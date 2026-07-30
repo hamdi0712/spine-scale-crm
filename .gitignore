@@ -14,6 +14,9 @@ npm-debug.log*
 prisma/dev.db
 prisma/dev.db-journal
 
+# local env — real password lives here, never committed
+.env
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -7,18 +7,20 @@ library. Runs locally against a SQLite file — no external services.
 ## Run it locally
 
 ```bash
+cp .env.example .env   # then edit APP_PASSWORD in .env
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000. That's it — `npm run dev` applies the database
+Open http://localhost:3000. `npm run dev` applies the database
 migrations automatically, so the SQLite file (`prisma/dev.db`) is created with
 the correct schema and zero rows on first run.
 
 ## Setting / changing the login password
 
 The app is protected by a single password read from the `APP_PASSWORD`
-environment variable, set in `.env`:
+environment variable, set in `.env` (created by copying `.env.example`;
+the real `.env` is gitignored and never committed):
 
 ```
 APP_PASSWORD="your-password-here"
