@@ -1,0 +1,19 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# local database — never commit real data
+prisma/dev.db
+prisma/dev.db-journal
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

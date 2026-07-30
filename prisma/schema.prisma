@@ -1,0 +1,101 @@
+// Spine Scale internal ops CRM — single-user, local SQLite.
+// To move to Postgres later: change provider to "postgresql", point
+// DATABASE_URL at the hosted database, and re-run migrations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enums in Prisma, so stage/status fields are strings
+// constrained by constants in src/lib/constants.ts.
+
+model Lead {
+  id           String     @id @default(cuid())
+  clinicName   String
+  contactName  String?
+  phone        String?
+  email        String?
+  leadSource   String?
+  stage        String     @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST
+  estValue     Float?
+  nextFollowUp DateTime?
+  archived     Boolean    @default(false) // set when converted to a client (or otherwise closed out)
+  notes        LeadNote[]
+  client       Client?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// Append-only activity log — notes are never edited or deleted.
+model LeadNote {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model Client {
+  id            String          @id @default(cuid())
+  clinicName    String
+  contactName   String?
+  phone         String?
+  email         String?
+  packageName   String?
+  monthlyFee    Float?
+  contractStart DateTime?
+  status        String          @default("ONBOARDING") // ONBOARDING | ACTIVE | PAUSED | CHURNED
+  ghlRef        String? // GoHighLevel sub-account reference (plain text/URL)
+  metaRef       String? // Meta Ads account reference (plain text/URL)
+  notes         String?
+  leadId        String?         @unique
+  lead          Lead?           @relation(fields: [leadId], references: [id])
+  checklist    ChecklistItem[]
+  reports      WeeklyReport[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model ChecklistItem {
+  id          String    @id @default(cuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title       String
+  status      String    @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | DONE
+  completedAt DateTime?
+  notes       String?
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model WeeklyReport {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  weekStart DateTime
+  spend     Float    @default(0)
+  leads     Int      @default(0)
+  booked    Int      @default(0)
+  shows     Int      @default(0)
+  revenue   Float    @default(0)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, weekStart])
+}
+
+model LibraryEntry {
+  id        String   @id @default(cuid())
+  category  String // AUTOMATION_FLOW_COPY | AD_COPY | ONBOARDING_EMAILS | COMPLIANCE_TEMPLATES | REPORTING_TEMPLATES
+  title     String
+  body      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
