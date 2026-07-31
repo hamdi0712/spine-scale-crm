@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
 import Icon from "@/components/Icons";
-import { LogoIconChip, LogoWordmarkChip } from "@/components/Logo";
+import { LogoIconChip } from "@/components/Logo";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
@@ -36,8 +36,11 @@ export default function Sidebar({
         {collapsed ? (
           <LogoIconChip />
         ) : (
-          <Link href="/" className="min-w-0">
-            <LogoWordmarkChip />
+          <Link href="/" className="flex min-w-0 items-center gap-2.5">
+            <LogoIconChip />
+            <span className="truncate text-base font-bold tracking-[-0.01em] text-ink">
+              Spine Scale
+            </span>
           </Link>
         )}
         <button

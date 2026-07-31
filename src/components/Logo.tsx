@@ -6,7 +6,8 @@ import Image from "next/image";
 
 const CHIP_GRADIENT = "bg-gradient-to-b from-[#1893F8] to-[#0765C4]";
 
-// Icon mark on its gradient chip — used in the collapsed sidebar.
+// Icon mark on its gradient chip — used in the sidebar header, collapsed and
+// expanded alike (expanded pairs it with a plain "Spine Scale" title).
 // The mark fills ~67% of its square file, which matches the 24px mark the
 // vector version drew inside this same 36px chip.
 export function LogoIconChip({ className = "" }: { className?: string }) {
@@ -26,8 +27,8 @@ export function LogoIconChip({ className = "" }: { className?: string }) {
   );
 }
 
-// Full wordmark on its gradient chip — used in the expanded sidebar header and
-// on the login card. The wordmark file is square but its ink is 1.54:1, so the
+// Full wordmark on its gradient chip — used on the login card.
+// The wordmark file is square but its ink is 1.54:1, so the
 // chip is sized to that ratio and object-cover trims the surrounding gradient
 // padding. Keeps the chip 44px tall, as the vector lockup was.
 export function LogoWordmarkChip({ className = "" }: { className?: string }) {
