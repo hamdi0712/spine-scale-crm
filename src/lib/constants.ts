@@ -45,6 +45,12 @@ export const CLIENT_STATUS_LABELS: Record<ClientStatus, string> = {
   CHURNED: "Churned",
 };
 
+// Shared so the confirmation reads the same from the client detail page and
+// the clients table.
+export function clientDeleteMessage(clinicName: string): string {
+  return `Are you sure you want to delete ${clinicName}? This will also delete its checklist and weekly reporting history.`;
+}
+
 export const CHECKLIST_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "DONE"] as const;
 
 export type ChecklistStatus = (typeof CHECKLIST_STATUSES)[number];

@@ -72,6 +72,22 @@ export async function updateClient(id: string, formData: FormData) {
   revalidatePath("/");
 }
 
+// Cascade delete: the schema already declares onDelete: Cascade on both
+// children, but the checklist and reports are removed explicitly in one
+// transaction so a client can never leave orphaned rows behind.
+export async function deleteClient(id: string) {
+  await prisma.$transaction([
+    prisma.checklistItem.deleteMany({ where: { clientId: id } }),
+    prisma.weeklyReport.deleteMany({ where: { clientId: id } }),
+    prisma.client.delete({ where: { id } }),
+  ]);
+  revalidatePath("/clients");
+  revalidatePath("/reporting");
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+  redirect("/clients");
+}
+
 // --- Checklist ---
 
 export async function addChecklistItem(clientId: string, formData: FormData) {

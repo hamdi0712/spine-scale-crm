@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { deleteClient } from "@/lib/actions/clients";
+import { clientDeleteMessage } from "@/lib/constants";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { ClientStatusBadge } from "@/components/Badge";
 import CapsuleBar from "@/components/CapsuleBar";
+import ConfirmForm from "@/components/ConfirmForm";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,9 @@ export default async function ClientsPage() {
               <th className="th">Monthly fee</th>
               <th className="th">Contract start</th>
               <th className="th w-64">Delivery</th>
+              <th className="th w-10">
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -67,11 +73,20 @@ export default async function ClientsPage() {
                     }))}
                   />
                 </td>
+                <td className="td text-right">
+                  <ConfirmForm
+                    action={deleteClient.bind(null, client.id)}
+                    message={clientDeleteMessage(client.clinicName)}
+                    className="px-1 text-sm text-muted hover:text-bad"
+                  >
+                    Delete
+                  </ConfirmForm>
+                </td>
               </tr>
             ))}
             {clients.length === 0 && (
               <tr>
-                <td className="td text-muted" colSpan={6}>
+                <td className="td text-muted" colSpan={7}>
                   No clients yet. Convert a Won lead from the pipeline, or add
                   one manually.
                 </td>
