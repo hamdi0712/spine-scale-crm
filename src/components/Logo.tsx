@@ -1,69 +1,48 @@
-// Spine Scale brand assets, recreated as vectors from the logo files.
-// The turret-shell mark and the two-tone wordmark each sit on a small
-// rounded chip carrying the blue gradient from the logo background.
+// Spine Scale brand assets. Both source files are square tiles with the blue
+// logo gradient baked in, so each chip is just the image clipped to the rounded
+// shape — the gradient class stays as the backdrop behind it while it loads.
+
+import Image from "next/image";
 
 const CHIP_GRADIENT = "bg-gradient-to-b from-[#1893F8] to-[#0765C4]";
 
-// The shell: three light segments spiraling up into the teal mouth triangle.
-export function LogoMark({ className = "h-6 w-6" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 72 72" className={className} aria-hidden>
-      <g transform="translate(14 58) rotate(-40)">
-        <polygon
-          points="51,-18 51,22 73,4"
-          fill="#2FB4AE"
-          stroke="#2FB4AE"
-          strokeWidth="3"
-          strokeLinejoin="round"
-        />
-        <polygon
-          points="49,-20 49,20 71,2"
-          fill="#52D5CB"
-          stroke="#52D5CB"
-          strokeWidth="3"
-          strokeLinejoin="round"
-        />
-        {[
-          "1,-4 1,4 9,7.5 9,-7.5",
-          "15,-9 15,9 25,13.5 25,-13.5",
-          "31,-15 31,15 43,19.5 43,-19.5",
-        ].map((pts) => (
-          <polygon
-            key={pts}
-            points={pts}
-            fill="#E9F1FB"
-            stroke="#E9F1FB"
-            strokeWidth="3"
-            strokeLinejoin="round"
-          />
-        ))}
-      </g>
-    </svg>
-  );
-}
-
 // Icon mark on its gradient chip — used in the collapsed sidebar.
+// The mark fills ~67% of its square file, which matches the 24px mark the
+// vector version drew inside this same 36px chip.
 export function LogoIconChip({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${CHIP_GRADIENT} ${className}`}
+      className={`inline-flex h-9 w-9 overflow-hidden rounded-lg ${CHIP_GRADIENT} ${className}`}
     >
-      <LogoMark className="h-6 w-6" />
+      <Image
+        src="/logo-icon.png"
+        alt="Spine Scale"
+        width={500}
+        height={500}
+        className="h-full w-full object-cover"
+        priority
+      />
     </span>
   );
 }
 
-// Full wordmark on its gradient chip — used in the expanded sidebar header.
+// Full wordmark on its gradient chip — used in the expanded sidebar header and
+// on the login card. The wordmark file is square but its ink is 1.54:1, so the
+// chip is sized to that ratio and object-cover trims the surrounding gradient
+// padding. Keeps the chip 44px tall, as the vector lockup was.
 export function LogoWordmarkChip({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${CHIP_GRADIENT} ${className}`}
+      className={`inline-flex h-11 w-[68px] overflow-hidden rounded-lg ${CHIP_GRADIENT} ${className}`}
     >
-      <LogoMark className="h-7 w-7 shrink-0" />
-      <span className="text-[15px] font-extrabold leading-[1.05] tracking-tight">
-        <span className="block text-[#E9F1FB]">Spine</span>
-        <span className="block text-[#4FD8D4]">Scale</span>
-      </span>
+      <Image
+        src="/logo-wordmark.png"
+        alt="Spine Scale"
+        width={500}
+        height={500}
+        className="h-full w-full object-cover"
+        priority
+      />
     </span>
   );
 }
