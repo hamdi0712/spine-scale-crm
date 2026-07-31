@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  Line,
-  LineChart,
+  Bar,
+  BarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -20,6 +20,10 @@ export interface TrendPoint {
 // for the secondary series (show rate).
 const PRIMARY = "#126DFB";
 const SECONDARY = "#3FD1C8";
+
+// Rounded bar tops, matching the UI's 8-10px radius language.
+const BAR_RADIUS: [number, number, number, number] = [8, 8, 0, 0];
+const MAX_BAR = 28;
 
 const AXIS = {
   stroke: "#E7E9EE",
@@ -39,7 +43,7 @@ const TOOLTIP_STYLE = {
   },
   labelStyle: { color: "#6B7280", marginBottom: 4 },
   itemStyle: { color: "#1C1B27" },
-  cursor: { stroke: "#E7E9EE" },
+  cursor: { fill: "#F4F5F7", opacity: 0.6 },
 };
 
 function Panel({
@@ -69,45 +73,40 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <Panel title="Leads / week">
-        <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <XAxis dataKey="week" {...AXIS} />
           <YAxis {...AXIS} allowDecimals={false} width={48} />
           <Tooltip {...TOOLTIP_STYLE} />
-          <Line
-            type="monotone"
+          <Bar
             dataKey="leads"
             name="Leads"
-            stroke={PRIMARY}
-            strokeWidth={2}
-            dot={{ r: 2, fill: PRIMARY, strokeWidth: 0 }}
-            activeDot={{ r: 4 }}
+            fill={PRIMARY}
+            radius={BAR_RADIUS}
+            maxBarSize={MAX_BAR}
             isAnimationActive={false}
           />
-        </LineChart>
+        </BarChart>
       </Panel>
       <Panel title="CPL ($)">
-        <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <XAxis dataKey="week" {...AXIS} />
           <YAxis {...AXIS} width={48} tickFormatter={(v: number) => `$${v}`} />
           <Tooltip
             {...TOOLTIP_STYLE}
             formatter={(v: number) => [`$${Number(v).toFixed(2)}`, "CPL"]}
           />
-          <Line
-            type="monotone"
+          <Bar
             dataKey="cpl"
             name="CPL"
-            stroke={PRIMARY}
-            strokeWidth={2}
-            dot={{ r: 2, fill: PRIMARY, strokeWidth: 0 }}
-            activeDot={{ r: 4 }}
-            connectNulls
+            fill={PRIMARY}
+            radius={BAR_RADIUS}
+            maxBarSize={MAX_BAR}
             isAnimationActive={false}
           />
-        </LineChart>
+        </BarChart>
       </Panel>
       <Panel title="Show rate (%)">
-        <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <XAxis dataKey="week" {...AXIS} />
           <YAxis
             {...AXIS}
@@ -119,18 +118,15 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
             {...TOOLTIP_STYLE}
             formatter={(v: number) => [`${Number(v).toFixed(1)}%`, "Show rate"]}
           />
-          <Line
-            type="monotone"
+          <Bar
             dataKey="showRate"
             name="Show rate"
-            stroke={SECONDARY}
-            strokeWidth={2}
-            dot={{ r: 2, fill: SECONDARY, strokeWidth: 0 }}
-            activeDot={{ r: 4 }}
-            connectNulls
+            fill={SECONDARY}
+            radius={BAR_RADIUS}
+            maxBarSize={MAX_BAR}
             isAnimationActive={false}
           />
-        </LineChart>
+        </BarChart>
       </Panel>
     </div>
   );

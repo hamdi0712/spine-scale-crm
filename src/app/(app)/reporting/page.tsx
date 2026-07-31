@@ -41,7 +41,7 @@ export default async function ReportingPage() {
                   <td className="td">
                     <Link
                       href={`/reporting/${client.id}`}
-                      className="font-medium text-accent hover:underline"
+                      className="font-medium text-ink hover:underline"
                     >
                       {client.clinicName}
                     </Link>
