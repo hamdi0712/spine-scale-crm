@@ -13,5 +13,10 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  // The logo files are public assets: they render on the unauthenticated login
+  // page, serve as the favicon, and are fetched by the /_next/image optimizer,
+  // so they have to bypass the session redirect.
+  matcher: [
+    "/((?!login|_next/static|_next/image|favicon.ico|logo-icon.png|logo-wordmark.png).*)",
+  ],
 };
