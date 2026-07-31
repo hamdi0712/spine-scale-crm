@@ -8,53 +8,54 @@ import {
   LeadStage,
 } from "@/lib/constants";
 
-// Flat, rectangular badges — no pills, no shadows.
+// Pill-shaped status badges: colored dot on a soft tinted background.
 
-export function StageBadge({ stage }: { stage: string }) {
-  const label = LEAD_STAGE_LABELS[stage as LeadStage] ?? stage;
-  const cls =
-    stage === "WON"
-      ? "border-ok/40 text-ok"
-      : stage === "LOST"
-        ? "border-bad/40 text-bad"
-        : "border-line text-muted";
+type Tone = "green" | "amber" | "red" | "neutral";
+
+const TONE_CLS: Record<Tone, { pill: string; dot: string }> = {
+  green: { pill: "bg-ok-soft text-ok", dot: "bg-ok" },
+  amber: { pill: "bg-warn-soft text-warn", dot: "bg-warn" },
+  red: { pill: "bg-bad-soft text-bad", dot: "bg-bad" },
+  neutral: { pill: "bg-line/70 text-muted", dot: "bg-muted" },
+};
+
+function Pill({ tone, label }: { tone: Tone; label: string }) {
+  const cls = TONE_CLS[tone];
   return (
-    <span className={`inline-block border px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${cls.pill}`}
+    >
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls.dot}`} />
       {label}
     </span>
   );
+}
+
+export function StageBadge({ stage }: { stage: string }) {
+  const label = LEAD_STAGE_LABELS[stage as LeadStage] ?? stage;
+  const tone: Tone =
+    stage === "WON" ? "green" : stage === "LOST" ? "red" : "neutral";
+  return <Pill tone={tone} label={label} />;
 }
 
 export function ClientStatusBadge({ status }: { status: string }) {
   const label = CLIENT_STATUS_LABELS[status as ClientStatus] ?? status;
-  const cls =
+  const tone: Tone =
     status === "ACTIVE"
-      ? "border-ok/40 text-ok"
-      : status === "ONBOARDING"
-        ? "border-line text-ink"
-        : status === "PAUSED"
-          ? "border-warn/40 text-warn"
-          : "border-bad/40 text-bad";
-  return (
-    <span className={`inline-block border px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>
-      {label}
-    </span>
-  );
+      ? "green"
+      : status === "PAUSED"
+        ? "amber"
+        : status === "CHURNED"
+          ? "red"
+          : "neutral";
+  return <Pill tone={tone} label={label} />;
 }
 
 export function ChecklistStatusBadge({ status }: { status: string }) {
   const label = CHECKLIST_STATUS_LABELS[status as ChecklistStatus] ?? status;
-  const cls =
-    status === "DONE"
-      ? "border-ok/40 text-ok"
-      : status === "IN_PROGRESS"
-        ? "border-warn/40 text-warn"
-        : "border-line text-muted";
-  return (
-    <span className={`inline-block border px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>
-      {label}
-    </span>
-  );
+  const tone: Tone =
+    status === "DONE" ? "green" : status === "IN_PROGRESS" ? "amber" : "neutral";
+  return <Pill tone={tone} label={label} />;
 }
 
 const FLAG_CLS: Record<Flag, string> = {
@@ -64,7 +65,7 @@ const FLAG_CLS: Record<Flag, string> = {
   na: "text-muted",
 };
 
-// A metric value colored by its target-band flag, with a small square marker
+// A metric value colored by its target-band flag, with a small dot marker
 // so state is not carried by color alone.
 export function FlaggedValue({ value, flag }: { value: string; flag: Flag }) {
   return (
@@ -72,7 +73,7 @@ export function FlaggedValue({ value, flag }: { value: string; flag: Flag }) {
       {flag !== "na" && (
         <span
           aria-label={flag}
-          className={`inline-block h-1.5 w-1.5 ${
+          className={`inline-block h-1.5 w-1.5 rounded-full ${
             flag === "green" ? "bg-ok" : flag === "yellow" ? "bg-warn" : "bg-bad"
           }`}
         />

@@ -16,6 +16,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Spine Scale Ops",
   description: "Internal ops CRM for Spine Scale",
+  icons: { icon: "/logo-icon.svg" },
 };
 
 export default function RootLayout({

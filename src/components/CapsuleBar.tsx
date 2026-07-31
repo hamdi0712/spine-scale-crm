@@ -1,6 +1,7 @@
 // Signature element: segmented capsule bar for a client's delivery checklist.
-// One flat, sharp-edged segment per item; segments fill with the accent color
-// as items complete. In-progress items render at reduced opacity.
+// One segment per item inside a rounded capsule; segments fill with the
+// primary accent on a light gray track as items complete. In-progress items
+// render at reduced opacity.
 
 interface Segment {
   title: string;
@@ -21,7 +22,9 @@ export default function CapsuleBar({
   return (
     <div className="flex items-center gap-2.5">
       <div
-        className={`flex flex-1 gap-px ${size === "lg" ? "h-3.5" : "h-2"}`}
+        className={`flex flex-1 gap-px overflow-hidden rounded-full ${
+          size === "lg" ? "h-3.5" : "h-2"
+        }`}
         role="img"
         aria-label={`${done} of ${items.length} checklist items done`}
       >

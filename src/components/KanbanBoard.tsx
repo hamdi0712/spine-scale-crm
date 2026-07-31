@@ -41,7 +41,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
   }
 
   return (
-    <div className="flex gap-px overflow-x-auto border border-line bg-line">
+    <div className="flex gap-3 overflow-x-auto pb-1">
       {LEAD_STAGES.map((stage) => {
         const column = leads.filter((l) => stageOf(l) === stage);
         const value = column.reduce((s, l) => s + (l.estValue ?? 0), 0);
@@ -54,8 +54,10 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
             }}
             onDragLeave={() => setOverStage(null)}
             onDrop={() => handleDrop(stage)}
-            className={`flex min-h-[420px] w-56 shrink-0 flex-col ${
-              overStage === stage ? "bg-bg" : "bg-surface"
+            className={`flex min-h-[420px] w-56 shrink-0 flex-col rounded-[10px] border ${
+              overStage === stage
+                ? "border-accent/50 bg-accent/5"
+                : "border-line bg-bg"
             }`}
           >
             <div className="border-b border-line px-3 py-2">
@@ -71,7 +73,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                 {value > 0 ? fmtMoney(value) : "—"}
               </div>
             </div>
-            <div className="flex-1 space-y-px bg-line">
+            <div className="flex-1 space-y-2 p-2">
               {column.map((lead) => (
                 <div
                   key={lead.id}
@@ -81,7 +83,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                     setDragId(null);
                     setOverStage(null);
                   }}
-                  className={`cursor-grab bg-surface px-3 py-2.5 hover:bg-bg ${
+                  className={`cursor-grab rounded-lg border border-line bg-surface px-3 py-2.5 shadow-sm hover:border-accent/50 ${
                     dragId === lead.id ? "opacity-40" : ""
                   }`}
                 >
@@ -105,7 +107,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                   </div>
                 </div>
               ))}
-              {column.length === 0 && <div className="h-full bg-surface" />}
+              {column.length === 0 && <div className="h-full" />}
             </div>
           </div>
         );

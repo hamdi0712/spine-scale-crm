@@ -44,7 +44,7 @@ export default async function LeadDetailPage({
             <h1 className="text-xl font-bold tracking-tight">{lead.clinicName}</h1>
             <StageBadge stage={lead.stage} />
             {lead.archived && (
-              <span className="border border-line px-1.5 py-0.5 text-[11px] text-muted">
+              <span className="rounded-full bg-line/70 px-2 py-0.5 text-[11px] font-medium text-muted">
                 Archived
               </span>
             )}

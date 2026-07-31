@@ -16,24 +16,30 @@ export interface TrendPoint {
   showRate: number | null; // 0–100
 }
 
+// Primary accent for headline series; the teal secondary accent is reserved
+// for the secondary series (show rate).
+const PRIMARY = "#126DFB";
+const SECONDARY = "#3FD1C8";
+
 const AXIS = {
-  stroke: "#252331",
-  tick: { fill: "#84818A", fontSize: 11, fontFamily: "var(--font-mono)" },
+  stroke: "#E7E5F0",
+  tick: { fill: "#6F6C7D", fontSize: 11, fontFamily: "var(--font-mono)" },
   tickLine: false as const,
-  axisLine: { stroke: "#252331" },
+  axisLine: { stroke: "#E7E5F0" },
 };
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: "#16141C",
-    border: "1px solid #252331",
-    borderRadius: 0,
+    background: "#FFFFFF",
+    border: "1px solid #E7E5F0",
+    borderRadius: 8,
+    boxShadow: "0 4px 12px rgba(28, 27, 39, 0.08)",
     fontSize: 12,
     fontFamily: "var(--font-mono)",
   },
-  labelStyle: { color: "#84818A", marginBottom: 4 },
-  itemStyle: { color: "#E4E4EA" },
-  cursor: { stroke: "#252331" },
+  labelStyle: { color: "#6F6C7D", marginBottom: 4 },
+  itemStyle: { color: "#1C1B27" },
+  cursor: { stroke: "#E7E5F0" },
 };
 
 function Panel({
@@ -44,7 +50,7 @@ function Panel({
   children: React.ReactElement;
 }) {
   return (
-    <div className="bg-surface p-4">
+    <div className="card p-4">
       <div className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted">
         {title}
       </div>
@@ -61,7 +67,7 @@ function Panel({
 // and show rate are different units and never share an axis.
 export default function TrendCharts({ data }: { data: TrendPoint[] }) {
   return (
-    <div className="grid grid-cols-1 gap-px border border-line bg-line lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Panel title="Leads / week">
         <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <XAxis dataKey="week" {...AXIS} />
@@ -71,9 +77,9 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
             type="monotone"
             dataKey="leads"
             name="Leads"
-            stroke="#6366F1"
+            stroke={PRIMARY}
             strokeWidth={2}
-            dot={{ r: 2, fill: "#6366F1", strokeWidth: 0 }}
+            dot={{ r: 2, fill: PRIMARY, strokeWidth: 0 }}
             activeDot={{ r: 4 }}
             isAnimationActive={false}
           />
@@ -91,9 +97,9 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
             type="monotone"
             dataKey="cpl"
             name="CPL"
-            stroke="#6366F1"
+            stroke={PRIMARY}
             strokeWidth={2}
-            dot={{ r: 2, fill: "#6366F1", strokeWidth: 0 }}
+            dot={{ r: 2, fill: PRIMARY, strokeWidth: 0 }}
             activeDot={{ r: 4 }}
             connectNulls
             isAnimationActive={false}
@@ -117,9 +123,9 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
             type="monotone"
             dataKey="showRate"
             name="Show rate"
-            stroke="#6366F1"
+            stroke={SECONDARY}
             strokeWidth={2}
-            dot={{ r: 2, fill: "#6366F1", strokeWidth: 0 }}
+            dot={{ r: 2, fill: SECONDARY, strokeWidth: 0 }}
             activeDot={{ r: 4 }}
             connectNulls
             isAnimationActive={false}

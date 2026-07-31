@@ -51,17 +51,17 @@ export default async function LibraryPage({
         Playbooks and templates, written as you build them
       </p>
 
-      <div className="mt-6 grid items-start gap-px border border-line bg-line lg:grid-cols-[12rem_16rem_1fr]">
+      <div className="card mt-6 grid items-stretch divide-y divide-line lg:grid-cols-[12rem_16rem_1fr] lg:divide-x lg:divide-y-0">
         {/* Categories */}
-        <nav className="self-stretch bg-surface">
+        <nav className="self-stretch py-1">
           {LIBRARY_CATEGORIES.map((c) => (
             <Link
               key={c}
               href={`/library?category=${c}`}
-              className={`flex items-center justify-between border-l-2 px-3 py-2 text-sm ${
+              className={`mx-1.5 my-0.5 flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
                 c === category
-                  ? "border-accent bg-bg font-medium text-ink"
-                  : "border-transparent text-muted hover:text-ink"
+                  ? "bg-accent/10 font-medium text-accent"
+                  : "text-muted hover:bg-bg hover:text-ink"
               }`}
             >
               <span>{LIBRARY_CATEGORY_LABELS[c]}</span>
@@ -73,7 +73,7 @@ export default async function LibraryPage({
         </nav>
 
         {/* Entry list */}
-        <div className="flex min-h-[24rem] flex-col self-stretch bg-surface">
+        <div className="flex min-h-[24rem] flex-col self-stretch">
           <div className="flex items-center justify-between border-b border-line px-3 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
               Entries
@@ -118,7 +118,7 @@ export default async function LibraryPage({
         </div>
 
         {/* Viewer / editor */}
-        <div className="min-h-[24rem] self-stretch bg-surface p-5">
+        <div className="min-h-[24rem] self-stretch p-5">
           {creating ? (
             <form action={createLibraryEntry} className="flex h-full flex-col gap-3">
               <input type="hidden" name="category" value={category} />
@@ -214,7 +214,7 @@ export default async function LibraryPage({
                   </ConfirmForm>
                 </div>
               </div>
-              <div className="prose-dark mt-4">
+              <div className="prose-doc mt-4">
                 {selected.body.trim() === "" ? (
                   <p className="text-muted">This entry has no content yet.</p>
                 ) : (

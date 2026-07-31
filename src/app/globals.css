@@ -4,37 +4,34 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
   body {
     @apply bg-bg text-ink antialiased;
   }
   ::selection {
-    background: rgba(99, 102, 241, 0.35);
-  }
-  input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.6);
+    background: rgba(18, 109, 251, 0.18);
   }
 }
 
 @layer components {
   .field {
-    @apply w-full border border-line bg-bg px-2.5 py-1.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none;
+    @apply w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent;
   }
   .field-label {
     @apply mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted;
   }
   .btn {
-    @apply inline-flex items-center gap-1.5 border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-muted focus:outline-none focus:ring-1 focus:ring-accent;
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink shadow-sm hover:border-muted/50 focus:outline-none focus:ring-1 focus:ring-accent;
   }
   .btn-primary {
-    @apply inline-flex items-center gap-1.5 border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 focus:outline-none focus:ring-1 focus:ring-accent focus:ring-offset-1 focus:ring-offset-bg;
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-accent/90 focus:outline-none focus:ring-1 focus:ring-accent focus:ring-offset-1 focus:ring-offset-bg;
   }
   .btn-danger {
-    @apply inline-flex items-center gap-1.5 border border-bad/40 bg-transparent px-3 py-1.5 text-sm font-medium text-bad hover:border-bad focus:outline-none;
+    @apply inline-flex items-center gap-1.5 rounded-lg border border-bad/40 bg-transparent px-3 py-1.5 text-sm font-medium text-bad hover:border-bad focus:outline-none;
   }
   .card {
-    @apply border border-line bg-surface;
+    @apply overflow-hidden rounded-[10px] border border-line bg-surface shadow-card;
   }
   .th {
     @apply border-b border-line px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted;
@@ -45,28 +42,28 @@
 }
 
 /* Markdown rendering in the library — restrained typographic defaults. */
-.prose-dark {
+.prose-doc {
   @apply text-sm leading-relaxed text-ink;
 }
-.prose-dark h1,
-.prose-dark h2,
-.prose-dark h3,
-.prose-dark h4 {
+.prose-doc h1,
+.prose-doc h2,
+.prose-doc h3,
+.prose-doc h4 {
   @apply mb-2 mt-5 font-semibold text-ink first:mt-0;
 }
-.prose-dark h1 { @apply text-lg; }
-.prose-dark h2 { @apply text-base; }
-.prose-dark h3 { @apply text-sm; }
-.prose-dark p { @apply mb-3; }
-.prose-dark ul { @apply mb-3 list-disc pl-5; }
-.prose-dark ol { @apply mb-3 list-decimal pl-5; }
-.prose-dark li { @apply mb-1; }
-.prose-dark a { @apply text-accent underline; }
-.prose-dark blockquote { @apply mb-3 border-l-2 border-line pl-3 text-muted; }
-.prose-dark code { @apply bg-bg px-1 py-0.5 font-mono text-[13px]; }
-.prose-dark pre { @apply mb-3 overflow-x-auto border border-line bg-bg p-3; }
-.prose-dark pre code { @apply bg-transparent p-0; }
-.prose-dark hr { @apply my-4 border-line; }
-.prose-dark table { @apply mb-3 w-full border-collapse text-sm; }
-.prose-dark th,
-.prose-dark td { @apply border border-line px-2 py-1 text-left; }
+.prose-doc h1 { @apply text-lg; }
+.prose-doc h2 { @apply text-base; }
+.prose-doc h3 { @apply text-sm; }
+.prose-doc p { @apply mb-3; }
+.prose-doc ul { @apply mb-3 list-disc pl-5; }
+.prose-doc ol { @apply mb-3 list-decimal pl-5; }
+.prose-doc li { @apply mb-1; }
+.prose-doc a { @apply text-accent underline; }
+.prose-doc blockquote { @apply mb-3 border-l-2 border-line pl-3 text-muted; }
+.prose-doc code { @apply rounded bg-bg px-1 py-0.5 font-mono text-[13px]; }
+.prose-doc pre { @apply mb-3 overflow-x-auto rounded-lg border border-line bg-bg p-3; }
+.prose-doc pre code { @apply bg-transparent p-0; }
+.prose-doc hr { @apply my-4 border-line; }
+.prose-doc table { @apply mb-3 w-full border-collapse text-sm; }
+.prose-doc th,
+.prose-doc td { @apply border border-line px-2 py-1 text-left; }

@@ -37,12 +37,12 @@ export default async function PipelinePage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex border border-line">
+          <div className="flex gap-0.5 rounded-lg border border-line bg-surface p-0.5 shadow-sm">
             <Link
               href="/pipeline"
-              className={`px-3 py-1.5 text-sm ${
+              className={`rounded-md px-3 py-1 text-sm ${
                 view === "board"
-                  ? "bg-surface font-medium text-ink"
+                  ? "bg-accent/10 font-medium text-accent"
                   : "text-muted hover:text-ink"
               }`}
             >
@@ -50,9 +50,9 @@ export default async function PipelinePage({
             </Link>
             <Link
               href="/pipeline?view=table"
-              className={`border-l border-line px-3 py-1.5 text-sm ${
+              className={`rounded-md px-3 py-1 text-sm ${
                 view === "table"
-                  ? "bg-surface font-medium text-ink"
+                  ? "bg-accent/10 font-medium text-accent"
                   : "text-muted hover:text-ink"
               }`}
             >

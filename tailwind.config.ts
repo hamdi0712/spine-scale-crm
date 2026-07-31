@@ -5,15 +5,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: "#0D0D12",
-        surface: "#16141C",
-        line: "#252331",
-        accent: "#6366F1",
-        ink: "#E4E4EA",
-        muted: "#84818A",
-        ok: "#3FA575",
-        warn: "#C08A3E",
-        bad: "#C05257",
+        bg: "#F5F4FB",
+        surface: "#FFFFFF",
+        line: "#E7E5F0",
+        accent: "#126DFB",
+        accent2: "#3FD1C8",
+        ink: "#1C1B27",
+        muted: "#6F6C7D",
+        ok: "#1FAA6D",
+        "ok-soft": "#E7F8EF",
+        warn: "#D89B2D",
+        "warn-soft": "#FDF3E2",
+        bad: "#E14C57",
+        "bad-soft": "#FDEBEC",
+      },
+      boxShadow: {
+        card: "0 1px 2px rgba(28, 27, 39, 0.04), 0 4px 12px rgba(28, 27, 39, 0.06)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],

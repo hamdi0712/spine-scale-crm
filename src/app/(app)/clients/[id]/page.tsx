@@ -247,7 +247,7 @@ export default async function ClientDetailPage({
                     className="border-b border-line px-3 py-2 last:border-b-0"
                   >
                     <div className="flex items-center gap-2">
-                      <div className="flex shrink-0 border border-line">
+                      <div className="flex shrink-0 overflow-hidden rounded-md border border-line">
                         {CHECKLIST_STATUSES.map((s) => {
                           const setStatus = setChecklistItemStatus.bind(
                             null,
@@ -263,9 +263,9 @@ export default async function ClientDetailPage({
                                 className={`px-1.5 py-0.5 text-xs ${
                                   active
                                     ? s === "DONE"
-                                      ? "bg-accent text-white"
+                                      ? "bg-ok-soft text-ok"
                                       : s === "IN_PROGRESS"
-                                        ? "bg-accent/30 text-ink"
+                                        ? "bg-warn-soft text-warn"
                                         : "bg-line text-ink"
                                     : "text-muted hover:text-ink"
                                 }`}

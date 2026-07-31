@@ -2,6 +2,7 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { login, LoginState } from "@/lib/actions/auth";
+import { LogoWordmarkChip } from "@/components/Logo";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -18,8 +19,8 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="card w-full max-w-sm p-8">
         <div className="mb-8">
-          <div className="text-lg font-bold tracking-tight">Spine Scale</div>
-          <div className="mt-0.5 text-sm text-muted">Internal Ops CRM</div>
+          <LogoWordmarkChip />
+          <div className="mt-3 text-sm text-muted">Internal Ops CRM</div>
         </div>
         <form action={formAction} className="space-y-4">
           <div>
@@ -36,7 +37,7 @@ export default function LoginPage() {
             />
           </div>
           {state.error && (
-            <p className="border border-bad/40 px-3 py-2 text-sm text-bad">
+            <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
               {state.error}
             </p>
           )}

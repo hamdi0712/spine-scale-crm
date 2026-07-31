@@ -52,8 +52,8 @@ export default async function DashboardPage() {
       <h1 className="text-xl font-bold tracking-tight">Dashboard</h1>
       <p className="mt-0.5 text-sm text-muted">Agency at a glance</p>
 
-      <div className="mt-6 grid grid-cols-2 gap-px border border-line bg-line lg:grid-cols-4">
-        <div className="bg-surface px-4 py-3.5">
+      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="card px-4 py-3.5">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             Active clients
           </div>
@@ -61,13 +61,13 @@ export default async function DashboardPage() {
             {activeClients.length}
           </div>
         </div>
-        <div className="bg-surface px-4 py-3.5">
+        <div className="card px-4 py-3.5">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             MRR (active)
           </div>
           <div className="mt-1 font-mono text-2xl font-medium">{fmtMoney(mrr)}</div>
         </div>
-        <div className="bg-surface px-4 py-3.5">
+        <div className="card px-4 py-3.5">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             Pipeline value
           </div>
@@ -78,7 +78,7 @@ export default async function DashboardPage() {
             {openLeads.length} open lead{openLeads.length === 1 ? "" : "s"}
           </div>
         </div>
-        <div className="bg-surface px-4 py-3.5">
+        <div className="card px-4 py-3.5">
           <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
             Follow-ups due (7d)
           </div>
