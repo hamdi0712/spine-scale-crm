@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import {
   addChecklistItem,
   deleteChecklistItem,
+  deleteClient,
   renameChecklistItem,
   setChecklistItemNotes,
   setChecklistItemStatus,
@@ -14,6 +15,7 @@ import {
   CHECKLIST_STATUS_LABELS,
   CLIENT_STATUSES,
   CLIENT_STATUS_LABELS,
+  clientDeleteMessage,
 } from "@/lib/constants";
 import { fmtDate, toDateInput } from "@/lib/format";
 import { ClientStatusBadge } from "@/components/Badge";
@@ -41,6 +43,7 @@ export default async function ClientDetailPage({
 
   const update = updateClient.bind(null, client.id);
   const addItem = addChecklistItem.bind(null, client.id);
+  const remove = deleteClient.bind(null, client.id);
 
   return (
     <div>
@@ -65,6 +68,13 @@ export default async function ClientDetailPage({
               Original lead
             </Link>
           )}
+          <ConfirmForm
+            action={remove}
+            message={clientDeleteMessage(client.clinicName)}
+            className="btn-danger"
+          >
+            Delete
+          </ConfirmForm>
         </div>
       </div>
 
