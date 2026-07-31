@@ -40,7 +40,7 @@ export default function CapsuleBar({
           />
         ))}
       </div>
-      <span className="shrink-0 text-right text-xs text-muted">
+      <span className="num shrink-0 text-right text-xs text-muted">
         {done}/{items.length}
       </span>
     </div>

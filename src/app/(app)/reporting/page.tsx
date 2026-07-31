@@ -37,7 +37,7 @@ export default async function ReportingPage() {
               const latest = client.reports[0];
               const m = latest ? computeMetrics(latest) : null;
               return (
-                <tr key={client.id} className="hover:bg-bg/50">
+                <tr key={client.id} className="hover:bg-wash/70">
                   <td className="td">
                     <Link
                       href={`/reporting/${client.id}`}
@@ -49,10 +49,10 @@ export default async function ReportingPage() {
                   <td className="td">
                     <ClientStatusBadge status={client.status} />
                   </td>
-                  <td className="td text-xs">
+                  <td className="td num text-xs">
                     {latest ? fmtDate(latest.weekStart) : "—"}
                   </td>
-                  <td className="td">
+                  <td className="td num">
                     {latest ? latest.leads : "—"}
                   </td>
                   <td className="td">

@@ -68,7 +68,7 @@ export default function NewClientPage() {
               type="number"
               min="0"
               step="any"
-              className="field"
+              className="field num"
             />
           </div>
           <div>
@@ -79,7 +79,7 @@ export default function NewClientPage() {
               id="contractStart"
               name="contractStart"
               type="date"
-              className="field"
+              className="field num"
             />
           </div>
         </div>

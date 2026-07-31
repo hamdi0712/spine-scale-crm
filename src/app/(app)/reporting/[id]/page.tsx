@@ -96,7 +96,7 @@ export default async function ClientReportingPage({
                 type="date"
                 required
                 defaultValue={defaultWeekStart()}
-                className="field"
+                className="field num"
               />
             </div>
             <div>
@@ -110,7 +110,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="any"
                 required
-                className="field"
+                className="field num"
               />
             </div>
             <div>
@@ -124,7 +124,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="1"
                 required
-                className="field"
+                className="field num"
               />
             </div>
             <div>
@@ -138,7 +138,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="1"
                 required
-                className="field"
+                className="field num"
               />
             </div>
             <div>
@@ -152,7 +152,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="1"
                 required
-                className="field"
+                className="field num"
               />
             </div>
             <div>
@@ -165,7 +165,7 @@ export default async function ClientReportingPage({
                 type="number"
                 min="0"
                 step="any"
-                className="field"
+                className="field num"
               />
             </div>
           </div>
@@ -211,17 +211,17 @@ export default async function ClientReportingPage({
                 const m = computeMetrics(r);
                 const remove = deleteWeeklyReport.bind(null, r.id);
                 return (
-                  <tr key={r.id} className="hover:bg-bg/50">
-                    <td className="td text-xs">
+                  <tr key={r.id} className="hover:bg-wash/70">
+                    <td className="td num text-xs">
                       {fmtDate(r.weekStart)}
                     </td>
-                    <td className="td">
+                    <td className="td num">
                       {fmtMoney(r.spend)}
                     </td>
-                    <td className="td">{r.leads}</td>
-                    <td className="td">{r.booked}</td>
-                    <td className="td">{r.shows}</td>
-                    <td className="td">
+                    <td className="td num">{r.leads}</td>
+                    <td className="td num">{r.booked}</td>
+                    <td className="td num">{r.shows}</td>
+                    <td className="td num">
                       {fmtMoney(r.revenue)}
                     </td>
                     <td className="td">

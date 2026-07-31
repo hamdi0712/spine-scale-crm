@@ -93,7 +93,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
             </option>
           ))}
         </select>
-        <span className="ml-auto text-xs text-muted">
+        <span className="num ml-auto text-xs text-muted">
           {rows.length} lead{rows.length === 1 ? "" : "s"}
         </span>
       </div>
@@ -118,11 +118,11 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
           </thead>
           <tbody>
             {rows.map((lead) => (
-              <tr key={lead.id} className="hover:bg-bg/50">
+              <tr key={lead.id} className="hover:bg-wash/70">
                 <td className="td">
                   <Link
                     href={`/pipeline/${lead.id}`}
-                    className="font-medium text-accent hover:underline"
+                    className="font-medium text-ink hover:underline"
                   >
                     {lead.clinicName}
                   </Link>
@@ -132,13 +132,13 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
                 <td className="td">
                   <StageBadge stage={lead.stage} />
                 </td>
-                <td className="td">
+                <td className="td num">
                   {lead.estValue != null ? fmtMoney(lead.estValue) : "—"}
                 </td>
-                <td className="td text-xs">
+                <td className="td num text-xs">
                   {fmtDate(lead.nextFollowUp)}
                 </td>
-                <td className="td text-xs text-muted">
+                <td className="td num text-xs text-muted">
                   {fmtDate(lead.createdAt)}
                 </td>
               </tr>

@@ -5,7 +5,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: "#F5F4FB",
+        bg: "#FEFEFE",
+        panel: "#FAFAFB",
+        wash: "#F4F5F7",
         surface: "#FFFFFF",
         line: "#E7E9EE",
         accent: "#126DFB",
@@ -24,6 +26,7 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        num: ["var(--font-num)", "var(--font-sans)", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
     },

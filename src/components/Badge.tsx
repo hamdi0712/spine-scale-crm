@@ -69,7 +69,7 @@ const FLAG_CLS: Record<Flag, string> = {
 // so state is not carried by color alone.
 export function FlaggedValue({ value, flag }: { value: string; flag: Flag }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 ${FLAG_CLS[flag]}`}>
+    <span className={`num inline-flex items-center gap-1.5 ${FLAG_CLS[flag]}`}>
       {flag !== "na" && (
         <span
           aria-label={flag}

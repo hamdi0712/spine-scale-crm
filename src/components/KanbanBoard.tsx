@@ -57,7 +57,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
             className={`flex min-h-[420px] w-56 shrink-0 flex-col rounded-2xl border ${
               overStage === stage
                 ? "border-accent/50 bg-accent/5"
-                : "border-line bg-bg"
+                : "border-line bg-panel"
             }`}
           >
             <div className="border-b border-line/60 px-4 py-3">
@@ -65,11 +65,11 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                 <span className="text-xs font-medium">
                   {LEAD_STAGE_LABELS[stage]}
                 </span>
-                <span className="text-xs text-muted">
+                <span className="num text-xs text-muted">
                   {column.length}
                 </span>
               </div>
-              <div className="mt-0.5 text-xs text-muted">
+              <div className="num mt-0.5 text-xs text-muted">
                 {value > 0 ? fmtMoney(value) : "—"}
               </div>
             </div>
@@ -89,7 +89,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                 >
                   <Link
                     href={`/pipeline/${lead.id}`}
-                    className="block text-sm font-medium hover:text-accent"
+                    className="block text-sm font-medium hover:underline"
                     draggable={false}
                   >
                     {lead.clinicName}
@@ -99,7 +99,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                       {lead.contactName}
                     </div>
                   )}
-                  <div className="mt-1.5 flex items-center justify-between text-xs text-muted">
+                  <div className="num mt-1.5 flex items-center justify-between text-xs text-muted">
                     <span>{lead.estValue != null ? fmtMoney(lead.estValue) : ""}</span>
                     <span>
                       {lead.nextFollowUp ? fmtDate(lead.nextFollowUp) : ""}

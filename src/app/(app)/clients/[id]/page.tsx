@@ -173,7 +173,7 @@ export default async function ClientDetailPage({
                   min="0"
                   step="any"
                   defaultValue={client.monthlyFee ?? ""}
-                  className="field"
+                  className="field num"
                 />
               </div>
               <div className="col-span-2">
@@ -185,7 +185,7 @@ export default async function ClientDetailPage({
                   name="contractStart"
                   type="date"
                   defaultValue={toDateInput(client.contractStart)}
-                  className="field"
+                  className="field num"
                 />
               </div>
               <div className="col-span-2">
@@ -244,7 +244,7 @@ export default async function ClientDetailPage({
                 return (
                   <li
                     key={item.id}
-                    className="min-h-[56px] border-b border-line/60 px-4 py-3 last:border-b-0 hover:bg-bg/40"
+                    className="min-h-[56px] border-b border-line/60 px-4 py-3 last:border-b-0 hover:bg-wash/60"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex shrink-0 overflow-hidden rounded-full border border-line">
@@ -267,7 +267,7 @@ export default async function ClientDetailPage({
                                       : s === "IN_PROGRESS"
                                         ? "bg-warn-soft text-warn"
                                         : "bg-line/70 text-ink"
-                                    : "text-muted/70 hover:bg-bg/60 hover:text-ink"
+                                    : "text-muted/70 hover:bg-wash/70 hover:text-ink"
                                 }`}
                               >
                                 {STATUS_GLYPH[s]}
@@ -288,7 +288,7 @@ export default async function ClientDetailPage({
                         />
                       </form>
                       {item.completedAt && (
-                        <span className="shrink-0 text-xs text-muted">
+                        <span className="num shrink-0 text-xs text-muted">
                           {fmtDate(item.completedAt)}
                         </span>
                       )}

@@ -145,7 +145,7 @@ export default async function LeadDetailPage({
                   min="0"
                   step="any"
                   defaultValue={lead.estValue ?? ""}
-                  className="field"
+                  className="field num"
                 />
               </div>
               <div>
@@ -157,7 +157,7 @@ export default async function LeadDetailPage({
                   name="nextFollowUp"
                   type="date"
                   defaultValue={toDateInput(lead.nextFollowUp)}
-                  className="field"
+                  className="field num"
                 />
               </div>
               <div>
@@ -208,7 +208,7 @@ export default async function LeadDetailPage({
               <ul>
                 {lead.notes.map((note) => (
                   <li key={note.id} className="border-b border-line/60 px-5 py-4 last:border-b-0">
-                    <div className="text-xs text-muted">
+                    <div className="num text-xs text-muted">
                       {fmtDateTime(note.createdAt)}
                     </div>
                     <div className="mt-0.5 whitespace-pre-wrap text-sm">

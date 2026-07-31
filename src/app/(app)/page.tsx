@@ -89,7 +89,7 @@ export default async function DashboardPage() {
                 <Icon name={kpi.icon} />
               </div>
             </div>
-            <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight">
+            <div className="num mt-2 text-[28px] font-semibold leading-none tracking-tight">
               {kpi.value}
             </div>
             <div className="mt-2.5 text-xs text-muted">{kpi.detail}</div>
@@ -125,7 +125,7 @@ export default async function DashboardPage() {
                           <StageBadge stage={lead.stage} />
                         </td>
                         <td
-                          className={`td text-xs ${
+                          className={`td num text-xs ${
                             overdue ? "text-bad" : "text-muted"
                           }`}
                         >
@@ -162,7 +162,7 @@ export default async function DashboardPage() {
                         </Link>
                       </td>
                       <td className="td text-bad">{reds.join(", ")}</td>
-                      <td className="td text-xs text-muted">
+                      <td className="td num text-xs text-muted">
                         wk of {fmtDate(weekStart)}
                       </td>
                     </tr>

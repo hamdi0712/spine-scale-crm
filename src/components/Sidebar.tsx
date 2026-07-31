@@ -24,7 +24,7 @@ export default function Sidebar({
   const pathname = usePathname();
   return (
     <aside
-      className={`fixed inset-y-0 left-0 flex flex-col border-r border-line/70 bg-surface ${
+      className={`fixed inset-y-0 left-0 flex flex-col border-r border-line/70 bg-panel ${
         collapsed ? "w-16" : "w-56"
       }`}
     >
@@ -44,7 +44,7 @@ export default function Sidebar({
           type="button"
           onClick={onToggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="rounded-[10px] p-2 text-muted hover:bg-bg/60 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          className="rounded-[10px] p-2 text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
         >
           <Icon
             name="chevronLeft"
@@ -73,7 +73,7 @@ export default function Sidebar({
               } ${
                 active
                   ? "bg-accent/10 text-accent"
-                  : "text-muted hover:bg-bg/60 hover:text-ink"
+                  : "text-muted hover:bg-wash hover:text-ink"
               }`}
             >
               <Icon name={item.icon} />
@@ -89,7 +89,7 @@ export default function Sidebar({
         <button
           type="submit"
           title={collapsed ? "Sign out" : undefined}
-          className={`flex h-[42px] w-full items-center gap-3 rounded-[10px] text-left text-sm font-medium text-muted hover:bg-bg/60 hover:text-ink ${
+          className={`flex h-[42px] w-full items-center gap-3 rounded-[10px] text-left text-sm font-medium text-muted hover:bg-wash hover:text-ink ${
             collapsed ? "justify-center px-0" : "px-3"
           }`}
         >

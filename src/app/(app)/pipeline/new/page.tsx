@@ -57,7 +57,7 @@ export default function NewLeadPage() {
               type="number"
               min="0"
               step="any"
-              className="field"
+              className="field num"
             />
           </div>
           <div>
@@ -68,7 +68,7 @@ export default function NewLeadPage() {
               id="nextFollowUp"
               name="nextFollowUp"
               type="date"
-              className="field"
+              className="field num"
             />
           </div>
         </div>

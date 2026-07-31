@@ -61,11 +61,11 @@ export default async function LibraryPage({
               className={`mx-1.5 my-0.5 flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
                 c === category
                   ? "bg-accent/10 font-medium text-accent"
-                  : "text-muted hover:bg-bg/50 hover:text-ink"
+                  : "text-muted hover:bg-wash/70 hover:text-ink"
               }`}
             >
               <span>{LIBRARY_CATEGORY_LABELS[c]}</span>
-              <span className="text-xs text-muted">
+              <span className="num text-xs text-muted">
                 {countFor(c)}
               </span>
             </Link>
@@ -97,7 +97,7 @@ export default async function LibraryPage({
                   <Link
                     href={`/library?category=${category}&entry=${e.id}`}
                     className={`block border-b border-line/60 px-4 py-3 ${
-                      selected?.id === e.id ? "bg-bg" : "hover:bg-bg/50"
+                      selected?.id === e.id ? "bg-wash/70" : "hover:bg-wash/70"
                     }`}
                   >
                     <div
@@ -107,7 +107,7 @@ export default async function LibraryPage({
                     >
                       {e.title}
                     </div>
-                    <div className="mt-0.5 text-xs text-muted">
+                    <div className="num mt-0.5 text-xs text-muted">
                       {fmtDate(e.updatedAt)}
                     </div>
                   </Link>
@@ -194,7 +194,7 @@ export default async function LibraryPage({
               <div className="flex items-start justify-between border-b border-line pb-3">
                 <div>
                   <h2 className="text-base font-semibold">{selected.title}</h2>
-                  <div className="mt-0.5 text-xs text-muted">
+                  <div className="num mt-0.5 text-xs text-muted">
                     Updated {fmtDate(selected.updatedAt)}
                   </div>
                 </div>

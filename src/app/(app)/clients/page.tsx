@@ -40,7 +40,7 @@ export default async function ClientsPage() {
           </thead>
           <tbody>
             {clients.map((client) => (
-              <tr key={client.id} className="hover:bg-bg/50">
+              <tr key={client.id} className="hover:bg-wash/70">
                 <td className="td">
                   <Link
                     href={`/clients/${client.id}`}
@@ -53,10 +53,10 @@ export default async function ClientsPage() {
                   <ClientStatusBadge status={client.status} />
                 </td>
                 <td className="td text-muted">{client.packageName ?? "—"}</td>
-                <td className="td">
+                <td className="td num">
                   {fmtMoney(client.monthlyFee)}
                 </td>
-                <td className="td text-xs">
+                <td className="td num text-xs">
                   {fmtDate(client.contractStart)}
                 </td>
                 <td className="td">
