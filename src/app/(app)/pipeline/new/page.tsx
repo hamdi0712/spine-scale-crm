@@ -8,16 +8,16 @@ export default function NewLeadPage() {
         <Link href="/pipeline" className="text-sm text-accent hover:underline">
           ← Pipeline
         </Link>
-        <h1 className="mt-2 text-xl font-bold tracking-tight">New lead</h1>
+        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.02em]">New lead</h1>
       </div>
-      <form action={createLead} className="card space-y-4 p-5">
+      <form action={createLead} className="card space-y-5 p-6">
         <div>
           <label className="field-label" htmlFor="clinicName">
             Clinic name
           </label>
           <input id="clinicName" name="clinicName" required className="field" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="field-label" htmlFor="contactName">
               Contact name
@@ -57,7 +57,7 @@ export default function NewLeadPage() {
               type="number"
               min="0"
               step="any"
-              className="field font-mono"
+              className="field num"
             />
           </div>
           <div>
@@ -68,11 +68,11 @@ export default function NewLeadPage() {
               id="nextFollowUp"
               name="nextFollowUp"
               type="date"
-              className="field font-mono"
+              className="field num"
             />
           </div>
         </div>
-        <div className="flex justify-end gap-2 border-t border-line pt-4">
+        <div className="flex justify-end gap-3 border-t border-line/60 pt-5">
           <Link href="/pipeline" className="btn">
             Cancel
           </Link>

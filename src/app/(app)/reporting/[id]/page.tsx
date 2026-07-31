@@ -64,7 +64,7 @@ export default async function ClientReportingPage({
             ← Reporting
           </Link>
           <div className="mt-2 flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight">
+            <h1 className="text-[32px] font-bold tracking-[-0.02em]">
               {client.clinicName}
             </h1>
             <ClientStatusBadge status={client.status} />
@@ -76,16 +76,16 @@ export default async function ClientReportingPage({
       </div>
 
       {trend.length > 0 && (
-        <section className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold">Trends</h2>
+        <section className="mt-8">
+          <h2 className="mb-4 text-xl font-semibold">Trends</h2>
           <TrendCharts data={trend} />
         </section>
       )}
 
       <section className="mt-8">
-        <h2 className="mb-2 text-sm font-semibold">Log a week</h2>
-        <form action={upsert} className="card p-4">
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
+        <h2 className="mb-4 text-xl font-semibold">Log a week</h2>
+        <form action={upsert} className="card p-6">
+          <div className="grid grid-cols-2 gap-5 md:grid-cols-6">
             <div>
               <label className="field-label" htmlFor="weekStart">
                 Week start
@@ -96,7 +96,7 @@ export default async function ClientReportingPage({
                 type="date"
                 required
                 defaultValue={defaultWeekStart()}
-                className="field font-mono"
+                className="field num"
               />
             </div>
             <div>
@@ -110,7 +110,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="any"
                 required
-                className="field font-mono"
+                className="field num"
               />
             </div>
             <div>
@@ -124,7 +124,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="1"
                 required
-                className="field font-mono"
+                className="field num"
               />
             </div>
             <div>
@@ -138,7 +138,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="1"
                 required
-                className="field font-mono"
+                className="field num"
               />
             </div>
             <div>
@@ -152,7 +152,7 @@ export default async function ClientReportingPage({
                 min="0"
                 step="1"
                 required
-                className="field font-mono"
+                className="field num"
               />
             </div>
             <div>
@@ -165,11 +165,11 @@ export default async function ClientReportingPage({
                 type="number"
                 min="0"
                 step="any"
-                className="field font-mono"
+                className="field num"
               />
             </div>
           </div>
-          <div className="mt-4 flex items-end gap-4">
+          <div className="mt-5 flex items-end gap-5">
             <div className="flex-1">
               <label className="field-label" htmlFor="notes">
                 Notes
@@ -188,20 +188,20 @@ export default async function ClientReportingPage({
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-2 text-sm font-semibold">Weekly history</h2>
+        <h2 className="mb-4 text-xl font-semibold">Weekly history</h2>
         <div className="card overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>
                 <th className="th">Week of</th>
-                <th className="th text-right">Spend</th>
-                <th className="th text-right">Leads</th>
-                <th className="th text-right">Booked</th>
-                <th className="th text-right">Shows</th>
-                <th className="th text-right">Revenue</th>
-                <th className="th text-right">CPL</th>
-                <th className="th text-right">Lead→Booked</th>
-                <th className="th text-right">Show rate</th>
+                <th className="th">Spend</th>
+                <th className="th">Leads</th>
+                <th className="th">Booked</th>
+                <th className="th">Shows</th>
+                <th className="th">Revenue</th>
+                <th className="th">CPL</th>
+                <th className="th">Lead→Booked</th>
+                <th className="th">Show rate</th>
                 <th className="th">Notes</th>
                 <th className="th" />
               </tr>
@@ -211,29 +211,29 @@ export default async function ClientReportingPage({
                 const m = computeMetrics(r);
                 const remove = deleteWeeklyReport.bind(null, r.id);
                 return (
-                  <tr key={r.id} className="hover:bg-bg">
-                    <td className="td font-mono text-xs">
+                  <tr key={r.id} className="hover:bg-wash/70">
+                    <td className="td num text-xs">
                       {fmtDate(r.weekStart)}
                     </td>
-                    <td className="td text-right font-mono">
+                    <td className="td num">
                       {fmtMoney(r.spend)}
                     </td>
-                    <td className="td text-right font-mono">{r.leads}</td>
-                    <td className="td text-right font-mono">{r.booked}</td>
-                    <td className="td text-right font-mono">{r.shows}</td>
-                    <td className="td text-right font-mono">
+                    <td className="td num">{r.leads}</td>
+                    <td className="td num">{r.booked}</td>
+                    <td className="td num">{r.shows}</td>
+                    <td className="td num">
                       {fmtMoney(r.revenue)}
                     </td>
-                    <td className="td text-right">
+                    <td className="td">
                       <FlaggedValue value={fmtMoneyCents(m.cpl)} flag={m.cplFlag} />
                     </td>
-                    <td className="td text-right">
+                    <td className="td">
                       <FlaggedValue
                         value={fmtPct(m.leadToBooked)}
                         flag={m.leadToBookedFlag}
                       />
                     </td>
-                    <td className="td text-right">
+                    <td className="td">
                       <FlaggedValue
                         value={fmtPct(m.showRate)}
                         flag={m.showRateFlag}
@@ -242,7 +242,7 @@ export default async function ClientReportingPage({
                     <td className="td max-w-[16rem] truncate text-xs text-muted">
                       {r.notes ?? ""}
                     </td>
-                    <td className="td text-right">
+                    <td className="td">
                       <ConfirmForm
                         action={remove}
                         message={`Delete the week of ${fmtDate(r.weekStart)}?`}

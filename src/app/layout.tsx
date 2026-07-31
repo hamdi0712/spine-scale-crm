@@ -1,10 +1,16 @@
 import type { Metadata } from "next";
-import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { DM_Sans, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
+
+// DM Sans carries all UI text; Inter is reserved for numerals (tabular).
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+});
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-num",
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -16,6 +22,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Spine Scale Ops",
   description: "Internal ops CRM for Spine Scale",
+  icons: { icon: "/logo-icon.svg" },
 };
 
 export default function RootLayout({
@@ -24,7 +31,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${dmSans.variable} ${inter.variable} ${plexMono.variable}`}
+    >
       <body className="font-sans">{children}</body>
     </html>
   );

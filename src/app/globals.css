@@ -4,69 +4,123 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
   body {
     @apply bg-bg text-ink antialiased;
+    font-variant-numeric: tabular-nums;
   }
   ::selection {
-    background: rgba(99, 102, 241, 0.35);
-  }
-  input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.6);
+    background: rgba(18, 109, 251, 0.18);
   }
 }
 
 @layer components {
   .field {
-    @apply w-full border border-line bg-bg px-2.5 py-1.5 text-sm text-ink placeholder:text-muted focus:border-accent focus:outline-none;
+    @apply w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/80 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15;
   }
   .field-label {
-    @apply mb-1 block text-[11px] font-medium uppercase tracking-wider text-muted;
+    @apply mb-2 block text-xs font-medium tracking-[0.02em] text-muted;
   }
   .btn {
-    @apply inline-flex items-center gap-1.5 border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-muted focus:outline-none focus:ring-1 focus:ring-accent;
+    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-line bg-surface px-[18px] text-sm font-medium text-[#4B5563] hover:bg-wash/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
   }
   .btn-primary {
-    @apply inline-flex items-center gap-1.5 border border-accent bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent/90 focus:outline-none focus:ring-1 focus:ring-accent focus:ring-offset-1 focus:ring-offset-bg;
+    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-accent px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
   }
   .btn-danger {
-    @apply inline-flex items-center gap-1.5 border border-bad/40 bg-transparent px-3 py-1.5 text-sm font-medium text-bad hover:border-bad focus:outline-none;
+    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-bad/30 bg-transparent px-[18px] text-sm font-medium text-bad hover:bg-bad-soft/60 focus:outline-none;
+  }
+  .btn-ghost {
+    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-transparent bg-transparent px-[18px] text-sm font-medium text-muted hover:bg-wash/70 hover:text-ink focus:outline-none;
   }
   .card {
-    @apply border border-line bg-surface;
+    @apply overflow-hidden rounded-2xl border border-line bg-surface shadow-card;
   }
   .th {
-    @apply border-b border-line px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-muted;
+    @apply border-b border-line px-4 py-3 text-left text-xs font-medium tracking-[0.02em] text-muted;
   }
   .td {
-    @apply border-b border-line px-3 py-1.5 text-sm;
+    @apply border-b border-line/60 px-4 py-[18px] text-sm;
   }
 }
 
+/* Numerals render in Inter with tabular figures; all other UI text is
+   DM Sans. Apply .num to KPI values, money, counts, dates, percentages. */
+.num {
+  font-family: var(--font-num), var(--font-sans), system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Primary buttons carry a tactile, lit-from-above treatment: gradient
+   fill, glossy top edge, bottom bevel, and a soft brand-tinted lift. */
+.btn-primary {
+  background-image: linear-gradient(to bottom, #3b82ff, #126dfb);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.12),
+    0 6px 16px rgba(18, 109, 251, 0.35);
+  transition:
+    background-image 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.btn-primary:hover {
+  background-image: linear-gradient(to bottom, #4d8dff, #2378ff);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.12),
+    0 8px 20px rgba(18, 109, 251, 0.4);
+}
+.btn-primary:active {
+  background-image: linear-gradient(to bottom, #126dfb, #0f5edd);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 2px 6px rgba(18, 109, 251, 0.3);
+  transform: translateY(1px);
+}
+
+/* Single-line controls get a fixed 42px height; multi-line fields keep
+   vertical padding and a taller default. */
+input.field,
+select.field {
+  height: 42px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+textarea.field {
+  min-height: 108px;
+  line-height: 1.5;
+}
+
+/* Rows group by spacing, not hard rules — drop the divider on last rows. */
+tbody tr:last-child > .td {
+  border-bottom-width: 0;
+}
+
 /* Markdown rendering in the library — restrained typographic defaults. */
-.prose-dark {
+.prose-doc {
   @apply text-sm leading-relaxed text-ink;
 }
-.prose-dark h1,
-.prose-dark h2,
-.prose-dark h3,
-.prose-dark h4 {
+.prose-doc h1,
+.prose-doc h2,
+.prose-doc h3,
+.prose-doc h4 {
   @apply mb-2 mt-5 font-semibold text-ink first:mt-0;
 }
-.prose-dark h1 { @apply text-lg; }
-.prose-dark h2 { @apply text-base; }
-.prose-dark h3 { @apply text-sm; }
-.prose-dark p { @apply mb-3; }
-.prose-dark ul { @apply mb-3 list-disc pl-5; }
-.prose-dark ol { @apply mb-3 list-decimal pl-5; }
-.prose-dark li { @apply mb-1; }
-.prose-dark a { @apply text-accent underline; }
-.prose-dark blockquote { @apply mb-3 border-l-2 border-line pl-3 text-muted; }
-.prose-dark code { @apply bg-bg px-1 py-0.5 font-mono text-[13px]; }
-.prose-dark pre { @apply mb-3 overflow-x-auto border border-line bg-bg p-3; }
-.prose-dark pre code { @apply bg-transparent p-0; }
-.prose-dark hr { @apply my-4 border-line; }
-.prose-dark table { @apply mb-3 w-full border-collapse text-sm; }
-.prose-dark th,
-.prose-dark td { @apply border border-line px-2 py-1 text-left; }
+.prose-doc h1 { @apply text-lg; }
+.prose-doc h2 { @apply text-base; }
+.prose-doc h3 { @apply text-sm; }
+.prose-doc p { @apply mb-3; }
+.prose-doc ul { @apply mb-3 list-disc pl-5; }
+.prose-doc ol { @apply mb-3 list-decimal pl-5; }
+.prose-doc li { @apply mb-1; }
+.prose-doc a { @apply text-accent underline; }
+.prose-doc blockquote { @apply mb-3 border-l-2 border-line pl-3 text-muted; }
+.prose-doc code { @apply rounded bg-wash/70 px-1 py-0.5 font-mono text-[13px]; }
+.prose-doc pre { @apply mb-3 overflow-x-auto rounded-[10px] border border-line bg-wash/60 p-3; }
+.prose-doc pre code { @apply bg-transparent p-0; }
+.prose-doc hr { @apply my-4 border-line; }
+.prose-doc table { @apply mb-3 w-full border-collapse text-sm; }
+.prose-doc th,
+.prose-doc td { @apply border border-line px-2 py-1 text-left; }

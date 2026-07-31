@@ -3,24 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { logout } from "@/lib/actions/auth";
-
-const ICONS: Record<string, React.ReactNode> = {
-  dashboard: (
-    <path d="M3 3h7v9H3V3zm11 0h7v5h-7V3zm0 9h7v9h-7v-9zM3 16h7v5H3v-5z" />
-  ),
-  pipeline: (
-    <path d="M4 4h16v3H4V4zm2 6.5h12v3H6v-3zM8 17h8v3H8v-3z" />
-  ),
-  clients: (
-    <path d="M12 12a4 4 0 100-8 4 4 0 000 8zm-8 8a8 8 0 0116 0v1H4v-1z" />
-  ),
-  reporting: (
-    <path d="M4 20V10h3v10H4zm6.5 0V4h3v16h-3zM17 20v-7h3v7h-3z" />
-  ),
-  library: (
-    <path d="M4 3h5v18H4V3zm7 0h5v18h-5V3zm7.2.6l3.4 17-4.9 1L13.3 4.5l4.9-.9z" />
-  ),
-};
+import Icon from "@/components/Icons";
+import { LogoIconChip, LogoWordmarkChip } from "@/components/Logo";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
@@ -30,15 +14,50 @@ const NAV = [
   { href: "/library", label: "Library", icon: "library" },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+  collapsed,
+  onToggle,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   const pathname = usePathname();
   return (
-    <aside className="fixed inset-y-0 left-0 flex w-52 flex-col border-r border-line bg-surface">
-      <div className="border-b border-line px-4 py-4">
-        <div className="text-sm font-bold tracking-tight">Spine Scale</div>
-        <div className="text-[11px] text-muted">Internal Ops</div>
+    <aside
+      className={`fixed inset-y-0 left-0 flex flex-col border-r border-line/70 bg-panel ${
+        collapsed ? "w-16" : "w-56"
+      }`}
+    >
+      <div
+        className={`flex items-center px-4 pb-4 pt-5 ${
+          collapsed ? "flex-col gap-3 px-0" : "justify-between"
+        }`}
+      >
+        {collapsed ? (
+          <LogoIconChip />
+        ) : (
+          <Link href="/" className="min-w-0">
+            <LogoWordmarkChip />
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="rounded-[10px] p-2 text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+        >
+          <Icon
+            name="chevronLeft"
+            className={`h-4 w-4 ${collapsed ? "rotate-180" : ""}`}
+          />
+        </button>
       </div>
-      <nav className="flex-1 py-2">
+      {!collapsed && (
+        <div className="px-6 pb-2 pt-2 text-xs font-medium tracking-[0.02em] text-muted">
+          Internal ops
+        </div>
+      )}
+      <nav className={`flex-1 space-y-1 py-1 ${collapsed ? "px-2" : "px-3"}`}>
         {NAV.map((item) => {
           const active =
             item.href === "/"
@@ -48,30 +67,34 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-2.5 border-l-2 px-4 py-2 text-sm ${
+              title={collapsed ? item.label : undefined}
+              className={`flex h-[42px] items-center gap-3 rounded-[10px] text-sm font-medium ${
+                collapsed ? "justify-center px-0" : "px-3"
+              } ${
                 active
-                  ? "border-accent bg-bg font-medium text-ink"
-                  : "border-transparent text-muted hover:text-ink"
+                  ? "bg-accent/10 text-accent"
+                  : "text-muted hover:bg-wash hover:text-ink"
               }`}
             >
-              <svg
-                viewBox="0 0 24 24"
-                className={`h-4 w-4 shrink-0 ${active ? "fill-accent" : "fill-current"}`}
-                aria-hidden
-              >
-                {ICONS[item.icon]}
-              </svg>
-              {item.label}
+              <Icon name={item.icon} />
+              {!collapsed && item.label}
             </Link>
           );
         })}
       </nav>
-      <form action={logout} className="border-t border-line">
+      <form
+        action={logout}
+        className={`border-t border-line/60 py-3 ${collapsed ? "px-2" : "px-3"}`}
+      >
         <button
           type="submit"
-          className="w-full px-4 py-3 text-left text-sm text-muted hover:text-ink"
+          title={collapsed ? "Sign out" : undefined}
+          className={`flex h-[42px] w-full items-center gap-3 rounded-[10px] text-left text-sm font-medium text-muted hover:bg-wash hover:text-ink ${
+            collapsed ? "justify-center px-0" : "px-3"
+          }`}
         >
-          Sign out
+          <Icon name="logout" />
+          {!collapsed && "Sign out"}
         </button>
       </form>
     </aside>

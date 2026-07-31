@@ -31,18 +31,18 @@ export default async function PipelinePage({
     <div>
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Pipeline</h1>
-          <p className="mt-0.5 text-sm text-muted">
+          <h1 className="text-[32px] font-bold tracking-[-0.02em]">Pipeline</h1>
+          <p className="mt-1.5 text-sm text-muted">
             Clinics in play — drag cards between stages
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex border border-line">
+          <div className="flex h-[42px] items-center gap-1 rounded-[10px] border border-line bg-surface p-1">
             <Link
               href="/pipeline"
-              className={`px-3 py-1.5 text-sm ${
+              className={`flex h-[32px] items-center rounded-lg px-3.5 text-sm ${
                 view === "board"
-                  ? "bg-surface font-medium text-ink"
+                  ? "bg-accent/10 font-medium text-accent"
                   : "text-muted hover:text-ink"
               }`}
             >
@@ -50,9 +50,9 @@ export default async function PipelinePage({
             </Link>
             <Link
               href="/pipeline?view=table"
-              className={`border-l border-line px-3 py-1.5 text-sm ${
+              className={`flex h-[32px] items-center rounded-lg px-3.5 text-sm ${
                 view === "table"
-                  ? "bg-surface font-medium text-ink"
+                  ? "bg-accent/10 font-medium text-accent"
                   : "text-muted hover:text-ink"
               }`}
             >
@@ -65,7 +65,7 @@ export default async function PipelinePage({
         </div>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-8">
         {view === "board" ? (
           <KanbanBoard leads={serialized} />
         ) : (

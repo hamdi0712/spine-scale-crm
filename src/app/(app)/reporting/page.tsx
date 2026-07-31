@@ -14,22 +14,22 @@ export default async function ReportingPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold tracking-tight">Reporting</h1>
-      <p className="mt-0.5 text-sm text-muted">
+      <h1 className="text-[32px] font-bold tracking-[-0.02em]">Reporting</h1>
+      <p className="mt-1.5 text-sm text-muted">
         Latest reported week per client, against target KPIs
       </p>
 
-      <div className="card mt-6 overflow-x-auto">
+      <div className="card mt-8 overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr>
               <th className="th">Client</th>
               <th className="th">Status</th>
-              <th className="th text-right">Last week</th>
-              <th className="th text-right">Leads</th>
-              <th className="th text-right">CPL</th>
-              <th className="th text-right">Lead→Booked</th>
-              <th className="th text-right">Show rate</th>
+              <th className="th">Last week</th>
+              <th className="th">Leads</th>
+              <th className="th">CPL</th>
+              <th className="th">Lead→Booked</th>
+              <th className="th">Show rate</th>
             </tr>
           </thead>
           <tbody>
@@ -37,11 +37,11 @@ export default async function ReportingPage() {
               const latest = client.reports[0];
               const m = latest ? computeMetrics(latest) : null;
               return (
-                <tr key={client.id} className="hover:bg-bg">
+                <tr key={client.id} className="hover:bg-wash/70">
                   <td className="td">
                     <Link
                       href={`/reporting/${client.id}`}
-                      className="font-medium text-accent hover:underline"
+                      className="font-medium text-ink hover:underline"
                     >
                       {client.clinicName}
                     </Link>
@@ -49,20 +49,20 @@ export default async function ReportingPage() {
                   <td className="td">
                     <ClientStatusBadge status={client.status} />
                   </td>
-                  <td className="td text-right font-mono text-xs">
+                  <td className="td num text-xs">
                     {latest ? fmtDate(latest.weekStart) : "—"}
                   </td>
-                  <td className="td text-right font-mono">
+                  <td className="td num">
                     {latest ? latest.leads : "—"}
                   </td>
-                  <td className="td text-right">
+                  <td className="td">
                     {m ? (
                       <FlaggedValue value={fmtMoneyCents(m.cpl)} flag={m.cplFlag} />
                     ) : (
                       <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td className="td text-right">
+                  <td className="td">
                     {m ? (
                       <FlaggedValue
                         value={fmtPct(m.leadToBooked)}
@@ -72,7 +72,7 @@ export default async function ReportingPage() {
                       <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td className="td text-right">
+                  <td className="td">
                     {m ? (
                       <FlaggedValue
                         value={fmtPct(m.showRate)}

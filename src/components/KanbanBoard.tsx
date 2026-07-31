@@ -41,7 +41,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
   }
 
   return (
-    <div className="flex gap-px overflow-x-auto border border-line bg-line">
+    <div className="flex gap-4 overflow-x-auto pb-1">
       {LEAD_STAGES.map((stage) => {
         const column = leads.filter((l) => stageOf(l) === stage);
         const value = column.reduce((s, l) => s + (l.estValue ?? 0), 0);
@@ -54,24 +54,26 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
             }}
             onDragLeave={() => setOverStage(null)}
             onDrop={() => handleDrop(stage)}
-            className={`flex min-h-[420px] w-56 shrink-0 flex-col ${
-              overStage === stage ? "bg-bg" : "bg-surface"
+            className={`flex min-h-[420px] w-56 shrink-0 flex-col rounded-2xl border ${
+              overStage === stage
+                ? "border-accent/50 bg-accent/5"
+                : "border-line bg-panel"
             }`}
           >
-            <div className="border-b border-line px-3 py-2">
+            <div className="border-b border-line/60 px-4 py-3">
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-semibold">
+                <span className="text-xs font-medium">
                   {LEAD_STAGE_LABELS[stage]}
                 </span>
-                <span className="font-mono text-xs text-muted">
+                <span className="num text-xs text-muted">
                   {column.length}
                 </span>
               </div>
-              <div className="mt-0.5 font-mono text-[11px] text-muted">
+              <div className="num mt-0.5 text-xs text-muted">
                 {value > 0 ? fmtMoney(value) : "—"}
               </div>
             </div>
-            <div className="flex-1 space-y-px bg-line">
+            <div className="flex-1 space-y-2.5 p-3">
               {column.map((lead) => (
                 <div
                   key={lead.id}
@@ -81,13 +83,13 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                     setDragId(null);
                     setOverStage(null);
                   }}
-                  className={`cursor-grab bg-surface px-3 py-2.5 hover:bg-bg ${
+                  className={`cursor-grab rounded-xl border border-line bg-surface px-3.5 py-3 shadow-card hover:border-accent/50 ${
                     dragId === lead.id ? "opacity-40" : ""
                   }`}
                 >
                   <Link
                     href={`/pipeline/${lead.id}`}
-                    className="block text-sm font-medium hover:text-accent"
+                    className="block text-sm font-medium hover:underline"
                     draggable={false}
                   >
                     {lead.clinicName}
@@ -97,7 +99,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                       {lead.contactName}
                     </div>
                   )}
-                  <div className="mt-1.5 flex items-center justify-between font-mono text-[11px] text-muted">
+                  <div className="num mt-1.5 flex items-center justify-between text-xs text-muted">
                     <span>{lead.estValue != null ? fmtMoney(lead.estValue) : ""}</span>
                     <span>
                       {lead.nextFollowUp ? fmtDate(lead.nextFollowUp) : ""}
@@ -105,7 +107,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                   </div>
                 </div>
               ))}
-              {column.length === 0 && <div className="h-full bg-surface" />}
+              {column.length === 0 && <div className="h-full" />}
             </div>
           </div>
         );

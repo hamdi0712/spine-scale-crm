@@ -57,13 +57,13 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
     }
   }
 
-  function SortTh({ k, children, right }: { k: SortKey; children: React.ReactNode; right?: boolean }) {
+  function SortTh({ k, children }: { k: SortKey; children: React.ReactNode }) {
     return (
-      <th className={`th ${right ? "text-right" : ""}`}>
+      <th className="th">
         <button
           type="button"
           onClick={() => toggleSort(k)}
-          className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-ink"
+          className="inline-flex items-center gap-1 hover:text-ink"
         >
           {children}
           {sortKey === k && <span aria-hidden>{sortDir === 1 ? "↑" : "↓"}</span>}
@@ -74,7 +74,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
 
   return (
     <div>
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-3">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -93,7 +93,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
             </option>
           ))}
         </select>
-        <span className="ml-auto font-mono text-xs text-muted">
+        <span className="num ml-auto text-xs text-muted">
           {rows.length} lead{rows.length === 1 ? "" : "s"}
         </span>
       </div>
@@ -105,24 +105,24 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
               <th className="th">Contact</th>
               <th className="th">Source</th>
               <SortTh k="stage">Stage</SortTh>
-              <SortTh k="estValue" right>
+              <SortTh k="estValue">
                 Est. value
               </SortTh>
-              <SortTh k="nextFollowUp" right>
+              <SortTh k="nextFollowUp">
                 Next follow-up
               </SortTh>
-              <SortTh k="createdAt" right>
+              <SortTh k="createdAt">
                 Created
               </SortTh>
             </tr>
           </thead>
           <tbody>
             {rows.map((lead) => (
-              <tr key={lead.id} className="hover:bg-bg">
+              <tr key={lead.id} className="hover:bg-wash/70">
                 <td className="td">
                   <Link
                     href={`/pipeline/${lead.id}`}
-                    className="font-medium text-accent hover:underline"
+                    className="font-medium text-ink hover:underline"
                   >
                     {lead.clinicName}
                   </Link>
@@ -132,13 +132,13 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
                 <td className="td">
                   <StageBadge stage={lead.stage} />
                 </td>
-                <td className="td text-right font-mono">
+                <td className="td num">
                   {lead.estValue != null ? fmtMoney(lead.estValue) : "—"}
                 </td>
-                <td className="td text-right font-mono text-xs">
+                <td className="td num text-xs">
                   {fmtDate(lead.nextFollowUp)}
                 </td>
-                <td className="td text-right font-mono text-xs text-muted">
+                <td className="td num text-xs text-muted">
                   {fmtDate(lead.createdAt)}
                 </td>
               </tr>
