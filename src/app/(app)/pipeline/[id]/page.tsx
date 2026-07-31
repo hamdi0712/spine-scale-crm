@@ -41,10 +41,10 @@ export default async function LeadDetailPage({
             ← Pipeline
           </Link>
           <div className="mt-2 flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight">{lead.clinicName}</h1>
+            <h1 className="text-[32px] font-bold tracking-[-0.02em]">{lead.clinicName}</h1>
             <StageBadge stage={lead.stage} />
             {lead.archived && (
-              <span className="rounded-full bg-line/70 px-2 py-0.5 text-[11px] font-medium text-muted">
+              <span className="inline-flex h-[22px] items-center rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
                 Archived
               </span>
             )}
@@ -72,10 +72,10 @@ export default async function LeadDetailPage({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <section>
-          <h2 className="mb-2 text-sm font-semibold">Details</h2>
-          <form action={update} className="card space-y-4 p-5">
+          <h2 className="mb-4 text-xl font-semibold">Details</h2>
+          <form action={update} className="card space-y-5 p-6">
             <div>
               <label className="field-label" htmlFor="clinicName">
                 Clinic name
@@ -88,7 +88,7 @@ export default async function LeadDetailPage({
                 className="field"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <div>
                 <label className="field-label" htmlFor="contactName">
                   Contact name
@@ -145,7 +145,7 @@ export default async function LeadDetailPage({
                   min="0"
                   step="any"
                   defaultValue={lead.estValue ?? ""}
-                  className="field font-mono"
+                  className="field"
                 />
               </div>
               <div>
@@ -157,7 +157,7 @@ export default async function LeadDetailPage({
                   name="nextFollowUp"
                   type="date"
                   defaultValue={toDateInput(lead.nextFollowUp)}
-                  className="field font-mono"
+                  className="field"
                 />
               </div>
               <div>
@@ -178,7 +178,7 @@ export default async function LeadDetailPage({
                 </select>
               </div>
             </div>
-            <div className="flex justify-end border-t border-line pt-4">
+            <div className="flex justify-end border-t border-line/60 pt-5">
               <button type="submit" className="btn-primary">
                 Save changes
               </button>
@@ -187,8 +187,8 @@ export default async function LeadDetailPage({
         </section>
 
         <section>
-          <h2 className="mb-2 text-sm font-semibold">Activity log</h2>
-          <form action={addNote} className="card flex gap-2 p-3">
+          <h2 className="mb-4 text-xl font-semibold">Activity log</h2>
+          <form action={addNote} className="card flex gap-3 p-4">
             <input
               name="body"
               placeholder="Add a note — calls, emails, objections…"
@@ -199,7 +199,7 @@ export default async function LeadDetailPage({
               Log
             </button>
           </form>
-          <div className="card mt-px">
+          <div className="card mt-4">
             {lead.notes.length === 0 ? (
               <p className="px-4 py-6 text-sm text-muted">
                 No activity yet. Notes are append-only and timestamped.
@@ -207,8 +207,8 @@ export default async function LeadDetailPage({
             ) : (
               <ul>
                 {lead.notes.map((note) => (
-                  <li key={note.id} className="border-b border-line px-4 py-2.5 last:border-b-0">
-                    <div className="font-mono text-[11px] text-muted">
+                  <li key={note.id} className="border-b border-line/60 px-5 py-4 last:border-b-0">
+                    <div className="text-xs text-muted">
                       {fmtDateTime(note.createdAt)}
                     </div>
                     <div className="mt-0.5 whitespace-pre-wrap text-sm">

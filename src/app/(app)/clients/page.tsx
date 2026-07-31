@@ -16,8 +16,8 @@ export default async function ClientsPage() {
     <div>
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Clients</h1>
-          <p className="mt-0.5 text-sm text-muted">
+          <h1 className="text-[32px] font-bold tracking-[-0.02em]">Clients</h1>
+          <p className="mt-1.5 text-sm text-muted">
             Signed clinics and delivery progress
           </p>
         </div>
@@ -26,21 +26,21 @@ export default async function ClientsPage() {
         </Link>
       </div>
 
-      <div className="card mt-6 overflow-x-auto">
+      <div className="card mt-8 overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr>
               <th className="th">Clinic</th>
               <th className="th">Status</th>
               <th className="th">Package</th>
-              <th className="th text-right">Monthly fee</th>
-              <th className="th text-right">Contract start</th>
+              <th className="th">Monthly fee</th>
+              <th className="th">Contract start</th>
               <th className="th w-64">Delivery</th>
             </tr>
           </thead>
           <tbody>
             {clients.map((client) => (
-              <tr key={client.id} className="hover:bg-bg">
+              <tr key={client.id} className="hover:bg-bg/50">
                 <td className="td">
                   <Link
                     href={`/clients/${client.id}`}
@@ -53,10 +53,10 @@ export default async function ClientsPage() {
                   <ClientStatusBadge status={client.status} />
                 </td>
                 <td className="td text-muted">{client.packageName ?? "—"}</td>
-                <td className="td text-right font-mono">
+                <td className="td">
                   {fmtMoney(client.monthlyFee)}
                 </td>
-                <td className="td text-right font-mono text-xs">
+                <td className="td text-xs">
                   {fmtDate(client.contractStart)}
                 </td>
                 <td className="td">

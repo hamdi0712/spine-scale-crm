@@ -23,7 +23,7 @@ function Pill({ tone, label }: { tone: Tone; label: string }) {
   const cls = TONE_CLS[tone];
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ${cls.pill}`}
+      className={`inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium ${cls.pill}`}
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls.dot}`} />
       {label}
@@ -69,7 +69,7 @@ const FLAG_CLS: Record<Flag, string> = {
 // so state is not carried by color alone.
 export function FlaggedValue({ value, flag }: { value: string; flag: Flag }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 font-mono ${FLAG_CLS[flag]}`}>
+    <span className={`inline-flex items-center gap-1.5 ${FLAG_CLS[flag]}`}>
       {flag !== "na" && (
         <span
           aria-label={flag}

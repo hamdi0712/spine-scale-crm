@@ -7,11 +7,11 @@ const config: Config = {
       colors: {
         bg: "#F5F4FB",
         surface: "#FFFFFF",
-        line: "#E7E5F0",
+        line: "#E7E9EE",
         accent: "#126DFB",
         accent2: "#3FD1C8",
         ink: "#1C1B27",
-        muted: "#6F6C7D",
+        muted: "#6B7280",
         ok: "#1FAA6D",
         "ok-soft": "#E7F8EF",
         warn: "#D89B2D",
@@ -20,7 +20,7 @@ const config: Config = {
         "bad-soft": "#FDEBEC",
       },
       boxShadow: {
-        card: "0 1px 2px rgba(28, 27, 39, 0.04), 0 4px 12px rgba(28, 27, 39, 0.06)",
+        card: "0 1px 2px rgba(0, 0, 0, 0.04)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],

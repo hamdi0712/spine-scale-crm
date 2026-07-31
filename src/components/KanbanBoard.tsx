@@ -41,7 +41,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
   }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-1">
+    <div className="flex gap-4 overflow-x-auto pb-1">
       {LEAD_STAGES.map((stage) => {
         const column = leads.filter((l) => stageOf(l) === stage);
         const value = column.reduce((s, l) => s + (l.estValue ?? 0), 0);
@@ -54,26 +54,26 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
             }}
             onDragLeave={() => setOverStage(null)}
             onDrop={() => handleDrop(stage)}
-            className={`flex min-h-[420px] w-56 shrink-0 flex-col rounded-[10px] border ${
+            className={`flex min-h-[420px] w-56 shrink-0 flex-col rounded-2xl border ${
               overStage === stage
                 ? "border-accent/50 bg-accent/5"
                 : "border-line bg-bg"
             }`}
           >
-            <div className="border-b border-line px-3 py-2">
+            <div className="border-b border-line/60 px-4 py-3">
               <div className="flex items-baseline justify-between">
-                <span className="text-xs font-semibold">
+                <span className="text-xs font-medium">
                   {LEAD_STAGE_LABELS[stage]}
                 </span>
-                <span className="font-mono text-xs text-muted">
+                <span className="text-xs text-muted">
                   {column.length}
                 </span>
               </div>
-              <div className="mt-0.5 font-mono text-[11px] text-muted">
+              <div className="mt-0.5 text-xs text-muted">
                 {value > 0 ? fmtMoney(value) : "—"}
               </div>
             </div>
-            <div className="flex-1 space-y-2 p-2">
+            <div className="flex-1 space-y-2.5 p-3">
               {column.map((lead) => (
                 <div
                   key={lead.id}
@@ -83,7 +83,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                     setDragId(null);
                     setOverStage(null);
                   }}
-                  className={`cursor-grab rounded-lg border border-line bg-surface px-3 py-2.5 shadow-sm hover:border-accent/50 ${
+                  className={`cursor-grab rounded-xl border border-line bg-surface px-3.5 py-3 shadow-card hover:border-accent/50 ${
                     dragId === lead.id ? "opacity-40" : ""
                   }`}
                 >
@@ -99,7 +99,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                       {lead.contactName}
                     </div>
                   )}
-                  <div className="mt-1.5 flex items-center justify-between font-mono text-[11px] text-muted">
+                  <div className="mt-1.5 flex items-center justify-between text-xs text-muted">
                     <span>{lead.estValue != null ? fmtMoney(lead.estValue) : ""}</span>
                     <span>
                       {lead.nextFollowUp ? fmtDate(lead.nextFollowUp) : ""}

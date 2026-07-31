@@ -50,7 +50,7 @@ export default async function ClientDetailPage({
             ← Clients
           </Link>
           <div className="mt-2 flex items-center gap-3">
-            <h1 className="text-xl font-bold tracking-tight">
+            <h1 className="text-[32px] font-bold tracking-[-0.02em]">
               {client.clinicName}
             </h1>
             <ClientStatusBadge status={client.status} />
@@ -68,11 +68,11 @@ export default async function ClientDetailPage({
         </div>
       </div>
 
-      <section className="mt-6">
-        <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">Delivery progress</h2>
+      <section className="mt-8">
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-xl font-semibold">Delivery progress</h2>
         </div>
-        <div className="card p-4">
+        <div className="card p-6">
           <CapsuleBar
             size="lg"
             items={client.checklist.map((i) => ({
@@ -85,8 +85,8 @@ export default async function ClientDetailPage({
 
       <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
         <section className="lg:col-span-2">
-          <h2 className="mb-2 text-sm font-semibold">Client details</h2>
-          <form action={update} className="card space-y-4 p-5">
+          <h2 className="mb-4 text-xl font-semibold">Client details</h2>
+          <form action={update} className="card space-y-5 p-6">
             <div>
               <label className="field-label" htmlFor="clinicName">
                 Clinic name
@@ -99,7 +99,7 @@ export default async function ClientDetailPage({
                 className="field"
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
               <div>
                 <label className="field-label" htmlFor="contactName">
                   Contact name
@@ -173,7 +173,7 @@ export default async function ClientDetailPage({
                   min="0"
                   step="any"
                   defaultValue={client.monthlyFee ?? ""}
-                  className="field font-mono"
+                  className="field"
                 />
               </div>
               <div className="col-span-2">
@@ -185,7 +185,7 @@ export default async function ClientDetailPage({
                   name="contractStart"
                   type="date"
                   defaultValue={toDateInput(client.contractStart)}
-                  className="field font-mono"
+                  className="field"
                 />
               </div>
               <div className="col-span-2">
@@ -196,7 +196,7 @@ export default async function ClientDetailPage({
                   id="ghlRef"
                   name="ghlRef"
                   defaultValue={client.ghlRef ?? ""}
-                  className="field font-mono text-xs"
+                  className="field text-xs"
                 />
               </div>
               <div className="col-span-2">
@@ -207,7 +207,7 @@ export default async function ClientDetailPage({
                   id="metaRef"
                   name="metaRef"
                   defaultValue={client.metaRef ?? ""}
-                  className="field font-mono text-xs"
+                  className="field text-xs"
                 />
               </div>
               <div className="col-span-2">
@@ -223,7 +223,7 @@ export default async function ClientDetailPage({
                 />
               </div>
             </div>
-            <div className="flex justify-end border-t border-line pt-4">
+            <div className="flex justify-end border-t border-line/60 pt-5">
               <button type="submit" className="btn-primary">
                 Save changes
               </button>
@@ -232,7 +232,7 @@ export default async function ClientDetailPage({
         </section>
 
         <section className="lg:col-span-3">
-          <h2 className="mb-2 text-sm font-semibold">
+          <h2 className="mb-4 text-xl font-semibold">
             Onboarding / delivery checklist
           </h2>
           <div className="card">
@@ -244,10 +244,10 @@ export default async function ClientDetailPage({
                 return (
                   <li
                     key={item.id}
-                    className="border-b border-line px-3 py-2 last:border-b-0"
+                    className="min-h-[56px] border-b border-line/60 px-4 py-3 last:border-b-0 hover:bg-bg/40"
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="flex shrink-0 overflow-hidden rounded-md border border-line">
+                    <div className="flex items-center gap-3">
+                      <div className="flex shrink-0 overflow-hidden rounded-full border border-line">
                         {CHECKLIST_STATUSES.map((s) => {
                           const setStatus = setChecklistItemStatus.bind(
                             null,
@@ -260,14 +260,14 @@ export default async function ClientDetailPage({
                               <button
                                 type="submit"
                                 title={CHECKLIST_STATUS_LABELS[s]}
-                                className={`px-1.5 py-0.5 text-xs ${
+                                className={`flex h-7 w-8 items-center justify-center text-xs ${
                                   active
                                     ? s === "DONE"
                                       ? "bg-ok-soft text-ok"
                                       : s === "IN_PROGRESS"
                                         ? "bg-warn-soft text-warn"
-                                        : "bg-line text-ink"
-                                    : "text-muted hover:text-ink"
+                                        : "bg-line/70 text-ink"
+                                    : "text-muted/70 hover:bg-bg/60 hover:text-ink"
                                 }`}
                               >
                                 {STATUS_GLYPH[s]}
@@ -288,7 +288,7 @@ export default async function ClientDetailPage({
                         />
                       </form>
                       {item.completedAt && (
-                        <span className="shrink-0 font-mono text-[11px] text-muted">
+                        <span className="shrink-0 text-xs text-muted">
                           {fmtDate(item.completedAt)}
                         </span>
                       )}
@@ -300,7 +300,7 @@ export default async function ClientDetailPage({
                         ×
                       </ConfirmForm>
                     </div>
-                    <form action={setNotes} className="mt-1 pl-[74px]">
+                    <form action={setNotes} className="mt-1 pl-[110px]">
                       <input
                         name="notes"
                         defaultValue={item.notes ?? ""}
@@ -314,7 +314,7 @@ export default async function ClientDetailPage({
             </ul>
             <form
               action={addItem}
-              className="flex gap-2 border-t border-line p-3"
+              className="flex gap-3 border-t border-line/60 p-4"
             >
               <input
                 name="title"

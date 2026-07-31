@@ -4,6 +4,7 @@ import { OPEN_STAGES } from "@/lib/constants";
 import { computeMetrics } from "@/lib/kpi";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { StageBadge } from "@/components/Badge";
+import Icon from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
 
@@ -49,48 +50,56 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold tracking-tight">Dashboard</h1>
-      <p className="mt-0.5 text-sm text-muted">Agency at a glance</p>
+      <h1 className="text-[32px] font-bold tracking-[-0.02em]">Dashboard</h1>
+      <p className="mt-1.5 text-sm text-muted">Agency at a glance</p>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="card px-4 py-3.5">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
-            Active clients
+      <div className="mt-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
+        {[
+          {
+            label: "Active clients",
+            value: String(activeClients.length),
+            detail: "Currently on the books",
+            icon: "clients",
+          },
+          {
+            label: "MRR (active)",
+            value: fmtMoney(mrr),
+            detail: "Recurring monthly fees",
+            icon: "dollar",
+          },
+          {
+            label: "Pipeline value",
+            value: fmtMoney(pipelineValue),
+            detail: `${openLeads.length} open lead${openLeads.length === 1 ? "" : "s"}`,
+            icon: "trend",
+          },
+          {
+            label: "Follow-ups due (7d)",
+            value: String(followUps.length),
+            detail: "Due in the next 7 days",
+            icon: "clock",
+          },
+        ].map((kpi) => (
+          <div key={kpi.label} className="card p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-xs font-medium tracking-[0.02em] text-muted">
+                {kpi.label}
+              </div>
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-accent/10 text-accent">
+                <Icon name={kpi.icon} />
+              </div>
+            </div>
+            <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight">
+              {kpi.value}
+            </div>
+            <div className="mt-2.5 text-xs text-muted">{kpi.detail}</div>
           </div>
-          <div className="mt-1 font-mono text-2xl font-medium">
-            {activeClients.length}
-          </div>
-        </div>
-        <div className="card px-4 py-3.5">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
-            MRR (active)
-          </div>
-          <div className="mt-1 font-mono text-2xl font-medium">{fmtMoney(mrr)}</div>
-        </div>
-        <div className="card px-4 py-3.5">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
-            Pipeline value
-          </div>
-          <div className="mt-1 font-mono text-2xl font-medium">
-            {fmtMoney(pipelineValue)}
-          </div>
-          <div className="mt-0.5 text-xs text-muted">
-            {openLeads.length} open lead{openLeads.length === 1 ? "" : "s"}
-          </div>
-        </div>
-        <div className="card px-4 py-3.5">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-muted">
-            Follow-ups due (7d)
-          </div>
-          <div className="mt-1 font-mono text-2xl font-medium">
-            {followUps.length}
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <section>
-          <h2 className="mb-2 text-sm font-semibold">Follow-ups due</h2>
+          <h2 className="mb-4 text-xl font-semibold">Follow-ups due</h2>
           <div className="card">
             {followUps.length === 0 ? (
               <p className="px-4 py-6 text-sm text-muted">
@@ -116,7 +125,7 @@ export default async function DashboardPage() {
                           <StageBadge stage={lead.stage} />
                         </td>
                         <td
-                          className={`td text-right font-mono text-xs ${
+                          className={`td text-xs ${
                             overdue ? "text-bad" : "text-muted"
                           }`}
                         >
@@ -133,7 +142,7 @@ export default async function DashboardPage() {
         </section>
 
         <section>
-          <h2 className="mb-2 text-sm font-semibold">Clients needing attention</h2>
+          <h2 className="mb-4 text-xl font-semibold">Clients needing attention</h2>
           <div className="card">
             {redFlagged.length === 0 ? (
               <p className="px-4 py-6 text-sm text-muted">
@@ -153,7 +162,7 @@ export default async function DashboardPage() {
                         </Link>
                       </td>
                       <td className="td text-bad">{reds.join(", ")}</td>
-                      <td className="td text-right font-mono text-xs text-muted">
+                      <td className="td text-xs text-muted">
                         wk of {fmtDate(weekStart)}
                       </td>
                     </tr>

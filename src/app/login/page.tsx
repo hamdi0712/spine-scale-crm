@@ -22,7 +22,7 @@ export default function LoginPage() {
           <LogoWordmarkChip />
           <div className="mt-3 text-sm text-muted">Internal Ops CRM</div>
         </div>
-        <form action={formAction} className="space-y-4">
+        <form action={formAction} className="space-y-5">
           <div>
             <label htmlFor="password" className="field-label">
               Password
@@ -37,7 +37,7 @@ export default function LoginPage() {
             />
           </div>
           {state.error && (
-            <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">
+            <p className="rounded-[10px] bg-bad-soft px-3.5 py-2.5 text-sm text-bad">
               {state.error}
             </p>
           )}

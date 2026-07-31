@@ -22,24 +22,24 @@ const PRIMARY = "#126DFB";
 const SECONDARY = "#3FD1C8";
 
 const AXIS = {
-  stroke: "#E7E5F0",
-  tick: { fill: "#6F6C7D", fontSize: 11, fontFamily: "var(--font-mono)" },
+  stroke: "#E7E9EE",
+  tick: { fill: "#6B7280", fontSize: 11, fontFamily: "var(--font-sans)" },
   tickLine: false as const,
-  axisLine: { stroke: "#E7E5F0" },
+  axisLine: { stroke: "#E7E9EE" },
 };
 
 const TOOLTIP_STYLE = {
   contentStyle: {
     background: "#FFFFFF",
-    border: "1px solid #E7E5F0",
-    borderRadius: 8,
-    boxShadow: "0 4px 12px rgba(28, 27, 39, 0.08)",
+    border: "1px solid #E7E9EE",
+    borderRadius: 10,
+    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
     fontSize: 12,
-    fontFamily: "var(--font-mono)",
+    fontFamily: "var(--font-sans)",
   },
-  labelStyle: { color: "#6F6C7D", marginBottom: 4 },
+  labelStyle: { color: "#6B7280", marginBottom: 4 },
   itemStyle: { color: "#1C1B27" },
-  cursor: { stroke: "#E7E5F0" },
+  cursor: { stroke: "#E7E9EE" },
 };
 
 function Panel({
@@ -50,8 +50,8 @@ function Panel({
   children: React.ReactElement;
 }) {
   return (
-    <div className="card p-4">
-      <div className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted">
+    <div className="card p-6">
+      <div className="mb-4 text-xs font-medium tracking-[0.02em] text-muted">
         {title}
       </div>
       <div className="h-44">
@@ -67,7 +67,7 @@ function Panel({
 // and show rate are different units and never share an axis.
 export default function TrendCharts({ data }: { data: TrendPoint[] }) {
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <Panel title="Leads / week">
         <LineChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
           <XAxis dataKey="week" {...AXIS} />
@@ -111,7 +111,7 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
           <XAxis dataKey="week" {...AXIS} />
           <YAxis
             {...AXIS}
-            width={48}
+            width={56}
             domain={[0, 100]}
             tickFormatter={(v: number) => `${v}%`}
           />

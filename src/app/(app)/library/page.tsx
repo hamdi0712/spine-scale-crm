@@ -46,12 +46,12 @@ export default async function LibraryPage({
 
   return (
     <div>
-      <h1 className="text-xl font-bold tracking-tight">Library</h1>
-      <p className="mt-0.5 text-sm text-muted">
+      <h1 className="text-[32px] font-bold tracking-[-0.02em]">Library</h1>
+      <p className="mt-1.5 text-sm text-muted">
         Playbooks and templates, written as you build them
       </p>
 
-      <div className="card mt-6 grid items-stretch divide-y divide-line lg:grid-cols-[12rem_16rem_1fr] lg:divide-x lg:divide-y-0">
+      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[12rem_16rem_1fr] lg:divide-x lg:divide-y-0">
         {/* Categories */}
         <nav className="self-stretch py-1">
           {LIBRARY_CATEGORIES.map((c) => (
@@ -61,11 +61,11 @@ export default async function LibraryPage({
               className={`mx-1.5 my-0.5 flex items-center justify-between rounded-lg px-3 py-2 text-sm ${
                 c === category
                   ? "bg-accent/10 font-medium text-accent"
-                  : "text-muted hover:bg-bg hover:text-ink"
+                  : "text-muted hover:bg-bg/50 hover:text-ink"
               }`}
             >
               <span>{LIBRARY_CATEGORY_LABELS[c]}</span>
-              <span className="font-mono text-[11px] text-muted">
+              <span className="text-xs text-muted">
                 {countFor(c)}
               </span>
             </Link>
@@ -74,8 +74,8 @@ export default async function LibraryPage({
 
         {/* Entry list */}
         <div className="flex min-h-[24rem] flex-col self-stretch">
-          <div className="flex items-center justify-between border-b border-line px-3 py-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">
+          <div className="flex items-center justify-between border-b border-line/60 px-4 py-3">
+            <span className="text-xs font-medium tracking-[0.02em] text-muted">
               Entries
             </span>
             <Link
@@ -86,7 +86,7 @@ export default async function LibraryPage({
             </Link>
           </div>
           {entries.length === 0 ? (
-            <p className="px-3 py-6 text-sm text-muted">
+            <p className="px-4 py-6 text-sm text-muted">
               Nothing here yet — this category fills up as you write real
               material.
             </p>
@@ -96,8 +96,8 @@ export default async function LibraryPage({
                 <li key={e.id}>
                   <Link
                     href={`/library?category=${category}&entry=${e.id}`}
-                    className={`block border-b border-line px-3 py-2 ${
-                      selected?.id === e.id ? "bg-bg" : "hover:bg-bg"
+                    className={`block border-b border-line/60 px-4 py-3 ${
+                      selected?.id === e.id ? "bg-bg" : "hover:bg-bg/50"
                     }`}
                   >
                     <div
@@ -107,7 +107,7 @@ export default async function LibraryPage({
                     >
                       {e.title}
                     </div>
-                    <div className="mt-0.5 font-mono text-[11px] text-muted">
+                    <div className="mt-0.5 text-xs text-muted">
                       {fmtDate(e.updatedAt)}
                     </div>
                   </Link>
@@ -118,9 +118,9 @@ export default async function LibraryPage({
         </div>
 
         {/* Viewer / editor */}
-        <div className="min-h-[24rem] self-stretch p-5">
+        <div className="min-h-[24rem] self-stretch p-6">
           {creating ? (
-            <form action={createLibraryEntry} className="flex h-full flex-col gap-3">
+            <form action={createLibraryEntry} className="flex h-full flex-col gap-5">
               <input type="hidden" name="category" value={category} />
               <div>
                 <label className="field-label" htmlFor="title">
@@ -151,7 +151,7 @@ export default async function LibraryPage({
           ) : editing && selected ? (
             <form
               action={updateLibraryEntry.bind(null, selected.id)}
-              className="flex h-full flex-col gap-3"
+              className="flex h-full flex-col gap-5"
             >
               <div>
                 <label className="field-label" htmlFor="title">
@@ -194,7 +194,7 @@ export default async function LibraryPage({
               <div className="flex items-start justify-between border-b border-line pb-3">
                 <div>
                   <h2 className="text-base font-semibold">{selected.title}</h2>
-                  <div className="mt-0.5 font-mono text-[11px] text-muted">
+                  <div className="mt-0.5 text-xs text-muted">
                     Updated {fmtDate(selected.updatedAt)}
                   </div>
                 </div>
