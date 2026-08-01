@@ -39,8 +39,9 @@ again.
 ## Sections
 
 - **Dashboard** — a live world-clock strip across the four US time zones,
-  active client count, MRR, open pipeline value, follow-ups due in the next 7
-  days, and any client whose latest reported week has a red-flagged KPI.
+  active client count, MRR, open pipeline value, two reminder lists side by
+  side — follow-ups due and calls due in the next 7 days — and any client whose
+  latest reported week has a red-flagged KPI.
 - **Pipeline** — leads as a drag-and-drop Kanban board or a sortable/filterable
   table. Each lead has an append-only timestamped activity log and an **ICP
   scorecard**: five Layer 1 disqualifiers (any one stops the scoring), then
@@ -75,6 +76,18 @@ again.
   zone and the client's side by side. Google Calendar only creates a Meet link
   through its own interface, so the event draft carries a reminder to click
   "Add Google Meet" rather than pretending the link can do it.
+- **Calls** — a log of scheduled and held calls, on both lead and client
+  records. Each call has a date and time, a type (Check-in, Discovery, Kickoff,
+  Other), a status (Scheduled, Completed, No-show, Cancelled) and notes, and
+  belongs to exactly one lead or one client. The record's Calls section splits
+  them into what is still on the books and what has been closed out; the
+  dashboard's **Calls due** list rolls up everything still marked Scheduled in
+  the next 7 days across leads and clients. A scheduled call whose time has
+  passed is flagged overdue in red, the same as an overdue follow-up.
+
+  This is deliberately separate from a lead's **next follow-up** date: that
+  stays the single date the pipeline sorts and reminds on, and the call log
+  sits alongside it. Times are stored as instants and shown in your own zone.
 - **Reporting** — one entry per client per week. CPL, lead-to-booked rate, and
   show rate are calculated automatically and flagged green/yellow/red against
   targets (CPL $10–35, lead→booked 20–40%, show rate 50–70%). Per-client trend

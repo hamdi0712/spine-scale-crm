@@ -26,6 +26,7 @@ model Lead {
   nextFollowUp DateTime?
   archived     Boolean    @default(false) // set when converted to a client (or otherwise closed out)
   notes        LeadNote[]
+  calls        Call[]
   client       Client?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -65,6 +66,28 @@ model LeadNote {
   createdAt DateTime @default(now())
 }
 
+// A call, scheduled or already held. Hangs off exactly one side — a lead or a
+// client, never both and never neither. SQLite can't express that as a
+// constraint here, so it is enforced where calls are created, the same way the
+// status strings are (src/lib/actions/calls.ts, src/lib/calls.ts).
+//
+// Deliberately separate from Lead.nextFollowUp: that field is the single "when
+// do I next chase this lead" date the pipeline sorts on, and this is the
+// detailed log of individual calls alongside it.
+model Call {
+  id          String   @id @default(cuid())
+  leadId      String?
+  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scheduledAt DateTime
+  type        String   @default("CHECK_IN") // CHECK_IN | DISCOVERY | KICKOFF | OTHER
+  status      String   @default("SCHEDULED") // SCHEDULED | COMPLETED | NO_SHOW | CANCELLED
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Client {
   id            String          @id @default(cuid())
   clinicName    String
@@ -82,6 +105,7 @@ model Client {
   lead          Lead?           @relation(fields: [leadId], references: [id])
   checklist    ChecklistItem[]
   reports      WeeklyReport[]
+  calls        Call[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
