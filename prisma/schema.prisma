@@ -137,6 +137,13 @@ model Client {
   // two of them the client is Ramping, not Healthy and not At risk.
   activeSince DateTime?
 
+  // How this engagement handles patient health information. Path A keeps every
+  // funnel and automation symptom-agnostic so no PHI is ever collected; Path B
+  // takes intake details, which needs the HIPAA add-on and a signed BAA before
+  // anything goes live. Constrained to PHI_APPROACHES in src/lib/constants.ts;
+  // selecting Path B adds the HIPAA checklist item (src/lib/actions/clients.ts).
+  phiApproach String @default("PATH_A") // PATH_A | PATH_B
+
   // Onboarding wizard. 0 = not running (never started, skipped, or finished);
   // 1–5 = the step to resume on. Stored so leaving mid-way and coming back
   // continues where you left off.

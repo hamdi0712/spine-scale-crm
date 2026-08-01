@@ -39,7 +39,16 @@ export default function PipelineDonut({
   return (
     <div className="flex items-center gap-5">
       <div className="relative h-[132px] w-[132px] shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
+        {/* Depth, in the same language as the primary buttons: a soft
+            brand-tinted shadow under the ring and lightly rounded segment ends,
+            so the donut reads as a raised object rather than flat vector fill.
+            The shadow sits on the chart only — the total in the middle stays
+            crisp because it is a sibling, not a child. */}
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+          className="donut-elevated"
+        >
           <PieChart>
             <Pie
               data={drawn}
@@ -52,6 +61,10 @@ export default function PipelineDonut({
               // A 2px gap of card surface between segments keeps neighbouring
               // steps from bleeding into one another.
               paddingAngle={total > 0 ? 2 : 0}
+              // Softened, not pilled: 3px against a 20px-thick ring takes the
+              // hard vector corners off where segments meet while keeping the
+              // ring reading as a ring.
+              cornerRadius={3}
               stroke="none"
               isAnimationActive={false}
             >
