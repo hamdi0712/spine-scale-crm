@@ -35,16 +35,16 @@ model Lead {
   // never needs a migration or a backfill.
 
   // Layer 1 — hard disqualifiers. Any one of these true stops the scoring.
-  icpDqNotDecisionMaker Boolean   @default(false)
-  icpDqInsuranceOnly    Boolean   @default(false)
-  icpDqNoAdBudget       Boolean   @default(false)
-  icpDqAgencyLocked     Boolean   @default(false)
-  icpDqReputationRisk   Boolean   @default(false)
+  icpDqSurgicalPractice Boolean   @default(false)
+  icpDqSoloNoStaff      Boolean   @default(false)
+  icpDqFranchiseLocked  Boolean   @default(false)
+  icpDqSystemComplete   Boolean   @default(false)
+  icpDqOutOfRegion      Boolean   @default(false)
   icpDqTriggered        String? // labels of whichever disqualifiers fired, stamped on save
 
   // Scored categories. Null until the lead has been scored on that category.
   icpStaffSize          Int? // A — Staff Size Fit, 0–2
-  icpPackageEconomics   Int? // B — Package/Economics, 0–3
+  icpPackageEconomics   Int? // B — Package / Consult Economics, 0–3
   icpBudgetSignal       Int? // C — Budget Signal, 0–2
 
   // D — Automation Gap. Each gap found is worth 1 point, 3 max.

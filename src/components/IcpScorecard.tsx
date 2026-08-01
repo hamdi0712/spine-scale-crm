@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import {
   ICP_CATEGORIES,
   ICP_DISQUALIFIERS,
+  ICP_DISQUALIFIER_RULE,
   ICP_GAPS,
+  ICP_GAP_GUIDANCE,
   ICP_GAP_MAX,
   ICP_MAX_SCORE,
   ICP_TIER_BANDS,
@@ -73,8 +75,11 @@ export default function IcpScorecard({
       <div className="space-y-7 p-6">
         <fieldset>
           <legend className="field-label">
-            Layer 1 — Disqualifiers (any yes = stop)
+            Layer 1 — Hard disqualifiers (check first)
           </legend>
+          <p className="-mt-1 mb-2 text-xs leading-relaxed text-muted">
+            {ICP_DISQUALIFIER_RULE}
+          </p>
           <div className="space-y-2">
             {ICP_DISQUALIFIERS.map((d) => (
               <label
@@ -100,9 +105,11 @@ export default function IcpScorecard({
                   >
                     {d.label}
                   </span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                    {d.signal}
-                  </span>
+                  {d.signal && (
+                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                      {d.signal}
+                    </span>
+                  )}
                 </span>
               </label>
             ))}
@@ -113,12 +120,12 @@ export default function IcpScorecard({
           <>
             <div className="rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
               <p className="text-sm font-medium text-bad">
-                Disqualified — do not score
+                Disqualified — do not proceed to scoring
               </p>
               <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                Triggered by{" "}
-                {result.triggered.map((d) => d.label).join(", ")}. Clear the
-                check above to score this lead.
+                This clinic is not a fit right now regardless of how it would
+                score below. Triggered by{" "}
+                {result.triggered.map((d) => d.label).join("; ")}.
               </p>
             </div>
             {/* The scoring fieldset below is disabled, so its controls do not
@@ -148,14 +155,17 @@ export default function IcpScorecard({
         >
           {ICP_CATEGORIES.map((category) => (
             <div key={category.key}>
-              <div className="mb-2 flex items-baseline justify-between">
+              <div className="flex items-baseline justify-between gap-4">
                 <span className="field-label mb-0">
                   {category.letter} — {category.title}
                 </span>
-                <span className="num text-xs text-muted">
+                <span className="num shrink-0 text-xs text-muted">
                   {answers[category.key] ?? 0} / {category.max}
                 </span>
               </div>
+              <p className="mb-2 mt-1 text-xs leading-relaxed text-muted">
+                {category.guidance}
+              </p>
               <div className="space-y-2" role="radiogroup">
                 {category.options.map((option) => {
                   const selected = answers[category.key] === option.points;
@@ -191,9 +201,11 @@ export default function IcpScorecard({
                         <span className="block text-sm font-medium">
                           {option.label}
                         </span>
-                        <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                          {option.signal}
-                        </span>
+                        {option.signal && (
+                          <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                            {option.signal}
+                          </span>
+                        )}
                       </span>
                       <span
                         className={`num shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -208,16 +220,24 @@ export default function IcpScorecard({
                   );
                 })}
               </div>
+              {category.note && (
+                <p className="mt-2 text-xs leading-relaxed text-muted">
+                  {category.note}
+                </p>
+              )}
             </div>
           ))}
 
           <div>
-            <div className="mb-2 flex items-baseline justify-between">
+            <div className="flex items-baseline justify-between gap-4">
               <span className="field-label mb-0">D — Automation Gap</span>
-              <span className="num text-xs text-muted">
+              <span className="num shrink-0 text-xs text-muted">
                 {result.gapTotal} / {ICP_GAP_MAX}
               </span>
             </div>
+            <p className="mb-2 mt-1 text-xs leading-relaxed text-muted">
+              {ICP_GAP_GUIDANCE}
+            </p>
             <div className="space-y-2">
               {ICP_GAPS.map((gap) => (
                 <label
@@ -241,9 +261,11 @@ export default function IcpScorecard({
                     <span className="block text-sm font-medium">
                       {gap.label}
                     </span>
-                    <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                      {gap.signal}
-                    </span>
+                    {gap.signal && (
+                      <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+                        {gap.signal}
+                      </span>
+                    )}
                   </span>
                   <span
                     className={`num shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${

@@ -1,27 +1,32 @@
-// ICP scorecard — the lead qualification framework in one place.
+// ICP scorecard — the Spine Scale Clinic Qualification Scorecard in one place.
 //
 // Layer 1 is a set of hard disqualifiers: any single "yes" stops the
-// evaluation ("any yes = STOP"). A lead that clears Layer 1 scores out of 10
+// evaluation ("any yes = STOP"). A clinic that clears Layer 1 scores out of 10
 // across four categories, and the total maps to an A/B/C tier band.
 //
-//   A. Staff Size Fit .... 0–2
-//   B. Package/Economics . 0–3
-//   C. Budget Signal ..... 0–2
-//   D. Automation Gap .... 0–3 (one point per gap found)
-//                          ────
-//                            10
+//   A. Staff Size Fit ............ 0–2
+//   B. Package / Consult Economics 0–3
+//   C. Budget Signal ............. 0–2
+//   D. Automation Gap ............ 0–3 (one point per gap found)
+//                                  ────
+//                                    10
 //
-// Total and tier are always derived from the stored answers — never persisted
-// — so editing the bands below re-tiers every lead without a migration.
+// All copy below is the framework text verbatim. Total and tier are always
+// derived from the stored answers — never persisted — so editing the bands
+// below re-tiers every clinic without a migration.
 
-// ─── Layer 1: disqualifiers ────────────────────────────────────────────────
+// The rule that governs the whole exercise, shown above the card.
+export const ICP_SCORING_RULE =
+  "Score first, decide second. Do not adjust a category's meaning to justify a clinic you already like.";
+
+// ─── Layer 1: hard disqualifiers ───────────────────────────────────────────
 
 export const ICP_DISQUALIFIER_KEYS = [
-  "icpDqNotDecisionMaker",
-  "icpDqInsuranceOnly",
-  "icpDqNoAdBudget",
-  "icpDqAgencyLocked",
-  "icpDqReputationRisk",
+  "icpDqSurgicalPractice",
+  "icpDqSoloNoStaff",
+  "icpDqFranchiseLocked",
+  "icpDqSystemComplete",
+  "icpDqOutOfRegion",
 ] as const;
 
 export type IcpDisqualifierKey = (typeof ICP_DISQUALIFIER_KEYS)[number];
@@ -29,48 +34,49 @@ export type IcpDisqualifierKey = (typeof ICP_DISQUALIFIER_KEYS)[number];
 export interface IcpDisqualifier {
   key: IcpDisqualifierKey;
   label: string;
-  signal: string;
+  signal?: string;
 }
+
+export const ICP_DISQUALIFIER_RULE =
+  "Any single yes = STOP. Do not proceed to scoring. This clinic is not a fit right now regardless of how it would score below.";
 
 export const ICP_DISQUALIFIERS: IcpDisqualifier[] = [
   {
-    key: "icpDqNotDecisionMaker",
-    label: "Not the decision-maker",
-    signal:
-      "The contact cannot sign — the owner is not in the conversation and will not be brought in.",
+    key: "icpDqSurgicalPractice",
+    label: "Primarily a surgical practice / surgeons",
+    signal: "Not a non-surgical, conservative-care model.",
   },
   {
-    key: "icpDqInsuranceOnly",
-    label: "Insurance-only practice",
+    key: "icpDqSoloNoStaff",
+    label: "Solo practitioner with no support staff",
     signal:
-      "No cash care plans of any kind. Every visit is billed to insurance, so there is no margin to fund acquisition.",
+      "No one to execute intake, fulfillment, or follow-through on your systems.",
   },
   {
-    key: "icpDqNoAdBudget",
-    label: "No ad budget on top of retainer",
-    signal:
-      "Cannot fund monthly media spend in addition to the retainer, or expects the retainer to cover ad spend.",
+    key: "icpDqFranchiseLocked",
+    label:
+      "Franchise or corporate-owned location locked into a national marketing contract",
+    signal: "Can't independently hire an agency.",
   },
   {
-    key: "icpDqAgencyLocked",
-    label: "Locked into another agency",
+    key: "icpDqSystemComplete",
+    label: "Already has a complete, working system live",
     signal:
-      "Under an active contract with a competing marketing agency, with no exit inside the sales cycle.",
+      "Paid ads AND booking automation AND no-show/review systems all functioning — with no visible gap.",
   },
   {
-    key: "icpDqReputationRisk",
-    label: "Reputation or compliance risk",
-    signal:
-      "Sub-3.5 star average, an unresolved licensing or compliance issue, or anything that makes paid traffic unsafe to send.",
+    key: "icpDqOutOfRegion",
+    label:
+      "Outside your serviceable language, time zone, or legal/regulatory region",
   },
 ];
 
-// ─── Layers A–C: scored option groups ──────────────────────────────────────
+// ─── Layer 2, A–C: scored option groups ────────────────────────────────────
 
 export interface IcpScoreOption {
   points: number;
   label: string;
-  signal: string;
+  signal?: string;
 }
 
 export interface IcpCategory {
@@ -78,6 +84,8 @@ export interface IcpCategory {
   letter: string;
   title: string;
   max: number;
+  guidance: string; // where to look, from the research protocol
+  note?: string; // scoring caveat called out by the framework
   options: IcpScoreOption[];
 }
 
@@ -95,88 +103,75 @@ export const ICP_CATEGORIES: IcpCategory[] = [
     letter: "A",
     title: "Staff Size Fit",
     max: 2,
+    guidance:
+      "Check: “Meet the Team” page, Google Business Profile staff photos, LinkedIn company page.",
     options: [
-      {
-        points: 2,
-        label: "4+ staff or multi-provider",
-        signal:
-          "A dedicated front desk that can absorb inbound lead volume without the provider leaving the table.",
-      },
-      {
-        points: 1,
-        label: "2–3 staff",
-        signal:
-          "One provider plus front-desk support — can handle new leads, but speed-to-lead needs automation to hold up.",
-      },
-      {
-        points: 0,
-        label: "Solo operator, no front desk",
-        signal:
-          "The provider answers the phone between adjustments. Lead volume will be dropped no matter what we send.",
-      },
+      { points: 2, label: "3–15 total staff (clinical + admin)" },
+      { points: 1, label: "Borderline — 2 staff, or 16–20" },
+      { points: 0, label: "1 staff, or 20+ / large multi-location group" },
     ],
   },
   {
     key: "icpPackageEconomics",
     letter: "B",
-    title: "Package / Economics",
+    title: "Package / Consult Economics",
     max: 3,
+    guidance:
+      "Highest weight — the strongest signal that they can afford and will value your retainer. Check: services/pricing page, “programs” or “plans” language.",
     options: [
       {
         points: 3,
-        label: "Care plans $2,500+",
-        signal:
-          "Packaged care plans priced high enough that a single conversion pays back a month of ad spend.",
+        label:
+          "Explicit named treatment program with visible or inquire-for pricing",
+        signal: "e.g. “12-Week Non-Surgical Spine Program”.",
       },
       {
         points: 2,
-        label: "Care plans $1,200–$2,500",
-        signal:
-          "A real packaged offer with workable margin — profitable at target CPL, sensitive to show rate.",
+        label:
+          "Language implies a package/plan structure but no clear name or pricing",
+        signal: "“Treatment plans,” “care packages.”",
       },
       {
         points: 1,
-        label: "Under $1,200, or visit-by-visit cash",
-        signal:
-          "Cash pricing exists but is not packaged. Payback needs volume, so the margin is thin.",
+        label: "Only itemized per-visit services, no package framing at all",
+        signal: "Single adjustments, single PT sessions.",
       },
       {
         points: 0,
-        label: "No packaged cash offer",
-        signal:
-          "Nothing to sell beyond individual insurance-rate visits. Economics do not support paid acquisition.",
+        label: "Pure insurance-billed, no cash-pay component visible anywhere",
       },
     ],
   },
   {
     key: "icpBudgetSignal",
     letter: "C",
-    title: "Budget Signal",
+    title: "Budget Signal — Ad Spend or Ad Capacity",
     max: 2,
+    guidance:
+      "Check: Meta Ad Library (facebook.com/ads/library), years established, number of locations, review velocity.",
+    note: "No visible ads is not automatically bad — it can mean “no incumbent vendor to displace.” Only score 0 if there's also no evidence of capacity to spend.",
     options: [
       {
         points: 2,
-        label: "Actively spending $2k+/mo on ads",
-        signal:
-          "Already committed to paid acquisition — the conversation is about performance, not about whether to spend.",
+        label:
+          "Active or recent ads found in Meta Ad Library or visible Google Ads",
       },
       {
         points: 1,
-        label: "Has spent before, currently paused or small",
+        label: "No active ads currently, but capacity signals present",
         signal:
-          "Prior marketing spend with a named budget. Understands the model but needs a reason to restart.",
+          "Multiple locations, 5+ years established, premium package pricing, steady recent review velocity implying healthy patient volume.",
       },
       {
         points: 0,
-        label: "Never spent, no budget named",
-        signal:
-          "No paid acquisition history and no number on the table. Every objection will be a budget objection.",
+        label: "No ad evidence AND no capacity signals",
+        signal: "Small, new, thin/stale reviews.",
       },
     ],
   },
 ];
 
-// ─── Layer D: automation gaps (one point each) ─────────────────────────────
+// ─── Layer 2, D: automation gaps (one point each) ──────────────────────────
 
 export const ICP_GAP_KEYS = [
   "icpGapBooking",
@@ -189,29 +184,31 @@ export type IcpGapKey = (typeof ICP_GAP_KEYS)[number];
 export interface IcpGap {
   key: IcpGapKey;
   label: string;
-  signal: string;
+  signal?: string;
 }
 
 export const ICP_GAP_MAX = ICP_GAP_KEYS.length;
 
+export const ICP_GAP_GUIDANCE =
+  "Inverted — more gaps = better fit. Check one point for each gap present, max 3. This is the space Spine Scale exists to fill.";
+
 export const ICP_GAPS: IcpGap[] = [
   {
     key: "icpGapBooking",
-    label: "No booking widget",
-    signal:
-      "No online scheduler on the site — booking depends on someone picking up the phone during office hours.",
+    label: "No real-time online booking widget",
+    signal: "Phone-only, or a plain contact form.",
   },
   {
     key: "icpGapReviews",
-    label: "Thin or stale review pattern",
+    label: "No visible automated review-request pattern",
     signal:
-      "Few reviews, or the most recent cluster is months old — no post-visit request flow is running.",
+      "Review count/velocity doesn't match years in business or apparent patient volume.",
   },
   {
     key: "icpGapRemarketing",
-    label: "No remarketing running",
+    label: "No visible follow-up/remarketing evidence",
     signal:
-      "No pixel-based retargeting or database reactivation — past traffic and dormant patients are never touched again.",
+      "No retargeting pixel/tag detectable, no recurring “book your consult” ad creative, front-desk phone call is the only path to booking.",
   },
 ];
 
@@ -279,7 +276,7 @@ export function scoreIcp(answers: IcpAnswers): IcpResult {
   };
 }
 
-// A lead only carries a tier once it has actually been scored — an untouched
+// A clinic only carries a tier once it has actually been scored — an untouched
 // lead is "not scored", not a C-tier.
 export function leadTier(answers: IcpAnswers): IcpTier | null {
   if (!answers.icpScoredAt) return null;

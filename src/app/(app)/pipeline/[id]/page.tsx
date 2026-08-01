@@ -9,7 +9,7 @@ import {
   updateLead,
 } from "@/lib/actions/leads";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
-import { leadTier } from "@/lib/icp";
+import { ICP_SCORING_RULE, leadTier } from "@/lib/icp";
 import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import ConfirmForm from "@/components/ConfirmForm";
@@ -230,18 +230,18 @@ export default async function LeadDetailPage({
       <section className="mt-8">
         <div className="mb-4 flex items-baseline justify-between">
           <h2 className="text-xl font-semibold">ICP Scorecard</h2>
-          <p className="text-sm text-muted">
-            Layer 1 disqualifiers first — any yes stops the scoring
+          <p className="max-w-xl text-right text-sm text-muted">
+            {ICP_SCORING_RULE}
           </p>
         </div>
         <IcpScorecard
           action={saveScorecard}
           values={{
-            icpDqNotDecisionMaker: lead.icpDqNotDecisionMaker,
-            icpDqInsuranceOnly: lead.icpDqInsuranceOnly,
-            icpDqNoAdBudget: lead.icpDqNoAdBudget,
-            icpDqAgencyLocked: lead.icpDqAgencyLocked,
-            icpDqReputationRisk: lead.icpDqReputationRisk,
+            icpDqSurgicalPractice: lead.icpDqSurgicalPractice,
+            icpDqSoloNoStaff: lead.icpDqSoloNoStaff,
+            icpDqFranchiseLocked: lead.icpDqFranchiseLocked,
+            icpDqSystemComplete: lead.icpDqSystemComplete,
+            icpDqOutOfRegion: lead.icpDqOutOfRegion,
             icpStaffSize: lead.icpStaffSize,
             icpPackageEconomics: lead.icpPackageEconomics,
             icpBudgetSignal: lead.icpBudgetSignal,
