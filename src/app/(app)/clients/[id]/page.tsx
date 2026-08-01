@@ -10,6 +10,7 @@ import {
   setChecklistItemStatus,
   updateClient,
 } from "@/lib/actions/clients";
+import { startOnboarding } from "@/lib/actions/onboarding";
 import {
   CHECKLIST_STATUSES,
   CHECKLIST_STATUS_LABELS,
@@ -17,10 +18,19 @@ import {
   CLIENT_STATUS_LABELS,
   clientDeleteMessage,
 } from "@/lib/constants";
+import {
+  CONTRACT_STATUSES,
+  CONTRACT_STATUS_LABELS,
+  ONBOARDING_TOTAL_STEPS,
+  isOnboarding,
+} from "@/lib/onboarding";
+import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDate, toDateInput } from "@/lib/format";
 import { ClientStatusBadge } from "@/components/Badge";
 import CapsuleBar from "@/components/CapsuleBar";
+import { KickoffTime, LocalTimeBadge } from "@/components/Clock";
 import ConfirmForm from "@/components/ConfirmForm";
+import InvoiceLog from "@/components/InvoiceLog";
 
 export const dynamic = "force-dynamic";
 
@@ -37,13 +47,19 @@ export default async function ClientDetailPage({
 }) {
   const client = await prisma.client.findUnique({
     where: { id: params.id },
-    include: { checklist: { orderBy: { sortOrder: "asc" } }, lead: true },
+    include: {
+      checklist: { orderBy: { sortOrder: "asc" } },
+      invoices: { orderBy: { issuedOn: "desc" } },
+      lead: true,
+    },
   });
   if (!client) notFound();
 
   const update = updateClient.bind(null, client.id);
   const addItem = addChecklistItem.bind(null, client.id);
   const remove = deleteClient.bind(null, client.id);
+  const startWizard = startOnboarding.bind(null, client.id);
+  const wizardRunning = isOnboarding(client.onboardingStep);
 
   return (
     <div>
@@ -57,7 +73,17 @@ export default async function ClientDetailPage({
               {client.clinicName}
             </h1>
             <ClientStatusBadge status={client.status} />
+            <LocalTimeBadge timeZone={client.timeZone} />
           </div>
+          {client.kickoffAt && (
+            <p className="mt-1.5 text-sm text-muted">
+              Kickoff call —{" "}
+              <KickoffTime
+                at={client.kickoffAt.toISOString()}
+                timeZone={client.timeZone}
+              />
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/reporting/${client.id}`} className="btn">
@@ -79,8 +105,23 @@ export default async function ClientDetailPage({
       </div>
 
       <section className="mt-8">
-        <div className="mb-4 flex items-baseline justify-between">
+        <div className="mb-4 flex items-center justify-between gap-4">
           <h2 className="text-xl font-semibold">Delivery progress</h2>
+          {wizardRunning ? (
+            <Link
+              href={`/clients/${client.id}/onboarding`}
+              className="btn-primary h-[34px] shrink-0 px-3.5 text-xs"
+            >
+              Resume onboarding · step {client.onboardingStep} of{" "}
+              {ONBOARDING_TOTAL_STEPS}
+            </Link>
+          ) : (
+            <form action={startWizard} className="shrink-0">
+              <button type="submit" className="btn h-[34px] px-3.5 text-xs">
+                Onboarding wizard
+              </button>
+            </form>
+          )}
         </div>
         <div className="card p-6">
           <CapsuleBar
@@ -186,6 +227,40 @@ export default async function ClientDetailPage({
                   className="field num"
                 />
               </div>
+              <div>
+                <label className="field-label" htmlFor="timeZone">
+                  Time zone
+                </label>
+                <select
+                  id="timeZone"
+                  name="timeZone"
+                  defaultValue={client.timeZone}
+                  className="field"
+                >
+                  {US_TIME_ZONES.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="field-label" htmlFor="contractStatus">
+                  Contract status
+                </label>
+                <select
+                  id="contractStatus"
+                  name="contractStatus"
+                  defaultValue={client.contractStatus}
+                  className="field"
+                >
+                  {CONTRACT_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {CONTRACT_STATUS_LABELS[s]}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="col-span-2">
                 <label className="field-label" htmlFor="contractStart">
                   Contract start
@@ -196,6 +271,17 @@ export default async function ClientDetailPage({
                   type="date"
                   defaultValue={toDateInput(client.contractStart)}
                   className="field num"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="field-label" htmlFor="contractRef">
+                  Signed contract (link or ref)
+                </label>
+                <input
+                  id="contractRef"
+                  name="contractRef"
+                  defaultValue={client.contractRef ?? ""}
+                  className="field text-xs"
                 />
               </div>
               <div className="col-span-2">
@@ -339,6 +425,17 @@ export default async function ClientDetailPage({
           </div>
         </section>
       </div>
+
+      <section className="mt-8">
+        <h2 className="mb-4 text-xl font-semibold">Invoices</h2>
+        <div className="card p-6">
+          <InvoiceLog
+            clientId={client.id}
+            invoices={client.invoices}
+            defaultAmount={client.monthlyFee}
+          />
+        </div>
+      </section>
     </div>
   );
 }

@@ -38,9 +38,9 @@ again.
 
 ## Sections
 
-- **Dashboard** — active client count, MRR, open pipeline value, follow-ups
-  due in the next 7 days, and any client whose latest reported week has a
-  red-flagged KPI.
+- **Dashboard** — a live world-clock strip across the four US time zones,
+  active client count, MRR, open pipeline value, follow-ups due in the next 7
+  days, and any client whose latest reported week has a red-flagged KPI.
 - **Pipeline** — leads as a drag-and-drop Kanban board or a sortable/filterable
   table. Each lead has an append-only timestamped activity log and an **ICP
   scorecard**: five Layer 1 disqualifiers (any one stops the scoring), then
@@ -50,11 +50,31 @@ again.
   the raw answers are stored; the total and tier are derived in
   `src/lib/icp.ts`, so re-tuning the framework needs no migration. Marking a
   lead Won enables one-click **Convert to Client**, which pre-fills a client
-  record and archives the lead.
+  record (including the estimated deal value as the monthly fee), archives the
+  lead, and opens the onboarding wizard.
 - **Clients** — signed clinics with package/fee/contract details, GHL and Meta
-  Ads reference links, and a per-client delivery checklist (seeded with the
-  standard Disc Relief Pipeline OS items, fully editable per client). The
-  segmented capsule bar shows delivery progress at a glance.
+  Ads reference links, an invoice log, and a per-client delivery checklist
+  (seeded with the standard Disc Relief Pipeline OS items, fully editable per
+  client). The segmented capsule bar shows delivery progress at a glance. Each
+  client carries a **time zone** (one of the four US zones), shown as a live
+  local-time badge on the client page and in the clients table.
+- **Onboarding wizard** — a five-step step-through that runs after a lead is
+  converted: confirm details and time zone, contract status plus a link to the
+  signed document, an invoice log with a running total collected, the kickoff
+  call, and handoff to the delivery checklist. The current step is stored on
+  the client (`onboardingStep`), so leaving mid-way and coming back picks up
+  where you left off — from the client record, the clients table, or the
+  wizard URL. **Skip onboarding wizard** is available on every step and jumps
+  straight to the normal client page, and the wizard can be re-run later from
+  the client record.
+
+  The wizard hands off to Google rather than integrating with it: the contract
+  and invoice steps open a pre-filled **Gmail compose** window (editable
+  subject and body, you send it), and the kickoff step opens a pre-filled
+  **Google Calendar** event. The kickoff step shows the chosen time in your
+  zone and the client's side by side. Google Calendar only creates a Meet link
+  through its own interface, so the event draft carries a reminder to click
+  "Add Google Meet" rather than pretending the link can do it.
 - **Reporting** — one entry per client per week. CPL, lead-to-booked rate, and
   show rate are calculated automatically and flagged green/yellow/red against
   targets (CPL $10–35, lead→booked 20–40%, show rate 50–70%). Per-client trend
