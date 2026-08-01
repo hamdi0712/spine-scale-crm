@@ -241,3 +241,162 @@ model LibraryEntry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// ─── Ad Hub ────────────────────────────────────────────────────────────────
+//
+// The ad-building framework, in the order the work actually happens:
+//
+//   Research → Persona → Desire → Benefit → Concept → Creative
+//                                              ↓
+//                         compliance gate → launch → performance
+//
+// A Concept is the strategic unit (who / what they want / what they get /
+// how it is positioned); a Creative is one execution of it, and iterating on
+// a Creative makes a child Creative rather than editing the parent — "don't
+// kill a concept, iterate on it". Nothing here is generated: every field is
+// typed in by hand.
+
+// Raw notes from the research phase, before any of it is shaped into a
+// persona or a concept. Deliberately freeform — the type is the only
+// structure imposed on it.
+model ResearchNote {
+  id        String   @id @default(cuid())
+  type      String // INTERNAL | EXTERNAL | MECHANISM | DESIRE
+  title     String
+  body      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Who the ad is talking to. The five prompts below are the framework's own —
+// identity, self-image, ambition, and the history of failure that explains
+// why they will be sceptical of the next promise.
+model Persona {
+  id           String  @id @default(cuid())
+  name         String
+  demographics String?
+
+  wantsToBeSeenAs String? // characteristics they want others to see
+  believesAboutSelf String? // what they believe about themselves
+  wantsToAchieve String? // what they want to achieve
+  triedAndFailed String? // other solutions tried and failed
+  reasonForFailure String? // why those failed them
+
+  concepts  Concept[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// A mass desire — "I want to…" — written once and reused across concepts and
+// personas. Deliberately not owned by a Persona: the same want shows up in
+// several of them, and duplicating it per persona would hide that.
+model Desire {
+  id        String    @id @default(cuid())
+  statement String // the want statement, e.g. "I want to get through a workday without my back seizing up"
+  notes     String?
+  benefits  Benefit[]
+  concepts  Concept[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// Feature → benefit, tied to the desire it answers. The benefit is the
+// "so you can…" half — what the feature buys them, in their words.
+model Benefit {
+  id          String    @id @default(cuid())
+  productName String // the product or feature this belongs to
+  feature     String // what it is
+  benefit     String // so you can…
+  desireId    String
+  desire      Desire    @relation(fields: [desireId], references: [id], onDelete: Cascade)
+  concepts    Concept[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// Persona + desire + benefit + positioning. Everything a creative needs to be
+// judged against, decided before a word of copy is written.
+model Concept {
+  id          String @id @default(cuid())
+  name        String
+  batchNumber Int    @default(1)
+
+  personaId String
+  persona   Persona @relation(fields: [personaId], references: [id], onDelete: Cascade)
+  desireId  String
+  desire    Desire  @relation(fields: [desireId], references: [id])
+  benefitId String
+  benefit   Benefit @relation(fields: [benefitId], references: [id])
+
+  // Positioning. Constrained to the values in src/lib/adhub.ts.
+  awarenessLevel      String // UNAWARE | PROBLEM_AWARE | SOLUTION_AWARE | PRODUCT_AWARE | MOST_AWARE
+  sophisticationStage Int // 1–5
+
+  status    String     @default("DRAFT") // DRAFT | ACTIVE | PAUSED | KILLED
+  notes     String?
+  creatives Creative[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+// One execution of a concept. A variation is a Creative whose parentCreativeId
+// points at the one it was duplicated from, so a concept's iteration history
+// stays readable instead of being overwritten in place.
+model Creative {
+  id             String @id @default(cuid())
+  conceptId      String
+  concept        Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  creativeNumber Int     @default(1) // batch/creative number within the concept
+  creativeType   String  @default("PHOTO") // PHOTO | VIDEO | UGC
+
+  conceptHeadline String  @default("") // the hook — bold, predominant text
+  adHeadline      String  @default("") // 40–50 characters
+  adCopy          String  @default("")
+  cta             String  @default("")
+
+  // READY is gated on every compliance item being checked — enforced in
+  // src/lib/actions/adhub.ts, not by the database.
+  status String @default("DRAFT") // DRAFT | COMPLIANCE_REVIEW | READY | LAUNCHED | TESTING | WINNER | LOSER
+
+  // Self-relation for iteration lineage. SetNull rather than Cascade: deleting
+  // a creative should not take its variations with it — they are their own
+  // executions by then.
+  parentCreativeId String?
+  parent           Creative?  @relation("CreativeLineage", fields: [parentCreativeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  variations       Creative[] @relation("CreativeLineage")
+
+  compliance  ComplianceCheck[]
+  performance PerformanceLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// One row per checklist item per creative, seeded from AD_COMPLIANCE_ITEMS in
+// src/lib/adhub.ts when the creative is created. Stored per creative rather
+// than derived so a check is a record of someone having actually looked.
+model ComplianceCheck {
+  id         String    @id @default(cuid())
+  creativeId String
+  creative   Creative  @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  item       String
+  checked    Boolean   @default(false)
+  checkedAt  DateTime?
+  sortOrder  Int       @default(0)
+}
+
+// Manual performance entry — numbers typed in from the ad platform, not pulled
+// from it. There is no ad-platform integration anywhere in this section.
+model PerformanceLog {
+  id          String   @id @default(cuid())
+  creativeId  String
+  creative    Creative @relation(fields: [creativeId], references: [id], onDelete: Cascade)
+  loggedOn    DateTime
+  spend       Float    @default(0)
+  impressions Int?
+  ctr         Float? // percent, as typed
+  cpl         Float?
+  conversions Int      @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+}

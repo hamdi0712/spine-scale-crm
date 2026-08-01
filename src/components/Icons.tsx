@@ -23,6 +23,18 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M12 6.4v13" />
     </>
   ),
+  adhub: (
+    <>
+      <path d="M4.5 10.5A1.5 1.5 0 016 9h3l9-4.5v15L9 15H6a1.5 1.5 0 01-1.5-1.5z" />
+      <path d="M8.6 15.2l1.1 4.3h2.6l-1.2-4.3" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 3.5l7 2.5v5.6c0 3.9-2.8 7-7 8.9-4.2-1.9-7-5-7-8.9V6z" />
+      <path d="M9 12l2 2 4-4" />
+    </>
+  ),
   logout: (
     <>
       <path d="M14 4.5h4.5a1 1 0 011 1v13a1 1 0 01-1 1H14" />

@@ -159,6 +159,48 @@ again.
   targets (CPL $10–35, lead→booked 20–40%, show rate 50–70%). Per-client trend
   charts and full weekly history. The same target bands feed client health, so
   the two never disagree about what "on target" means.
+- **Ad Hub** — where ad concepts get built, in the order the framework works:
+  research → persona → desire → benefit → concept → creative → compliance →
+  launch → performance. Nothing in it is generated; every field is typed in by
+  hand, and there is no ad-platform integration anywhere — performance numbers
+  are entered manually.
+
+  - **Browse** is the section's home: an accordion of personas, each expanding
+    to its concepts, each concept expanding to its creatives, with a status
+    badge at every level (a persona has no status of its own, so it shows the
+    strongest state among its concepts). Any row navigates to that record.
+  - **Concepts** are the strategic unit — persona + desire + benefit +
+    positioning. Positioning is an **awareness level** (Unaware → Most Aware)
+    and a **market sophistication stage** (1–5), each carrying the course's own
+    strategy guidance as helper text at the point of choosing, the same way the
+    ICP scorecard spells out what each score means. That copy is verbatim from
+    the course and lives as plain constants in `src/lib/adhub.ts` — only the
+    integer stage and the awareness key are stored, so re-wording the guidance
+    is a text edit with no migration and no backfill.
+  - **Desires are shared, not owned.** A want statement lives on its own and is
+    reused across personas and concepts; benefits hang off the desire they
+    answer. Both are managed on **Desires & benefits**, and a desire or benefit
+    a concept is built on cannot be deleted out from under it.
+  - **The new-concept wizard** is five steps — pick or create a persona, then a
+    desire, then a benefit, then positioning, then name it and set a batch
+    number. Unlike the onboarding wizard nothing is written until the last
+    step, so abandoning it half way leaves no orphaned personas or desires
+    behind. **The new-creative wizard** is four — type, hook plus ad headline
+    (with the 40–50 character guideline and a live count), ad copy, CTA — and
+    creates the creative in Draft with its compliance checklist seeded.
+  - **The compliance gate is mandatory.** Every creative carries the five fixed
+    pre-launch checks, and **Ready** is unavailable in the status dropdown until
+    all five are ticked — enforced in the server action, not just hidden in the
+    UI. Unticking one later drops a Ready creative back to Compliance review
+    rather than leaving it claiming a check that no longer holds.
+  - **Iterating beats killing.** *Duplicate as variation* creates a new
+    creative under the same concept, pre-filled with the same copy, linked to
+    its parent through `parentCreativeId` and reset to Draft with a fresh,
+    unchecked compliance list — the check has to be about this creative, not
+    the one it came from.
+  - **Research notes** is a filterable list of freeform notes typed Internal /
+    External / Mechanism / Desire — the same shape as the Library, but its own
+    thing inside Ad Hub rather than another Library category.
 - **Library** — markdown notes in five fixed categories. Starts empty by
   design; it fills up with real material as you write it.
 

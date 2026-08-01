@@ -1,4 +1,14 @@
 import { Flag } from "@/lib/kpi";
+import {
+  CONCEPT_STATUS_LABELS,
+  ConceptStatus,
+  CREATIVE_STATUS_LABELS,
+  CREATIVE_TYPE_LABELS,
+  CreativeStatus,
+  CreativeType,
+  RESEARCH_NOTE_TYPE_LABELS,
+  ResearchNoteType,
+} from "@/lib/adhub";
 import { CALL_STATUS_LABELS, CallStatus } from "@/lib/calls";
 import {
   HEALTH_ACTIONS,
@@ -193,6 +203,77 @@ export function ChecklistStatusBadge({ status }: { status: string }) {
   const tone: Tone =
     status === "DONE" ? "green" : status === "IN_PROGRESS" ? "amber" : "neutral";
   return <Pill tone={tone} label={label} />;
+}
+
+// ─── Ad Hub ────────────────────────────────────────────────────────────────
+
+// Concepts follow the client-status convention: green live, amber held, red
+// stopped, blue-free neutral for something not started yet.
+const CONCEPT_TONES: Record<ConceptStatus, Tone> = {
+  DRAFT: "neutral",
+  ACTIVE: "green",
+  PAUSED: "amber",
+  KILLED: "red",
+};
+
+export function ConceptStatusBadge({ status }: { status: string }) {
+  const label = CONCEPT_STATUS_LABELS[status as ConceptStatus] ?? status;
+  return <Pill tone={CONCEPT_TONES[status as ConceptStatus] ?? "neutral"} label={label} />;
+}
+
+// A creative walks a longer road than a concept, so the tones track the stage
+// it is at: amber while it is being checked, blue once cleared, teal live,
+// purple under test, then the verdict in green or red.
+const CREATIVE_TONES: Record<CreativeStatus, Tone> = {
+  DRAFT: "neutral",
+  COMPLIANCE_REVIEW: "amber",
+  READY: "blue",
+  LAUNCHED: "teal",
+  TESTING: "purple",
+  WINNER: "green",
+  LOSER: "red",
+};
+
+export function CreativeStatusBadge({ status }: { status: string }) {
+  const label = CREATIVE_STATUS_LABELS[status as CreativeStatus] ?? status;
+  return <Pill tone={CREATIVE_TONES[status as CreativeStatus] ?? "neutral"} label={label} />;
+}
+
+// A persona has no status of its own — this renders the rollup from its
+// concepts, and nothing at all for a persona with none.
+export function PersonaRollupBadge({
+  status,
+}: {
+  status: ConceptStatus | null;
+}) {
+  if (!status) return null;
+  return (
+    <Pill
+      tone={CONCEPT_TONES[status]}
+      label={CONCEPT_STATUS_LABELS[status]}
+      title={`Strongest state across this persona's concepts: ${CONCEPT_STATUS_LABELS[status]}`}
+    />
+  );
+}
+
+// Type is a fact about the creative, not a state, so it gets a flat chip
+// rather than a status dot.
+export function CreativeTypeChip({ type }: { type: string }) {
+  const label = CREATIVE_TYPE_LABELS[type as CreativeType] ?? type;
+  return (
+    <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full bg-wash px-2.5 text-xs font-medium text-muted">
+      {label}
+    </span>
+  );
+}
+
+export function ResearchTypeChip({ type }: { type: string }) {
+  const label = RESEARCH_NOTE_TYPE_LABELS[type as ResearchNoteType] ?? type;
+  return (
+    <span className="inline-flex h-[22px] items-center whitespace-nowrap rounded-full bg-wash px-2.5 text-xs font-medium text-muted">
+      {label}
+    </span>
+  );
 }
 
 const FLAG_CLS: Record<Flag, string> = {
