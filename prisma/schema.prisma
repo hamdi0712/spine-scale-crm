@@ -27,6 +27,7 @@ model Lead {
   archived     Boolean    @default(false) // set when converted to a client (or otherwise closed out)
   notes        LeadNote[]
   calls        Call[]
+  activity     ActivityLog[]
   client       Client?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -106,12 +107,35 @@ model Client {
   checklist    ChecklistItem[]
   reports      WeeklyReport[]
   calls        Call[]
+  activity     ActivityLog[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
   // IANA zone id, constrained to the four US zones in src/lib/timezones.ts.
   // Drives the client's local-time badge and the kickoff-call comparison.
   timeZone String @default("America/New_York")
+
+  // ─── Client health ───────────────────────────────────────────────────────
+  // Health is derived from the last few weekly reports in src/lib/health.ts,
+  // never stored as the source of truth — the same rule the ICP tier follows.
+  // The three fields below are the exceptions that genuinely need persisting.
+
+  // Manual flag for an operational break (ad account down, tracking broken,
+  // client unresponsive). "at_risk" forces At risk regardless of the metrics;
+  // null hands the status back to the computation.
+  healthOverride String?
+
+  // The last health status this client was seen at, so a change can be
+  // detected and logged. Written by syncClientHealth() in src/lib/milestones.ts
+  // whenever something that feeds the computation changes; read only to
+  // compare against, never to display.
+  healthStatus    String?
+  healthChangedAt DateTime?
+
+  // When the client first went Active. Health needs it to know how many full
+  // reporting weeks have actually elapsed under an active engagement — before
+  // two of them the client is Ramping, not Healthy and not At risk.
+  activeSince DateTime?
 
   // Onboarding wizard. 0 = not running (never started, skipped, or finished);
   // 1–5 = the step to resume on. Stored so leaving mid-way and coming back
@@ -156,6 +180,33 @@ model ChecklistItem {
   sortOrder   Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+
+  // Blocks the launch (or the call that depends on it), so the dashboard's
+  // Today's focus lifts it above the rest of the checklist. Seeded from
+  // LAUNCH_BLOCKING_CHECKLIST in src/lib/constants.ts and toggleable per item,
+  // so renaming an item never silently drops the flag.
+  blocking Boolean @default(false)
+}
+
+// Internal milestone feed behind the dashboard's Recent activity card.
+//
+// Written on a fixed, small set of events only — a lead becoming a client, a
+// weekly report being generated, a contract signed, an invoice paid, a health
+// status change, onboarding completed. Routine field edits are deliberately
+// not logged: this is a record of things that happened to the engagement, not
+// an audit trail of keystrokes.
+model ActivityLog {
+  id       String  @id @default(cuid())
+  kind     String // LEAD_CONVERTED | REPORT_GENERATED | CONTRACT_SIGNED | INVOICE_PAID | HEALTH_CHANGED | ONBOARDING_COMPLETED
+  summary  String // the line the feed shows, composed when the event happens
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  leadId   String?
+  lead     Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model WeeklyReport {

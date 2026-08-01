@@ -1,6 +1,13 @@
 import { Flag } from "@/lib/kpi";
 import { CALL_STATUS_LABELS, CallStatus } from "@/lib/calls";
+import {
+  HEALTH_ACTIONS,
+  HEALTH_LABELS,
+  HealthStatus,
+  Trend,
+} from "@/lib/health";
 import { ICP_TIER_ACTIONS, ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
+import Icon from "@/components/Icons";
 import {
   CHECKLIST_STATUS_LABELS,
   ChecklistStatus,
@@ -110,6 +117,62 @@ export function IcpTierBadge({
       label={ICP_TIER_LABELS[tier]}
       title={tooltip && action ? action : undefined}
     />
+  );
+}
+
+// Ramping is the deliberate fourth colour: a client with too little reported
+// history is neither good news nor bad, and painting it green or red would be
+// inventing a reading the numbers do not support.
+const HEALTH_TONES: Record<HealthStatus, Tone> = {
+  HEALTHY: "green",
+  NEEDS_ATTENTION: "amber",
+  AT_RISK: "red",
+  RAMPING: "neutral",
+};
+
+export function HealthBadge({
+  status,
+  reason,
+}: {
+  status: HealthStatus;
+  reason?: string;
+}) {
+  return (
+    <Pill
+      tone={HEALTH_TONES[status]}
+      label={HEALTH_LABELS[status]}
+      title={reason ?? HEALTH_ACTIONS[status]}
+    />
+  );
+}
+
+const TREND_ICONS: Record<Trend, string> = {
+  up: "arrowUp",
+  down: "arrowDown",
+  flat: "arrowRight",
+};
+
+const TREND_TITLES: Record<Trend, string> = {
+  up: "Show rate up on the previous reported week",
+  down: "Show rate down on the previous reported week",
+  flat: "Show rate flat against the previous reported week",
+};
+
+// Direction of travel beside the badge. Colour is intentionally muted: the
+// badge says how things are, this says which way they are going, and a green
+// arrow on a red badge would fight it.
+export function TrendArrow({ trend }: { trend: Trend | null }) {
+  if (!trend) return null;
+  return (
+    <span
+      title={TREND_TITLES[trend]}
+      className={`inline-flex items-center ${
+        trend === "up" ? "text-ok" : trend === "down" ? "text-bad" : "text-muted"
+      }`}
+    >
+      <Icon name={TREND_ICONS[trend]} className="h-3.5 w-3.5" />
+      <span className="sr-only">{TREND_TITLES[trend]}</span>
+    </span>
   );
 }
 

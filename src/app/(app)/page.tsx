@@ -1,40 +1,49 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { OPEN_STAGES } from "@/lib/constants";
-import { callTypeLabel, isCallOverdue } from "@/lib/calls";
-import { computeMetrics } from "@/lib/kpi";
-import { fmtDate, fmtMoney } from "@/lib/format";
-import { StageBadge } from "@/components/Badge";
-import { LocalDateTime, WorldClock } from "@/components/Clock";
+import { LEAD_STAGE_SHORT_LABELS, OPEN_STAGES } from "@/lib/constants";
+import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
+import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
+import { fmtMoney } from "@/lib/format";
+import ActivityFeed from "@/components/ActivityFeed";
+import BusinessHoursPanel, {
+  BusinessHoursChip,
+} from "@/components/BusinessHoursPanel";
+import ClientHealthList, { HealthRow } from "@/components/ClientHealthList";
 import Icon from "@/components/Icons";
+import PipelineDonut from "@/components/PipelineDonut";
+import TodaysFocus from "@/components/TodaysFocus";
 
 export const dynamic = "force-dynamic";
+
+// How many rows the two feed cards carry before they defer to their full page.
+const FEED_ROWS = 6;
 
 export default async function DashboardPage() {
   const now = new Date();
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dayEnd = new Date(now);
+  dayEnd.setHours(23, 59, 59, 999);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [activeClients, openLeads, followUps, upcomingCalls, clients] =
+  const [activeClients, openLeads, focusCalls, focusClients, activity] =
     await Promise.all([
-      prisma.client.findMany({ where: { status: "ACTIVE" } }),
+      prisma.client.findMany({
+        where: { status: "ACTIVE" },
+        orderBy: { clinicName: "asc" },
+        include: {
+          reports: { orderBy: { weekStart: "desc" }, take: HEALTH_WINDOW_WEEKS },
+        },
+      }),
       prisma.lead.findMany({
         where: { archived: false, stage: { in: [...OPEN_STAGES] } },
       }),
-      prisma.lead.findMany({
-        where: {
-          archived: false,
-          stage: { in: [...OPEN_STAGES] },
-          nextFollowUp: { lte: in7Days },
-        },
-        orderBy: { nextFollowUp: "asc" },
-      }),
-      // No lower bound, like the follow-ups above: anything still marked
-      // Scheduled whose time has already passed is overdue, not gone.
-      // Archived leads have been closed out, so their calls stop nagging.
+      // No lower bound: anything still marked Scheduled whose time has passed
+      // is overdue, not gone. Archived leads have been closed out, so their
+      // calls stop nagging.
       prisma.call.findMany({
         where: {
           status: "SCHEDULED",
-          scheduledAt: { lte: in7Days },
+          scheduledAt: { lte: dayEnd },
           OR: [{ leadId: null }, { lead: { archived: false } }],
         },
         orderBy: { scheduledAt: "asc" },
@@ -42,63 +51,126 @@ export default async function DashboardPage() {
       }),
       prisma.client.findMany({
         where: { status: { not: "CHURNED" } },
-        include: { reports: { orderBy: { weekStart: "desc" }, take: 1 } },
+        include: { checklist: { orderBy: { sortOrder: "asc" } } },
+      }),
+      prisma.activityLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: FEED_ROWS,
       }),
     ]);
 
+  // ─── Headline numbers ────────────────────────────────────────────────────
+
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
   const mrr = activeClients.reduce((s, c) => s + (c.monthlyFee ?? 0), 0);
+  const followUps7d = openLeads.filter(
+    (l) => l.nextFollowUp !== null && l.nextFollowUp <= in7Days,
+  );
+  const dueToday = followUps7d.filter(
+    (l) => l.nextFollowUp !== null && l.nextFollowUp <= dayEnd,
+  ).length;
 
-  const redFlagged = clients
-    .map((c) => {
-      const latest = c.reports[0];
-      if (!latest) return null;
-      const m = computeMetrics(latest);
-      if (!m.hasRed) return null;
-      const reds: string[] = [];
-      if (m.cplFlag === "red") reds.push("CPL");
-      if (m.leadToBookedFlag === "red") reds.push("Lead→Booked");
-      if (m.showRateFlag === "red") reds.push("Show rate");
-      return { client: c, weekStart: latest.weekStart, reds };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null);
+  // Month-on-month is only claimed where the data actually supports it: we
+  // know when each client went active, so "added this month" is real. There is
+  // no stored history of what MRR was in June, so no percentage is shown.
+  const newThisMonth = activeClients.filter(
+    (c) => c.activeSince !== null && c.activeSince >= monthStart,
+  );
+  const mrrAdded = newThisMonth.reduce((s, c) => s + (c.monthlyFee ?? 0), 0);
+
+  const kpis: {
+    label: string;
+    value: string;
+    icon: string;
+    delta: string;
+    tone: "up" | "alert" | "flat";
+  }[] = [
+    {
+      label: "Active clients",
+      value: String(activeClients.length),
+      icon: "clients",
+      delta:
+        newThisMonth.length > 0
+          ? `${newThisMonth.length} added this month`
+          : "No change this month",
+      tone: newThisMonth.length > 0 ? "up" : "flat",
+    },
+    {
+      label: "MRR (active)",
+      value: fmtMoney(mrr),
+      icon: "dollar",
+      delta:
+        mrrAdded > 0
+          ? `${fmtMoney(mrrAdded)} added this month`
+          : "Recurring monthly fees",
+      tone: mrrAdded > 0 ? "up" : "flat",
+    },
+    {
+      label: "Pipeline value",
+      value: fmtMoney(pipelineValue),
+      icon: "trend",
+      delta: `${openLeads.length} open lead${openLeads.length === 1 ? "" : "s"}`,
+      tone: "flat",
+    },
+    {
+      label: "Follow-ups due (7d)",
+      value: String(followUps7d.length),
+      icon: "clock",
+      delta: dueToday > 0 ? `${dueToday} due today` : "None due today",
+      tone: dueToday > 0 ? "alert" : "flat",
+    },
+  ];
+
+  // ─── Today's focus ───────────────────────────────────────────────────────
+
+  const focus = buildFocus({ now, calls: focusCalls, leads: openLeads, clients: focusClients });
+  const { visible, hidden } = splitFocus(focus);
+  const summary = summariseFocus(focus);
+
+  // ─── Client health ───────────────────────────────────────────────────────
+
+  const healthRows: HealthRow[] = activeClients.map((client) => ({
+    id: client.id,
+    clinicName: client.clinicName,
+    detail: [
+      "Active",
+      client.packageName ?? "No package set",
+    ].join(" · "),
+    health: computeHealth(client, client.reports),
+  }));
+  const healthOrder = { AT_RISK: 0, NEEDS_ATTENTION: 1, RAMPING: 2, HEALTHY: 3 };
+  healthRows.sort(
+    (a, b) => healthOrder[a.health.status] - healthOrder[b.health.status],
+  );
+
+  // ─── Pipeline snapshot ───────────────────────────────────────────────────
+
+  const slices = OPEN_STAGES.map((stage) => ({
+    stage,
+    label: LEAD_STAGE_SHORT_LABELS[stage],
+    value: openLeads
+      .filter((l) => l.stage === stage)
+      .reduce((s, l) => s + (l.estValue ?? 0), 0),
+  }));
 
   return (
     <div>
-      <h1 className="text-[32px] font-bold tracking-[-0.02em]">Dashboard</h1>
-      <p className="mt-1.5 text-sm text-muted">Agency at a glance</p>
-
-      <div className="mt-8">
-        <WorldClock />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[32px] font-bold tracking-[-0.02em]">Dashboard</h1>
+          <p className="mt-1.5 text-sm text-muted">Agency at a glance</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <BusinessHoursChip />
+          <Link href="/clients/new" className="btn-primary">
+            <Icon name="plus" className="h-4 w-4" />
+            New client
+          </Link>
+        </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-6 lg:grid-cols-4">
-        {[
-          {
-            label: "Active clients",
-            value: String(activeClients.length),
-            detail: "Currently on the books",
-            icon: "clients",
-          },
-          {
-            label: "MRR (active)",
-            value: fmtMoney(mrr),
-            detail: "Recurring monthly fees",
-            icon: "dollar",
-          },
-          {
-            label: "Pipeline value",
-            value: fmtMoney(pipelineValue),
-            detail: `${openLeads.length} open lead${openLeads.length === 1 ? "" : "s"}`,
-            icon: "trend",
-          },
-          {
-            label: "Follow-ups due (7d)",
-            value: String(followUps.length),
-            detail: "Due in the next 7 days",
-            icon: "clock",
-          },
-        ].map((kpi) => (
+      <div className="mt-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
+        {kpis.map((kpi) => (
           <div key={kpi.label} className="card p-6">
             <div className="flex items-start justify-between gap-3">
               <div className="text-xs font-medium tracking-[0.02em] text-muted">
@@ -111,136 +183,126 @@ export default async function DashboardPage() {
             <div className="num mt-2 text-[28px] font-semibold leading-none tracking-tight">
               {kpi.value}
             </div>
-            <div className="mt-2.5 text-xs text-muted">{kpi.detail}</div>
+            <div
+              className={`mt-2.5 flex items-center gap-1 text-xs ${
+                kpi.tone === "up"
+                  ? "text-ok"
+                  : kpi.tone === "alert"
+                    ? "text-bad"
+                    : "text-muted"
+              }`}
+            >
+              {kpi.tone !== "flat" && (
+                <Icon name="arrowUp" className="h-3.5 w-3.5" />
+              )}
+              {kpi.delta}
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <section>
-          <h2 className="mb-4 text-xl font-semibold">Follow-ups due</h2>
-          <div className="card">
-            {followUps.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted">
-                No follow-ups due in the next 7 days.
-              </p>
-            ) : (
-              <table className="w-full">
-                <tbody>
-                  {followUps.map((lead) => {
-                    const overdue =
-                      lead.nextFollowUp && lead.nextFollowUp < now;
-                    return (
-                      <tr key={lead.id}>
-                        <td className="td">
-                          <Link
-                            href={`/pipeline/${lead.id}`}
-                            className="font-medium text-ink hover:underline"
-                          >
-                            {lead.clinicName}
-                          </Link>
-                        </td>
-                        <td className="td">
-                          <StageBadge stage={lead.stage} />
-                        </td>
-                        <td
-                          className={`td num text-xs ${
-                            overdue ? "text-bad" : "text-muted"
-                          }`}
-                        >
-                          {fmtDate(lead.nextFollowUp)}
-                          {overdue ? " · overdue" : ""}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-2">
+        <section className="card p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Now</h2>
+            <span
+              className={`inline-flex items-center gap-2 text-xs font-medium ${
+                summary.overdue > 0 ? "text-bad" : "text-ok"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  summary.overdue > 0 ? "bg-bad" : "bg-ok"
+                }`}
+                aria-hidden
+              />
+              {summary.overdue > 0
+                ? `${summary.overdue} overdue`
+                : "Nothing overdue"}
+            </span>
+          </div>
+
+          <div className="mt-4 flex items-center gap-4 rounded-xl bg-accent/[0.06] p-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-accent/10 text-accent">
+              <Icon name="bell" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold">
+                {summary.headline}
+              </span>
+              <span className="mt-0.5 block truncate text-xs text-muted">
+                {summary.detail}
+              </span>
+            </span>
+            {summary.cta && (
+              <Link
+                href={summary.cta.href}
+                className="btn h-[34px] shrink-0 px-3.5 text-xs"
+              >
+                {summary.cta.label}
+                <Icon name="chevronRight" className="h-3.5 w-3.5" />
+              </Link>
             )}
           </div>
+
+          <h3 className="mb-1 mt-6 text-sm font-semibold">Today&rsquo;s focus</h3>
+          <TodaysFocus visible={visible} hidden={hidden} />
         </section>
 
-        <section>
-          <h2 className="mb-4 text-xl font-semibold">Calls due</h2>
-          <div className="card">
-            {upcomingCalls.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted">
-                No calls scheduled in the next 7 days.
-              </p>
-            ) : (
-              <table className="w-full">
-                <tbody>
-                  {upcomingCalls.map((call) => {
-                    const overdue = isCallOverdue(call, now);
-                    const owner = call.lead ?? call.client;
-                    const href = call.lead
-                      ? `/pipeline/${call.lead.id}`
-                      : `/clients/${call.clientId}`;
-                    return (
-                      <tr key={call.id}>
-                        <td className="td">
-                          <Link
-                            href={href}
-                            className="font-medium text-ink hover:underline"
-                          >
-                            {owner?.clinicName ?? "Unknown record"}
-                          </Link>
-                          <span className="ml-2 text-xs text-muted">
-                            {call.lead ? "Lead" : "Client"}
-                          </span>
-                        </td>
-                        <td className="td text-muted">
-                          {callTypeLabel(call.type)}
-                        </td>
-                        <td
-                          className={`td whitespace-nowrap text-right text-xs ${
-                            overdue ? "text-bad" : "text-muted"
-                          }`}
-                        >
-                          <LocalDateTime at={call.scheduledAt.toISOString()} />
-                          {overdue ? " · overdue" : ""}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
+        <section className="card p-6">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2.5 text-xl font-semibold">
+              <Icon name="clock" className="h-[18px] w-[18px] text-accent" />
+              US business hours
+            </h2>
+            <span className="text-xs text-muted">9–5 local, Mon–Fri</span>
           </div>
+          <BusinessHoursPanel />
+        </section>
+      </div>
+
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-3">
+        <section className="card p-6">
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Recent activity</h2>
+            <Link href="/activity" className="text-xs font-medium text-accent hover:underline">
+              View all
+            </Link>
+          </div>
+          <ActivityFeed
+            entries={activity.map((a) => ({
+              id: a.id,
+              kind: a.kind,
+              summary: a.summary,
+              createdAt: a.createdAt,
+              href: a.clientId
+                ? `/clients/${a.clientId}`
+                : a.leadId
+                  ? `/pipeline/${a.leadId}`
+                  : null,
+            }))}
+            now={now}
+          />
         </section>
 
-        {/* The two date-driven reminder lists pair up on the row above; this
-            one is a different kind of alert, so it takes the full width. */}
-        <section className="lg:col-span-2">
-          <h2 className="mb-4 text-xl font-semibold">Clients needing attention</h2>
-          <div className="card">
-            {redFlagged.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted">
-                No red-flagged metrics in the latest reported weeks.
-              </p>
-            ) : (
-              <table className="w-full">
-                <tbody>
-                  {redFlagged.map(({ client, weekStart, reds }) => (
-                    <tr key={client.id}>
-                      <td className="td">
-                        <Link
-                          href={`/reporting/${client.id}`}
-                          className="font-medium text-ink hover:underline"
-                        >
-                          {client.clinicName}
-                        </Link>
-                      </td>
-                      <td className="td text-bad">{reds.join(", ")}</td>
-                      <td className="td num text-xs text-muted">
-                        wk of {fmtDate(weekStart)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+        <section className="card p-6">
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Client health</h2>
+            <Link href="/clients" className="text-xs font-medium text-accent hover:underline">
+              View all
+            </Link>
           </div>
+          <ClientHealthList rows={healthRows.slice(0, FEED_ROWS)} />
+        </section>
+
+        <section className="card p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Pipeline snapshot</h2>
+            <Link href="/pipeline" className="text-xs font-medium text-accent hover:underline">
+              View pipeline
+            </Link>
+          </div>
+          <PipelineDonut slices={slices} total={pipelineValue} />
         </section>
       </div>
     </div>

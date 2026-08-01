@@ -14,32 +14,39 @@ export function showRate(shows: number, booked: number): number | null {
   return booked > 0 ? shows / booked : null;
 }
 
-function bandFlag(
-  value: number | null,
-  greenLo: number,
-  greenHi: number,
-  yellowLo: number,
-  yellowHi: number
-): Flag {
-  if (value === null) return "na";
-  if (value >= greenLo && value <= greenHi) return "green";
-  if (value >= yellowLo && value <= yellowHi) return "yellow";
-  return "red";
+// Target bands, named so client health (src/lib/health.ts) reads the same
+// numbers the weekly report is flagged against rather than restating them.
+export interface Band {
+  green: [number, number];
+  yellow: [number, number];
 }
 
 // CPL target: green $10–35; yellow within ~20% of the band ($8–42); red outside.
-export function cplFlag(value: number | null): Flag {
-  return bandFlag(value, 10, 35, 8, 42);
-}
+export const CPL_BAND: Band = { green: [10, 35], yellow: [8, 42] };
 
 // Lead-to-booked target: green 20–40%; yellow within 5pts (15–45%); red outside.
-export function leadToBookedFlag(value: number | null): Flag {
-  return bandFlag(value, 0.2, 0.4, 0.15, 0.45);
-}
+export const LEAD_TO_BOOKED_BAND: Band = { green: [0.2, 0.4], yellow: [0.15, 0.45] };
 
 // Show rate target: green 50–70%; yellow within 5pts (45–75%); red outside.
+export const SHOW_RATE_BAND: Band = { green: [0.5, 0.7], yellow: [0.45, 0.75] };
+
+function bandFlag(value: number | null, band: Band): Flag {
+  if (value === null) return "na";
+  if (value >= band.green[0] && value <= band.green[1]) return "green";
+  if (value >= band.yellow[0] && value <= band.yellow[1]) return "yellow";
+  return "red";
+}
+
+export function cplFlag(value: number | null): Flag {
+  return bandFlag(value, CPL_BAND);
+}
+
+export function leadToBookedFlag(value: number | null): Flag {
+  return bandFlag(value, LEAD_TO_BOOKED_BAND);
+}
+
 export function showRateFlag(value: number | null): Flag {
-  return bandFlag(value, 0.5, 0.7, 0.45, 0.75);
+  return bandFlag(value, SHOW_RATE_BAND);
 }
 
 export interface ReportMetrics {

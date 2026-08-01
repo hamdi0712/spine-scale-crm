@@ -7,11 +7,8 @@
 
 import { useEffect, useState } from "react";
 import {
-  US_TIME_ZONES,
   fmtDateTimeInZone,
-  fmtDayInZone,
   fmtTimeInZone,
-  fmtTimeWithSecondsInZone,
   sameWallClock,
   zoneAbbr,
   zoneLabel,
@@ -100,38 +97,5 @@ export function KickoffTime({
   );
 }
 
-// Dashboard strip: one tile per US zone, with the viewer's own zone marked so
-// the row reads as a comparison rather than four unrelated numbers.
-export function WorldClock() {
-  const now = useNow();
-  const localAbbr = now ? zoneAbbr(now) : null;
-  return (
-    <div className="card flex divide-x divide-line">
-      {US_TIME_ZONES.map((zone) => {
-        const abbr = now ? zoneAbbr(now, zone.id) : "";
-        const isYours = localAbbr !== null && abbr === localAbbr;
-        return (
-          <div
-            key={zone.id}
-            className={`min-w-0 flex-1 px-5 py-4 ${isYours ? "bg-accent/[0.04]" : ""}`}
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate text-xs font-medium tracking-[0.02em] text-muted">
-                {zone.label}
-              </span>
-              <span className="num shrink-0 text-[11px] text-muted">
-                {isYours ? "you" : abbr}
-              </span>
-            </div>
-            <div className="num mt-2 text-xl font-semibold leading-none tracking-tight">
-              {now ? fmtTimeWithSecondsInZone(now, zone.id) : "—:—:—"}
-            </div>
-            <div className="mt-2 truncate text-xs text-muted">
-              {now ? fmtDayInZone(now, zone.id) : "—"}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// The dashboard's four-zone strip lives in BusinessHoursPanel: it needs to say
+// whether each zone is inside working hours, not just what the clock reads.

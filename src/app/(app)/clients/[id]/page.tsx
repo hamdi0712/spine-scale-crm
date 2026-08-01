@@ -8,6 +8,7 @@ import {
   renameChecklistItem,
   setChecklistItemNotes,
   setChecklistItemStatus,
+  toggleChecklistItemBlocking,
   updateClient,
 } from "@/lib/actions/clients";
 import { addClientCall } from "@/lib/actions/calls";
@@ -25,13 +26,20 @@ import {
   ONBOARDING_TOTAL_STEPS,
   isOnboarding,
 } from "@/lib/onboarding";
+import {
+  HEALTH_OVERRIDE_AT_RISK,
+  HEALTH_WINDOW_WEEKS,
+  computeHealth,
+  isHealthScored,
+} from "@/lib/health";
 import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDate, toDateInput } from "@/lib/format";
-import { ClientStatusBadge } from "@/components/Badge";
+import { ClientStatusBadge, HealthBadge, TrendArrow } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import CapsuleBar from "@/components/CapsuleBar";
 import { KickoffTime, LocalTimeBadge } from "@/components/Clock";
 import ConfirmForm from "@/components/ConfirmForm";
+import Icon from "@/components/Icons";
 import InvoiceLog from "@/components/InvoiceLog";
 
 export const dynamic = "force-dynamic";
@@ -53,10 +61,15 @@ export default async function ClientDetailPage({
       checklist: { orderBy: { sortOrder: "asc" } },
       invoices: { orderBy: { issuedOn: "desc" } },
       calls: { orderBy: { scheduledAt: "asc" } },
+      reports: { orderBy: { weekStart: "desc" }, take: HEALTH_WINDOW_WEEKS },
       lead: true,
     },
   });
   if (!client) notFound();
+
+  const health = isHealthScored(client.status)
+    ? computeHealth(client, client.reports)
+    : null;
 
   const update = updateClient.bind(null, client.id);
   const addItem = addChecklistItem.bind(null, client.id);
@@ -77,8 +90,17 @@ export default async function ClientDetailPage({
               {client.clinicName}
             </h1>
             <ClientStatusBadge status={client.status} />
+            {health && (
+              <span className="flex items-center gap-1.5">
+                <HealthBadge status={health.status} reason={health.reason} />
+                <TrendArrow trend={health.trend} />
+              </span>
+            )}
             <LocalTimeBadge timeZone={client.timeZone} />
           </div>
+          {health && (
+            <p className="mt-1.5 text-sm text-muted">{health.reason}</p>
+          )}
           {client.kickoffAt && (
             <p className="mt-1.5 text-sm text-muted">
               Kickoff call —{" "}
@@ -266,6 +288,28 @@ export default async function ClientDetailPage({
                 </select>
               </div>
               <div className="col-span-2">
+                <label className="field-label" htmlFor="healthOverride">
+                  Health override
+                </label>
+                <select
+                  id="healthOverride"
+                  name="healthOverride"
+                  defaultValue={client.healthOverride ?? ""}
+                  className="field"
+                >
+                  <option value="">Auto — read from the weekly reports</option>
+                  <option value={HEALTH_OVERRIDE_AT_RISK}>
+                    Force At risk — operational break
+                  </option>
+                </select>
+                <p className="mt-2 text-xs text-muted">
+                  For when something is broken that the numbers have not caught
+                  up with — ad account down, tracking dead, access revoked.
+                  While it is set, health reads At risk whatever the metrics
+                  say.
+                </p>
+              </div>
+              <div className="col-span-2">
                 <label className="field-label" htmlFor="contractStart">
                   Contract start
                 </label>
@@ -341,6 +385,10 @@ export default async function ClientDetailPage({
                 const rename = renameChecklistItem.bind(null, item.id);
                 const setNotes = setChecklistItemNotes.bind(null, item.id);
                 const remove = deleteChecklistItem.bind(null, item.id);
+                const toggleBlocking = toggleChecklistItemBlocking.bind(
+                  null,
+                  item.id,
+                );
                 return (
                   <li
                     key={item.id}
@@ -392,6 +440,28 @@ export default async function ClientDetailPage({
                           {fmtDate(item.completedAt)}
                         </span>
                       )}
+                      {/* Blocking items are what the dashboard lifts to the
+                          top of Today's focus while a client is onboarding. */}
+                      <form action={toggleBlocking} className="shrink-0">
+                        <button
+                          type="submit"
+                          title={
+                            item.blocking
+                              ? "Blocks going live — click to unflag"
+                              : "Does not block going live — click to flag"
+                          }
+                          className={`flex h-6 w-6 items-center justify-center rounded-[7px] ${
+                            item.blocking
+                              ? "bg-warn-soft text-warn"
+                              : "text-muted/40 hover:bg-wash hover:text-muted"
+                          }`}
+                        >
+                          <Icon name="flag" className="h-3.5 w-3.5" />
+                          <span className="sr-only">
+                            {item.blocking ? "Blocking" : "Not blocking"}
+                          </span>
+                        </button>
+                      </form>
                       <ConfirmForm
                         action={remove}
                         message={`Remove "${item.title}" from this checklist?`}

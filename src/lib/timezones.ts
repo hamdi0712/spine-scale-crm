@@ -40,15 +40,6 @@ export function fmtTimeInZone(date: Date, timeZone?: Zone): string {
   return parts(date, timeZone, { hour: "numeric", minute: "2-digit" });
 }
 
-// "3:42:07 PM" — used where the tick should be visible, like the world clock.
-export function fmtTimeWithSecondsInZone(date: Date, timeZone?: Zone): string {
-  return parts(date, timeZone, {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
 // "Fri, Aug 1"
 export function fmtDayInZone(date: Date, timeZone?: Zone): string {
   return parts(date, timeZone, {
