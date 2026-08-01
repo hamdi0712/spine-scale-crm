@@ -6,6 +6,12 @@
 // re-wording the guidance or re-tuning the checklist never needs a migration.
 // Nothing in this file talks to the database, so client components can import
 // it directly.
+//
+// The positioning copy — the five awareness levels, the five sophistication
+// stages, and the headline guidance — is the course's own text, taken from
+// "Mastering Marketing Fundamentals for High-Converting Ads" and "Creating Ads
+// That Convert: Positioning & Concepting". Constants only, deliberately: it is
+// meant to be edited as text, and nothing stored depends on the wording.
 
 // ─── Research notes ────────────────────────────────────────────────────────
 
@@ -109,21 +115,26 @@ export const AWARENESS_LEVEL_LABELS: Record<AwarenessLevel, string> = {
 
 // Shown as helper text under each option while positioning a concept, the same
 // way the ICP scorecard spells out what each score means.
+//
+// The five levels and the strategy line under each are the course's own words,
+// from the Five Levels of Market Awareness in "Mastering Marketing Fundamentals
+// for High-Converting Ads". Kept verbatim — reword them here and every concept
+// re-reads against the new text with no migration.
 export const AWARENESS_LEVEL_GUIDANCE: Record<AwarenessLevel, string> = {
   UNAWARE:
-    "They do not connect what they are living with to a problem worth solving. Lead with the situation, not the offer — a story or a moment they recognise. Sell nothing in the hook.",
+    "Prospects are not aware of their desires. Broad dissatisfaction is echoed. Strategy: use broad messaging that speaks to general dissatisfaction.",
   PROBLEM_AWARE:
-    "They feel the problem but do not know what fixes it. Name the problem back to them precisely, then open the door to a category of solution.",
+    "Prospects know they have a problem but not the solutions. Link the problem to a solution. Strategy: highlight the problem in your headline and introduce your solution.",
   SOLUTION_AWARE:
-    "They know solutions exist and have probably tried one. Lead with the mechanism — what makes this way of solving it different from the one that failed them.",
+    "Prospects know of solutions but not your specific one. Call out the solution and provide proof. Strategy: emphasize the existence of the solution and demonstrate its effectiveness.",
   PRODUCT_AWARE:
-    "They know the program and are weighing it up. Lead with proof and specifics — what happens, how long it takes, who it is for.",
+    "Prospects know of your product. Reinforce the desire and problem, demonstrate the product. Strategy: use social proof and product demos to highlight your product's benefits.",
   MOST_AWARE:
-    "They are already convinced and just need a reason to move now. Lead with the offer and the next step.",
+    "Prospects know your product and business. Focus on product name, price, guarantees, and social proof. Strategy: clearly state product details, pricing, and customer testimonials.",
 };
 
 export const AWARENESS_GUIDANCE_INTRO =
-  "Pick where this persona actually is, not where you wish they were. The awareness level decides what the hook opens with — everything downstream follows it.";
+  "How aware your market is of their desires and your product's ability to satisfy them. Focuses on consumer awareness and understanding of needs and available solutions — it fine-tunes the communication and ad messaging that moves consumers through the funnel.";
 
 // ─── Positioning: market sophistication ────────────────────────────────────
 
@@ -137,41 +148,45 @@ export interface SophisticationStageMeta {
   guidance: string;
 }
 
+// The stage names, strategy lines and worked examples are the course's own,
+// from the Market Sophistication Stages in "Mastering Marketing Fundamentals
+// for High-Converting Ads". Only the numbering is rendered as a numeral rather
+// than a word, to match the 1–5 value stored on the concept.
 export const SOPHISTICATION_STAGE_META: SophisticationStageMeta[] = [
   {
     stage: 1,
-    label: "Stage 1 — First to market",
+    label: "Stage 1 — Stating the Claim",
     guidance:
-      "Nobody has made this claim to this market yet. State it plainly and directly; the claim itself does the work.",
+      "For first-to-market products. Simply state what your product does. Example: “Improve your run with our comfortable shoes.”",
   },
   {
     stage: 2,
-    label: "Stage 2 — Claims are being copied",
+    label: "Stage 2 — Enlarging the Claim",
     guidance:
-      "Others are making the same claim. Enlarge it — more specific, faster, further than theirs — but keep it the same claim.",
+      "For second-to-market products, make a bigger claim than competitors. Look at what the competition is claiming and top them. Example: “Experience 50% less foot fatigue with our advanced running shoes.”",
   },
   {
     stage: 3,
-    label: "Stage 3 — The market stopped believing claims",
+    label: "Stage 3 — New Mechanism",
     guidance:
-      "Bigger promises no longer land. Lead with the mechanism: the how that makes the claim credible again.",
+      "For markets familiar with existing claims, introduce a new way of achieving the benefit. Prospects have heard a lot of claims, so present a new method or technology. Example: “Introducing our unique arch support design for superior comfort.”",
   },
   {
     stage: 4,
-    label: "Stage 4 — The mechanism is being copied",
+    label: "Stage 4 — Improving the Mechanism",
     guidance:
-      "Competitors have your mechanism. Elaborate on it — more complete, easier, less of what they hate about the alternatives.",
+      "For crowded markets, enhance the existing mechanism. Example: “Experience our improved anatomically correct arch support for unparalleled running comfort.”",
   },
   {
     stage: 5,
-    label: "Stage 5 — Numb to claims and mechanisms",
+    label: "Stage 5 — Identification",
     guidance:
-      "Nothing said about the product moves them. Shift to identity and experience — who they become, and how it feels to be that person.",
+      "For saturated markets, focus on personal identification with the brand — lifestyle and brand identity. Example: “Join the Marathon Runners Club and experience the freedom of long-distance running without discomfort.”",
   },
 ];
 
 export const SOPHISTICATION_GUIDANCE_INTRO =
-  "How much of this has the market already heard? Stage is set by the competition, not by your product — read the ads already running before choosing.";
+  "Focuses on the competitive context of the market — how much of this the market has already heard. It guides how to position and differentiate the product in a crowded market.";
 
 export function sophisticationMeta(stage: number): SophisticationStageMeta {
   return (
@@ -237,13 +252,15 @@ export const CREATIVE_STATUS_LABELS: Record<CreativeStatus, string> = {
   LOSER: "Loser",
 };
 
-// Copy guidance shown in the creative wizard. Lengths are the course's, kept
-// here rather than hard-coded into the form so they read the same everywhere.
+// Copy guidance shown in the creative wizard, in the course's own words —
+// the concept-vs-ad headline distinction and the headline length guideline from
+// "Creating Ads That Convert: Positioning & Concepting". Kept here rather than
+// hard-coded into the form so they read the same everywhere.
 export const CONCEPT_HEADLINE_GUIDANCE =
-  "The hook — the bold, predominant text on the creative itself. It is the only thing most people will read, so it carries the concept on its own.";
+  "The bold, predominant text in your ad. Appears at the start of a video ad or as the main text in a static image.";
 
 export const AD_HEADLINE_GUIDANCE =
-  "The headline in the ad unit, under the creative. Keep it to 40–50 characters so it does not truncate.";
+  "The smaller headline below your copy, particularly on platforms like Facebook. Less prominent but still important for context. Keep it short, ideally between 40–50 characters, and aligned with the persona's main desire.";
 
 export const AD_HEADLINE_MIN = 40;
 export const AD_HEADLINE_MAX = 50;

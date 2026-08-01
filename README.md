@@ -171,9 +171,12 @@ again.
     strongest state among its concepts). Any row navigates to that record.
   - **Concepts** are the strategic unit — persona + desire + benefit +
     positioning. Positioning is an **awareness level** (Unaware → Most Aware)
-    and a **market sophistication stage** (1–5), each carrying the framework's
+    and a **market sophistication stage** (1–5), each carrying the course's own
     strategy guidance as helper text at the point of choosing, the same way the
-    ICP scorecard spells out what each score means.
+    ICP scorecard spells out what each score means. That copy is verbatim from
+    the course and lives as plain constants in `src/lib/adhub.ts` — only the
+    integer stage and the awareness key are stored, so re-wording the guidance
+    is a text edit with no migration and no backfill.
   - **Desires are shared, not owned.** A want statement lives on its own and is
     reused across personas and concepts; benefits hang off the desire they
     answer. Both are managed on **Desires & benefits**, and a desire or benefit
