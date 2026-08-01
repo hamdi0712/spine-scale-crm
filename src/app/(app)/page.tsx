@@ -4,6 +4,7 @@ import { OPEN_STAGES } from "@/lib/constants";
 import { computeMetrics } from "@/lib/kpi";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { StageBadge } from "@/components/Badge";
+import { WorldClock } from "@/components/Clock";
 import Icon from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,11 @@ export default async function DashboardPage() {
       <h1 className="text-[32px] font-bold tracking-[-0.02em]">Dashboard</h1>
       <p className="mt-1.5 text-sm text-muted">Agency at a glance</p>
 
-      <div className="mt-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
+      <div className="mt-8">
+        <WorldClock />
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-6 lg:grid-cols-4">
         {[
           {
             label: "Active clients",

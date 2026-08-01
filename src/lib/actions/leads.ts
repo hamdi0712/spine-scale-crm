@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_CHECKLIST, LEAD_STAGES, LeadStage } from "@/lib/constants";
+import { ONBOARDING_FIRST_STEP } from "@/lib/onboarding";
 import {
   ICP_CATEGORIES,
   ICP_DISQUALIFIER_KEYS,
@@ -120,8 +121,10 @@ export async function deleteLead(id: string) {
   redirect("/pipeline");
 }
 
-// One-click conversion of a Won lead: creates a Client pre-filled from the
-// lead, seeds the default delivery checklist, and archives the lead.
+// Conversion of a Won lead: creates a Client pre-filled from the lead, seeds
+// the default delivery checklist, archives the lead, and opens the onboarding
+// wizard on step 1. The record is complete enough to stand on its own from
+// this moment — the wizard walks through the rest and can be skipped outright.
 export async function convertLeadToClient(id: string) {
   const lead = await prisma.lead.findUnique({
     where: { id },
@@ -136,7 +139,11 @@ export async function convertLeadToClient(id: string) {
       contactName: lead.contactName,
       phone: lead.phone,
       email: lead.email,
+      // The lead's estimated deal value is quoted per month, so it seeds the
+      // fee that step 1 asks the user to confirm.
+      monthlyFee: lead.estValue,
       leadId: lead.id,
+      onboardingStep: ONBOARDING_FIRST_STEP,
       checklist: {
         create: DEFAULT_CHECKLIST.map((title, i) => ({
           title,
@@ -152,5 +159,5 @@ export async function convertLeadToClient(id: string) {
   revalidatePath("/pipeline");
   revalidatePath("/clients");
   revalidatePath("/");
-  redirect(`/clients/${client.id}`);
+  redirect(`/clients/${client.id}/onboarding`);
 }

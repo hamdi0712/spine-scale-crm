@@ -84,6 +84,41 @@ model Client {
   reports      WeeklyReport[]
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+
+  // IANA zone id, constrained to the four US zones in src/lib/timezones.ts.
+  // Drives the client's local-time badge and the kickoff-call comparison.
+  timeZone String @default("America/New_York")
+
+  // Onboarding wizard. 0 = not running (never started, skipped, or finished);
+  // 1–5 = the step to resume on. Stored so leaving mid-way and coming back
+  // continues where you left off.
+  onboardingStep Int @default(0)
+
+  // Step 2 — contract. Same reference-field pattern as ghlRef/metaRef: a
+  // pointer to where the signed document actually lives.
+  contractStatus String  @default("NOT_SENT") // NOT_SENT | SENT | SIGNED
+  contractRef    String?
+
+  // Step 3 — invoices logged over time, not just the first one.
+  invoices Invoice[]
+
+  // Step 4 — kickoff call, stored as a UTC instant and displayed both in the
+  // client's zone and the viewer's.
+  kickoffAt DateTime?
+}
+
+// One row per invoice raised for a client. Append as they go out; the client
+// page and the wizard both show the running total collected.
+model Invoice {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  issuedOn  DateTime
+  amount    Float    @default(0)
+  status    String   @default("UNPAID") // PAID | UNPAID
+  memo      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ChecklistItem {

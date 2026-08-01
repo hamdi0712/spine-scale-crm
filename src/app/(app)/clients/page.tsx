@@ -2,9 +2,11 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { deleteClient } from "@/lib/actions/clients";
 import { clientDeleteMessage } from "@/lib/constants";
+import { ONBOARDING_TOTAL_STEPS, isOnboarding } from "@/lib/onboarding";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { ClientStatusBadge } from "@/components/Badge";
 import CapsuleBar from "@/components/CapsuleBar";
+import { LocalTimeBadge } from "@/components/Clock";
 import ConfirmForm from "@/components/ConfirmForm";
 
 export const dynamic = "force-dynamic";
@@ -48,12 +50,24 @@ export default async function ClientsPage() {
             {clients.map((client) => (
               <tr key={client.id} className="hover:bg-wash/70">
                 <td className="td">
-                  <Link
-                    href={`/clients/${client.id}`}
-                    className="font-medium text-ink hover:underline"
-                  >
-                    {client.clinicName}
-                  </Link>
+                  <div className="flex items-center gap-2.5">
+                    <Link
+                      href={`/clients/${client.id}`}
+                      className="font-medium text-ink hover:underline"
+                    >
+                      {client.clinicName}
+                    </Link>
+                    <LocalTimeBadge timeZone={client.timeZone} />
+                  </div>
+                  {isOnboarding(client.onboardingStep) && (
+                    <Link
+                      href={`/clients/${client.id}/onboarding`}
+                      className="mt-1 block text-xs text-accent hover:underline"
+                    >
+                      Resume onboarding · step {client.onboardingStep} of{" "}
+                      {ONBOARDING_TOTAL_STEPS}
+                    </Link>
+                  )}
                 </td>
                 <td className="td">
                   <ClientStatusBadge status={client.status} />
