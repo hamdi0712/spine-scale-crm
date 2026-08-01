@@ -312,12 +312,10 @@ export default async function DashboardPage() {
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-3">
         <section className="card p-6">
-          <div className="mb-1 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">Recent activity</h2>
-            <Link href="/activity" className="text-xs font-medium text-accent hover:underline">
-              View all
-            </Link>
-          </div>
+          {/* No header link here, unlike the two cards beside it: the feed
+              carries its own "View all (N)" under the rows, where the count
+              can say how much is behind it. */}
+          <h2 className="mb-1 text-xl font-semibold">Recent activity</h2>
           <ActivityFeed
             entries={activity.map((a) => ({
               id: a.id,
