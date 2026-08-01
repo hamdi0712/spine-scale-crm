@@ -28,9 +28,10 @@ function Row({ entry, now }: { entry: ActivityEntry; now: Date }) {
   );
 }
 
-// `total` is how many entries exist behind the ones handed over. The dashboard
-// card passes it so the capped list can say what it is hiding and hand off to
-// the full feed; the activity page shows everything and leaves it out.
+// `total` is how many entries exist in all, not just the ones handed over. The
+// dashboard card passes it so the capped list can say how much there is and
+// hand off to the full feed; the activity page shows everything and leaves it
+// out, which is what keeps the link off the page it points at.
 export default function ActivityFeed({
   entries,
   now,
@@ -64,7 +65,11 @@ export default function ActivityFeed({
           </li>
         ))}
       </ul>
-      {total !== undefined && total > entries.length && (
+      {/* Shown whenever a total was handed over, including when it matches
+          what is already on screen: landing on a page listing the same rows
+          costs nothing, and leaving the feed unreachable until it grows
+          past the card does. */}
+      {total !== undefined && (
         <Link
           href="/activity"
           className="mt-3 inline-block text-xs font-medium text-accent hover:underline"
