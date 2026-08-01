@@ -1,4 +1,5 @@
 import { Flag } from "@/lib/kpi";
+import { CALL_STATUS_LABELS, CallStatus } from "@/lib/calls";
 import { ICP_TIER_ACTIONS, ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
 import {
   CHECKLIST_STATUS_LABELS,
@@ -110,6 +111,18 @@ export function IcpTierBadge({
       title={tooltip && action ? action : undefined}
     />
   );
+}
+
+const CALL_TONES: Record<string, Tone> = {
+  SCHEDULED: "blue",
+  COMPLETED: "green",
+  NO_SHOW: "red",
+  CANCELLED: "neutral",
+};
+
+export function CallStatusBadge({ status }: { status: string }) {
+  const label = CALL_STATUS_LABELS[status as CallStatus] ?? status;
+  return <Pill tone={CALL_TONES[status] ?? "neutral"} label={label} />;
 }
 
 export function ChecklistStatusBadge({ status }: { status: string }) {

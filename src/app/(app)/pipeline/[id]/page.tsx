@@ -8,10 +8,12 @@ import {
   saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
+import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
 import { ICP_SCORING_RULE, leadTier } from "@/lib/icp";
 import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
+import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import IcpScorecard from "@/components/IcpScorecard";
 
@@ -26,6 +28,7 @@ export default async function LeadDetailPage({
     where: { id: params.id },
     include: {
       notes: { orderBy: { createdAt: "desc" } },
+      calls: { orderBy: { scheduledAt: "asc" } },
       client: true,
     },
   });
@@ -33,6 +36,7 @@ export default async function LeadDetailPage({
 
   const update = updateLead.bind(null, lead.id);
   const addNote = addLeadNote.bind(null, lead.id);
+  const addCall = addLeadCall.bind(null, lead.id);
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
   const saveScorecard = saveIcpScorecard.bind(null, lead.id);
@@ -226,6 +230,16 @@ export default async function LeadDetailPage({
           </div>
         </section>
       </div>
+
+      <section className="mt-8">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <h2 className="text-xl font-semibold">Calls</h2>
+          <p className="text-sm text-muted">
+            Alongside the next follow-up date, not instead of it
+          </p>
+        </div>
+        <CallLog calls={lead.calls} addAction={addCall} />
+      </section>
 
       <section className="mt-8">
         <div className="mb-4 flex items-baseline justify-between">

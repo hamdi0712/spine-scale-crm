@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { OPEN_STAGES } from "@/lib/constants";
+import { callTypeLabel, isCallOverdue } from "@/lib/calls";
 import { computeMetrics } from "@/lib/kpi";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { StageBadge } from "@/components/Badge";
-import { WorldClock } from "@/components/Clock";
+import { LocalDateTime, WorldClock } from "@/components/Clock";
 import Icon from "@/components/Icons";
 
 export const dynamic = "force-dynamic";
@@ -13,24 +14,37 @@ export default async function DashboardPage() {
   const now = new Date();
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const [activeClients, openLeads, followUps, clients] = await Promise.all([
-    prisma.client.findMany({ where: { status: "ACTIVE" } }),
-    prisma.lead.findMany({
-      where: { archived: false, stage: { in: [...OPEN_STAGES] } },
-    }),
-    prisma.lead.findMany({
-      where: {
-        archived: false,
-        stage: { in: [...OPEN_STAGES] },
-        nextFollowUp: { lte: in7Days },
-      },
-      orderBy: { nextFollowUp: "asc" },
-    }),
-    prisma.client.findMany({
-      where: { status: { not: "CHURNED" } },
-      include: { reports: { orderBy: { weekStart: "desc" }, take: 1 } },
-    }),
-  ]);
+  const [activeClients, openLeads, followUps, upcomingCalls, clients] =
+    await Promise.all([
+      prisma.client.findMany({ where: { status: "ACTIVE" } }),
+      prisma.lead.findMany({
+        where: { archived: false, stage: { in: [...OPEN_STAGES] } },
+      }),
+      prisma.lead.findMany({
+        where: {
+          archived: false,
+          stage: { in: [...OPEN_STAGES] },
+          nextFollowUp: { lte: in7Days },
+        },
+        orderBy: { nextFollowUp: "asc" },
+      }),
+      // No lower bound, like the follow-ups above: anything still marked
+      // Scheduled whose time has already passed is overdue, not gone.
+      // Archived leads have been closed out, so their calls stop nagging.
+      prisma.call.findMany({
+        where: {
+          status: "SCHEDULED",
+          scheduledAt: { lte: in7Days },
+          OR: [{ leadId: null }, { lead: { archived: false } }],
+        },
+        orderBy: { scheduledAt: "asc" },
+        include: { lead: true, client: true },
+      }),
+      prisma.client.findMany({
+        where: { status: { not: "CHURNED" } },
+        include: { reports: { orderBy: { weekStart: "desc" }, take: 1 } },
+      }),
+    ]);
 
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
   const mrr = activeClients.reduce((s, c) => s + (c.monthlyFee ?? 0), 0);
@@ -147,6 +161,57 @@ export default async function DashboardPage() {
         </section>
 
         <section>
+          <h2 className="mb-4 text-xl font-semibold">Calls due</h2>
+          <div className="card">
+            {upcomingCalls.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted">
+                No calls scheduled in the next 7 days.
+              </p>
+            ) : (
+              <table className="w-full">
+                <tbody>
+                  {upcomingCalls.map((call) => {
+                    const overdue = isCallOverdue(call, now);
+                    const owner = call.lead ?? call.client;
+                    const href = call.lead
+                      ? `/pipeline/${call.lead.id}`
+                      : `/clients/${call.clientId}`;
+                    return (
+                      <tr key={call.id}>
+                        <td className="td">
+                          <Link
+                            href={href}
+                            className="font-medium text-ink hover:underline"
+                          >
+                            {owner?.clinicName ?? "Unknown record"}
+                          </Link>
+                          <span className="ml-2 text-xs text-muted">
+                            {call.lead ? "Lead" : "Client"}
+                          </span>
+                        </td>
+                        <td className="td text-muted">
+                          {callTypeLabel(call.type)}
+                        </td>
+                        <td
+                          className={`td whitespace-nowrap text-right text-xs ${
+                            overdue ? "text-bad" : "text-muted"
+                          }`}
+                        >
+                          <LocalDateTime at={call.scheduledAt.toISOString()} />
+                          {overdue ? " · overdue" : ""}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+
+        {/* The two date-driven reminder lists pair up on the row above; this
+            one is a different kind of alert, so it takes the full width. */}
+        <section className="lg:col-span-2">
           <h2 className="mb-4 text-xl font-semibold">Clients needing attention</h2>
           <div className="card">
             {redFlagged.length === 0 ? (

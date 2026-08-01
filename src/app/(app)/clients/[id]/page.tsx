@@ -10,6 +10,7 @@ import {
   setChecklistItemStatus,
   updateClient,
 } from "@/lib/actions/clients";
+import { addClientCall } from "@/lib/actions/calls";
 import { startOnboarding } from "@/lib/actions/onboarding";
 import {
   CHECKLIST_STATUSES,
@@ -27,6 +28,7 @@ import {
 import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDate, toDateInput } from "@/lib/format";
 import { ClientStatusBadge } from "@/components/Badge";
+import CallLog from "@/components/CallLog";
 import CapsuleBar from "@/components/CapsuleBar";
 import { KickoffTime, LocalTimeBadge } from "@/components/Clock";
 import ConfirmForm from "@/components/ConfirmForm";
@@ -50,6 +52,7 @@ export default async function ClientDetailPage({
     include: {
       checklist: { orderBy: { sortOrder: "asc" } },
       invoices: { orderBy: { issuedOn: "desc" } },
+      calls: { orderBy: { scheduledAt: "asc" } },
       lead: true,
     },
   });
@@ -57,6 +60,7 @@ export default async function ClientDetailPage({
 
   const update = updateClient.bind(null, client.id);
   const addItem = addChecklistItem.bind(null, client.id);
+  const addCall = addClientCall.bind(null, client.id);
   const remove = deleteClient.bind(null, client.id);
   const startWizard = startOnboarding.bind(null, client.id);
   const wizardRunning = isOnboarding(client.onboardingStep);
@@ -425,6 +429,11 @@ export default async function ClientDetailPage({
           </div>
         </section>
       </div>
+
+      <section className="mt-8">
+        <h2 className="mb-4 text-xl font-semibold">Calls</h2>
+        <CallLog calls={client.calls} addAction={addCall} />
+      </section>
 
       <section className="mt-8">
         <h2 className="mb-4 text-xl font-semibold">Invoices</h2>

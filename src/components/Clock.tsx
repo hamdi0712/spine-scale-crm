@@ -16,6 +16,7 @@ import {
   zoneAbbr,
   zoneLabel,
 } from "@/lib/timezones";
+import { fmtDateTime } from "@/lib/format";
 import Icon from "@/components/Icons";
 
 // Ticks every second so the minute never lags behind by more than that.
@@ -49,6 +50,25 @@ export function LocalTimeBadge({
         {now ? fmtTimeInZone(now, timeZone) : "—:—"}
       </span>
       <span>{now ? zoneAbbr(now, timeZone) : zoneLabel(timeZone)}</span>
+    </span>
+  );
+}
+
+// A stored instant printed in the viewer's own zone. Only the browser knows
+// what that zone is, so the server renders a placeholder and the real value
+// arrives on mount — the same deal as the clocks above.
+export function LocalDateTime({
+  at,
+  className = "",
+}: {
+  at: string; // ISO instant
+  className?: string;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return (
+    <span className={`num ${className}`}>
+      {mounted ? fmtDateTime(new Date(at)) : "—"}
     </span>
   );
 }

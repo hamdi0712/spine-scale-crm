@@ -122,11 +122,11 @@ export default function InvoiceLog({
         className="grid grid-cols-12 items-end gap-3"
       >
         <div className="col-span-3">
-          <label className="field-label" htmlFor="issuedOn">
+          <label className="field-label" htmlFor="invoiceIssuedOn">
             Date
           </label>
           <input
-            id="issuedOn"
+            id="invoiceIssuedOn"
             name="issuedOn"
             type="date"
             defaultValue={toDateInput(new Date())}
@@ -135,11 +135,11 @@ export default function InvoiceLog({
           />
         </div>
         <div className="col-span-2">
-          <label className="field-label" htmlFor="amount">
+          <label className="field-label" htmlFor="invoiceAmount">
             Amount ($)
           </label>
           <input
-            id="amount"
+            id="invoiceAmount"
             name="amount"
             type="number"
             min="0"
@@ -150,10 +150,10 @@ export default function InvoiceLog({
           />
         </div>
         <div className="col-span-2">
-          <label className="field-label" htmlFor="status">
+          <label className="field-label" htmlFor="invoiceStatus">
             Status
           </label>
-          <select id="status" name="status" defaultValue="UNPAID" className="field">
+          <select id="invoiceStatus" name="status" defaultValue="UNPAID" className="field">
             {INVOICE_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {INVOICE_STATUS_LABELS[s]}
@@ -162,10 +162,10 @@ export default function InvoiceLog({
           </select>
         </div>
         <div className="col-span-2">
-          <label className="field-label" htmlFor="memo">
+          <label className="field-label" htmlFor="invoiceMemo">
             Memo
           </label>
-          <input id="memo" name="memo" placeholder="Optional" className="field" />
+          <input id="invoiceMemo" name="memo" placeholder="Optional" className="field" />
         </div>
         <div className="col-span-3">
           <button type="submit" className="btn w-full justify-center">
