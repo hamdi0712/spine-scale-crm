@@ -1,5 +1,5 @@
 import { Flag } from "@/lib/kpi";
-import { ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
+import { ICP_TIER_ACTIONS, ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
 import {
   CHECKLIST_STATUS_LABELS,
   ChecklistStatus,
@@ -32,10 +32,19 @@ const TONE_CLS: Record<Tone, { pill: string; dot: string }> = {
   neutral: { pill: "bg-line/70 text-muted", dot: "bg-muted" },
 };
 
-function Pill({ tone, label }: { tone: Tone; label: string }) {
+function Pill({
+  tone,
+  label,
+  title,
+}: {
+  tone: Tone;
+  label: string;
+  title?: string;
+}) {
   const cls = TONE_CLS[tone];
   return (
     <span
+      title={title}
       className={`inline-flex h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs font-medium ${cls.pill}`}
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls.dot}`} />
@@ -81,9 +90,26 @@ const TIER_TONES: Record<IcpTier, Tone> = {
 
 // Renders nothing for a lead that has never been scored — absence of a tier
 // is not a C-tier.
-export function IcpTierBadge({ tier }: { tier: IcpTier | null | undefined }) {
+//
+// The compact views (Kanban cards, pipeline table) carry the tier's action as
+// a hover title so it costs no space. Pass tooltip={false} where the action is
+// already spelled out on screen.
+export function IcpTierBadge({
+  tier,
+  tooltip = true,
+}: {
+  tier: IcpTier | null | undefined;
+  tooltip?: boolean;
+}) {
   if (!tier) return null;
-  return <Pill tone={TIER_TONES[tier]} label={ICP_TIER_LABELS[tier]} />;
+  const action = ICP_TIER_ACTIONS[tier];
+  return (
+    <Pill
+      tone={TIER_TONES[tier]}
+      label={ICP_TIER_LABELS[tier]}
+      title={tooltip && action ? action : undefined}
+    />
+  );
 }
 
 export function ChecklistStatusBadge({ status }: { status: string }) {

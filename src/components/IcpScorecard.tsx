@@ -9,6 +9,7 @@ import {
   ICP_GAP_GUIDANCE,
   ICP_GAP_MAX,
   ICP_MAX_SCORE,
+  ICP_TIER_ACTIONS,
   ICP_TIER_BANDS,
   IcpAnswers,
   IcpCategoryKey,
@@ -57,8 +58,8 @@ export default function IcpScorecard({
               : ICP_TIER_BANDS}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-baseline gap-1">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
             <span
               className={`num text-2xl font-semibold tracking-[-0.02em] ${
                 disqualified ? "text-muted" : "text-ink"
@@ -68,7 +69,13 @@ export default function IcpScorecard({
             </span>
             <span className="num text-sm text-muted">/ {ICP_MAX_SCORE}</span>
           </span>
-          <IcpTierBadge tier={result.tier} />
+          {/* Action spelled out here, so the badge drops its hover title. */}
+          <IcpTierBadge tier={result.tier} tooltip={false} />
+          {ICP_TIER_ACTIONS[result.tier] && (
+            <span className="text-xs leading-relaxed text-muted">
+              {ICP_TIER_ACTIONS[result.tier]}
+            </span>
+          )}
         </div>
       </div>
 

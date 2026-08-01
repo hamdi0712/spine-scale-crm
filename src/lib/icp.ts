@@ -240,6 +240,15 @@ export function tierForScore(total: number): IcpTier {
 // described in exactly one place.
 export const ICP_TIER_BANDS = "8–10 A-tier · 5–7 B-tier · 0–4 C-tier";
 
+// What to do with a clinic once it lands in a tier. Disqualified has no
+// action — the Layer 1 banner already says not to proceed.
+export const ICP_TIER_ACTIONS: Record<IcpTier, string | null> = {
+  A: "Pursue now — prioritize outreach this week",
+  B: "Warm list — revisit in 30–60 days or if a warm intro surfaces",
+  C: "Deprioritize — do not spend outreach time on this one now",
+  DISQUALIFIED: null,
+};
+
 // ─── Scoring ───────────────────────────────────────────────────────────────
 
 // Every field the scorecard reads. Accepts the Prisma Lead row as-is.
