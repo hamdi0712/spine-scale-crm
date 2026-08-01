@@ -3,15 +3,23 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
+import { ICP_TIER_LABELS, ICP_TIER_ORDER, IcpTier } from "@/lib/icp";
 import { fmtDate, fmtMoney } from "@/lib/format";
-import { StageBadge } from "@/components/Badge";
+import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 
-type SortKey = "clinicName" | "stage" | "estValue" | "nextFollowUp" | "createdAt";
+type SortKey =
+  | "clinicName"
+  | "stage"
+  | "icpTier"
+  | "estValue"
+  | "nextFollowUp"
+  | "createdAt";
 
 export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
   const [query, setQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("ALL");
+  const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
 
@@ -19,12 +27,19 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
     const q = query.trim().toLowerCase();
     const filtered = leads.filter((l) => {
       if (stageFilter !== "ALL" && l.stage !== stageFilter) return false;
+      if (tierFilter === "UNSCORED" && l.icpTier != null) return false;
+      if (tierFilter !== "ALL" && tierFilter !== "UNSCORED" && l.icpTier !== tierFilter)
+        return false;
       if (!q) return true;
       return [l.clinicName, l.contactName, l.leadSource]
         .filter(Boolean)
         .some((s) => (s as string).toLowerCase().includes(q));
     });
     const stageOrder = (s: string) => LEAD_STAGES.indexOf(s as LeadStage);
+    // Unscored leads sort after every tier, in both directions is fine —
+    // they carry no tier to rank.
+    const tierOrder = (t: IcpTier | null) =>
+      t == null ? ICP_TIER_ORDER.length : ICP_TIER_ORDER.indexOf(t);
     return filtered.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
@@ -33,6 +48,9 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
           break;
         case "stage":
           cmp = stageOrder(a.stage) - stageOrder(b.stage);
+          break;
+        case "icpTier":
+          cmp = tierOrder(a.icpTier) - tierOrder(b.icpTier);
           break;
         case "estValue":
           cmp = (a.estValue ?? -1) - (b.estValue ?? -1);
@@ -46,7 +64,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
       }
       return cmp * sortDir;
     });
-  }, [leads, query, stageFilter, sortKey, sortDir]);
+  }, [leads, query, stageFilter, tierFilter, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -93,6 +111,19 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
             </option>
           ))}
         </select>
+        <select
+          value={tierFilter}
+          onChange={(e) => setTierFilter(e.target.value)}
+          className="field w-auto"
+        >
+          <option value="ALL">All tiers</option>
+          {ICP_TIER_ORDER.map((t) => (
+            <option key={t} value={t}>
+              {ICP_TIER_LABELS[t]}
+            </option>
+          ))}
+          <option value="UNSCORED">Not scored</option>
+        </select>
         <span className="num ml-auto text-xs text-muted">
           {rows.length} lead{rows.length === 1 ? "" : "s"}
         </span>
@@ -105,6 +136,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
               <th className="th">Contact</th>
               <th className="th">Source</th>
               <SortTh k="stage">Stage</SortTh>
+              <SortTh k="icpTier">ICP tier</SortTh>
               <SortTh k="estValue">
                 Est. value
               </SortTh>
@@ -132,6 +164,13 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
                 <td className="td">
                   <StageBadge stage={lead.stage} />
                 </td>
+                <td className="td">
+                  {lead.icpTier ? (
+                    <IcpTierBadge tier={lead.icpTier} />
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
+                </td>
                 <td className="td num">
                   {lead.estValue != null ? fmtMoney(lead.estValue) : "—"}
                 </td>
@@ -145,7 +184,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td className="td text-muted" colSpan={7}>
+                <td className="td text-muted" colSpan={8}>
                   No leads match.
                 </td>
               </tr>

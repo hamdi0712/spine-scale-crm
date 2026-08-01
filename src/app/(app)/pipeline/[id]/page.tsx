@@ -5,12 +5,15 @@ import {
   addLeadNote,
   convertLeadToClient,
   deleteLead,
+  saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
+import { ICP_SCORING_RULE, leadTier } from "@/lib/icp";
 import { fmtDateTime, toDateInput } from "@/lib/format";
-import { StageBadge } from "@/components/Badge";
+import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import ConfirmForm from "@/components/ConfirmForm";
+import IcpScorecard from "@/components/IcpScorecard";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +35,7 @@ export default async function LeadDetailPage({
   const addNote = addLeadNote.bind(null, lead.id);
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
+  const saveScorecard = saveIcpScorecard.bind(null, lead.id);
 
   return (
     <div>
@@ -43,6 +47,7 @@ export default async function LeadDetailPage({
           <div className="mt-2 flex items-center gap-3">
             <h1 className="text-[32px] font-bold tracking-[-0.02em]">{lead.clinicName}</h1>
             <StageBadge stage={lead.stage} />
+            <IcpTierBadge tier={leadTier(lead)} />
             {lead.archived && (
               <span className="inline-flex h-[22px] items-center rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
                 Archived
@@ -221,6 +226,35 @@ export default async function LeadDetailPage({
           </div>
         </section>
       </div>
+
+      <section className="mt-8">
+        <div className="mb-4 flex items-baseline justify-between">
+          <h2 className="text-xl font-semibold">ICP Scorecard</h2>
+          <p className="max-w-xl text-right text-sm text-muted">
+            {ICP_SCORING_RULE}
+          </p>
+        </div>
+        <IcpScorecard
+          action={saveScorecard}
+          values={{
+            icpDqSurgicalPractice: lead.icpDqSurgicalPractice,
+            icpDqSoloNoStaff: lead.icpDqSoloNoStaff,
+            icpDqFranchiseLocked: lead.icpDqFranchiseLocked,
+            icpDqSystemComplete: lead.icpDqSystemComplete,
+            icpDqOutOfRegion: lead.icpDqOutOfRegion,
+            icpStaffSize: lead.icpStaffSize,
+            icpPackageEconomics: lead.icpPackageEconomics,
+            icpBudgetSignal: lead.icpBudgetSignal,
+            icpGapBooking: lead.icpGapBooking,
+            icpGapReviews: lead.icpGapReviews,
+            icpGapRemarketing: lead.icpGapRemarketing,
+            icpNotes: lead.icpNotes,
+            icpScoredAt: lead.icpScoredAt
+              ? lead.icpScoredAt.toISOString()
+              : null,
+          }}
+        />
+      </section>
     </div>
   );
 }

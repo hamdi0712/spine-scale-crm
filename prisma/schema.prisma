@@ -29,6 +29,31 @@ model Lead {
   client       Client?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+
+  // ICP scorecard. Only the raw answers live here — the total (out of 10) and
+  // the A/B/C tier are derived in src/lib/icp.ts so re-tuning the framework
+  // never needs a migration or a backfill.
+
+  // Layer 1 — hard disqualifiers. Any one of these true stops the scoring.
+  icpDqSurgicalPractice Boolean   @default(false)
+  icpDqSoloNoStaff      Boolean   @default(false)
+  icpDqFranchiseLocked  Boolean   @default(false)
+  icpDqSystemComplete   Boolean   @default(false)
+  icpDqOutOfRegion      Boolean   @default(false)
+  icpDqTriggered        String? // labels of whichever disqualifiers fired, stamped on save
+
+  // Scored categories. Null until the lead has been scored on that category.
+  icpStaffSize          Int? // A — Staff Size Fit, 0–2
+  icpPackageEconomics   Int? // B — Package / Consult Economics, 0–3
+  icpBudgetSignal       Int? // C — Budget Signal, 0–2
+
+  // D — Automation Gap. Each gap found is worth 1 point, 3 max.
+  icpGapBooking     Boolean   @default(false)
+  icpGapReviews     Boolean   @default(false)
+  icpGapRemarketing Boolean   @default(false)
+
+  icpScoredAt DateTime? // null = never scored; drives whether a tier badge shows
+  icpNotes    String?
 }
 
 // Append-only activity log — notes are never edited or deleted.

@@ -42,9 +42,15 @@ again.
   due in the next 7 days, and any client whose latest reported week has a
   red-flagged KPI.
 - **Pipeline** — leads as a drag-and-drop Kanban board or a sortable/filterable
-  table. Each lead has an append-only timestamped activity log. Marking a lead
-  Won enables one-click **Convert to Client**, which pre-fills a client record
-  and archives the lead.
+  table. Each lead has an append-only timestamped activity log and an **ICP
+  scorecard**: five Layer 1 disqualifiers (any one stops the scoring), then
+  four scored categories out of 10 — Staff Size Fit, Package/Economics, Budget
+  Signal, and Automation Gap — banding the lead A-tier (8–10), B-tier (5–7) or
+  C-tier (0–4). The tier shows as a badge on board cards and table rows. Only
+  the raw answers are stored; the total and tier are derived in
+  `src/lib/icp.ts`, so re-tuning the framework needs no migration. Marking a
+  lead Won enables one-click **Convert to Client**, which pre-fills a client
+  record and archives the lead.
 - **Clients** — signed clinics with package/fee/contract details, GHL and Meta
   Ads reference links, and a per-client delivery checklist (seeded with the
   standard Disc Relief Pipeline OS items, fully editable per client). The
