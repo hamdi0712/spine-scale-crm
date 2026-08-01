@@ -9,10 +9,11 @@
 // a call or a launch is not admin, it is the thing standing between a client
 // and going live, so it is lifted to sit with the calls.
 //
-// The list is deliberately uncapped. Hiding work does not make it go away —
-// what the dashboard does instead is fold the routine onboarding items away
-// once the list gets long (see FOCUS_COLLAPSE_THRESHOLD), leaving everything
-// that is time-bound or blocking on screen.
+// The list itself is uncapped — hiding work does not make it go away — but the
+// dashboard card only shows the top FOCUS_VISIBLE_LIMIT of it behind a "View
+// all", so the panel reads as the next thing to do rather than a backlog. The
+// ordering above is what makes that safe: the two rows on screen are always the
+// two most pressing, and nothing is dropped, only folded.
 
 import { callTypeLabel } from "@/lib/calls";
 import { HEALTH_LABELS, HealthStatus } from "@/lib/health";
@@ -25,11 +26,8 @@ const TIER_HEALTH = 4;
 const TIER_BLOCKING = 5;
 const TIER_ONBOARDING = 6;
 
-// Past this many items the non-blocking onboarding rows fold away.
-export const FOCUS_COLLAPSE_THRESHOLD = 7;
-
-// …but never fold so far that the panel looks empty.
-export const FOCUS_MIN_VISIBLE = 3;
+// How many rows the dashboard card shows before the rest go behind "View all".
+export const FOCUS_VISIBLE_LIMIT = 2;
 
 // A health change stops being news after this long.
 const HEALTH_NEWS_DAYS = 7;
@@ -49,8 +47,8 @@ export interface FocusItem {
   tone: FocusTone;
   priority: number;
   sortAt: number; // epoch ms within a tier; 0 where time is not the sort key
-  // Whether this row survives the collapse. Everything except routine
-  // onboarding items does.
+  // Whether this row is time-bound or blocking rather than routine onboarding
+  // admin. The summary line counts on it; the visible/hidden split does not.
   pinned: boolean;
 }
 
@@ -303,22 +301,16 @@ export function summariseFocus(items: FocusItem[]): FocusSummary {
   return { headline, detail: `Next up: ${top.label}.`, tone, cta, overdue };
 }
 
-// Which rows stay on screen when the list is folded, and which hide behind the
-// toggle. Kept here beside the ordering so the two rules never drift apart.
+// Which rows stay on screen, and which hide behind "View all". A straight cut
+// down the priority order — no per-kind exceptions, so the top two rows are
+// exactly the top two of the list. Kept here beside the ordering so the two
+// rules never drift apart.
 export function splitFocus(items: FocusItem[]): {
   visible: FocusItem[];
   hidden: FocusItem[];
 } {
-  const foldable = items.filter((i) => !i.pinned);
-  if (items.length <= FOCUS_COLLAPSE_THRESHOLD || foldable.length === 0) {
-    return { visible: items, hidden: [] };
-  }
-  const pinnedCount = items.length - foldable.length;
-  const keep = new Set(
-    foldable.slice(0, Math.max(0, FOCUS_MIN_VISIBLE - pinnedCount)).map((i) => i.id),
-  );
   return {
-    visible: items.filter((i) => i.pinned || keep.has(i.id)),
-    hidden: items.filter((i) => !i.pinned && !keep.has(i.id)),
+    visible: items.slice(0, FOCUS_VISIBLE_LIMIT),
+    hidden: items.slice(FOCUS_VISIBLE_LIMIT),
   };
 }

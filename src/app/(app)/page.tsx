@@ -9,6 +9,7 @@ import BusinessHoursPanel, {
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
 import ClientHealthList, { HealthRow } from "@/components/ClientHealthList";
+import Greeting from "@/components/Greeting";
 import Icon from "@/components/Icons";
 import PipelineDonut from "@/components/PipelineDonut";
 import TodaysFocus from "@/components/TodaysFocus";
@@ -157,7 +158,7 @@ export default async function DashboardPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[32px] font-bold tracking-[-0.02em]">Dashboard</h1>
+          <Greeting serverHour={now.getHours()} />
           <p className="mt-1.5 text-sm text-muted">Agency at a glance</p>
         </div>
         <div className="flex items-center gap-3">

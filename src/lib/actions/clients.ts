@@ -8,6 +8,9 @@ import {
   ChecklistStatus,
   CLIENT_STATUSES,
   ClientStatus,
+  HIPAA_CHECKLIST_ITEM,
+  PHI_APPROACHES,
+  PhiApproach,
   seedChecklist,
 } from "@/lib/constants";
 import { HEALTH_OVERRIDE_AT_RISK } from "@/lib/health";
@@ -36,10 +39,42 @@ function date(formData: FormData, key: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Path B needs the HIPAA add-on and a signed BAA before anything runs, so the
+// checklist item comes with it. Matched on the title rather than tracked by id:
+// the item is only ever added, never removed on a switch back to Path A —
+// deleting it would silently throw away whatever notes or status it carried,
+// and it is one row the user can remove themselves. That also makes flipping
+// back and forth idempotent: the second switch to Path B finds it and stops.
+async function syncPhiChecklist(
+  clientId: string,
+  phiApproach: PhiApproach | undefined,
+) {
+  if (phiApproach !== "PATH_B") return;
+  const existing = await prisma.checklistItem.findFirst({
+    where: { clientId, title: HIPAA_CHECKLIST_ITEM },
+    select: { id: true },
+  });
+  if (existing) return;
+  const max = await prisma.checklistItem.aggregate({
+    where: { clientId },
+    _max: { sortOrder: true },
+  });
+  await prisma.checklistItem.create({
+    data: {
+      clientId,
+      title: HIPAA_CHECKLIST_ITEM,
+      sortOrder: (max._max.sortOrder ?? -1) + 1,
+      // Gates going live, the same as the policy and consent items.
+      blocking: true,
+    },
+  });
+}
+
 function clientFields(formData: FormData) {
   const status = str(formData, "status");
   const contractStatus = str(formData, "contractStatus");
   const timeZone = str(formData, "timeZone");
+  const phiApproach = str(formData, "phiApproach");
   // The only accepted override is the at-risk flag; anything else clears it
   // and hands the status back to the computation.
   const healthOverride =
@@ -68,6 +103,9 @@ function clientFields(formData: FormData) {
       ? (contractStatus as ContractStatus)
       : undefined,
     contractRef: str(formData, "contractRef"),
+    phiApproach: PHI_APPROACHES.includes(phiApproach as PhiApproach)
+      ? (phiApproach as PhiApproach)
+      : undefined,
   };
 }
 
@@ -81,6 +119,7 @@ export async function createClient(formData: FormData) {
       checklist: { create: seedChecklist() },
     },
   });
+  await syncPhiChecklist(client.id, fields.phiApproach);
   revalidatePath("/clients");
   revalidatePath("/");
   redirect(`/clients/${client.id}`);
@@ -112,6 +151,8 @@ export async function updateClient(id: string, formData: FormData) {
       ...(becomingActive ? { activeSince: new Date() } : {}),
     },
   });
+
+  await syncPhiChecklist(id, fields.phiApproach);
 
   if (fields.contractStatus === "SIGNED" && before.contractStatus !== "SIGNED") {
     await recordMilestone(

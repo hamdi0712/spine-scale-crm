@@ -1,8 +1,8 @@
 "use client";
 
-// The merged Today's focus list. Ordering and the fold rule both live in
-// src/lib/focus.ts — this renders what it is handed and owns nothing but the
-// toggle state.
+// The merged Today's focus list. Ordering and the visible/hidden split both
+// live in src/lib/focus.ts — this renders what it is handed and owns nothing
+// but the expanded state behind "View all".
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -85,9 +85,7 @@ export default function TodaysFocus({
             name="chevronDown"
             className={`h-3.5 w-3.5 ${expanded ? "rotate-180" : ""}`}
           />
-          {expanded
-            ? "Show fewer"
-            : `Show ${hidden.length} more onboarding item${hidden.length === 1 ? "" : "s"}`}
+          {expanded ? "Show less" : `View all (${visible.length + hidden.length})`}
         </button>
       )}
     </div>

@@ -18,6 +18,9 @@ import {
   CHECKLIST_STATUS_LABELS,
   CLIENT_STATUSES,
   CLIENT_STATUS_LABELS,
+  HIPAA_CHECKLIST_ITEM,
+  PHI_APPROACHES,
+  PHI_APPROACH_LABELS,
   clientDeleteMessage,
 } from "@/lib/constants";
 import {
@@ -286,6 +289,29 @@ export default async function ClientDetailPage({
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="col-span-2">
+                <label className="field-label" htmlFor="phiApproach">
+                  PHI / HIPAA approach
+                </label>
+                <select
+                  id="phiApproach"
+                  name="phiApproach"
+                  defaultValue={client.phiApproach}
+                  className="field"
+                >
+                  {PHI_APPROACHES.map((p) => (
+                    <option key={p} value={p}>
+                      {PHI_APPROACH_LABELS[p]}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-muted">
+                  Path A keeps every form and automation symptom-agnostic, so no
+                  patient health information is ever collected. Switching to Path
+                  B adds &ldquo;{HIPAA_CHECKLIST_ITEM}&rdquo; to the checklist
+                  below as a launch-blocking item.
+                </p>
               </div>
               <div className="col-span-2">
                 <label className="field-label" htmlFor="healthOverride">

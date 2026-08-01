@@ -119,6 +119,28 @@ export function seedChecklist(): {
   }));
 }
 
+// ─── PHI / HIPAA approach ──────────────────────────────────────────────────
+//
+// Which of the two compliance postures an engagement runs under. Path A is the
+// default: nothing the funnels or automations collect touches symptoms or
+// conditions, so no PHI ever exists and no HIPAA add-on is required. Path B
+// takes intake detail, which is PHI the moment it is collected — that needs the
+// HIPAA add-on on the tooling and a signed BAA in place before launch, which is
+// why choosing it puts HIPAA_CHECKLIST_ITEM on the client's checklist.
+export const PHI_APPROACHES = ["PATH_A", "PATH_B"] as const;
+
+export type PhiApproach = (typeof PHI_APPROACHES)[number];
+
+export const PHI_APPROACH_LABELS: Record<PhiApproach, string> = {
+  PATH_A: "Path A (symptom-agnostic)",
+  PATH_B: "Path B (intake forms, requires HIPAA add-on + BAA)",
+};
+
+// Added to a client's checklist when they move to Path B, and matched on the
+// title so switching back and forth never creates a second copy. It gates going
+// live for the same reason the policy items do, so it is seeded blocking.
+export const HIPAA_CHECKLIST_ITEM = "HIPAA add-on + signed BAA in place";
+
 export const LIBRARY_CATEGORIES = [
   "AUTOMATION_FLOW_COPY",
   "AD_COPY",
