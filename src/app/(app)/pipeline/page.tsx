@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { leadTier } from "@/lib/icp";
 import KanbanBoard, { KanbanLead } from "@/components/KanbanBoard";
 import LeadTable from "@/components/LeadTable";
 
@@ -25,6 +26,8 @@ export default async function PipelinePage({
     estValue: l.estValue,
     nextFollowUp: l.nextFollowUp ? l.nextFollowUp.toISOString() : null,
     createdAt: l.createdAt.toISOString(),
+    // Derived here so the board and table stay presentational.
+    icpTier: leadTier(l),
   }));
 
   return (

@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { moveLeadStage } from "@/lib/actions/leads";
+import { IcpTier } from "@/lib/icp";
 import { fmtDate, fmtMoney } from "@/lib/format";
+import { IcpTierBadge } from "@/components/Badge";
 
 export interface KanbanLead {
   id: string;
@@ -16,6 +18,7 @@ export interface KanbanLead {
   estValue: number | null;
   nextFollowUp: string | null;
   createdAt: string;
+  icpTier: IcpTier | null;
 }
 
 export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
@@ -97,6 +100,11 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                   {lead.contactName && (
                     <div className="mt-0.5 text-xs text-muted">
                       {lead.contactName}
+                    </div>
+                  )}
+                  {lead.icpTier && (
+                    <div className="mt-1.5">
+                      <IcpTierBadge tier={lead.icpTier} />
                     </div>
                   )}
                   <div className="num mt-1.5 flex items-center justify-between text-xs text-muted">

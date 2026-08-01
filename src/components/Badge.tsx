@@ -1,4 +1,5 @@
 import { Flag } from "@/lib/kpi";
+import { ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
 import {
   CHECKLIST_STATUS_LABELS,
   ChecklistStatus,
@@ -69,6 +70,20 @@ export function ClientStatusBadge({ status }: { status: string }) {
           ? "red"
           : "blue";
   return <Pill tone={tone} label={label} />;
+}
+
+const TIER_TONES: Record<IcpTier, Tone> = {
+  A: "green",
+  B: "amber",
+  C: "neutral",
+  DISQUALIFIED: "red",
+};
+
+// Renders nothing for a lead that has never been scored — absence of a tier
+// is not a C-tier.
+export function IcpTierBadge({ tier }: { tier: IcpTier | null | undefined }) {
+  if (!tier) return null;
+  return <Pill tone={TIER_TONES[tier]} label={ICP_TIER_LABELS[tier]} />;
 }
 
 export function ChecklistStatusBadge({ status }: { status: string }) {

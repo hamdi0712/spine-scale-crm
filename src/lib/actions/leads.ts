@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_CHECKLIST, LEAD_STAGES, LeadStage } from "@/lib/constants";
+import {
+  ICP_CATEGORIES,
+  ICP_DISQUALIFIER_KEYS,
+  ICP_GAP_KEYS,
+  IcpAnswers,
+  triggeredSummary,
+} from "@/lib/icp";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -63,6 +70,41 @@ export async function moveLeadStage(id: string, stage: string) {
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
   revalidatePath("/");
+}
+
+function bool(formData: FormData, key: string): boolean {
+  return formData.get(key) === "on" || formData.get(key) === "true";
+}
+
+// Reads only the raw scorecard answers — the total and tier are derived on
+// read, so nothing here needs to know the bands.
+export async function saveIcpScorecard(id: string, formData: FormData) {
+  const answers = {
+    ...Object.fromEntries(
+      ICP_DISQUALIFIER_KEYS.map((k) => [k, bool(formData, k)]),
+    ),
+    ...Object.fromEntries(ICP_GAP_KEYS.map((k) => [k, bool(formData, k)])),
+    ...Object.fromEntries(
+      ICP_CATEGORIES.map((c) => {
+        const raw = num(formData, c.key);
+        const valid =
+          raw != null && c.options.some((o) => o.points === raw) ? raw : null;
+        return [c.key, valid];
+      }),
+    ),
+  } as IcpAnswers;
+
+  await prisma.lead.update({
+    where: { id },
+    data: {
+      ...answers,
+      icpDqTriggered: triggeredSummary(answers),
+      icpNotes: str(formData, "icpNotes"),
+      icpScoredAt: new Date(),
+    },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${id}`);
 }
 
 export async function addLeadNote(id: string, formData: FormData) {
