@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_CHECKLIST, LEAD_STAGES, LeadStage } from "@/lib/constants";
+import { LEAD_STAGES, LeadStage, seedChecklist } from "@/lib/constants";
+import { recordMilestone } from "@/lib/milestones";
 import { ONBOARDING_FIRST_STEP } from "@/lib/onboarding";
 import {
   ICP_CATEGORIES,
@@ -144,18 +145,18 @@ export async function convertLeadToClient(id: string) {
       monthlyFee: lead.estValue,
       leadId: lead.id,
       onboardingStep: ONBOARDING_FIRST_STEP,
-      checklist: {
-        create: DEFAULT_CHECKLIST.map((title, i) => ({
-          title,
-          sortOrder: i,
-        })),
-      },
+      checklist: { create: seedChecklist() },
     },
   });
   await prisma.lead.update({
     where: { id },
     data: { stage: "WON", archived: true },
   });
+  await recordMilestone(
+    "LEAD_CONVERTED",
+    `${lead.clinicName} converted from lead to client`,
+    { clientId: client.id },
+  );
   revalidatePath("/pipeline");
   revalidatePath("/clients");
   revalidatePath("/");

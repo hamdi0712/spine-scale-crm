@@ -8,8 +8,10 @@ import {
   ChecklistStatus,
   CLIENT_STATUSES,
   ClientStatus,
-  DEFAULT_CHECKLIST,
+  seedChecklist,
 } from "@/lib/constants";
+import { HEALTH_OVERRIDE_AT_RISK } from "@/lib/health";
+import { recordMilestone, syncClientHealth } from "@/lib/milestones";
 import { CONTRACT_STATUSES, ContractStatus } from "@/lib/onboarding";
 import { isUsTimeZone } from "@/lib/timezones";
 
@@ -38,7 +40,14 @@ function clientFields(formData: FormData) {
   const status = str(formData, "status");
   const contractStatus = str(formData, "contractStatus");
   const timeZone = str(formData, "timeZone");
+  // The only accepted override is the at-risk flag; anything else clears it
+  // and hands the status back to the computation.
+  const healthOverride =
+    str(formData, "healthOverride") === HEALTH_OVERRIDE_AT_RISK
+      ? HEALTH_OVERRIDE_AT_RISK
+      : null;
   return {
+    healthOverride,
     clinicName: str(formData, "clinicName") ?? "Untitled clinic",
     contactName: str(formData, "contactName"),
     phone: str(formData, "phone"),
@@ -63,12 +72,13 @@ function clientFields(formData: FormData) {
 }
 
 export async function createClient(formData: FormData) {
+  const fields = clientFields(formData);
   const client = await prisma.client.create({
     data: {
-      ...clientFields(formData),
-      checklist: {
-        create: DEFAULT_CHECKLIST.map((title, i) => ({ title, sortOrder: i })),
-      },
+      ...fields,
+      // A client added straight in as Active starts its reporting clock now.
+      activeSince: fields.status === "ACTIVE" ? new Date() : null,
+      checklist: { create: seedChecklist() },
     },
   });
   revalidatePath("/clients");
@@ -77,7 +87,43 @@ export async function createClient(formData: FormData) {
 }
 
 export async function updateClient(id: string, formData: FormData) {
-  await prisma.client.update({ where: { id }, data: clientFields(formData) });
+  const before = await prisma.client.findUnique({
+    where: { id },
+    select: {
+      clinicName: true,
+      status: true,
+      activeSince: true,
+      contractStatus: true,
+    },
+  });
+  if (!before) return;
+  const fields = clientFields(formData);
+
+  // Going Active for the first time starts the clock health measures from.
+  // Coming back to Active after a pause keeps the original date — the
+  // engagement is the same one.
+  const becomingActive =
+    fields.status === "ACTIVE" && before.activeSince === null;
+
+  await prisma.client.update({
+    where: { id },
+    data: {
+      ...fields,
+      ...(becomingActive ? { activeSince: new Date() } : {}),
+    },
+  });
+
+  if (fields.contractStatus === "SIGNED" && before.contractStatus !== "SIGNED") {
+    await recordMilestone(
+      "CONTRACT_SIGNED",
+      `Contract signed — ${fields.clinicName}`,
+      { clientId: id },
+    );
+  }
+
+  // Status, override and activeSince all feed the computation.
+  await syncClientHealth(id);
+
   revalidatePath("/clients");
   revalidatePath(`/clients/${id}`);
   revalidatePath("/");
@@ -91,6 +137,7 @@ export async function deleteClient(id: string) {
     prisma.checklistItem.deleteMany({ where: { clientId: id } }),
     prisma.weeklyReport.deleteMany({ where: { clientId: id } }),
     prisma.invoice.deleteMany({ where: { clientId: id } }),
+    prisma.activityLog.deleteMany({ where: { clientId: id } }),
     prisma.client.delete({ where: { id } }),
   ]);
   revalidatePath("/clients");
@@ -136,6 +183,24 @@ export async function setChecklistItemStatus(id: string, status: string) {
   });
   revalidatePath(`/clients/${item.clientId}`);
   revalidatePath("/clients");
+  // Completing an item can take it off Today's focus.
+  revalidatePath("/");
+}
+
+// Whether an item gates going live. Drives nothing but the ordering of the
+// dashboard's Today's focus list, so it is a plain toggle with no side effects.
+export async function toggleChecklistItemBlocking(id: string) {
+  const current = await prisma.checklistItem.findUnique({
+    where: { id },
+    select: { blocking: true },
+  });
+  if (!current) return;
+  const item = await prisma.checklistItem.update({
+    where: { id },
+    data: { blocking: !current.blocking },
+  });
+  revalidatePath(`/clients/${item.clientId}`);
+  revalidatePath("/");
 }
 
 export async function setChecklistItemNotes(id: string, formData: FormData) {

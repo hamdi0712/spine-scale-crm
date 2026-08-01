@@ -38,10 +38,42 @@ again.
 
 ## Sections
 
-- **Dashboard** — a live world-clock strip across the four US time zones,
-  active client count, MRR, open pipeline value, two reminder lists side by
-  side — follow-ups due and calls due in the next 7 days — and any client whose
-  latest reported week has a red-flagged KPI.
+- **Dashboard** — four KPI cards (active clients, MRR, open pipeline value,
+  follow-ups due in 7 days), then two panels side by side and three cards
+  below.
+
+  **Now** carries **Today's focus**: one merged list of everything that wants
+  doing today, drawn from four places and ordered by urgency — calls scheduled
+  for today or already overdue (soonest first), then onboarding items that are
+  holding up a launch or a kickoff, then follow-ups due or overdue, then any
+  client that has just crossed into Needs attention or At risk, then the rest
+  of the onboarding checklist. There is no item cap; once the list passes seven
+  rows the routine (non-blocking) onboarding items fold behind a "show more"
+  toggle, so everything time-bound or blocking stays on screen. Which checklist
+  items block a launch is a per-item flag, seeded from the standard set and
+  toggleable from the client record.
+
+  **US business hours** is the four-zone strip: local time and an open /
+  opening-soon / closed badge per zone, on 9–5 local Monday to Friday. It
+  deliberately does not suggest a best time to prospect — nothing in the
+  reporting data supports one yet.
+
+  **Recent activity** is the milestone feed (below), **Client health** ranks
+  the live clients worst-first with a sparkline of recent show rate, and
+  **Pipeline snapshot** breaks open pipeline value down by stage as a donut.
+  Because pipeline stages are a sequence rather than unrelated categories, the
+  donut uses an ordered ramp derived from the brand palette — deep blue through
+  the primary `#126DFB` to a tint of the secondary teal `#3FD1C8` — stepped by
+  lightness so neighbouring segments stay apart, with every segment named and
+  valued in the legend.
+
+- **Activity feed** — an internal log of milestones, newest first, on the
+  dashboard card and in full at `/activity`. Six events are logged and nothing
+  else: a lead converted to a client, a weekly report generated (the first time
+  that week is filed, not later corrections), a contract marked signed, an
+  invoice marked paid, a health status change, and onboarding completed by
+  reaching the end of the wizard. Routine field edits are deliberately not
+  logged — a log of everything is a log of nothing.
 - **Pipeline** — leads as a drag-and-drop Kanban board or a sortable/filterable
   table. Each lead has an append-only timestamped activity log and an **ICP
   scorecard**: five Layer 1 disqualifiers (any one stops the scoring), then
@@ -59,6 +91,40 @@ again.
   client). The segmented capsule bar shows delivery progress at a glance. Each
   client carries a **time zone** (one of the four US zones), shown as a live
   local-time badge on the client page and in the clients table.
+
+- **Client health** — for **Active** clients the flat status badge is replaced
+  by a health status with a trend arrow, in the clients table, on the client
+  record and on the dashboard. Onboarding clients keep showing their percentage
+  progress instead; paused and churned clients keep the plain status badge.
+
+  Health is **derived on read** from the client's last three weekly reports
+  (`src/lib/health.ts`) — like the ICP tier, nothing is stored that a
+  recalculation could contradict, so re-tuning the rules needs no migration.
+  The rules:
+
+  - **Show rate is the core metric.** Nothing reads Healthy while show rate is
+    under target. CPL never drives the status on its own — a cheap lead that
+    never turns up is not a healthy account — and lead-to-booked is a secondary
+    signal that can pull a clean week down to Needs attention but never to At
+    risk by itself.
+  - **Small numbers are read as counts, not percentages.** Below eight booked
+    consults across the window a week is judged on how many shows it is short
+    of target: one short is a dip, two or more is a miss. Below five booked
+    consults the window is not judged at all.
+  - **Four states.** *Healthy*, *Needs attention* (a soft dip — look at the
+    account, no client conversation implied), *At risk* (the core metric missed
+    in two or more weeks, or an operational break — reach out proactively) and
+    *Ramping* (fewer than two full reporting weeks since going Active, or too
+    little booked volume to score). Ramping is a distinct neutral badge: it
+    never defaults to green or red.
+  - **`healthOverride`** on the client record forces At risk whatever the
+    metrics say, for an operational break the numbers have not caught up with
+    — ad account down, tracking dead, access revoked. Set it from **Health
+    override** on the client page; clearing it hands the status back to the
+    computation.
+
+  A health change is written to the activity feed, and a client that has just
+  crossed into Needs attention or At risk surfaces in Today's focus for a week.
 - **Onboarding wizard** — a five-step step-through that runs after a lead is
   converted: confirm details and time zone, contract status plus a link to the
   signed document, an invoice log with a running total collected, the kickoff
@@ -91,7 +157,8 @@ again.
 - **Reporting** — one entry per client per week. CPL, lead-to-booked rate, and
   show rate are calculated automatically and flagged green/yellow/red against
   targets (CPL $10–35, lead→booked 20–40%, show rate 50–70%). Per-client trend
-  charts and full weekly history.
+  charts and full weekly history. The same target bands feed client health, so
+  the two never disagree about what "on target" means.
 - **Library** — markdown notes in five fixed categories. Starts empty by
   design; it fills up with real material as you write it.
 

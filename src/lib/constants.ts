@@ -20,6 +20,18 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   LOST: "Lost",
 };
 
+// Short forms for tight spaces — chart legends, mostly, where "Discovery Call
+// Booked" would wrap or truncate.
+export const LEAD_STAGE_SHORT_LABELS: Record<LeadStage, string> = {
+  NEW: "New",
+  CONTACTED: "Contacted",
+  DISCOVERY: "Discovery",
+  PROPOSAL: "Proposal",
+  NEGOTIATING: "Negotiating",
+  WON: "Won",
+  LOST: "Lost",
+};
+
 // Stages that count toward open pipeline value.
 export const OPEN_STAGES: LeadStage[] = [
   "NEW",
@@ -61,6 +73,20 @@ export const CHECKLIST_STATUS_LABELS: Record<ChecklistStatus, string> = {
   DONE: "Done",
 };
 
+// Items that gate going live: no ads can responsibly run until each of these
+// is done, so they carry the blocking flag and the dashboard lifts them above
+// the rest of the checklist. Seeded onto new clients and toggleable per item
+// afterwards — the flag lives on the row, not on the title, so renaming an
+// item keeps it.
+export const LAUNCH_BLOCKING_CHECKLIST: string[] = [
+  "Funnel + embedded calendar built",
+  "Speed-to-lead automation live",
+  "Meta ad campaign launched",
+  "Privacy policy published",
+  "Cookie policy published",
+  "Consent language present on all forms",
+];
+
 // Default delivery checklist seeded onto every new client. Editable per client.
 export const DEFAULT_CHECKLIST: string[] = [
   "Funnel + embedded calendar built",
@@ -77,6 +103,21 @@ export const DEFAULT_CHECKLIST: string[] = [
   "Consent language present on all forms",
   "Client reporting dashboard set up",
 ];
+
+// The rows to create for a brand-new client's checklist, blocking flags and
+// all. Used by both ways a client comes into existence — added by hand, or
+// converted from a won lead.
+export function seedChecklist(): {
+  title: string;
+  sortOrder: number;
+  blocking: boolean;
+}[] {
+  return DEFAULT_CHECKLIST.map((title, i) => ({
+    title,
+    sortOrder: i,
+    blocking: LAUNCH_BLOCKING_CHECKLIST.includes(title),
+  }));
+}
 
 export const LIBRARY_CATEGORIES = [
   "AUTOMATION_FLOW_COPY",

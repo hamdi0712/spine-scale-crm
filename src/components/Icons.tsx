@@ -40,6 +40,42 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M12 7.5V12l3 1.8" />
     </>
   ),
+  chevronRight: <path d="M9.5 6.5L15 12l-5.5 5.5" />,
+  chevronDown: <path d="M6.5 9.5L12 15l5.5-5.5" />,
+  plus: <path d="M12 5.5v13M5.5 12h13" />,
+  check: <path d="M5 12.5l4.5 4.5L19 7" />,
+  doc: (
+    <>
+      <path d="M6 3.5h7l5 5v12a1 1 0 01-1 1H6a1 1 0 01-1-1v-16a1 1 0 011-1z" />
+      <path d="M13 3.5v5h5M8.5 13h7M8.5 16.5h4.5" />
+    </>
+  ),
+  signed: (
+    <>
+      <path d="M6 3.5h7l5 5v12a1 1 0 01-1 1H6a1 1 0 01-1-1v-16a1 1 0 011-1z" />
+      <path d="M13 3.5v5h5M8.5 14.5l2.5 2.5 4.5-5" />
+    </>
+  ),
+  pulse: <path d="M3.5 12h4l2.5-6 4 12 2.5-6h4" />,
+  phone: (
+    <path d="M6.2 4h3l1.5 3.8-2 1.4a11 11 0 005.1 5.1l1.4-2 3.8 1.5v3a1.5 1.5 0 01-1.7 1.5C10.6 17.4 6.6 13.4 4.7 5.7A1.5 1.5 0 016.2 4z" />
+  ),
+  bell: (
+    <>
+      <path d="M6.5 10a5.5 5.5 0 0111 0c0 3.2.8 5 1.5 6h-14c.7-1 1.5-2.8 1.5-6z" />
+      <path d="M10 19.5a2.2 2.2 0 004 0" />
+    </>
+  ),
+  checklist: (
+    <>
+      <path d="M4 6.5l1.8 1.8L9 5M4 16.5l1.8 1.8L9 15" />
+      <path d="M12 7h8M12 17h8" />
+    </>
+  ),
+  flag: <path d="M6 20V4.5h12l-2.5 4 2.5 4H6" />,
+  arrowUp: <path d="M12 19V6M6.5 11.5L12 6l5.5 5.5" />,
+  arrowDown: <path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" />,
+  arrowRight: <path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5" />,
 };
 
 export default function Icon({

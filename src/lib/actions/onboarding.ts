@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { fmtMoney } from "@/lib/format";
+import { recordMilestone } from "@/lib/milestones";
 import {
   CONTRACT_STATUSES,
   ContractStatus,
@@ -85,11 +87,18 @@ export async function skipOnboarding(clientId: string) {
   redirect(`/clients/${clientId}`);
 }
 
+// Reaching the end of the wizard, as opposed to skipping out of it. Only this
+// one counts as onboarding being completed.
 export async function finishOnboarding(clientId: string) {
-  await prisma.client.update({
+  const client = await prisma.client.update({
     where: { id: clientId },
     data: { onboardingStep: ONBOARDING_NOT_RUNNING },
   });
+  await recordMilestone(
+    "ONBOARDING_COMPLETED",
+    `Onboarding completed for ${client.clinicName}`,
+    { clientId },
+  );
   revalidateClient(clientId);
   redirect(`/clients/${clientId}`);
 }
@@ -124,7 +133,11 @@ export async function saveOnboardingContract(
   formData: FormData,
 ) {
   const status = str(formData, "contractStatus");
-  await prisma.client.update({
+  const before = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { contractStatus: true },
+  });
+  const client = await prisma.client.update({
     where: { id: clientId },
     data: {
       contractStatus: CONTRACT_STATUSES.includes(status as ContractStatus)
@@ -134,16 +147,37 @@ export async function saveOnboardingContract(
       onboardingStep: stepAfter(formData, 2),
     },
   });
+  if (client.contractStatus === "SIGNED" && before?.contractStatus !== "SIGNED") {
+    await recordMilestone(
+      "CONTRACT_SIGNED",
+      `Contract signed — ${client.clinicName}`,
+      { clientId },
+    );
+  }
   revalidateClient(clientId);
 }
 
 // ─── Step 3 — invoices ─────────────────────────────────────────────────────
 
+// Logging an invoice that is already marked paid is the same milestone as
+// marking one paid later, so both routes go through here.
+async function recordInvoicePaid(clientId: string, amount: number) {
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { clinicName: true },
+  });
+  await recordMilestone(
+    "INVOICE_PAID",
+    `Invoice paid — ${fmtMoney(amount)} from ${client?.clinicName ?? "client"}`,
+    { clientId },
+  );
+}
+
 export async function addInvoice(clientId: string, formData: FormData) {
   const amount = num(formData, "amount");
   if (amount == null) return;
   const status = str(formData, "status");
-  await prisma.invoice.create({
+  const invoice = await prisma.invoice.create({
     data: {
       clientId,
       issuedOn: date(formData, "issuedOn") ?? new Date(),
@@ -154,15 +188,23 @@ export async function addInvoice(clientId: string, formData: FormData) {
       memo: str(formData, "memo"),
     },
   });
+  if (invoice.status === "PAID") await recordInvoicePaid(clientId, invoice.amount);
   revalidateClient(clientId);
 }
 
 export async function setInvoiceStatus(invoiceId: string, status: string) {
   if (!INVOICE_STATUSES.includes(status as InvoiceStatus)) return;
+  const before = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { status: true },
+  });
   const invoice = await prisma.invoice.update({
     where: { id: invoiceId },
     data: { status },
   });
+  if (invoice.status === "PAID" && before?.status !== "PAID") {
+    await recordInvoicePaid(invoice.clientId, invoice.amount);
+  }
   revalidateClient(invoice.clientId);
 }
 
