@@ -12,8 +12,8 @@
 // The list itself is uncapped — hiding work does not make it go away — but the
 // dashboard card only shows the top FOCUS_VISIBLE_LIMIT of it behind a "View
 // all", so the panel reads as the next thing to do rather than a backlog. The
-// ordering above is what makes that safe: the two rows on screen are always the
-// two most pressing, and nothing is dropped, only folded.
+// ordering above is what makes that safe: the row on screen is always the most
+// pressing one, and nothing is dropped, only folded.
 
 import { callTypeLabel } from "@/lib/calls";
 import { HEALTH_LABELS, HealthStatus } from "@/lib/health";
@@ -27,7 +27,9 @@ const TIER_BLOCKING = 5;
 const TIER_ONBOARDING = 6;
 
 // How many rows the dashboard card shows before the rest go behind "View all".
-export const FOCUS_VISIBLE_LIMIT = 2;
+// One: the collapsed Now card then stands the same height as the fixed
+// four-row US business hours card sitting beside it.
+export const FOCUS_VISIBLE_LIMIT = 1;
 
 // A health change stops being news after this long.
 const HEALTH_NEWS_DAYS = 7;
@@ -302,9 +304,9 @@ export function summariseFocus(items: FocusItem[]): FocusSummary {
 }
 
 // Which rows stay on screen, and which hide behind "View all". A straight cut
-// down the priority order — no per-kind exceptions, so the top two rows are
-// exactly the top two of the list. Kept here beside the ordering so the two
-// rules never drift apart.
+// down the priority order — no per-kind exceptions, so the visible row is
+// exactly the top of the list. Kept here beside the ordering so the two rules
+// never drift apart.
 export function splitFocus(items: FocusItem[]): {
   visible: FocusItem[];
   hidden: FocusItem[];

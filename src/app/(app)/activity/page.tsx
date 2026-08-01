@@ -5,7 +5,8 @@ import ActivityFeed from "@/components/ActivityFeed";
 export const dynamic = "force-dynamic";
 
 // The whole milestone feed, behind the dashboard card's "View all". Internal
-// only, most recent first — the same rows, just without the six-line ceiling.
+// only, most recent first — the same rows, just without the card's three-row
+// ceiling.
 const PAGE_SIZE = 100;
 
 export default async function ActivityPage() {
