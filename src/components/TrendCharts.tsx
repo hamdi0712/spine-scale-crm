@@ -27,7 +27,7 @@ const MAX_BAR = 28;
 
 const AXIS = {
   stroke: "#E7E9EE",
-  tick: { fill: "#6B7280", fontSize: 11, fontFamily: "var(--font-num)" },
+  tick: { fill: "#6B7280", fontSize: 11, fontFamily: "var(--font-sans)" },
   tickLine: false as const,
   axisLine: { stroke: "#E7E9EE" },
 };
@@ -39,7 +39,7 @@ const TOOLTIP_STYLE = {
     borderRadius: 10,
     boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
     fontSize: 12,
-    fontFamily: "var(--font-num)",
+    fontFamily: "var(--font-sans)",
   },
   labelStyle: { color: "#6B7280", marginBottom: 4 },
   itemStyle: { color: "#1C1B27" },

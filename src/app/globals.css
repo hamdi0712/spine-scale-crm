@@ -9,6 +9,9 @@
   body {
     @apply bg-bg text-ink antialiased;
     font-variant-numeric: tabular-nums;
+    /* Inter reads tighter across the app; elements that set their own
+       tracking (small caps-ish labels) still opt out locally. */
+    letter-spacing: -0.02em;
   }
   ::selection {
     background: rgba(18, 109, 251, 0.18);
@@ -34,6 +37,12 @@
   .btn-ghost {
     @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-transparent bg-transparent px-[18px] text-sm font-medium text-muted hover:bg-wash/70 hover:text-ink focus:outline-none;
   }
+  /* The active sidebar item is the secondary button's surface — same white
+     fill and gray border as .btn — raised off the panel and tinted brand
+     blue. Layout (height, padding, gap) stays with the nav's own utilities. */
+  .nav-active {
+    @apply rounded-[10px] border border-line bg-surface text-accent;
+  }
   .card {
     @apply overflow-hidden rounded-2xl border border-line bg-surface shadow-card;
   }
@@ -45,10 +54,10 @@
   }
 }
 
-/* Numerals render in Inter with tabular figures; all other UI text is
-   DM Sans. Apply .num to KPI values, money, counts, dates, percentages. */
+/* Numerals render with tabular figures. Apply .num to KPI values, money,
+   counts, dates, percentages. */
 .num {
-  font-family: var(--font-num), var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -78,6 +87,17 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 2px 6px rgba(18, 109, 251, 0.3);
   transform: translateY(1px);
+}
+
+/* The active nav card borrows the primary button's lift — a tight contact
+   shadow to seat the edge, a wider diffuse one for the elevation — retuned
+   neutral for a white face rather than a blue gradient one, and topped with
+   the same lit-from-above highlight. */
+.nav-active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(28, 27, 39, 0.1),
+    0 6px 16px rgba(28, 27, 39, 0.12);
 }
 
 /* The pipeline donut gets a lighter reading of the primary button's lift: the
