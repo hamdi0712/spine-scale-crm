@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-// Inter carries all UI text, numerals included.
+// Inter carries all UI text, numerals included. Requesting the optical-size
+// axis alongside weight ships the variable font's display cut, which the
+// header tier opts into via `font-optical-sizing` (see .display in globals).
 const inter = Inter({
   subsets: ["latin"],
+  axes: ["opsz"],
   variable: "--font-sans",
 });
 

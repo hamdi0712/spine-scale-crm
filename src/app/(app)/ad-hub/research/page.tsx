@@ -164,7 +164,7 @@ export default async function ResearchPage({
             <div>
               <div className="flex items-start justify-between gap-4 border-b border-line pb-3">
                 <div className="min-w-0">
-                  <h2 className="text-base font-semibold">{selected.title}</h2>
+                  <h2 className="display text-base font-semibold">{selected.title}</h2>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
                     <span>
                       {RESEARCH_NOTE_TYPE_LABELS[

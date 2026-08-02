@@ -25,7 +25,7 @@ export default async function ClientsPage() {
     <div>
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-[32px] font-bold tracking-[-0.02em]">Clients</h1>
+          <h1 className="display text-[32px] font-semibold">Clients</h1>
           <p className="mt-1.5 text-sm text-muted">
             Signed clinics and delivery progress
           </p>

@@ -78,7 +78,7 @@ export default async function ConceptDetailPage({
             ← Ad Hub
           </Link>
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="text-[32px] font-bold tracking-[-0.02em]">
+            <h1 className="display text-[32px] font-semibold">
               {concept.name}
             </h1>
             <ConceptStatusBadge status={concept.status} />
@@ -116,7 +116,7 @@ export default async function ConceptDetailPage({
 
       {/* ─── The four things a creative is judged against ─────────────── */}
       <section className="mt-8">
-        <h2 className="mb-4 text-xl font-semibold">The concept</h2>
+        <h2 className="display mb-4 text-xl font-semibold">The concept</h2>
         <div className="card divide-y divide-line/60">
           <Row
             label="Persona"
@@ -146,7 +146,7 @@ export default async function ConceptDetailPage({
 
       {/* ─── Positioning, with the guidance that goes with each choice ── */}
       <section className="mt-8">
-        <h2 className="mb-4 text-xl font-semibold">Positioning</h2>
+        <h2 className="display mb-4 text-xl font-semibold">Positioning</h2>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="card p-6">
             <p className="text-xs font-medium tracking-[0.02em] text-muted">
@@ -174,7 +174,7 @@ export default async function ConceptDetailPage({
       <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
         {/* ─── Edit ────────────────────────────────────────────────────── */}
         <section className="lg:col-span-2">
-          <h2 className="mb-4 text-xl font-semibold">Concept details</h2>
+          <h2 className="display mb-4 text-xl font-semibold">Concept details</h2>
           <form action={update} className="card space-y-5 p-6">
             <div className="grid grid-cols-3 gap-x-4 gap-y-5">
               <div className="col-span-2">
@@ -347,7 +347,7 @@ export default async function ConceptDetailPage({
         {/* ─── Creatives ───────────────────────────────────────────────── */}
         <section className="lg:col-span-3">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold">
+            <h2 className="display text-xl font-semibold">
               Creatives{" "}
               <span className="num text-sm font-normal text-muted">
                 {concept.creatives.length}

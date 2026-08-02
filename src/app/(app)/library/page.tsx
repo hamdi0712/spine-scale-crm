@@ -46,7 +46,7 @@ export default async function LibraryPage({
 
   return (
     <div>
-      <h1 className="text-[32px] font-bold tracking-[-0.02em]">Library</h1>
+      <h1 className="display text-[32px] font-semibold">Library</h1>
       <p className="mt-1.5 text-sm text-muted">
         Playbooks and templates, written as you build them
       </p>
@@ -193,7 +193,7 @@ export default async function LibraryPage({
             <div>
               <div className="flex items-start justify-between border-b border-line pb-3">
                 <div>
-                  <h2 className="text-base font-semibold">{selected.title}</h2>
+                  <h2 className="display text-base font-semibold">{selected.title}</h2>
                   <div className="num mt-0.5 text-xs text-muted">
                     Updated {fmtDate(selected.updatedAt)}
                   </div>

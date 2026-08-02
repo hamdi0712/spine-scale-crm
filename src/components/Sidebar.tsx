@@ -2,18 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  IconBook,
+  IconBulb,
+  IconChartBar,
+  IconGitBranch,
+  IconLayoutDashboard,
+  IconUsers,
+} from "@tabler/icons-react";
 import { logout } from "@/lib/actions/auth";
 import Icon from "@/components/Icons";
 import { LogoIconChip } from "@/components/Logo";
 
+// Nav glyphs come from Tabler; the rest of the app (including the collapse
+// chevron and Sign out below) stays on the in-house set. Stroke is dialled
+// from Tabler's default 2 down to 1.75 so the two sets sit together.
 const NAV = [
-  { href: "/", label: "Dashboard", icon: "dashboard" },
-  { href: "/pipeline", label: "Pipeline", icon: "pipeline" },
-  { href: "/clients", label: "Clients", icon: "clients" },
-  { href: "/reporting", label: "Reporting", icon: "reporting" },
-  { href: "/ad-hub", label: "Ad Hub", icon: "adhub" },
-  { href: "/library", label: "Library", icon: "library" },
+  { href: "/", label: "Dashboard", Glyph: IconLayoutDashboard },
+  { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
+  { href: "/clients", label: "Clients", Glyph: IconUsers },
+  { href: "/reporting", label: "Reporting", Glyph: IconChartBar },
+  { href: "/ad-hub", label: "Ad Hub", Glyph: IconBulb },
+  { href: "/library", label: "Library", Glyph: IconBook },
 ];
+
+// Long enough to read as a fade, short enough to stay out of the way. Colour,
+// border and the active card's shadow all ease together; nothing moves.
+const NAV_MOTION =
+  "transition-[color,background-color,border-color,box-shadow] duration-150 ease-out";
 
 export default function Sidebar({
   collapsed,
@@ -39,7 +55,7 @@ export default function Sidebar({
         ) : (
           <Link href="/" className="flex min-w-0 items-center gap-2.5">
             <LogoIconChip />
-            <span className="truncate text-base font-bold tracking-[-0.01em] text-ink">
+            <span className="display truncate text-base font-semibold text-ink">
               Spine Scale
             </span>
           </Link>
@@ -72,7 +88,7 @@ export default function Sidebar({
               key={item.href}
               href={item.href}
               title={collapsed ? item.label : undefined}
-              className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-semibold ${
+              className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${NAV_MOTION} ${
                 collapsed ? "justify-center px-0" : "px-3"
               } ${
                 active
@@ -80,7 +96,7 @@ export default function Sidebar({
                   : "text-muted hover:bg-wash hover:text-ink"
               }`}
             >
-              <Icon name={item.icon} />
+              <item.Glyph size={20} stroke={1.75} className="shrink-0" />
               {!collapsed && item.label}
             </Link>
           );
@@ -93,7 +109,7 @@ export default function Sidebar({
         <button
           type="submit"
           title={collapsed ? "Sign out" : undefined}
-          className={`flex h-[42px] w-full items-center gap-2 rounded-[10px] text-left text-sm font-semibold text-muted hover:bg-wash hover:text-ink ${
+          className={`flex h-[42px] w-full items-center gap-2 rounded-[10px] text-left text-sm font-normal text-muted hover:bg-wash hover:text-ink ${NAV_MOTION} ${
             collapsed ? "justify-center px-0" : "px-3"
           }`}
         >

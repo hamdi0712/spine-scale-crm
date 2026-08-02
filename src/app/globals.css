@@ -12,6 +12,15 @@
     /* Inter reads tighter across the app; elements that set their own
        tracking (small caps-ish labels) still opt out locally. */
     letter-spacing: -0.02em;
+    /* Body copy stays on Inter's text cut at every size — only the header
+       tier (.display) opts back into optical sizing. */
+    font-optical-sizing: none;
+  }
+  /* 600 is the heaviest weight in the app; browsers default <b>/<strong>
+     to 700, so cap them here too. */
+  b,
+  strong {
+    font-weight: 600;
   }
   ::selection {
     background: rgba(18, 109, 251, 0.18);
@@ -52,6 +61,15 @@
   .td {
     @apply border-b border-line/60 px-4 py-[18px] text-sm;
   }
+}
+
+/* The header tier — the sidebar wordmark, page titles, and card titles.
+   Optical sizing pulls Inter toward its display cut at these sizes (tighter
+   apertures, finer joins), and the tracking is drawn in to match. Weight is
+   capped at 600 like everything else; sizes are set per element. */
+.display {
+  letter-spacing: -0.05em;
+  font-optical-sizing: auto;
 }
 
 /* Numerals render with tabular figures. Apply .num to KPI values, money,

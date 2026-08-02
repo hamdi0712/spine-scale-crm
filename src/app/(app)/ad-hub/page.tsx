@@ -74,7 +74,7 @@ export default async function AdHubPage() {
       />
 
       <div className="mt-8 flex items-baseline justify-between gap-4">
-        <h2 className="text-xl font-semibold">Browse</h2>
+        <h2 className="display text-xl font-semibold">Browse</h2>
         <p className="num text-xs text-muted">
           {countLabel(tree.length, "persona")} · {countLabel(concepts, "concept")}{" "}
           · {countLabel(creatives, "creative")}

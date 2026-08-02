@@ -28,18 +28,14 @@ function Row({ entry, now }: { entry: ActivityEntry; now: Date }) {
   );
 }
 
-// `total` is how many entries exist in all, not just the ones handed over. The
-// dashboard card passes it so the capped list can say how much there is and
-// hand off to the full feed; the activity page shows everything and leaves it
-// out, which is what keeps the link off the page it points at.
+// Just the rows. The hand-off to the full feed is the card header's "View
+// all", placed like every other dashboard card's.
 export default function ActivityFeed({
   entries,
   now,
-  total,
 }: {
   entries: ActivityEntry[];
   now: Date;
-  total?: number;
 }) {
   if (entries.length === 0) {
     return (
@@ -51,32 +47,18 @@ export default function ActivityFeed({
     );
   }
   return (
-    <div>
-      <ul className="divide-y divide-line/60">
-        {entries.map((entry) => (
-          <li key={entry.id}>
-            {entry.href ? (
-              <Link href={entry.href} className="block hover:opacity-80">
-                <Row entry={entry} now={now} />
-              </Link>
-            ) : (
+    <ul className="divide-y divide-line/60">
+      {entries.map((entry) => (
+        <li key={entry.id}>
+          {entry.href ? (
+            <Link href={entry.href} className="block hover:opacity-80">
               <Row entry={entry} now={now} />
-            )}
-          </li>
-        ))}
-      </ul>
-      {/* Shown whenever a total was handed over, including when it matches
-          what is already on screen: landing on a page listing the same rows
-          costs nothing, and leaving the feed unreachable until it grows
-          past the card does. */}
-      {total !== undefined && (
-        <Link
-          href="/activity"
-          className="mt-3 inline-block text-xs font-medium text-accent hover:underline"
-        >
-          View all ({total})
-        </Link>
-      )}
-    </div>
+            </Link>
+          ) : (
+            <Row entry={entry} now={now} />
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

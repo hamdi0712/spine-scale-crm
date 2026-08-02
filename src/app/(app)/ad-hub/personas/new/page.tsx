@@ -9,7 +9,7 @@ export default function NewPersonaPage() {
         <Link href="/ad-hub" className="text-sm text-accent hover:underline">
           ← Ad Hub
         </Link>
-        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.02em]">
+        <h1 className="display mt-2 text-[32px] font-semibold">
           New persona
         </h1>
         <p className="mt-1.5 text-sm text-muted">
