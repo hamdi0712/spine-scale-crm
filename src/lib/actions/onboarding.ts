@@ -181,6 +181,8 @@ export async function addInvoice(clientId: string, formData: FormData) {
     data: {
       clientId,
       issuedOn: date(formData, "issuedOn") ?? new Date(),
+      // Optional — left blank the invoice simply raises no calendar event.
+      dueDate: date(formData, "dueDate"),
       amount,
       status: INVOICE_STATUSES.includes(status as InvoiceStatus)
         ? (status as InvoiceStatus)

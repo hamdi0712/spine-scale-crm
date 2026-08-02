@@ -174,6 +174,12 @@ model Invoice {
   memo      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // When payment is expected. Optional, and deliberately not derived from
+  // issuedOn — terms vary per client, and guessing one would put a date on the
+  // calendar that nobody agreed to. Invoices without it simply raise no
+  // due-date event (src/lib/calendar.ts).
+  dueDate DateTime?
 }
 
 model ChecklistItem {

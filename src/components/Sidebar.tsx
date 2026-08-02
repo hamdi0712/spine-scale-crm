@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   IconBook,
   IconBulb,
+  IconCalendarEvent,
   IconChartBar,
   IconGitBranch,
   IconLayoutDashboard,
@@ -19,6 +20,9 @@ import { LogoIconChip } from "@/components/Logo";
 // from Tabler's default 2 down to 1.75 so the two sets sit together.
 const NAV = [
   { href: "/", label: "Dashboard", Glyph: IconLayoutDashboard },
+  // Sits with the dashboard: both read across every record rather than owning
+  // one, and the pair is where a day starts.
+  { href: "/calendar", label: "Calendar", Glyph: IconCalendarEvent },
   { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
   { href: "/clients", label: "Clients", Glyph: IconUsers },
   { href: "/reporting", label: "Reporting", Glyph: IconChartBar },

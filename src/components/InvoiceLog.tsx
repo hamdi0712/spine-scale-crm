@@ -14,9 +14,20 @@ import ConfirmForm from "@/components/ConfirmForm";
 export interface InvoiceRow {
   id: string;
   issuedOn: Date;
+  dueDate: Date | null;
   amount: number;
   status: string;
   memo: string | null;
+}
+
+// Unpaid and the due date has been and gone — the same reading the calendar
+// takes, and the same red the rest of the app gives an overdue date.
+function isInvoiceOverdue(invoice: InvoiceRow, today: Date): boolean {
+  return (
+    invoice.status !== "PAID" &&
+    invoice.dueDate !== null &&
+    invoice.dueDate < today
+  );
 }
 
 export default function InvoiceLog({
@@ -30,6 +41,12 @@ export default function InvoiceLog({
 }) {
   const add = addInvoice.bind(null, clientId);
   const totals = invoiceTotals(invoices);
+  // Due dates are stored as UTC midnight, so "today" has to be read the same
+  // way for the comparison to land on the right day.
+  const now = new Date();
+  const today = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
 
   return (
     <div className="space-y-5">
@@ -38,6 +55,7 @@ export default function InvoiceLog({
           <thead>
             <tr>
               <th className="th">Date</th>
+              <th className="th">Due</th>
               <th className="th">Amount</th>
               <th className="th">Status</th>
               <th className="th">Memo</th>
@@ -50,6 +68,14 @@ export default function InvoiceLog({
             {invoices.map((invoice) => (
               <tr key={invoice.id} className="hover:bg-wash/60">
                 <td className="td num text-xs">{fmtDate(invoice.issuedOn)}</td>
+                <td
+                  className={`td num text-xs ${
+                    isInvoiceOverdue(invoice, today) ? "text-bad" : "text-muted"
+                  }`}
+                >
+                  {invoice.dueDate ? fmtDate(invoice.dueDate) : "—"}
+                  {isInvoiceOverdue(invoice, today) && " · overdue"}
+                </td>
                 <td className="td num">{fmtMoney(invoice.amount)}</td>
                 <td className="td">
                   <div className="inline-flex overflow-hidden rounded-full border border-line">
@@ -89,7 +115,7 @@ export default function InvoiceLog({
             ))}
             {invoices.length === 0 && (
               <tr>
-                <td className="td text-sm text-muted" colSpan={5}>
+                <td className="td text-sm text-muted" colSpan={6}>
                   No invoices logged yet. Add the first one below — more can be
                   added over time as they go out.
                 </td>
@@ -121,7 +147,7 @@ export default function InvoiceLog({
         action={add}
         className="grid grid-cols-12 items-end gap-3"
       >
-        <div className="col-span-3">
+        <div className="col-span-2">
           <label className="field-label" htmlFor="invoiceIssuedOn">
             Date
           </label>
@@ -131,6 +157,19 @@ export default function InvoiceLog({
             type="date"
             defaultValue={toDateInput(new Date())}
             required
+            className="field num"
+          />
+        </div>
+        {/* Optional: terms vary per client, and an invoice with no agreed due
+            date should not get an invented one on the calendar. */}
+        <div className="col-span-2">
+          <label className="field-label" htmlFor="invoiceDueDate">
+            Due
+          </label>
+          <input
+            id="invoiceDueDate"
+            name="dueDate"
+            type="date"
             className="field num"
           />
         </div>
@@ -167,7 +206,7 @@ export default function InvoiceLog({
           </label>
           <input id="invoiceMemo" name="memo" placeholder="Optional" className="field" />
         </div>
-        <div className="col-span-3">
+        <div className="col-span-2">
           <button type="submit" className="btn w-full justify-center">
             Log invoice
           </button>
