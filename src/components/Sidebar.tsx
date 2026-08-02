@@ -72,11 +72,11 @@ export default function Sidebar({
               key={item.href}
               href={item.href}
               title={collapsed ? item.label : undefined}
-              className={`flex h-[42px] items-center gap-3 rounded-[10px] text-sm font-medium ${
+              className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-semibold ${
                 collapsed ? "justify-center px-0" : "px-3"
               } ${
                 active
-                  ? "bg-accent/10 text-accent"
+                  ? "nav-active"
                   : "text-muted hover:bg-wash hover:text-ink"
               }`}
             >
@@ -93,7 +93,7 @@ export default function Sidebar({
         <button
           type="submit"
           title={collapsed ? "Sign out" : undefined}
-          className={`flex h-[42px] w-full items-center gap-3 rounded-[10px] text-left text-sm font-medium text-muted hover:bg-wash hover:text-ink ${
+          className={`flex h-[42px] w-full items-center gap-2 rounded-[10px] text-left text-sm font-semibold text-muted hover:bg-wash hover:text-ink ${
             collapsed ? "justify-center px-0" : "px-3"
           }`}
         >
