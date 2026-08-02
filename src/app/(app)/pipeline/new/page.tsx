@@ -8,7 +8,7 @@ export default function NewLeadPage() {
         <Link href="/pipeline" className="text-sm text-accent hover:underline">
           ← Pipeline
         </Link>
-        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.02em]">New lead</h1>
+        <h1 className="display mt-2 text-[32px] font-semibold">New lead</h1>
       </div>
       <form action={createLead} className="card space-y-5 p-6">
         <div>

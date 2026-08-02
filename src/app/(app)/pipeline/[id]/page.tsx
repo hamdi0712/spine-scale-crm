@@ -49,7 +49,7 @@ export default async function LeadDetailPage({
             ← Pipeline
           </Link>
           <div className="mt-2 flex items-center gap-3">
-            <h1 className="text-[32px] font-bold tracking-[-0.02em]">{lead.clinicName}</h1>
+            <h1 className="display text-[32px] font-semibold">{lead.clinicName}</h1>
             <StageBadge stage={lead.stage} />
             <IcpTierBadge tier={leadTier(lead)} />
             {lead.archived && (
@@ -83,7 +83,7 @@ export default async function LeadDetailPage({
 
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <section>
-          <h2 className="mb-4 text-xl font-semibold">Details</h2>
+          <h2 className="display mb-4 text-xl font-semibold">Details</h2>
           <form action={update} className="card space-y-5 p-6">
             <div>
               <label className="field-label" htmlFor="clinicName">
@@ -196,7 +196,7 @@ export default async function LeadDetailPage({
         </section>
 
         <section>
-          <h2 className="mb-4 text-xl font-semibold">Activity log</h2>
+          <h2 className="display mb-4 text-xl font-semibold">Activity log</h2>
           <form action={addNote} className="card flex gap-3 p-4">
             <input
               name="body"
@@ -233,7 +233,7 @@ export default async function LeadDetailPage({
 
       <section className="mt-8">
         <div className="mb-4 flex items-baseline justify-between gap-4">
-          <h2 className="text-xl font-semibold">Calls</h2>
+          <h2 className="display text-xl font-semibold">Calls</h2>
           <p className="text-sm text-muted">
             Alongside the next follow-up date, not instead of it
           </p>
@@ -243,7 +243,7 @@ export default async function LeadDetailPage({
 
       <section className="mt-8">
         <div className="mb-4 flex items-baseline justify-between">
-          <h2 className="text-xl font-semibold">ICP Scorecard</h2>
+          <h2 className="display text-xl font-semibold">ICP Scorecard</h2>
           <p className="max-w-xl text-right text-sm text-muted">
             {ICP_SCORING_RULE}
           </p>

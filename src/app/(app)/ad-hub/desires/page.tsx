@@ -34,7 +34,7 @@ export default async function DesiresPage() {
 
       <div className="mt-8 grid items-start gap-8 lg:grid-cols-3">
         <section className="lg:col-span-1">
-          <h2 className="mb-4 text-xl font-semibold">New desire</h2>
+          <h2 className="display mb-4 text-xl font-semibold">New desire</h2>
           <form action={createDesire} className="card space-y-5 p-6">
             <div>
               <label className="field-label" htmlFor="statement">
@@ -75,7 +75,7 @@ export default async function DesiresPage() {
         </section>
 
         <section className="lg:col-span-2">
-          <h2 className="mb-4 text-xl font-semibold">
+          <h2 className="display mb-4 text-xl font-semibold">
             Desires{" "}
             <span className="num text-sm font-normal text-muted">
               {desires.length}

@@ -39,7 +39,7 @@ export default function Sidebar({
         ) : (
           <Link href="/" className="flex min-w-0 items-center gap-2.5">
             <LogoIconChip />
-            <span className="truncate text-base font-bold tracking-[-0.01em] text-ink">
+            <span className="display truncate text-base font-semibold text-ink">
               Spine Scale
             </span>
           </Link>
@@ -72,7 +72,7 @@ export default function Sidebar({
               key={item.href}
               href={item.href}
               title={collapsed ? item.label : undefined}
-              className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-semibold ${
+              className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${
                 collapsed ? "justify-center px-0" : "px-3"
               } ${
                 active
@@ -93,7 +93,7 @@ export default function Sidebar({
         <button
           type="submit"
           title={collapsed ? "Sign out" : undefined}
-          className={`flex h-[42px] w-full items-center gap-2 rounded-[10px] text-left text-sm font-semibold text-muted hover:bg-wash hover:text-ink ${
+          className={`flex h-[42px] w-full items-center gap-2 rounded-[10px] text-left text-sm font-normal text-muted hover:bg-wash hover:text-ink ${
             collapsed ? "justify-center px-0" : "px-3"
           }`}
         >

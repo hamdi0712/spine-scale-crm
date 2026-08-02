@@ -70,7 +70,7 @@ export default async function CreativeDetailPage({
             ← {concept.name}
           </Link>
           <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="num text-[32px] font-bold tracking-[-0.02em]">
+            <h1 className="display num text-[32px] font-semibold">
               Creative #{creative.creativeNumber}
             </h1>
             <CreativeTypeChip type={creative.creativeType} />
@@ -118,7 +118,7 @@ export default async function CreativeDetailPage({
       <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
         {/* ─── The copy ────────────────────────────────────────────────── */}
         <section className="lg:col-span-3">
-          <h2 className="mb-4 text-xl font-semibold">The creative</h2>
+          <h2 className="display mb-4 text-xl font-semibold">The creative</h2>
           <form action={update} className="card space-y-5 p-6">
             <div className="grid grid-cols-3 gap-x-4 gap-y-5">
               <div className="col-span-2">
@@ -235,7 +235,7 @@ export default async function CreativeDetailPage({
         {/* ─── Status, gate, lineage ───────────────────────────────────── */}
         <section className="space-y-8 lg:col-span-2">
           <div>
-            <h2 className="mb-4 text-xl font-semibold">Status</h2>
+            <h2 className="display mb-4 text-xl font-semibold">Status</h2>
             <form action={setStatus} className="card space-y-4 p-6">
               <div>
                 <label className="field-label" htmlFor="status">
@@ -277,12 +277,12 @@ export default async function CreativeDetailPage({
           </div>
 
           <div>
-            <h2 className="mb-4 text-xl font-semibold">Compliance gate</h2>
+            <h2 className="display mb-4 text-xl font-semibold">Compliance gate</h2>
             <ComplianceChecklist items={creative.compliance} />
           </div>
 
           <div>
-            <h2 className="mb-4 text-xl font-semibold">Iteration</h2>
+            <h2 className="display mb-4 text-xl font-semibold">Iteration</h2>
             <div className="card p-6">
               <p className="text-xs leading-relaxed text-muted">
                 {ITERATE_NOTE}
@@ -316,7 +316,7 @@ export default async function CreativeDetailPage({
       </div>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-xl font-semibold">Performance</h2>
+        <h2 className="display mb-4 text-xl font-semibold">Performance</h2>
         <div className="card p-6">
           <PerformanceLog
             creativeId={creative.id}

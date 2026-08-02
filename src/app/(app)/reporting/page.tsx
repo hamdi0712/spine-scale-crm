@@ -14,7 +14,7 @@ export default async function ReportingPage() {
 
   return (
     <div>
-      <h1 className="text-[32px] font-bold tracking-[-0.02em]">Reporting</h1>
+      <h1 className="display text-[32px] font-semibold">Reporting</h1>
       <p className="mt-1.5 text-sm text-muted">
         Latest reported week per client, against target KPIs
       </p>

@@ -9,7 +9,7 @@ export default function NewClientPage() {
         <Link href="/clients" className="text-sm text-accent hover:underline">
           ← Clients
         </Link>
-        <h1 className="mt-2 text-[32px] font-bold tracking-[-0.02em]">New client</h1>
+        <h1 className="display mt-2 text-[32px] font-semibold">New client</h1>
         <p className="mt-1.5 text-sm text-muted">
           Seeds the default delivery checklist automatically.
         </p>

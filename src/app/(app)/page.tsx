@@ -253,7 +253,7 @@ export default async function DashboardPage() {
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-2">
         <section className="card p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">Now</h2>
+            <h2 className="display text-xl font-semibold">Now</h2>
             <span
               className={`inline-flex items-center gap-2 text-xs font-medium ${
                 summary.overdue > 0 ? "text-bad" : "text-ok"
@@ -300,7 +300,7 @@ export default async function DashboardPage() {
 
         <section className="card p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2.5 text-xl font-semibold">
+            <h2 className="display flex items-center gap-2.5 text-xl font-semibold">
               <Icon name="clock" className="h-[18px] w-[18px] text-accent" />
               US business hours
             </h2>
@@ -315,7 +315,7 @@ export default async function DashboardPage() {
           {/* No header link here, unlike the two cards beside it: the feed
               carries its own "View all (N)" under the rows, where the count
               can say how much is behind it. */}
-          <h2 className="mb-1 text-xl font-semibold">Recent activity</h2>
+          <h2 className="display mb-1 text-xl font-semibold">Recent activity</h2>
           <ActivityFeed
             entries={activity.map((a) => ({
               id: a.id,
@@ -335,7 +335,7 @@ export default async function DashboardPage() {
 
         <section className="card p-6">
           <div className="mb-1 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">Client health</h2>
+            <h2 className="display text-xl font-semibold">Client health</h2>
             <Link href="/clients" className="text-xs font-medium text-accent hover:underline">
               View all
             </Link>
@@ -345,7 +345,7 @@ export default async function DashboardPage() {
 
         <section className="card p-6">
           <div className="mb-5 flex items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">Pipeline snapshot</h2>
+            <h2 className="display text-xl font-semibold">Pipeline snapshot</h2>
             <Link href="/pipeline" className="text-xs font-medium text-accent hover:underline">
               View pipeline
             </Link>

@@ -27,7 +27,7 @@ export default function Greeting({ serverHour }: { serverHour: number }) {
   useEffect(() => setHour(new Date().getHours()), []);
 
   return (
-    <h1 className="text-[32px] font-bold tracking-[-0.02em]">
+    <h1 className="display text-[32px] font-semibold">
       {greetingFor(hour)}, {NAME}{" "}
       <span role="img" aria-label="waving hand">
         👋

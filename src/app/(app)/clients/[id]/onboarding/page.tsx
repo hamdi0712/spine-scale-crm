@@ -67,7 +67,7 @@ export default async function OnboardingPage({
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-[32px] font-bold tracking-[-0.02em]">
+            <h1 className="display text-[32px] font-semibold">
               {client.clinicName}
             </h1>
             <LocalTimeBadge timeZone={client.timeZone} />

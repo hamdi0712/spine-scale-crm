@@ -34,7 +34,7 @@ export default async function PipelinePage({
     <div>
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-[32px] font-bold tracking-[-0.02em]">Pipeline</h1>
+          <h1 className="display text-[32px] font-semibold">Pipeline</h1>
           <p className="mt-1.5 text-sm text-muted">
             Clinics in play — drag cards between stages
           </p>

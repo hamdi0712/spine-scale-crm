@@ -25,7 +25,7 @@ export default async function NewCreativePage({
       >
         ← {concept.name}
       </Link>
-      <h1 className="mt-2 text-[32px] font-bold tracking-[-0.02em]">
+      <h1 className="display mt-2 text-[32px] font-semibold">
         New creative
       </h1>
       <p className="mb-8 mt-1.5 text-sm text-muted">

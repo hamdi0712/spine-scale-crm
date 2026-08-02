@@ -21,7 +21,7 @@ export default async function ActivityPage() {
       <Link href="/" className="text-sm text-accent hover:underline">
         ← Dashboard
       </Link>
-      <h1 className="mt-2 text-[32px] font-bold tracking-[-0.02em]">Activity</h1>
+      <h1 className="display mt-2 text-[32px] font-semibold">Activity</h1>
       <p className="mt-1.5 text-sm text-muted">
         Milestones across every lead and client — conversions, reports,
         contracts, payments, health changes and completed onboardings.

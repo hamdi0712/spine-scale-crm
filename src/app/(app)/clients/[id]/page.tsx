@@ -89,7 +89,7 @@ export default async function ClientDetailPage({
             ← Clients
           </Link>
           <div className="mt-2 flex items-center gap-3">
-            <h1 className="text-[32px] font-bold tracking-[-0.02em]">
+            <h1 className="display text-[32px] font-semibold">
               {client.clinicName}
             </h1>
             <ClientStatusBadge status={client.status} />
@@ -135,7 +135,7 @@ export default async function ClientDetailPage({
 
       <section className="mt-8">
         <div className="mb-4 flex items-center justify-between gap-4">
-          <h2 className="text-xl font-semibold">Delivery progress</h2>
+          <h2 className="display text-xl font-semibold">Delivery progress</h2>
           {wizardRunning ? (
             <Link
               href={`/clients/${client.id}/onboarding`}
@@ -165,7 +165,7 @@ export default async function ClientDetailPage({
 
       <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
         <section className="lg:col-span-2">
-          <h2 className="mb-4 text-xl font-semibold">Client details</h2>
+          <h2 className="display mb-4 text-xl font-semibold">Client details</h2>
           <form action={update} className="card space-y-5 p-6">
             <div>
               <label className="field-label" htmlFor="clinicName">
@@ -402,7 +402,7 @@ export default async function ClientDetailPage({
         </section>
 
         <section className="lg:col-span-3">
-          <h2 className="mb-4 text-xl font-semibold">
+          <h2 className="display mb-4 text-xl font-semibold">
             Onboarding / delivery checklist
           </h2>
           <div className="card">
@@ -527,12 +527,12 @@ export default async function ClientDetailPage({
       </div>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-xl font-semibold">Calls</h2>
+        <h2 className="display mb-4 text-xl font-semibold">Calls</h2>
         <CallLog calls={client.calls} addAction={addCall} />
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-xl font-semibold">Invoices</h2>
+        <h2 className="display mb-4 text-xl font-semibold">Invoices</h2>
         <div className="card p-6">
           <InvoiceLog
             clientId={client.id}
