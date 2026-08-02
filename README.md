@@ -67,6 +67,31 @@ again.
   lightness so neighbouring segments stay apart, with every segment named and
   valued in the legend.
 
+- **Calendar** — a month grid over dates that already live on other records:
+  every call (scheduled or held, on leads and clients alike), every lead's next
+  follow-up date, and every invoice due date. Nothing is created here — a date
+  is set on the record it belongs to, and every row on the calendar links
+  straight back to it.
+
+  Cells stay deliberately quiet: the date, and a coloured dot per thing
+  happening — brand blue `#126DFB` for calls, the secondary teal `#3FD1C8` for
+  follow-ups, and violet `#7C3AED` for invoice due dates, explained by a legend
+  under the grid. Violet is the third colour rather than amber or red because a
+  due date arriving is not a warning; being *late* is, and that is what the
+  overdue treatment says. A day with more kinds than dot slots always shows one
+  of each colour present before it shows a second of anything, so a busy day
+  cannot hide a whole category behind the "+n".
+
+  Clicking a day opens the agenda beside the grid: the day's items in order,
+  timed calls first (they are the ones that cannot move), then follow-ups, then
+  invoices. Anything past its date and not closed out — a call still marked
+  Scheduled, an unpaid invoice, a follow-up that has slipped — carries the same
+  red and "Overdue" tag the rest of the app uses.
+
+  A call is stored as an instant, so which day it falls on and whether it has
+  slipped both depend on the viewer's zone; the server renders its own reading
+  and the browser corrects it on mount, the same way every clock in the app
+  does. Follow-up and due dates are date-only, so they read the same everywhere.
 - **Activity feed** — an internal log of milestones, newest first, on the
   dashboard card and in full at `/activity`. Six events are logged and nothing
   else: a lead converted to a client, a weekly report generated (the first time
@@ -127,7 +152,9 @@ again.
   crossed into Needs attention or At risk surfaces in Today's focus for a week.
 - **Onboarding wizard** — a five-step step-through that runs after a lead is
   converted: confirm details and time zone, contract status plus a link to the
-  signed document, an invoice log with a running total collected, the kickoff
+  signed document, an invoice log with a running total collected (each invoice
+  takes an optional due date, which is what puts it on the calendar and what
+  turns it red once it has passed unpaid), the kickoff
   call, and handoff to the delivery checklist. The current step is stored on
   the client (`onboardingStep`), so leaving mid-way and coming back picks up
   where you left off — from the client record, the clients table, or the
