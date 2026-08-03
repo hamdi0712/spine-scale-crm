@@ -246,14 +246,20 @@ export default async function DashboardPage() {
         ))}
       </div>
 
-      {/* items-start keeps each card at its own height; self-stretch on the Now
-          card alone makes it fill the row instead, and the row is as tall as
-          the taller of the two. Collapsed, that is US business hours, so Now
-          sits at exactly its neighbour's height whether it is showing nothing,
-          one row, or one row plus "View all". Expanded, Now is itself the
-          taller one, so it keeps its natural height and business hours is left
-          where it was. */}
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-2">
+      {/* The two cards match heights while Now is collapsed, and the row is as
+          tall as whichever is naturally taller — either can be: business hours
+          is always four rows, Now varies with its banner. So the default
+          stretch applies to both and neither one leads.
+
+          Expanded, Now is showing a list it was never sized for and business
+          hours should not be dragged along with it, so items-start hands both
+          cards back their natural heights. Now keeps self-stretch through
+          that, which is what still lifts a short expanded list — one hidden
+          row, say — up to the height of business hours beside it.
+
+          The flag comes off the data attribute TodaysFocus sets from the state
+          behind its own "View all" toggle. */}
+      <div className="mt-6 grid items-stretch gap-6 has-[[data-focus-expanded]]:items-start lg:grid-cols-2">
         <section className="card self-stretch p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
