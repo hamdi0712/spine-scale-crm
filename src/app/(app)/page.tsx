@@ -319,7 +319,16 @@ export default async function DashboardPage() {
         </section>
       </div>
 
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-3">
+      {/* These three always stand level, in every state — an empty feed, a
+          single teaser row and the donut all end up the same height as the
+          tallest of them. None of them expands in place, so there is nothing
+          to make it conditional on: all three "View all" links leave for a
+          page of their own.
+
+          The stretch reaches the bordered card directly because each section
+          carries .card itself and is the grid item — no wrapper in between to
+          stretch instead and leave the visible card floating short inside it. */}
+      <div className="mt-6 grid items-stretch gap-6 lg:grid-cols-3">
         <section className="card p-6">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Recent activity</h2>
