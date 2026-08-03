@@ -66,8 +66,11 @@ export default function TodaysFocus({
     );
   }
 
+  // The expanded flag is published to the DOM as well as used here: the
+  // dashboard row above needs it to decide how the two cards share a height,
+  // and reads it off this attribute rather than hoisting the state.
   return (
-    <div>
+    <div data-focus-expanded={expanded || undefined}>
       <ul className="-mx-2">
         {visible.map((item) => (
           <Row key={item.id} item={item} mounted={mounted} />

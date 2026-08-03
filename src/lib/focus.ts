@@ -27,8 +27,10 @@ const TIER_BLOCKING = 5;
 const TIER_ONBOARDING = 6;
 
 // How many rows the dashboard card shows before the rest go behind "View all".
-// One: the collapsed Now card then stands the same height as the fixed
-// four-row US business hours card sitting beside it.
+// One, so the card reads as the next thing to do. It is not what squares the
+// card off against US business hours beside it — collapsed, the two are held
+// to a common height by the dashboard row itself, whichever of them is the
+// taller — so this number can change without unsettling that.
 export const FOCUS_VISIBLE_LIMIT = 1;
 
 // A health change stops being news after this long.
