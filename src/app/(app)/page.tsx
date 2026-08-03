@@ -246,8 +246,15 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      {/* items-start keeps each card at its own height; self-stretch on the Now
+          card alone makes it fill the row instead, and the row is as tall as
+          the taller of the two. Collapsed, that is US business hours, so Now
+          sits at exactly its neighbour's height whether it is showing nothing,
+          one row, or one row plus "View all". Expanded, Now is itself the
+          taller one, so it keeps its natural height and business hours is left
+          where it was. */}
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-2">
-        <section className="card p-6">
+        <section className="card self-stretch p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
             <span
