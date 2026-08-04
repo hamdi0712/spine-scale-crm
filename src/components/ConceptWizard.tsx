@@ -547,15 +547,13 @@ export default function ConceptWizard({
           ) : (
             <span />
           )}
-          {last ? (
-            <button
-              type="submit"
-              disabled={!canContinue}
-              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Create concept →
-            </button>
-          ) : (
+          {/* Two separate slots rather than one ternary, so React never reuses
+              the same DOM node for both. Advancing to the last step inside the
+              click handler would otherwise flip that node to type="submit"
+              before the browser runs the click's default action — and the
+              Continue press onto the final step would create the concept
+              without "Create concept" ever being pressed. */}
+          {!last && (
             <button
               type="button"
               onClick={() => setStep((n) => n + 1)}
@@ -563,6 +561,15 @@ export default function ConceptWizard({
               className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               Continue
+            </button>
+          )}
+          {last && (
+            <button
+              type="submit"
+              disabled={!canContinue}
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Create concept →
             </button>
           )}
         </div>

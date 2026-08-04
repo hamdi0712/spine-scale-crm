@@ -248,15 +248,13 @@ export default function CreativeWizard({
           ) : (
             <span />
           )}
-          {last ? (
-            <button
-              type="submit"
-              disabled={!canContinue}
-              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Create creative →
-            </button>
-          ) : (
+          {/* Two separate slots rather than one ternary, so React never reuses
+              the same DOM node for both. Advancing to the last step inside the
+              click handler would otherwise flip that node to type="submit"
+              before the browser runs the click's default action — and the
+              Continue press onto the final step would create the creative
+              without "Create creative" ever being pressed. */}
+          {!last && (
             <button
               type="button"
               onClick={() => setStep((n) => n + 1)}
@@ -264,6 +262,15 @@ export default function CreativeWizard({
               className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               Continue
+            </button>
+          )}
+          {last && (
+            <button
+              type="submit"
+              disabled={!canContinue}
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Create creative →
             </button>
           )}
         </div>
