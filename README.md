@@ -110,6 +110,22 @@ again.
   lead Won enables one-click **Convert to Client**, which pre-fills a client
   record (including the estimated deal value as the monthly fee), archives the
   lead, and opens the onboarding wizard.
+
+  **Import leads** bulk-adds prospects from a CSV export — built for Apify
+  LinkedIn scrapes, but nothing in it is specific to one. The file is parsed in
+  the browser, its real headers are listed, and each column is pointed at a
+  Lead field by hand: no column name or order is ever assumed, because two
+  actors scraping the same thing export different ones. The first five mapped
+  rows are shown before anything is written. Imported leads start at **New**
+  and are sourced **LinkedIn** unless the CSV maps a source column of its own,
+  and a lead whose clinic name and contact name already exist is skipped — so
+  re-importing the same export creates nothing.
+
+  A scraped headcount is stored as `staffCountRaw`, deliberately alongside the
+  scorecard's 0–2 Staff Size Fit band rather than instead of it. It **suggests**
+  a band on the lead's scorecard (3–15 = 2, 2 or 16–20 = 1, 1 or 20+ = 0), and
+  the suggestion sits there pre-selected and editable until the card is saved.
+  Nothing is scored by an import — scoring is a decision someone makes.
 - **Clients** — signed clinics with package/fee/contract details, GHL and Meta
   Ads reference links, an invoice log, and a per-client delivery checklist
   (seeded with the standard Disc Relief Pipeline OS items, fully editable per

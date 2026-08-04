@@ -27,14 +27,31 @@ export type IcpScorecardValues = Record<IcpDisqualifierKey, boolean> &
     icpScoredAt: string | null;
   };
 
+export interface StaffSizeSuggestion {
+  staffCount: number;
+  points: number;
+}
+
 export default function IcpScorecard({
   values,
   action,
+  staffSizeSuggestion = null,
 }: {
   values: IcpScorecardValues;
   action: (formData: FormData) => Promise<void>;
+  // Offered by the CSV import when the lead arrived with a staff count and
+  // category A has never been answered. It pre-selects an option and says so —
+  // it is not a score until this form is saved, which is the whole point: a
+  // number off a scrape is evidence, not a judgement.
+  staffSizeSuggestion?: StaffSizeSuggestion | null;
 }) {
-  const [answers, setAnswers] = useState(values);
+  const suggestingStaffSize =
+    staffSizeSuggestion != null && values.icpStaffSize == null;
+  const [answers, setAnswers] = useState(() =>
+    suggestingStaffSize
+      ? { ...values, icpStaffSize: staffSizeSuggestion!.points }
+      : values,
+  );
 
   const result = useMemo(() => scoreIcp(answers as IcpAnswers), [answers]);
   const { disqualified } = result;
@@ -173,6 +190,20 @@ export default function IcpScorecard({
               <p className="mb-2 mt-1 text-xs leading-relaxed text-muted">
                 {category.guidance}
               </p>
+              {suggestingStaffSize && category.key === "icpStaffSize" && (
+                <p className="mb-2 rounded-[10px] border border-accent/30 bg-accent/5 px-3.5 py-2 text-xs leading-relaxed text-muted">
+                  Imported staff count of{" "}
+                  <span className="num font-medium text-ink">
+                    {staffSizeSuggestion!.staffCount}
+                  </span>{" "}
+                  suggests{" "}
+                  <span className="num font-medium text-ink">
+                    {staffSizeSuggestion!.points} pt
+                  </span>
+                  , pre-selected below. Change it if the headcount is wrong —
+                  nothing is scored until you save this card.
+                </p>
+              )}
               <div className="space-y-2" role="radiogroup">
                 {category.options.map((option) => {
                   const selected = answers[category.key] === option.points;

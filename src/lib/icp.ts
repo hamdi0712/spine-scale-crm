@@ -171,6 +171,22 @@ export const ICP_CATEGORIES: IcpCategory[] = [
   },
 ];
 
+// A raw headcount read onto category A's bands, for leads imported with a
+// staff count attached (src/lib/leadImport.ts). It is only ever a suggestion:
+// the scorecard pre-selects it, and nothing is stored until someone opens the
+// card and saves it — scoring is a decision, not a side effect of an import.
+//
+// 16–20 is read as the borderline band, so a clinic on exactly 20 scores 1
+// rather than falling into "20+".
+export function suggestedStaffSizeScore(
+  staff: number | null | undefined,
+): number | null {
+  if (staff == null || !Number.isFinite(staff) || staff < 1) return null;
+  if (staff >= 3 && staff <= 15) return 2;
+  if (staff === 2 || (staff >= 16 && staff <= 20)) return 1;
+  return 0; // a single-hand operation, or a group too big for the model
+}
+
 // ─── Layer 2, D: automation gaps (one point each) ──────────────────────────
 
 export const ICP_GAP_KEYS = [

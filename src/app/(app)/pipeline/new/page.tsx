@@ -48,6 +48,41 @@ export default function NewLeadPage() {
             <input id="email" name="email" type="email" className="field" />
           </div>
           <div>
+            <label className="field-label" htmlFor="linkedinUrl">
+              LinkedIn URL
+            </label>
+            <input
+              id="linkedinUrl"
+              name="linkedinUrl"
+              placeholder="Contact's profile"
+              className="field"
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="companyLinkedinUrl">
+              Company LinkedIn URL
+            </label>
+            <input
+              id="companyLinkedinUrl"
+              name="companyLinkedinUrl"
+              placeholder="Clinic's company page"
+              className="field"
+            />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="staffCountRaw">
+              Staff count
+            </label>
+            <input
+              id="staffCountRaw"
+              name="staffCountRaw"
+              type="number"
+              min="0"
+              step="1"
+              className="field num"
+            />
+          </div>
+          <div>
             <label className="field-label" htmlFor="estValue">
               Est. deal value ($/mo)
             </label>
