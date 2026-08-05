@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { IconBrandLinkedin } from "@tabler/icons-react";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { ICP_TIER_LABELS, ICP_TIER_ORDER, IcpTier } from "@/lib/icp";
 import { fmtDate, fmtMoney } from "@/lib/format";
@@ -159,7 +160,12 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
                     {lead.clinicName}
                   </Link>
                 </td>
-                <td className="td text-muted">{lead.contactName ?? "—"}</td>
+                <td className="td text-muted">
+                  <span className="inline-flex items-center gap-1.5">
+                    {lead.contactName ?? "—"}
+                    <LinkedInLink lead={lead} />
+                  </span>
+                </td>
                 <td className="td text-muted">{lead.leadSource ?? "—"}</td>
                 <td className="td">
                   <StageBadge stage={lead.stage} />
@@ -193,5 +199,33 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
         </table>
       </div>
     </div>
+  );
+}
+
+// The row's outreach link: the contact's profile where there is one, the
+// clinic's company page where there is only that, and nothing at all
+// otherwise — an empty column is quieter than a row of dead icons.
+//
+// It opens LinkedIn and stops there. Nothing in the app sends a connection
+// request or a message; the work on the other side of this link is done by
+// hand, deliberately.
+function LinkedInLink({ lead }: { lead: KanbanLead }) {
+  const href = lead.linkedinUrl ?? lead.companyLinkedinUrl;
+  if (!href) return null;
+  const label = lead.linkedinUrl
+    ? `Open ${lead.contactName ?? lead.clinicName} on LinkedIn`
+    : `Open ${lead.clinicName}'s LinkedIn company page`;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title={label}
+      aria-label={label}
+      onClick={(e) => e.stopPropagation()}
+      className="text-muted transition-colors hover:text-accent"
+    >
+      <IconBrandLinkedin size={16} stroke={1.75} aria-hidden />
+    </a>
   );
 }

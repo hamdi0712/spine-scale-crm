@@ -13,6 +13,16 @@ import {
   IcpAnswers,
   triggeredSummary,
 } from "@/lib/icp";
+import {
+  IMPORT_DEFAULT_STAGE,
+  ImportSummary,
+  ImportedLead,
+  MAX_IMPORT_ROWS,
+  dedupeKey,
+  mapRow,
+  mappedColumn,
+  readMapping,
+} from "@/lib/leadImport";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -26,6 +36,11 @@ function num(formData: FormData, key: string): number | null {
   if (v === null) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+function int(formData: FormData, key: string): number | null {
+  const n = num(formData, key);
+  return n === null ? null : Math.round(n);
 }
 
 function date(formData: FormData, key: string): Date | null {
@@ -42,6 +57,9 @@ function leadFields(formData: FormData) {
     phone: str(formData, "phone"),
     email: str(formData, "email"),
     leadSource: str(formData, "leadSource"),
+    linkedinUrl: str(formData, "linkedinUrl"),
+    companyLinkedinUrl: str(formData, "companyLinkedinUrl"),
+    staffCountRaw: int(formData, "staffCountRaw"),
     estValue: num(formData, "estValue"),
     nextFollowUp: date(formData, "nextFollowUp"),
   };
@@ -51,6 +69,85 @@ export async function createLead(formData: FormData) {
   const lead = await prisma.lead.create({ data: leadFields(formData) });
   revalidatePath("/pipeline");
   redirect(`/pipeline/${lead.id}`);
+}
+
+// Bulk import from a mapped CSV (src/components/LeadImportWizard.tsx). The
+// wizard posts the raw rows plus the column mapping the user confirmed, and
+// the rows are read here with the same helpers that produced the preview — so
+// what was previewed is what gets written.
+//
+// Nothing about the ICP scorecard is touched. A staff count comes in as
+// staffCountRaw and stays there until someone opens the scorecard and saves it.
+export async function importLeads(formData: FormData) {
+  const rows = parseJson<string[][]>(formData, "rows");
+  const rawMapping = parseJson<unknown[]>(formData, "mapping");
+  if (!Array.isArray(rows) || rows.length === 0) redirect("/pipeline/import");
+
+  const mapping = readMapping(rawMapping, Array.isArray(rawMapping) ? rawMapping.length : 0);
+  if (mappedColumn(mapping, "clinicName") === -1) redirect("/pipeline/import");
+
+  const capped = rows.slice(0, MAX_IMPORT_ROWS);
+  const summary: ImportSummary = {
+    created: 0,
+    // Rows dropped past the cap are counted as skipped like any other row that
+    // produced no lead, so the summary always accounts for the whole file.
+    skipped: rows.length - capped.length,
+    duplicates: 0,
+  };
+
+  // One read of the existing keys up front, rather than a lookup per row.
+  const existing = await prisma.lead.findMany({
+    select: { clinicName: true, contactName: true },
+  });
+  const seen = new Set(
+    existing.map((l) => dedupeKey(l.clinicName, l.contactName)),
+  );
+
+  const toCreate: ImportedLead[] = [];
+  for (const row of capped) {
+    const lead = Array.isArray(row) ? mapRow(row, mapping) : null;
+    if (!lead) {
+      summary.skipped++;
+      continue;
+    }
+    const key = dedupeKey(lead.clinicName, lead.contactName);
+    // seen grows as the batch is read, so a file that repeats a clinic inside
+    // itself imports it once.
+    if (seen.has(key)) {
+      summary.duplicates++;
+      continue;
+    }
+    seen.add(key);
+    toCreate.push(lead);
+  }
+
+  if (toCreate.length > 0) {
+    await prisma.$transaction(
+      toCreate.map((lead) =>
+        prisma.lead.create({
+          data: { ...lead, stage: IMPORT_DEFAULT_STAGE },
+        }),
+      ),
+    );
+    summary.created = toCreate.length;
+  }
+
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+  // The table view lists what just landed; the counts drive the banner on it.
+  redirect(
+    `/pipeline?view=table&imported=${summary.created}&duplicates=${summary.duplicates}&skipped=${summary.skipped}`,
+  );
+}
+
+function parseJson<T>(formData: FormData, key: string): T | null {
+  const raw = str(formData, key);
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
 export async function updateLead(id: string, formData: FormData) {

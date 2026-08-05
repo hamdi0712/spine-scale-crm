@@ -10,7 +10,11 @@ import {
 } from "@/lib/actions/leads";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
-import { ICP_SCORING_RULE, leadTier } from "@/lib/icp";
+import {
+  ICP_SCORING_RULE,
+  leadTier,
+  suggestedStaffSizeScore,
+} from "@/lib/icp";
 import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
@@ -40,6 +44,7 @@ export default async function LeadDetailPage({
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
   const saveScorecard = saveIcpScorecard.bind(null, lead.id);
+  const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
 
   return (
     <div>
@@ -144,6 +149,44 @@ export default async function LeadDetailPage({
                 />
               </div>
               <div>
+                <label className="field-label" htmlFor="linkedinUrl">
+                  LinkedIn URL
+                </label>
+                <input
+                  id="linkedinUrl"
+                  name="linkedinUrl"
+                  defaultValue={lead.linkedinUrl ?? ""}
+                  placeholder="Contact's profile"
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="companyLinkedinUrl">
+                  Company LinkedIn URL
+                </label>
+                <input
+                  id="companyLinkedinUrl"
+                  name="companyLinkedinUrl"
+                  defaultValue={lead.companyLinkedinUrl ?? ""}
+                  placeholder="Clinic's company page"
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="staffCountRaw">
+                  Staff count
+                </label>
+                <input
+                  id="staffCountRaw"
+                  name="staffCountRaw"
+                  type="number"
+                  min="0"
+                  step="1"
+                  defaultValue={lead.staffCountRaw ?? ""}
+                  className="field num"
+                />
+              </div>
+              <div>
                 <label className="field-label" htmlFor="estValue">
                   Est. deal value ($/mo)
                 </label>
@@ -187,6 +230,33 @@ export default async function LeadDetailPage({
                 </select>
               </div>
             </div>
+            {/* A launchpad for outreach done by hand, sitting with the contact
+                details it belongs to. Opening a profile is the whole feature —
+                nothing here sends, connects, or messages anyone. */}
+            {(lead.linkedinUrl || lead.companyLinkedinUrl) && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-5">
+                {lead.linkedinUrl && (
+                  <a
+                    href={lead.linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    View LinkedIn profile ↗
+                  </a>
+                )}
+                {lead.companyLinkedinUrl && (
+                  <a
+                    href={lead.companyLinkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    View company page ↗
+                  </a>
+                )}
+              </div>
+            )}
             <div className="flex justify-end border-t border-line/60 pt-5">
               <button type="submit" className="btn-primary">
                 Save changes
@@ -250,6 +320,14 @@ export default async function LeadDetailPage({
         </div>
         <IcpScorecard
           action={saveScorecard}
+          // A staff count that came in with the lead (usually from a CSV
+          // import) suggests category A's band. Computed here, offered by the
+          // card, and stored by nothing until the card is saved.
+          staffSizeSuggestion={
+            staffSizeSuggestion == null || lead.staffCountRaw == null
+              ? null
+              : { staffCount: lead.staffCountRaw, points: staffSizeSuggestion }
+          }
           values={{
             icpDqSurgicalPractice: lead.icpDqSurgicalPractice,
             icpDqSoloNoStaff: lead.icpDqSoloNoStaff,

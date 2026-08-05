@@ -25,6 +25,18 @@ model Lead {
   estValue     Float?
   nextFollowUp DateTime?
   archived     Boolean    @default(false) // set when converted to a client (or otherwise closed out)
+
+  // Prospecting detail, mostly arriving through the CSV import
+  // (src/lib/leadImport.ts) but editable by hand like everything else.
+  linkedinUrl        String? // the contact's own profile
+  companyLinkedinUrl String? // the clinic's company page
+
+  // Headcount exactly as the source reported it. Deliberately separate from
+  // icpStaffSize below: that field is the scorecard's 0–2 band, and collapsing
+  // the two would throw away the number the band was read off. The import can
+  // suggest a band from it, but only a human saving the scorecard stores one.
+  staffCountRaw Int?
+
   notes        LeadNote[]
   calls        Call[]
   activity     ActivityLog[]
