@@ -2,12 +2,15 @@
 
 Single-user internal tool for running the Spine Scale agency: sales pipeline,
 signed clients with delivery checklists, weekly KPI reporting, and a reference
-library. Runs locally against a SQLite file — no external services.
+library. Runs locally against a SQLite file. The only external service it can
+talk to is Apify, and only when the lead import is pointed at it — leave
+`APIFY_API_TOKEN` unset and nothing in the app calls out anywhere.
 
 ## Run it locally
 
 ```bash
 cp .env.example .env   # then edit APP_PASSWORD in .env
+                       # APIFY_API_TOKEN is optional — only the Apify import needs it
 npm install
 npm run dev
 ```
@@ -126,6 +129,30 @@ again.
   a band on the lead's scorecard (3–15 = 2, 2 or 16–20 = 1, 1 or 20+ = 0), and
   the suggestion sits there pre-selected and editable until the card is saved.
   Nothing is scored by an import — scoring is a decision someone makes.
+
+  **Import from Apify** is the same import with a live source. Give it an actor
+  or task ID and the actor's input as JSON, and the server calls Apify's
+  `run-sync-get-dataset-items` — one request that starts the run, waits for it,
+  and returns the dataset — then hands the items to the same mapping step. The
+  dataset's JSON keys are the columns, nested objects flattened to dotted paths
+  (`company.name`), the keys of every item pooled so a field only some records
+  carry is still offered. From there it is identical to the CSV path: map,
+  preview five rows, confirm, same duplicate check.
+
+  `APIFY_API_TOKEN` lives in `.env` beside `APP_PASSWORD` and is read only in
+  `src/lib/apify.ts`, which is server-side and sends it as a bearer header —
+  never in a URL, never in a payload the browser sees. A missing token, a
+  rejected one, an unknown actor, an input Apify won't accept, spent credits,
+  and a run that overruns its two minutes each come back as their own sentence
+  saying what to do about it. Leave the token unset and only the CSV import
+  works; nothing else in the app changes.
+
+  Imported leads carry their **LinkedIn URLs** through to where outreach
+  happens: *View LinkedIn profile* and *View company page* on the lead record,
+  and a small LinkedIn glyph on each pipeline table row that has one (the
+  contact's profile, or the company page when that is all there is). They open
+  LinkedIn in a new tab and nothing else — this is a launchpad for outreach
+  done by hand, not automated outreach.
 - **Clients** — signed clinics with package/fee/contract details, GHL and Meta
   Ads reference links, an invoice log, and a per-client delivery checklist
   (seeded with the standard Disc Relief Pipeline OS items, fully editable per

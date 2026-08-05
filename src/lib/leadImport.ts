@@ -73,25 +73,76 @@ export const IMPORT_PREVIEW_ROWS = 5;
 // than half way through writing it.
 export const MAX_IMPORT_ROWS = 1000;
 
-export const IMPORT_WIZARD_STEPS = [
-  {
-    n: 1,
-    title: "Upload CSV",
-    blurb:
+// The two ways rows get into the wizard. Everything after step 1 is identical
+// between them, so the source only changes that step and the noun the mapping
+// step uses for the things it is mapping.
+export const IMPORT_SOURCES = ["csv", "apify"] as const;
+
+export type ImportSource = (typeof IMPORT_SOURCES)[number];
+
+interface ImportSourceMeta {
+  step1Title: string;
+  step1Blurb: string;
+  mapTitle: string;
+  columnHeading: string;
+}
+
+export const IMPORT_SOURCE_META: Record<ImportSource, ImportSourceMeta> = {
+  csv: {
+    step1Title: "Upload CSV",
+    step1Blurb:
       "Any CSV export — the columns are read off the file itself, in whatever order they came in.",
+    mapTitle: "Map columns",
+    columnHeading: "CSV column",
   },
-  {
-    n: 2,
-    title: "Map columns",
-    blurb:
-      "Point each column at the field it fills. Anything left unmapped is ignored.",
+  apify: {
+    step1Title: "Run the actor",
+    step1Blurb:
+      "The run happens on the server, with the API token that never leaves it. Its results come back here to be mapped.",
+    mapTitle: "Map fields",
+    columnHeading: "Dataset field",
   },
-  {
-    n: 3,
-    title: "Preview & confirm",
-    blurb: "The first rows exactly as they will be created. Nothing is saved until you confirm.",
-  },
-];
+};
+
+export function importWizardSteps(source: ImportSource) {
+  const meta = IMPORT_SOURCE_META[source];
+  return [
+    { n: 1, title: meta.step1Title, blurb: meta.step1Blurb },
+    {
+      n: 2,
+      title: meta.mapTitle,
+      blurb:
+        "Point each one at the field it fills. Anything left unmapped is ignored.",
+    },
+    {
+      n: 3,
+      title: "Preview & confirm",
+      blurb:
+        "The first rows exactly as they will be created. Nothing is saved until you confirm.",
+    },
+  ];
+}
+
+// What a source hands the wizard: the columns it detected and the rows behind
+// them, whatever the source was. A CSV produces this from its header row; an
+// Apify run produces it from the keys of the dataset items. Everything past
+// step 1 — mapping, preview, confirm — only ever sees this shape, which is why
+// there is one wizard and not two.
+//
+// Declared here rather than beside the Apify client because a "use server"
+// module can export nothing but async functions, and the browser needs the
+// type. Nothing in this file touches the network or the token.
+export type ApifyFetchResult =
+  | { ok: true; label: string; headers: string[]; rows: string[][] }
+  | { ok: false; error: string };
+
+// The two things an Apify import needs from the user, and the placeholder that
+// shows what the second one looks like.
+export const APIFY_INPUT_PLACEHOLDER = `{
+  "searchQuery": "chiropractor",
+  "location": "Austin, TX",
+  "maxResults": 100
+}`;
 
 // One entry per detected column, in header order: the Lead field that column
 // fills, or null for "don't import". Column-indexed rather than field-indexed

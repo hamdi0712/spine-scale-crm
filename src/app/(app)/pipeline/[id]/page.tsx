@@ -230,6 +230,33 @@ export default async function LeadDetailPage({
                 </select>
               </div>
             </div>
+            {/* A launchpad for outreach done by hand, sitting with the contact
+                details it belongs to. Opening a profile is the whole feature —
+                nothing here sends, connects, or messages anyone. */}
+            {(lead.linkedinUrl || lead.companyLinkedinUrl) && (
+              <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-5">
+                {lead.linkedinUrl && (
+                  <a
+                    href={lead.linkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    View LinkedIn profile ↗
+                  </a>
+                )}
+                {lead.companyLinkedinUrl && (
+                  <a
+                    href={lead.companyLinkedinUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    View company page ↗
+                  </a>
+                )}
+              </div>
+            )}
             <div className="flex justify-end border-t border-line/60 pt-5">
               <button type="submit" className="btn-primary">
                 Save changes

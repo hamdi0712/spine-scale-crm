@@ -1,29 +1,37 @@
 "use client";
 
-// The CSV lead import — upload, map, preview, confirm.
+// The lead import — pick a source, map its columns, preview, confirm.
 //
-// The file never leaves the browser until the last step: it is parsed here so
-// the real headers can be shown and mapped, and only the rows plus the
-// confirmed mapping are posted. Nothing about the columns is guessed — every
-// column starts unmapped, because the whole point is that two Apify actors
-// scraping the same thing export different headers in a different order.
+// Two sources feed the same three steps. A CSV is parsed in the browser, so
+// the file never leaves it until the last step; an Apify run happens on the
+// server, because the API token lives there and nowhere else. Both arrive at
+// step 2 as the same thing: a list of detected columns and the rows behind
+// them, which is why there is one wizard rather than two.
+//
+// Nothing about the columns is ever guessed — every one starts unmapped,
+// because the whole point is that two actors scraping the same thing return
+// different fields under different names in a different order.
 //
 // Like the other wizards in the app, the visible controls are unnamed and
 // bound to state; two hidden inputs carry the payload into the post.
 
 import { useMemo, useState } from "react";
 import { parseCsv } from "@/lib/csv";
+import { fetchApifyDataset } from "@/lib/actions/apify";
 import {
+  APIFY_INPUT_PLACEHOLDER,
   ColumnMapping,
   IMPORT_DEFAULT_SOURCE,
   IMPORT_DEFAULT_STAGE,
   IMPORT_FIELDS,
   IMPORT_PREVIEW_ROWS,
-  IMPORT_WIZARD_STEPS,
+  IMPORT_SOURCE_META,
   ImportFieldKey,
+  ImportSource,
   ImportedLead,
   MAX_IMPORT_ROWS,
   dedupeKey,
+  importWizardSteps,
   isImportFieldKey,
   mapRow,
   mappedColumn,
@@ -33,25 +41,43 @@ import { suggestedStaffSizeScore } from "@/lib/icp";
 import { fmtMoney } from "@/lib/format";
 import WizardProgress from "@/components/WizardProgress";
 
-interface Parsed {
-  fileName: string;
+// What either source hands to step 2: what it was, what columns it found, and
+// the rows behind them.
+interface Loaded {
+  label: string;
   headers: string[];
   rows: string[][];
 }
 
 export default function LeadImportWizard({
   action,
+  source,
 }: {
   action: (formData: FormData) => Promise<void>;
+  source: ImportSource;
 }) {
+  const steps = importWizardSteps(source);
+  const sourceMeta = IMPORT_SOURCE_META[source];
+
   const [step, setStep] = useState(1);
-  const [parsed, setParsed] = useState<Parsed | null>(null);
+  const [parsed, setParsed] = useState<Loaded | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  const meta = IMPORT_WIZARD_STEPS[step - 1];
+  // Apify step 1 only. Unnamed like every other control here, so none of it
+  // posts with the import.
+  const [apifyKind, setApifyKind] = useState("actor");
+  const [apifyId, setApifyId] = useState("");
+  const [apifyInput, setApifyInput] = useState("");
+  const [running, setRunning] = useState(false);
+
+  const meta = steps[step - 1];
   const clinicMapped = mappedColumn(mapping, "clinicName") !== -1;
+  const canRun = !running && apifyId.trim() !== "";
+  // What the thing being mapped is called, so the copy fits the source it
+  // came from: a CSV has columns, a dataset item has fields.
+  const noun = source === "csv" ? "column" : "field";
 
   // Every row the mapping can actually turn into a lead, and what happened to
   // the rest, so the confirm step states all of it before anything is written.
@@ -101,13 +127,46 @@ export default function LeadImportWizard({
         );
         return;
       }
-      setParsed({ fileName: file.name, headers: table.headers, rows: table.rows });
+      setParsed({ label: file.name, headers: table.headers, rows: table.rows });
       // A new file means new columns — start every one of them unmapped.
       setMapping(table.headers.map(() => null));
     } catch {
       setParsed(null);
       setMapping([]);
       setError("That file could not be read as CSV.");
+    }
+  }
+
+  // Runs the actor and waits for it. Everything that can go wrong — a missing
+  // token, a bad ID, spent credits, a run that overruns — comes back as a
+  // sentence in result.error rather than an exception, and is shown as-is.
+  async function runApify() {
+    setError(null);
+    setRunning(true);
+    try {
+      const result = await fetchApifyDataset({
+        kind: apifyKind,
+        id: apifyId,
+        input: apifyInput,
+      });
+      if (!result.ok) {
+        setParsed(null);
+        setMapping([]);
+        setError(result.error);
+        return;
+      }
+      setParsed({
+        label: result.label,
+        headers: result.headers,
+        rows: result.rows,
+      });
+      setMapping(result.headers.map(() => null));
+    } catch {
+      setError(
+        "The run could not be reached. Check the server is still up and try again.",
+      );
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -124,7 +183,19 @@ export default function LeadImportWizard({
   }
 
   return (
-    <form action={action}>
+    <form
+      action={action}
+      // Enter inside a field would otherwise submit the import from whichever
+      // step is on screen. On the Apify step it runs the actor instead, which
+      // is what pressing Enter in that form plainly means.
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "TEXTAREA") return;
+        e.preventDefault();
+        if (step === 1 && source === "apify" && canRun) void runApify();
+      }}
+    >
       <input type="hidden" name="mapping" value={JSON.stringify(mapping)} />
       <input
         type="hidden"
@@ -133,7 +204,7 @@ export default function LeadImportWizard({
       />
 
       <WizardProgress
-        steps={IMPORT_WIZARD_STEPS}
+        steps={steps}
         current={step}
         note="Nothing is created until you confirm."
       />
@@ -147,73 +218,146 @@ export default function LeadImportWizard({
         </div>
 
         <div className="space-y-6 p-6">
-          {/* ─── Step 1 — upload ────────────────────────────────────────── */}
-          {step === 1 && (
-            <>
-              <label
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragging(true);
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragging(false);
-                  const file = e.dataTransfer.files?.[0];
+          {/* ─── Step 1a — upload a CSV ─────────────────────────────────── */}
+          {step === 1 && source === "csv" && (
+            <label
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragging(true);
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragging(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) void readFile(file);
+              }}
+              className={`flex cursor-pointer flex-col items-center gap-3 rounded-[10px] border border-dashed px-6 py-10 text-center transition-colors ${
+                dragging ? "border-accent bg-accent/5" : "border-line hover:bg-wash/70"
+              }`}
+            >
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
                   if (file) void readFile(file);
+                  // Clear the input so re-picking the same file re-reads it.
+                  e.target.value = "";
                 }}
-                className={`flex cursor-pointer flex-col items-center gap-3 rounded-[10px] border border-dashed px-6 py-10 text-center transition-colors ${
-                  dragging ? "border-accent bg-accent/5" : "border-line hover:bg-wash/70"
-                }`}
-              >
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void readFile(file);
-                    // Clear the input so re-picking the same file re-reads it.
-                    e.target.value = "";
-                  }}
+              />
+              <span className="btn pointer-events-none">Choose a CSV file</span>
+              <span className="text-xs leading-relaxed text-muted">
+                or drop it here — Apify exports, spreadsheet exports, anything
+                with a header row
+              </span>
+            </label>
+          )}
+
+          {/* ─── Step 1b — run an Apify actor or task ────────────────────── */}
+          {step === 1 && source === "apify" && (
+            <>
+              <div className="grid grid-cols-[150px_1fr] gap-4">
+                <div>
+                  <label className="field-label" htmlFor="apify-kind">
+                    Run a
+                  </label>
+                  <select
+                    id="apify-kind"
+                    value={apifyKind}
+                    onChange={(e) => setApifyKind(e.target.value)}
+                    className="field"
+                  >
+                    <option value="actor">Actor</option>
+                    <option value="task">Task</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="field-label" htmlFor="apify-id">
+                    {apifyKind === "task" ? "Task ID" : "Actor ID"}
+                  </label>
+                  <input
+                    id="apify-id"
+                    value={apifyId}
+                    onChange={(e) => setApifyId(e.target.value)}
+                    placeholder="apimaestro~linkedin-profile-search or the 17-character ID"
+                    className="field"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="field-label" htmlFor="apify-input">
+                  Input parameters (JSON)
+                </label>
+                <textarea
+                  id="apify-input"
+                  value={apifyInput}
+                  onChange={(e) => setApifyInput(e.target.value)}
+                  rows={10}
+                  spellCheck={false}
+                  placeholder={APIFY_INPUT_PLACEHOLDER}
+                  className="field font-mono text-xs"
                 />
-                <span className="btn pointer-events-none">Choose a CSV file</span>
+                <p className="mt-2 text-xs leading-relaxed text-muted">
+                  Paste it from the {apifyKind}’s own input tab in the Apify
+                  console. Leave it empty to run with the {apifyKind}’s
+                  defaults.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* Primary until there are results to move on with — after
+                    that Continue is the step's real action and this drops back
+                    to a secondary re-run. */}
+                <button
+                  type="button"
+                  onClick={() => void runApify()}
+                  disabled={!canRun}
+                  className={`${parsed ? "btn" : "btn-primary"} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {running ? "Running…" : parsed ? "Run again" : "Run and fetch results"}
+                </button>
                 <span className="text-xs leading-relaxed text-muted">
-                  or drop it here — Apify exports, spreadsheet exports, anything
-                  with a header row
+                  {running
+                    ? "Waiting for the run to finish — this can take a couple of minutes."
+                    : `The run is charged to the account the token belongs to.`}
                 </span>
-              </label>
-
-              {error && (
-                <div className="rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
-                  <p className="text-sm font-medium text-bad">
-                    Couldn’t read that file
-                  </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                    {error}
-                  </p>
-                </div>
-              )}
-
-              {parsed && (
-                <div className="rounded-[10px] border border-line bg-wash/50 px-4 py-3">
-                  <p className="text-sm font-medium">{parsed.fileName}</p>
-                  <p className="num mt-0.5 text-xs leading-relaxed text-muted">
-                    {parsed.rows.length} row
-                    {parsed.rows.length === 1 ? "" : "s"} ·{" "}
-                    {parsed.headers.length} column
-                    {parsed.headers.length === 1 ? "" : "s"} detected
-                  </p>
-                  {overCap > 0 && (
-                    <p className="num mt-1 text-xs leading-relaxed text-warn">
-                      Only the first {MAX_IMPORT_ROWS} rows will be imported —{" "}
-                      {overCap} beyond that are ignored. Split the file to bring
-                      in the rest.
-                    </p>
-                  )}
-                </div>
-              )}
+              </div>
             </>
+          )}
+
+          {/* Both sources report the same two ways: what went wrong, or what
+              came back. */}
+          {step === 1 && error && (
+            <div className="rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
+              <p className="text-sm font-medium text-bad">
+                {source === "csv" ? "Couldn’t read that file" : "The run didn’t return anything to import"}
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                {error}
+              </p>
+            </div>
+          )}
+
+          {step === 1 && parsed && (
+            <div className="rounded-[10px] border border-line bg-wash/50 px-4 py-3">
+              <p className="text-sm font-medium">{parsed.label}</p>
+              <p className="num mt-0.5 text-xs leading-relaxed text-muted">
+                {parsed.rows.length} row
+                {parsed.rows.length === 1 ? "" : "s"} ·{" "}
+                {parsed.headers.length} {noun}
+                {parsed.headers.length === 1 ? "" : "s"} detected
+              </p>
+              {overCap > 0 && (
+                <p className="num mt-1 text-xs leading-relaxed text-warn">
+                  Only the first {MAX_IMPORT_ROWS} rows will be imported —{" "}
+                  {overCap} beyond that are ignored. Narrow the run, or split
+                  the file, to bring in the rest.
+                </p>
+              )}
+            </div>
           )}
 
           {/* ─── Step 2 — map columns ───────────────────────────────────── */}
@@ -223,7 +367,7 @@ export default function LeadImportWizard({
                 <table className="w-full">
                   <thead>
                     <tr>
-                      <th className="th">CSV column</th>
+                      <th className="th">{sourceMeta.columnHeading}</th>
                       <th className="th">First value</th>
                       <th className="th">Imports as</th>
                     </tr>
@@ -268,7 +412,7 @@ export default function LeadImportWizard({
               {!clinicMapped && (
                 <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
                   <p className="text-sm font-medium text-ink">
-                    Map a column to Clinic name to continue
+                    Map a {noun} to Clinic name to continue
                   </p>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted">
                     It is the one field a lead cannot be created without.

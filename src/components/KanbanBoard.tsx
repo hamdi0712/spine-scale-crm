@@ -19,6 +19,10 @@ export interface KanbanLead {
   nextFollowUp: string | null;
   createdAt: string;
   icpTier: IcpTier | null;
+  // Carried for the table's LinkedIn link. The board cards deliberately do not
+  // show it — a card is a thing to drag, not a launchpad.
+  linkedinUrl: string | null;
+  companyLinkedinUrl: string | null;
 }
 
 export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {

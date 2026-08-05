@@ -67,6 +67,8 @@ export default async function PipelinePage({
     estValue: l.estValue,
     nextFollowUp: l.nextFollowUp ? l.nextFollowUp.toISOString() : null,
     createdAt: l.createdAt.toISOString(),
+    linkedinUrl: l.linkedinUrl,
+    companyLinkedinUrl: l.companyLinkedinUrl,
     // Derived here so the board and table stay presentational.
     icpTier: leadTier(l),
   }));
@@ -104,7 +106,10 @@ export default async function PipelinePage({
             </Link>
           </div>
           <Link href="/pipeline/import" className="btn">
-            Import leads
+            Import CSV
+          </Link>
+          <Link href="/pipeline/import/apify" className="btn">
+            Import from Apify
           </Link>
           <Link href="/pipeline/new" className="btn-primary">
             New lead
