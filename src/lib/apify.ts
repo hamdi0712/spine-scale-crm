@@ -11,7 +11,11 @@
 // import can be a single button press rather than a polling loop — and why a
 // long-running actor comes back as a timeout rather than a background job.
 
-import { ApifyFetchResult, MAX_IMPORT_ROWS } from "@/lib/leadImport";
+import {
+  ApifyFetchResult,
+  MAX_IMPORT_ROWS,
+  NESTED_FIELD_SEPARATOR,
+} from "@/lib/leadImport";
 
 export const APIFY_SOURCE_KINDS = ["actor", "task"] as const;
 
@@ -223,7 +227,7 @@ export function itemsToTable(
   const flattened: Record<string, string>[] = [];
 
   for (const item of items.slice(0, limit)) {
-    const flat = flatten(item);
+    const flat = withNestedFields(flatten(item));
     flattened.push(flat);
     for (const key of Object.keys(flat)) {
       if (!seen.has(key)) {
@@ -237,6 +241,80 @@ export function itemsToTable(
     headers,
     rows: flattened.map((flat) => headers.map((h) => flat[h] ?? "")),
   };
+}
+
+// Lists of objects that a mapping cannot use as they stand, and the property
+// inside them that it can. flatten() leaves such a list as one cell of JSON —
+// honest, but unmappable: nobody can point Clinic name at
+// [{"companyName":"Austin Spine",…}]. Each rule here says which property to
+// lift out of the list, and the lifted value is offered as a column of its own
+// beside the raw one.
+//
+// This is a short list on purpose. It exists because the LinkedIn profile
+// actors put the employer in currentPositions rather than in a field of its
+// own, not as a general query language — an actor nesting something else is a
+// new entry here, and everything else stays a mapping rather than a code
+// change.
+const NESTED_FIELD_RULES: { list: string; property: string; label: string }[] = [
+  { list: "currentPositions", property: "companyName", label: "company name" },
+];
+
+// Adds the derived columns to one flattened item, each immediately after the
+// list it was pulled out of, so the mapping step shows the two next to each
+// other. A rule that finds nothing adds no column at all: headers are the
+// union of the keys the items actually produced, so a dataset without
+// currentPositions never grows a currentPositions column.
+function withNestedFields(flat: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(flat)) {
+    out[key] = value;
+    // Matched on the last path segment, so a list nested under an object —
+    // profile.currentPositions — is picked up the same as a top-level one.
+    const leaf = key.slice(key.lastIndexOf(".") + 1);
+    for (const rule of NESTED_FIELD_RULES) {
+      if (leaf !== rule.list) continue;
+      const extracted = firstEntryValue(value, rule.property);
+      if (extracted !== null) {
+        out[`${key}${NESTED_FIELD_SEPARATOR}${rule.label}`] = extracted;
+      }
+    }
+  }
+  return out;
+}
+
+// The property as it reads on the first entry of the JSON list — the current
+// employer, the current company, whichever the actor listed first. Entries
+// that carry nothing for it are stepped over rather than ending the search: a
+// profile whose first position predates the company name being recorded still
+// has one further down, and a blank column would look like a lead with no
+// clinic rather than a scrape that needed one more line read.
+//
+// Returns null — no column — rather than "" when the list holds nothing
+// usable, so a dataset where this never lands doesn't gain an empty column.
+function firstEntryValue(json: string, property: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    // Not a list at all: some other field happens to share the name.
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+
+  for (const entry of parsed) {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      continue;
+    }
+    const value = (entry as Record<string, unknown>)[property];
+    if (typeof value === "string") {
+      if (value.trim() !== "") return value.trim();
+      continue;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+  }
+  return null;
 }
 
 const MAX_DEPTH = 3;
