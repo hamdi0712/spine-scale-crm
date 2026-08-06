@@ -176,6 +176,33 @@ export async function moveLeadStage(id: string, stage: string) {
   revalidatePath("/");
 }
 
+// Marks that a LinkedIn connection request went out, and takes it back.
+//
+// The app sends nothing — this is a note that a person did something on
+// LinkedIn, kept here so the pipeline can show who has already been
+// approached. Stamped with the moment it was marked rather than a date the
+// user picks, because the useful question is "has this one been done", and a
+// date field would invite an accuracy the record doesn't have.
+export async function markConnectionRequestSent(id: string) {
+  await prisma.lead.update({
+    where: { id },
+    data: { connectionRequestSentAt: new Date() },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${id}`);
+}
+
+// The way back from a misclick. Clears the mark rather than recording that it
+// was cleared: an unsent request is not an event.
+export async function clearConnectionRequestSent(id: string) {
+  await prisma.lead.update({
+    where: { id },
+    data: { connectionRequestSentAt: null },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${id}`);
+}
+
 function bool(formData: FormData, key: string): boolean {
   return formData.get(key) === "on" || formData.get(key) === "true";
 }

@@ -188,6 +188,15 @@ again.
   contact's profile, or the company page when that is all there is). They open
   LinkedIn in a new tab and nothing else — this is a launchpad for outreach
   done by hand, not automated outreach.
+
+  What the app does keep is a record that the outreach happened. *Mark
+  connection request sent* sits in that same row and stamps the moment it is
+  pressed; from then on it reads *Connection sent 3d ago*, with an undo for the
+  misclick. A green check beside the LinkedIn glyph carries it onto the
+  pipeline table, so a list of forty rows says which of them have already been
+  approached without forty pages being opened to find out. Nothing sends a
+  request — this is a note that a person did, kept where it stops the same
+  clinic being approached twice.
 - **Clients** — signed clinics with package/fee/contract details, GHL and Meta
   Ads reference links, an invoice log, and a per-client delivery checklist
   (seeded with the standard Disc Relief Pipeline OS items, fully editable per

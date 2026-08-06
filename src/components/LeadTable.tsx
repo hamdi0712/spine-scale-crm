@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { IconBrandLinkedin } from "@tabler/icons-react";
+import { IconBrandLinkedin, IconCheck } from "@tabler/icons-react";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { ICP_TIER_LABELS, ICP_TIER_ORDER, IcpTier } from "@/lib/icp";
-import { fmtDate, fmtMoney } from "@/lib/format";
+import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
+import { fmtRelative } from "@/lib/activity";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 
@@ -209,23 +210,45 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
 // It opens LinkedIn and stops there. Nothing in the app sends a connection
 // request or a message; the work on the other side of this link is done by
 // hand, deliberately.
+//
+// Beside it, where one has been marked sent on the lead page, a check — so a
+// list of forty rows says which of them have already been approached without
+// forty pages being opened to find out.
 function LinkedInLink({ lead }: { lead: KanbanLead }) {
   const href = lead.linkedinUrl ?? lead.companyLinkedinUrl;
-  if (!href) return null;
+  const sentAt = lead.connectionRequestSentAt
+    ? new Date(lead.connectionRequestSentAt)
+    : null;
+  if (!href && !sentAt) return null;
   const label = lead.linkedinUrl
     ? `Open ${lead.contactName ?? lead.clinicName} on LinkedIn`
     : `Open ${lead.clinicName}'s LinkedIn company page`;
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      title={label}
-      aria-label={label}
-      onClick={(e) => e.stopPropagation()}
-      className="text-muted transition-colors hover:text-accent"
-    >
-      <IconBrandLinkedin size={16} stroke={1.75} aria-hidden />
-    </a>
+    <span className="inline-flex items-center gap-1">
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          title={label}
+          aria-label={label}
+          onClick={(e) => e.stopPropagation()}
+          className="text-muted transition-colors hover:text-accent"
+        >
+          <IconBrandLinkedin size={16} stroke={1.75} aria-hidden />
+        </a>
+      )}
+      {sentAt && (
+        <span
+          title={`Connection request sent ${fmtRelative(sentAt)} — ${fmtDateTime(sentAt)}`}
+          className="text-ok"
+        >
+          <IconCheck size={13} stroke={2.5} aria-hidden />
+          <span className="sr-only">
+            Connection request sent {fmtRelative(sentAt)}
+          </span>
+        </span>
+      )}
+    </span>
   );
 }

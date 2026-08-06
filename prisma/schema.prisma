@@ -34,6 +34,12 @@ model Lead {
   facebookUrl        String? // the clinic's Facebook page
   location           String? // town or metro, as somebody would search for it
 
+  // When a LinkedIn connection request was sent to this lead, marked by hand
+  // on the lead page. Nothing in the app sends one — this records an act that
+  // happened on LinkedIn, so that the pipeline can show at a glance who has
+  // already been approached and nobody gets approached twice.
+  connectionRequestSentAt DateTime?
+
   // The four above are also the enrichment run's inputs: each actor is built
   // from one of them (src/lib/leadEnrich.ts), and an empty one means that
   // actor is skipped rather than run against nothing.

@@ -75,6 +75,19 @@ const SIGNAL_MAX_CHARS = 200;
 // Also keeps a garbage value inside the range the Int column can hold.
 const MAX_PLAUSIBLE_COUNT = 10_000_000;
 
+// How many ads to pull. One item per ad, and this is both what is asked for
+// and what is read back, so the count and the ceiling can never disagree.
+const FACEBOOK_ADS_CAP = 50;
+
+// The ads scraper's e-commerce enrichment, off, in writing.
+//
+// It is an opt-in add-on and off by default, so this changes nothing today.
+// It is set anyway because it bills per ad for shop data a chiropractic clinic
+// does not have, and a default is somebody else's decision to revisit — an
+// input we send is ours. If the add-on is ever renamed, this is the one line
+// to change.
+const ECOMMERCE_ENRICHMENT_OFF = { enrichWithEcommerceData: false } as const;
+
 // ─── What a run is built from ──────────────────────────────────────────────
 
 // The lead's own fields, and the only thing any actor input is built out of.
@@ -131,10 +144,11 @@ export interface EnrichActor {
 
 // The four actors, by ID.
 //
-// These are store actors, addressed the way the Apify console shows them
-// (`username~name`). Each entry is the whole integration: the ID, the input
-// its schema expects, and the fields its output is read from. Swapping an
-// actor for another that does the same job is an edit to one entry here and to
+// These are the confirmed store actors, addressed the way the Apify console
+// shows them (`username~name`; a pasted `username/name` normalises to the
+// same thing). Each entry is the whole integration: the ID, the input its
+// schema expects, and the fields its output is read from. Swapping an actor
+// for another that does the same job is an edit to one entry here and to
 // nothing else in the app — and if a swapped actor names its output fields
 // differently, adding the new name to that reader's candidate list is the
 // entire change.
@@ -142,24 +156,18 @@ export const ENRICH_ACTORS: EnrichActor[] = [
   {
     key: "companyDetails",
     label: "Company Details",
-    actorId: "apimaestro~linkedin-company-detail",
+    actorId: "harvestapi~linkedin-company",
     requires: "companyLinkedinUrl",
     requiresLabel: "Company LinkedIn URL",
     maxItems: 5,
     writes: ["staffCountRaw"],
     identifies: true,
-    identityFields: ["name", "companyName", "universalName", "website", "linkedinUrl"],
-    buildInput: (inputs) => ({ identifier: inputs.companyLinkedinUrl }),
+    identityFields: ["name", "universalName", "website", "linkedinUrl"],
+    buildInput: (inputs) => ({ companies: [inputs.companyLinkedinUrl] }),
+    // employeeCount is the field this actor reports headcount in. parseCount
+    // takes the lower end of anything banded, so a range answers conservatively.
     read: (table) => {
-      const count = plausibleCount(
-        cell(table, 0, [
-          "employeeCount",
-          "employeesCount",
-          "staffCount",
-          "employeeCountRange",
-          "companySize",
-        ]),
-      );
+      const count = plausibleCount(cell(table, 0, ["employeeCount"]));
       return count === null ? {} : { staffCountRaw: count };
     },
   },
@@ -172,18 +180,21 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     // One item per ad, so this is the only ceiling that is a real limit rather
     // than a formality. A clinic running more than fifty ads at once is not a
     // clinic whose ad count needs another decimal place.
-    maxItems: 50,
+    maxItems: FACEBOOK_ADS_CAP,
     writes: ["metaAdsSignal"],
     identifies: false,
     identityFields: [],
     buildInput: (inputs) => ({
       startUrls: [{ url: inputs.facebookUrl }],
-      // The signal is about what is running now, not what ever ran.
+      // The signal is about what is running now, not what ever ran. The
+      // library is still read past that — an ad that stopped last month is
+      // worth knowing about — but this is what the count is of.
       activeStatus: "active",
-      resultsLimit: 50,
+      resultsLimit: FACEBOOK_ADS_CAP,
+      ...ECOMMERCE_ENRICHMENT_OFF,
     }),
     read: (table) => {
-      const signal = adsSignal(table, 50);
+      const signal = adsSignal(table, FACEBOOK_ADS_CAP);
       return signal === null ? {} : { metaAdsSignal: signal };
     },
   },
@@ -371,32 +382,84 @@ function plausibleCount(raw: string): number | null {
 }
 
 // The ads signal, built from the whole result rather than from any one item:
-// each item is one ad, so the count is the answer and the earliest start date
-// says how long this clinic has been at it. "3 active ads, running 4mo".
+// each item is one ad, so counting the ones still running is the answer and
+// the earliest of their start dates says how long this clinic has been at it.
+// "3 active ads, running 4mo".
+//
+// A library with nothing live in it is worth a sentence of its own rather than
+// a blank, because "advertises, but not right now" and "has never advertised"
+// are different clinics — the scorecard's Budget Signal category scores them
+// one point apart.
 function adsSignal(table: EnrichTable, cap: number): string | null {
-  const count = table.rows.length;
-  if (count === 0) return null;
+  const total = table.rows.length;
+  if (total === 0) return null;
 
-  let earliest: number | null = null;
-  for (let i = 0; i < count; i++) {
-    const at = timestamp(
-      cell(table, i, [
-        "startDate",
-        "start_date",
-        "adDeliveryStartTime",
-        "ad_delivery_start_time",
-        "startDateFormatted",
-      ]),
+  // An actor build that doesn't report isActive at all would otherwise read as
+  // a library with nothing live in it. The run asked for active ads, so with
+  // no flag to go on, that is what these are taken to be.
+  const flagged = hasField(table, ["isActive", "is_active"]);
+
+  let active = 0;
+  let earliestStart: number | null = null;
+  let latestEnd: number | null = null;
+
+  for (let i = 0; i < total; i++) {
+    const isActive =
+      !flagged || isTrue(cell(table, i, ["isActive", "is_active"]));
+    const start = timestamp(
+      cell(table, i, ["startDateFormatted", "startDate", "start_date"]),
     );
-    if (at !== null && (earliest === null || at < earliest)) earliest = at;
+    const end = timestamp(
+      cell(table, i, ["endDateFormatted", "endDate", "end_date"]),
+    );
+
+    if (isActive) {
+      active++;
+      if (start !== null && (earliestStart === null || start < earliestStart)) {
+        earliestStart = start;
+      }
+    } else if (end !== null && (latestEnd === null || end > latestEnd)) {
+      latestEnd = end;
+    }
+  }
+
+  if (active === 0) {
+    const ended =
+      latestEnd === null
+        ? ""
+        : `, last ended ${duration(Date.now() - latestEnd)} ago`;
+    return `No active ads — ${total} in the library${ended}`;
   }
 
   // A result that came back exactly at the ceiling was cut off there, so the
   // count is a floor rather than a total and says so.
-  const capped = count >= cap;
-  const plural = count === 1 && !capped ? "" : "s";
-  const running = earliest === null ? "" : `, running ${duration(Date.now() - earliest)}`;
-  return `${count}${capped ? "+" : ""} active ad${plural}${running}`;
+  const capped = total >= cap;
+  const plural = active === 1 && !capped ? "" : "s";
+  const running =
+    earliestStart === null
+      ? ""
+      : `, running ${duration(Date.now() - earliestStart)}`;
+  return `${active}${capped ? "+" : ""} active ad${plural}${running}`;
+}
+
+// Whether the result carries a field at all, as against carrying it empty —
+// the difference between an actor that doesn't report something and an item
+// that had nothing to report.
+function hasField(table: EnrichTable, candidates: string[]): boolean {
+  return candidates.some((candidate) => {
+    const wanted = candidate.toLowerCase();
+    return table.headers.some(
+      (h) =>
+        h.toLowerCase() === wanted ||
+        h.slice(h.lastIndexOf(".") + 1).toLowerCase() === wanted,
+    );
+  });
+}
+
+// Booleans arrive flattened to text, and not always the same text.
+function isTrue(raw: string): boolean {
+  const v = raw.trim().toLowerCase();
+  return v === "true" || v === "yes" || v === "1";
 }
 
 // Dates arrive as ISO strings, as "April 1, 2025", and as epoch seconds. A

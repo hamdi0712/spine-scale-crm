@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
   addLeadNote,
+  clearConnectionRequestSent,
   convertLeadToClient,
   deleteLead,
+  markConnectionRequestSent,
   saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
@@ -22,6 +24,7 @@ import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
+import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
 import IcpScorecard from "@/components/IcpScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 
@@ -48,6 +51,8 @@ export default async function LeadDetailPage({
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
   const saveScorecard = saveIcpScorecard.bind(null, lead.id);
+  const markConnectionSent = markConnectionRequestSent.bind(null, lead.id);
+  const clearConnectionSent = clearConnectionRequestSent.bind(null, lead.id);
   const runEnrichment = runLeadEnrichment.bind(null, lead.id);
   const applySelection = applyEnrichSelection.bind(null, lead.id);
   const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
@@ -330,7 +335,10 @@ export default async function LeadDetailPage({
             {(lead.linkedinUrl ||
               lead.companyLinkedinUrl ||
               lead.websiteUrl ||
-              lead.facebookUrl) && (
+              lead.facebookUrl ||
+              // A mark outlives the URL it was made against: a profile link
+              // deleted later shouldn't take the record of the outreach with it.
+              lead.connectionRequestSentAt) && (
               <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-5">
                 {lead.linkedinUrl && (
                   <a
@@ -371,6 +379,33 @@ export default async function LeadDetailPage({
                   >
                     View Facebook page ↗
                   </a>
+                )}
+                {/* The one thing in this row that records rather than opens.
+                    Sending the request is still done by hand on LinkedIn; this
+                    is where you say you did it, so the pipeline can show it.
+
+                    Once marked it stops being a button — the useful state is
+                    the date, and a button that has already been pressed is an
+                    invitation to press it again. Offered only where there is a
+                    LinkedIn profile to have sent it to, but shown wherever the
+                    mark exists. */}
+                {(lead.connectionRequestSentAt ||
+                  lead.linkedinUrl ||
+                  lead.companyLinkedinUrl) && (
+                  <ConnectionRequestToggle
+                    sentLabel={
+                      lead.connectionRequestSentAt
+                        ? `Connection sent ${fmtRelative(lead.connectionRequestSentAt)}`
+                        : null
+                    }
+                    sentTitle={
+                      lead.connectionRequestSentAt
+                        ? `Marked sent ${fmtDateTime(lead.connectionRequestSentAt)}`
+                        : null
+                    }
+                    mark={markConnectionSent}
+                    clear={clearConnectionSent}
+                  />
                 )}
               </div>
             )}
