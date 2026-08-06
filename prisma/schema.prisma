@@ -37,6 +37,18 @@ model Lead {
   // suggest a band from it, but only a human saving the scorecard stores one.
   staffCountRaw Int?
 
+  // Enrichment — written by the single-lead Apify run on the lead page
+  // (src/lib/leadEnrich.ts), and by nothing else. Every one of these is a
+  // snapshot of what a scrape saw at one moment, not a live reading, which is
+  // why the review count carries its own timestamp: a count with no date on it
+  // reads as current forever. The ads signal is left freeform on purpose —
+  // "3 active ads, running 4mo" is the useful shape, and no schema of ours
+  // would survive the next actor's idea of how to report it.
+  metaAdsSignal    String?
+  reviewCount      Int?
+  reviewsCheckedAt DateTime? // stamped whenever reviewCount is written
+  websiteNotes     String? // crawled copy, as long as the actor returned it
+
   notes        LeadNote[]
   calls        Call[]
   activity     ActivityLog[]

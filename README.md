@@ -147,6 +147,21 @@ again.
   saying what to do about it. Leave the token unset and only the CSV import
   works; nothing else in the app changes.
 
+  **Enrich this lead**, on a lead's own page, is that same run pointed at one
+  record instead of the pipeline. Same actor ID and JSON input, same
+  server-side call, same errors; the result is flattened by the same code and
+  mapped on the same kind of screen — but the targets are the four things
+  enrichment can say about a clinic (staff count, Meta ads signal, review
+  count, website notes) and the confirm writes them onto the lead already open.
+  It cannot create a lead, it never touches the fields left unmapped, and a run
+  that returns several items says so and lets you pick which one is read.
+
+  What it writes is shown apart from the editable details, because it is a
+  different kind of fact: a reading taken on a day, not a field somebody keeps
+  current. The review count carries the time it was read — *Reviews: 128 ·
+  checked 2w ago* under the clinic name — and after 30 days that turns amber
+  and says to re-run before quoting it. Nothing here refreshes itself.
+
   Imported leads carry their **LinkedIn URLs** through to where outreach
   happens: *View LinkedIn profile* and *View company page* on the lead record,
   and a small LinkedIn glyph on each pipeline table row that has one (the

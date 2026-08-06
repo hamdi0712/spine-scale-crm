@@ -5,6 +5,7 @@ import {
   addLeadNote,
   convertLeadToClient,
   deleteLead,
+  enrichLead,
   saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
@@ -15,11 +16,14 @@ import {
   leadTier,
   suggestedStaffSizeScore,
 } from "@/lib/icp";
+import { REVIEWS_STALE_AFTER_DAYS, reviewsAreStale } from "@/lib/leadEnrich";
+import { fmtRelative } from "@/lib/activity";
 import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import IcpScorecard from "@/components/IcpScorecard";
+import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +48,17 @@ export default async function LeadDetailPage({
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
   const saveScorecard = saveIcpScorecard.bind(null, lead.id);
+  const enrich = enrichLead.bind(null, lead.id);
   const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
+
+  // Enrichment is scraped evidence with a date on it, so it is shown as its
+  // own thing rather than mixed into the editable details — a one-line summary
+  // by the title for a glance, and the values in full further down.
+  const enriched =
+    lead.metaAdsSignal !== null ||
+    lead.reviewCount !== null ||
+    lead.websiteNotes !== null;
+  const reviewsStale = reviewsAreStale(lead.reviewsCheckedAt);
 
   return (
     <div>
@@ -63,8 +77,39 @@ export default async function LeadDetailPage({
               </span>
             )}
           </div>
+          {/* The last enrichment at a glance, dated so nobody quotes it as
+              today's reading. The full values are in the card below. */}
+          {enriched && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-muted">
+              {lead.metaAdsSignal && (
+                <span className="max-w-[420px] truncate" title={lead.metaAdsSignal}>
+                  Ads: <span className="text-ink">{lead.metaAdsSignal}</span>
+                </span>
+              )}
+              {lead.reviewCount !== null && (
+                <>
+                  {lead.metaAdsSignal && <span aria-hidden>·</span>}
+                  <span className="num">
+                    Reviews: <span className="text-ink">{lead.reviewCount}</span>
+                  </span>
+                </>
+              )}
+              {lead.reviewsCheckedAt && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span
+                    className={`num ${reviewsStale ? "text-warn" : ""}`}
+                    title={`Review count read ${fmtDateTime(lead.reviewsCheckedAt)}`}
+                  >
+                    checked {fmtRelative(lead.reviewsCheckedAt)}
+                  </span>
+                </>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <LeadEnrichPanel action={enrich} clinicName={lead.clinicName} />
           {lead.client ? (
             <Link href={`/clients/${lead.client.id}`} className="btn">
               View client record →
@@ -263,6 +308,53 @@ export default async function LeadDetailPage({
               </button>
             </div>
           </form>
+
+          {/* Written only by “Enrich this lead”, and shown apart from the form
+              above because it is not the same kind of fact: these are readings
+              taken on a day, not fields somebody keeps up to date. */}
+          {enriched && (
+            <>
+              <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
+                <h2 className="display text-xl font-semibold">Enrichment</h2>
+                <p className="text-xs text-muted">
+                  From an actor run — a snapshot, not live
+                </p>
+              </div>
+              <div className="card">
+                {lead.metaAdsSignal && (
+                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
+                    <div className="field-label mb-1">Meta ads signal</div>
+                    <p className="text-sm">{lead.metaAdsSignal}</p>
+                  </div>
+                )}
+                {lead.reviewCount !== null && (
+                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
+                    <div className="field-label mb-1">Review count</div>
+                    <p className="num text-sm">
+                      {lead.reviewCount}
+                      {lead.reviewsCheckedAt && (
+                        <span
+                          className={`ml-2 text-xs ${reviewsStale ? "text-warn" : "text-muted"}`}
+                        >
+                          read {fmtDateTime(lead.reviewsCheckedAt)}
+                          {reviewsStale &&
+                            ` — over ${REVIEWS_STALE_AFTER_DAYS} days old, worth re-running before quoting it`}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+                {lead.websiteNotes && (
+                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
+                    <div className="field-label mb-1">Website notes</div>
+                    <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
+                      {lead.websiteNotes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
 
         <section>

@@ -23,6 +23,11 @@ import {
   mappedColumn,
   readMapping,
 } from "@/lib/leadImport";
+import {
+  enrichFieldsWritten,
+  mapEnrichRow,
+  readEnrichMapping,
+} from "@/lib/leadEnrich";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -159,6 +164,48 @@ export async function updateLead(id: string, formData: FormData) {
       ...(stage && LEAD_STAGES.includes(stage as LeadStage) ? { stage } : {}),
     },
   });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${id}`);
+}
+
+// Enrichment of one lead from one Apify run
+// (src/components/LeadEnrichPanel.tsx). The panel posts the single row it
+// showed plus the mapping the user confirmed, and the row is read here with
+// the same helper that produced that preview.
+//
+// This is an update and only ever an update. It takes the lead's id from the
+// bound argument — the route the panel is open on — so no field of the posted
+// form can point it at another record, and there is no path through it that
+// reaches prisma.lead.create. A mapping that writes nothing writes nothing:
+// enrichment adds what a scrape found and never blanks what it didn't.
+export async function enrichLead(id: string, formData: FormData) {
+  const row = parseJson<string[]>(formData, "row");
+  const rawMapping = parseJson<unknown[]>(formData, "mapping");
+  if (!Array.isArray(row)) return;
+
+  const mapping = readEnrichMapping(
+    rawMapping,
+    Array.isArray(rawMapping) ? rawMapping.length : 0,
+  );
+  const update = mapEnrichRow(
+    row.map((cell) => (typeof cell === "string" ? cell : "")),
+    mapping,
+  );
+  if (enrichFieldsWritten(update).length === 0) return;
+
+  await prisma.lead.update({
+    where: { id },
+    data: {
+      ...update,
+      // The timestamp belongs to the count and travels with it. A run that
+      // mapped nothing onto Review count leaves the old count and the old date
+      // together, rather than re-dating a number nobody re-read.
+      ...(update.reviewCount !== undefined
+        ? { reviewsCheckedAt: new Date() }
+        : {}),
+    },
+  });
+
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
 }
