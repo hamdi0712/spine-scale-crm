@@ -30,12 +30,53 @@ model Lead {
   // (src/lib/leadImport.ts) but editable by hand like everything else.
   linkedinUrl        String? // the contact's own profile
   companyLinkedinUrl String? // the clinic's company page
+  websiteUrl         String? // the clinic's own site
+  facebookUrl        String? // the clinic's Facebook page
+  location           String? // town or metro, as somebody would search for it
+
+  // IANA id, one of the four US zones, and null until somebody sets it or an
+  // import reads it off the location. Nullable where the client's is not: a
+  // client is a clinic being called every week, a lead is a name on a list,
+  // and defaulting the whole pipeline to Eastern would put a zone on leads
+  // nobody has established anything about.
+  timeZone String?
+
+  // When a LinkedIn connection request was sent to this lead, marked by hand
+  // on the lead page. Nothing in the app sends one — this records an act that
+  // happened on LinkedIn, so that the pipeline can show at a glance who has
+  // already been approached and nobody gets approached twice.
+  connectionRequestSentAt DateTime?
+
+  // The four above are also the enrichment run's inputs: each actor is built
+  // from one of them (src/lib/leadEnrich.ts), and an empty one means that
+  // actor is skipped rather than run against nothing.
 
   // Headcount exactly as the source reported it. Deliberately separate from
   // icpStaffSize below: that field is the scorecard's 0–2 band, and collapsing
   // the two would throw away the number the band was read off. The import can
   // suggest a band from it, but only a human saving the scorecard stores one.
   staffCountRaw Int?
+
+  // Enrichment — written by the enrichment run on the lead page
+  // (src/lib/leadEnrich.ts), and by nothing else. Every one of these is a
+  // snapshot of what a scrape saw at one moment, not a live reading, which is
+  // why enrichedAt exists: a value with no date on it reads as current
+  // forever. The ads signal is left freeform on purpose — "3 active ads,
+  // running 4mo" is the useful shape, and no schema of ours would survive the
+  // next actor's idea of how to report it.
+  metaAdsSignal    String?
+  reviewCount      Int?
+  websiteNotes     String? // crawled copy, as long as the actor returned it
+
+  // When the enrichment run last wrote anything at all. One date for the whole
+  // record rather than one per field: the run does all four actors together,
+  // so "how old is this" has a single honest answer.
+  enrichedAt DateTime?
+
+  // When the review count itself was last read. Kept alongside enrichedAt
+  // because a run where the Maps actor was skipped or failed moves one and not
+  // the other, and a count that didn't get re-read shouldn't look like it did.
+  reviewsCheckedAt DateTime?
 
   notes        LeadNote[]
   calls        Call[]

@@ -3,11 +3,14 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
   addLeadNote,
+  clearConnectionRequestSent,
   convertLeadToClient,
   deleteLead,
+  markConnectionRequestSent,
   saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
+import { applyEnrichSelection, runLeadEnrichment } from "@/lib/actions/enrich";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
 import {
@@ -15,11 +18,16 @@ import {
   leadTier,
   suggestedStaffSizeScore,
 } from "@/lib/icp";
+import { enrichPlan } from "@/lib/leadEnrich";
+import { fmtRelative } from "@/lib/activity";
+import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
+import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
 import IcpScorecard from "@/components/IcpScorecard";
+import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +52,24 @@ export default async function LeadDetailPage({
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
   const saveScorecard = saveIcpScorecard.bind(null, lead.id);
+  const markConnectionSent = markConnectionRequestSent.bind(null, lead.id);
+  const clearConnectionSent = clearConnectionRequestSent.bind(null, lead.id);
+  const runEnrichment = runLeadEnrichment.bind(null, lead.id);
+  const applySelection = applyEnrichSelection.bind(null, lead.id);
   const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
+
+  // What an enrichment run would do with this lead as it stands, worked out
+  // here so the panel can say which actors it is skipping before it runs
+  // anything.
+  const plan = enrichPlan(lead);
+
+  // Enrichment is scraped evidence with a date on it, so it is shown as its
+  // own thing rather than mixed into the editable details — a one-line summary
+  // by the title for a glance, and the values in full further down.
+  const enriched =
+    lead.metaAdsSignal !== null ||
+    lead.reviewCount !== null ||
+    lead.websiteNotes !== null;
 
   return (
     <div>
@@ -63,8 +88,47 @@ export default async function LeadDetailPage({
               </span>
             )}
           </div>
+          {/* The last enrichment at a glance. The run's date leads, because it
+              is the one thing that says how much any of the rest is worth
+              today. The values in full are in the card below. */}
+          {(enriched || lead.enrichedAt) && (
+            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-muted">
+              {lead.enrichedAt && (
+                <span
+                  className="num font-medium text-ink"
+                  title={`Last enrichment run ${fmtDateTime(lead.enrichedAt)}`}
+                >
+                  Enriched {fmtRelative(lead.enrichedAt)}
+                </span>
+              )}
+              {lead.metaAdsSignal && (
+                <>
+                  {lead.enrichedAt && <span aria-hidden>·</span>}
+                  <span className="max-w-[420px] truncate" title={lead.metaAdsSignal}>
+                    Ads: <span className="text-ink">{lead.metaAdsSignal}</span>
+                  </span>
+                </>
+              )}
+              {lead.reviewCount !== null && (
+                <>
+                  {(lead.enrichedAt || lead.metaAdsSignal) && (
+                    <span aria-hidden>·</span>
+                  )}
+                  <span className="num">
+                    Reviews: <span className="text-ink">{lead.reviewCount}</span>
+                  </span>
+                </>
+              )}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
+          <LeadEnrichPanel
+            run={runEnrichment}
+            applySelection={applySelection}
+            plan={plan}
+            clinicName={lead.clinicName}
+          />
           {lead.client ? (
             <Link href={`/clients/${lead.client.id}`} className="btn">
               View client record →
@@ -173,6 +237,60 @@ export default async function LeadDetailPage({
                 />
               </div>
               <div>
+                <label className="field-label" htmlFor="websiteUrl">
+                  Website URL
+                </label>
+                <input
+                  id="websiteUrl"
+                  name="websiteUrl"
+                  defaultValue={lead.websiteUrl ?? ""}
+                  placeholder="Crawled for website notes"
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="facebookUrl">
+                  Facebook URL
+                </label>
+                <input
+                  id="facebookUrl"
+                  name="facebookUrl"
+                  defaultValue={lead.facebookUrl ?? ""}
+                  placeholder="Page, for the ads library check"
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="location">
+                  Location
+                </label>
+                <input
+                  id="location"
+                  name="location"
+                  defaultValue={lead.location ?? ""}
+                  placeholder="Town or metro — narrows the Maps search"
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="timeZone">
+                  Time zone
+                </label>
+                <select
+                  id="timeZone"
+                  name="timeZone"
+                  defaultValue={lead.timeZone ?? ""}
+                  className="field"
+                >
+                  <option value="">Not set</option>
+                  {US_TIME_ZONES.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="field-label" htmlFor="staffCountRaw">
                   Staff count
                 </label>
@@ -233,7 +351,13 @@ export default async function LeadDetailPage({
             {/* A launchpad for outreach done by hand, sitting with the contact
                 details it belongs to. Opening a profile is the whole feature —
                 nothing here sends, connects, or messages anyone. */}
-            {(lead.linkedinUrl || lead.companyLinkedinUrl) && (
+            {(lead.linkedinUrl ||
+              lead.companyLinkedinUrl ||
+              lead.websiteUrl ||
+              lead.facebookUrl ||
+              // A mark outlives the URL it was made against: a profile link
+              // deleted later shouldn't take the record of the outreach with it.
+              lead.connectionRequestSentAt) && (
               <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-5">
                 {lead.linkedinUrl && (
                   <a
@@ -255,6 +379,53 @@ export default async function LeadDetailPage({
                     View company page ↗
                   </a>
                 )}
+                {lead.websiteUrl && (
+                  <a
+                    href={lead.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    Visit website ↗
+                  </a>
+                )}
+                {lead.facebookUrl && (
+                  <a
+                    href={lead.facebookUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    View Facebook page ↗
+                  </a>
+                )}
+                {/* The one thing in this row that records rather than opens.
+                    Sending the request is still done by hand on LinkedIn; this
+                    is where you say you did it, so the pipeline can show it.
+
+                    Once marked it stops being a button — the useful state is
+                    the date, and a button that has already been pressed is an
+                    invitation to press it again. Offered only where there is a
+                    LinkedIn profile to have sent it to, but shown wherever the
+                    mark exists. */}
+                {(lead.connectionRequestSentAt ||
+                  lead.linkedinUrl ||
+                  lead.companyLinkedinUrl) && (
+                  <ConnectionRequestToggle
+                    sentLabel={
+                      lead.connectionRequestSentAt
+                        ? `Connection sent ${fmtRelative(lead.connectionRequestSentAt)}`
+                        : null
+                    }
+                    sentTitle={
+                      lead.connectionRequestSentAt
+                        ? `Marked sent ${fmtDateTime(lead.connectionRequestSentAt)}`
+                        : null
+                    }
+                    mark={markConnectionSent}
+                    clear={clearConnectionSent}
+                  />
+                )}
               </div>
             )}
             <div className="flex justify-end border-t border-line/60 pt-5">
@@ -263,6 +434,54 @@ export default async function LeadDetailPage({
               </button>
             </div>
           </form>
+
+          {/* Written only by “Enrich this lead”, and shown apart from the form
+              above because it is not the same kind of fact: these are readings
+              taken on a day, not fields somebody keeps up to date. */}
+          {enriched && (
+            <>
+              <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
+                <h2 className="display text-xl font-semibold">Enrichment</h2>
+                <p className="num text-xs text-muted">
+                  {lead.enrichedAt
+                    ? `Last run ${fmtDateTime(lead.enrichedAt)} — a snapshot, not live`
+                    : "From an actor run — a snapshot, not live"}
+                </p>
+              </div>
+              <div className="card">
+                {lead.metaAdsSignal && (
+                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
+                    <div className="field-label mb-1">Meta ads signal</div>
+                    <p className="text-sm">{lead.metaAdsSignal}</p>
+                  </div>
+                )}
+                {lead.reviewCount !== null && (
+                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
+                    <div className="field-label mb-1">Review count</div>
+                    <p className="num text-sm">
+                      {lead.reviewCount}
+                      {/* Its own date, because a run where the Maps actor was
+                          skipped or failed leaves this count older than the
+                          run that sits above it. */}
+                      {lead.reviewsCheckedAt && (
+                        <span className="ml-2 text-xs text-muted">
+                          read {fmtDateTime(lead.reviewsCheckedAt)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+                {lead.websiteNotes && (
+                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
+                    <div className="field-label mb-1">Website notes</div>
+                    <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
+                      {lead.websiteNotes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
 
         <section>

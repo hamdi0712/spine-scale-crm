@@ -23,6 +23,7 @@ import {
   mappedColumn,
   readMapping,
 } from "@/lib/leadImport";
+import { isUsTimeZone } from "@/lib/timezones";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -59,6 +60,16 @@ function leadFields(formData: FormData) {
     leadSource: str(formData, "leadSource"),
     linkedinUrl: str(formData, "linkedinUrl"),
     companyLinkedinUrl: str(formData, "companyLinkedinUrl"),
+    // Also the enrichment run's inputs — an empty one here is what makes that
+    // run skip an actor rather than run it against nothing.
+    websiteUrl: str(formData, "websiteUrl"),
+    facebookUrl: str(formData, "facebookUrl"),
+    location: str(formData, "location"),
+    // Blank is a real answer here — a lead whose zone nobody knows — so
+    // anything outside the four zones stores as null rather than defaulting.
+    timeZone: isUsTimeZone(str(formData, "timeZone"))
+      ? str(formData, "timeZone")
+      : null,
     staffCountRaw: int(formData, "staffCountRaw"),
     estValue: num(formData, "estValue"),
     nextFollowUp: date(formData, "nextFollowUp"),
@@ -163,12 +174,81 @@ export async function updateLead(id: string, formData: FormData) {
   revalidatePath(`/pipeline/${id}`);
 }
 
+// ─── Bulk actions from the pipeline table ──────────────────────────────────
+//
+// Both take the ids the table had selected. Ids arriving from the browser are
+// only ever matched against existing rows — an id for a lead that isn't there
+// updates and deletes nothing — and both are no-ops on an empty list rather
+// than a statement with no WHERE clause, which is the shape of this mistake
+// that costs a pipeline.
+
+// Anything past this is a misclick that got through the confirmation rather
+// than a day's work, and a delete is the one action here with nothing behind
+// it. Not exported: a "use server" module can export nothing but async
+// functions, and nothing outside needs the number.
+const MAX_BULK_LEADS = 200;
+
+export async function deleteLeads(ids: string[]) {
+  const list = leadIds(ids);
+  if (list.length === 0) return;
+  await prisma.lead.deleteMany({ where: { id: { in: list } } });
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+}
+
+export async function moveLeadsStage(ids: string[], stage: string) {
+  if (!LEAD_STAGES.includes(stage as LeadStage)) return;
+  const list = leadIds(ids);
+  if (list.length === 0) return;
+  await prisma.lead.updateMany({
+    where: { id: { in: list } },
+    data: { stage },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+}
+
+function leadIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.filter(
+    (id): id is string => typeof id === "string" && id.trim() !== "",
+  );
+  return Array.from(new Set(ids)).slice(0, MAX_BULK_LEADS);
+}
+
 export async function moveLeadStage(id: string, stage: string) {
   if (!LEAD_STAGES.includes(stage as LeadStage)) return;
   await prisma.lead.update({ where: { id }, data: { stage } });
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
   revalidatePath("/");
+}
+
+// Marks that a LinkedIn connection request went out, and takes it back.
+//
+// The app sends nothing — this is a note that a person did something on
+// LinkedIn, kept here so the pipeline can show who has already been
+// approached. Stamped with the moment it was marked rather than a date the
+// user picks, because the useful question is "has this one been done", and a
+// date field would invite an accuracy the record doesn't have.
+export async function markConnectionRequestSent(id: string) {
+  await prisma.lead.update({
+    where: { id },
+    data: { connectionRequestSentAt: new Date() },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${id}`);
+}
+
+// The way back from a misclick. Clears the mark rather than recording that it
+// was cleared: an unsent request is not an event.
+export async function clearConnectionRequestSent(id: string) {
+  await prisma.lead.update({
+    where: { id },
+    data: { connectionRequestSentAt: null },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${id}`);
 }
 
 function bool(formData: FormData, key: string): boolean {

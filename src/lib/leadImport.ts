@@ -9,6 +9,8 @@
 // Both sides of the import share these helpers, so the preview the user
 // confirms is produced by exactly the code that writes the rows.
 
+import { zoneFromLocation } from "@/lib/timezones";
+
 // Where every imported lead starts. Stage is always New — an import is the top
 // of the funnel by definition — and the source is LinkedIn unless the CSV
 // carries its own source column with something in it.
@@ -32,6 +34,7 @@ export const IMPORT_FIELD_KEYS = [
   "leadSource",
   "linkedinUrl",
   "companyLinkedinUrl",
+  "timeZone",
   "staffCountRaw",
   "estValue",
 ] as const;
@@ -55,6 +58,11 @@ export const IMPORT_FIELDS: ImportField[] = [
   },
   { key: "linkedinUrl", label: "LinkedIn URL" },
   { key: "companyLinkedinUrl", label: "Company LinkedIn URL" },
+  {
+    key: "timeZone",
+    label: "Time zone (auto-detected from state)",
+    hint: "Point a location column at it — “Austin, TX”, “Portland, Oregon”. The US state is read out and the lead gets that state's zone; a location with no state in it leaves the zone blank rather than picking one. The text itself is kept as the lead's location, where the enrichment run uses it.",
+  },
   {
     key: "staffCountRaw",
     label: "Staff count",
@@ -206,6 +214,12 @@ export interface ImportedLead {
   leadSource: string;
   linkedinUrl: string | null;
   companyLinkedinUrl: string | null;
+  // Both read off the one location column: the text as it came, and the zone
+  // its state keeps. Two fields from one mapping because they are two readings
+  // of the same cell, and asking for the column twice would be asking the same
+  // question twice.
+  location: string | null;
+  timeZone: string | null;
   staffCountRaw: number | null;
   estValue: number | null;
 }
@@ -266,6 +280,8 @@ export function mapRow(
   const clinicName = cell("clinicName");
   if (clinicName === "") return null;
 
+  const location = cell("timeZone");
+
   return {
     clinicName,
     contactName: blankToNull(cell("contactName")),
@@ -274,6 +290,8 @@ export function mapRow(
     leadSource: cell("leadSource") || IMPORT_DEFAULT_SOURCE,
     linkedinUrl: blankToNull(cell("linkedinUrl")),
     companyLinkedinUrl: blankToNull(cell("companyLinkedinUrl")),
+    location: blankToNull(location),
+    timeZone: zoneFromLocation(location),
     staffCountRaw: parseCount(cell("staffCountRaw")),
     estValue: parseAmount(cell("estValue")),
   };

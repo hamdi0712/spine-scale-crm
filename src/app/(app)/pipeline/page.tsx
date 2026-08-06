@@ -69,6 +69,9 @@ export default async function PipelinePage({
     createdAt: l.createdAt.toISOString(),
     linkedinUrl: l.linkedinUrl,
     companyLinkedinUrl: l.companyLinkedinUrl,
+    connectionRequestSentAt: l.connectionRequestSentAt
+      ? l.connectionRequestSentAt.toISOString()
+      : null,
     // Derived here so the board and table stay presentational.
     icpTier: leadTier(l),
   }));

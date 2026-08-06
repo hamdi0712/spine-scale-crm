@@ -23,6 +23,8 @@ export interface KanbanLead {
   // show it — a card is a thing to drag, not a launchpad.
   linkedinUrl: string | null;
   companyLinkedinUrl: string | null;
+  // ISO, and null until somebody marks the request as sent on the lead page.
+  connectionRequestSentAt: string | null;
 }
 
 export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {

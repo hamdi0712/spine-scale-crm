@@ -51,10 +51,15 @@ export async function runApifySync({
   kind,
   id,
   input,
+  // How many dataset items to ask for and keep. The bulk import wants the
+  // whole run; enriching one lead wants the handful it takes to see what came
+  // back. Never taken from the browser — each caller states its own ceiling.
+  maxItems = MAX_IMPORT_ROWS,
 }: {
   kind: ApifySourceKind;
   id: string;
   input: string;
+  maxItems?: number;
 }): Promise<ApifyFetchResult> {
   const token = process.env.APIFY_API_TOKEN;
   if (!token) {
@@ -96,7 +101,7 @@ export async function runApifySync({
   const path = kind === "task" ? "actor-tasks" : "acts";
   const url =
     `${API_BASE}/${path}/${encodeURIComponent(actorId)}/run-sync-get-dataset-items` +
-    `?timeout=${APIFY_RUN_TIMEOUT_SECONDS}&maxItems=${MAX_IMPORT_ROWS}&limit=${MAX_IMPORT_ROWS}`;
+    `?timeout=${APIFY_RUN_TIMEOUT_SECONDS}&maxItems=${maxItems}&limit=${maxItems}`;
 
   let response: Response;
   try {
@@ -150,7 +155,7 @@ export async function runApifySync({
     };
   }
 
-  const table = itemsToTable(items, MAX_IMPORT_ROWS);
+  const table = itemsToTable(items, maxItems);
   if (table.headers.length === 0) {
     return {
       ok: false,

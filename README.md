@@ -103,7 +103,14 @@ again.
   reaching the end of the wizard. Routine field edits are deliberately not
   logged — a log of everything is a log of nothing.
 - **Pipeline** — leads as a drag-and-drop Kanban board or a sortable/filterable
-  table. Each lead has an append-only timestamped activity log and an **ICP
+  table. The table selects: a checkbox per row and one in the header, and with
+  anything selected a bar rides the top of the screen offering a bulk stage
+  change and a bulk delete (which names the count before it does it). Selection
+  only ever covers rows currently on screen — filtering something out of view
+  takes it out of the selection too — and it is state and nothing else, so
+  navigating away or refreshing starts again with nothing selected.
+
+  Each lead has an append-only timestamped activity log and an **ICP
   scorecard**: five Layer 1 disqualifiers (any one stops the scoring), then
   four scored categories out of 10 — Staff Size Fit, Package/Economics, Budget
   Signal, and Automation Gap — banding the lead A-tier (8–10), B-tier (5–7) or
@@ -123,6 +130,16 @@ again.
   and are sourced **LinkedIn** unless the CSV maps a source column of its own,
   and a lead whose clinic name and contact name already exist is skipped — so
   re-importing the same export creates nothing.
+
+  A location column can be mapped to **Time zone (auto-detected from state)**.
+  The US state is read out of whatever the column holds — "Austin, TX",
+  "Portland, Oregon" — and the lead gets that state's zone, with the text kept
+  as the lead's location for the enrichment run to search on. The eight states
+  the zone line runs through take the zone most of their people live in, and a
+  location with no state the lookup recognises — "Greater Boston Area",
+  anything Canadian — imports with no zone at all rather than a guess. The
+  preview says how many of those there are before anything is written, and the
+  zone is a dropdown on the lead afterwards either way.
 
   A scraped headcount is stored as `staffCountRaw`, deliberately alongside the
   scorecard's 0–2 Staff Size Fit band rather than instead of it. It **suggests**
@@ -147,12 +164,56 @@ again.
   saying what to do about it. Leave the token unset and only the CSV import
   works; nothing else in the app changes.
 
+  **Enrich this lead**, on a lead's own page, is one press that runs four named
+  actors in turn — a LinkedIn company lookup, the Facebook ads library, a
+  website crawl, and a Google Maps search — and writes what they say onto the
+  lead already open. There is nothing to fill in: the actor IDs are fixed in
+  `src/lib/leadEnrich.ts`, and each input is built from a field the lead
+  already carries (Company LinkedIn URL, Facebook URL, Website URL, and the
+  clinic name with its location). Those fields are edited on the lead like any
+  other, and each actor's whole integration — its ID, the input its schema
+  expects, the output fields it is read from — is one entry in that file.
+
+  A missing input is a skip, not an error. A lead with no Facebook page still
+  gets its website crawled, and the run reports *skipped Facebook Ads Library:
+  no Facebook URL set* rather than failing the batch. One actor's failure is
+  its own for the same reason: each of the four reports separately — written,
+  skipped, failed, or ran and returned nothing readable — and the ones that
+  worked still write.
+
+  Because the four output shapes are known, there is no mapping step: staff
+  count, Meta ads signal, review count and website notes are read out and
+  written directly. The ads signal is built from the whole result rather than
+  one item of it — the ad count and the earliest start date make *3 active ads,
+  running 4mo*. The one thing the run will not decide for itself is identity:
+  when the company lookup or the Maps search comes back with several candidate
+  clinics, that actor's fields are left unwritten and the candidates are listed
+  to choose from. Writing another clinic's review count onto this lead is the
+  one mistake here that would look like a fact afterwards.
+
+  What it writes is shown apart from the editable details, because it is a
+  different kind of fact: a reading taken on a day, not a field somebody keeps
+  current. *Enriched 2d ago* under the clinic name is the headline, because it
+  is the one thing that says what the rest is worth today. The review count
+  keeps its own date alongside it, since a run where the Maps actor was skipped
+  or failed leaves that number older than the run above it. Nothing here
+  refreshes itself.
+
   Imported leads carry their **LinkedIn URLs** through to where outreach
   happens: *View LinkedIn profile* and *View company page* on the lead record,
   and a small LinkedIn glyph on each pipeline table row that has one (the
   contact's profile, or the company page when that is all there is). They open
   LinkedIn in a new tab and nothing else — this is a launchpad for outreach
   done by hand, not automated outreach.
+
+  What the app does keep is a record that the outreach happened. *Mark
+  connection request sent* sits in that same row and stamps the moment it is
+  pressed; from then on it reads *Connection sent 3d ago*, with an undo for the
+  misclick. A green check beside the LinkedIn glyph carries it onto the
+  pipeline table, so a list of forty rows says which of them have already been
+  approached without forty pages being opened to find out. Nothing sends a
+  request — this is a note that a person did, kept where it stops the same
+  clinic being approached twice.
 - **Clients** — signed clinics with package/fee/contract details, GHL and Meta
   Ads reference links, an invoice log, and a per-client delivery checklist
   (seeded with the standard Disc Relief Pipeline OS items, fully editable per
