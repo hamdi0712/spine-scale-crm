@@ -34,6 +34,13 @@ model Lead {
   facebookUrl        String? // the clinic's Facebook page
   location           String? // town or metro, as somebody would search for it
 
+  // IANA id, one of the four US zones, and null until somebody sets it or an
+  // import reads it off the location. Nullable where the client's is not: a
+  // client is a clinic being called every week, a lead is a name on a list,
+  // and defaulting the whole pipeline to Eastern would put a zone on leads
+  // nobody has established anything about.
+  timeZone String?
+
   // When a LinkedIn connection request was sent to this lead, marked by hand
   // on the lead page. Nothing in the app sends one — this records an act that
   // happened on LinkedIn, so that the pipeline can show at a glance who has

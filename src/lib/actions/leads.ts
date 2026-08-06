@@ -23,6 +23,7 @@ import {
   mappedColumn,
   readMapping,
 } from "@/lib/leadImport";
+import { isUsTimeZone } from "@/lib/timezones";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -64,6 +65,11 @@ function leadFields(formData: FormData) {
     websiteUrl: str(formData, "websiteUrl"),
     facebookUrl: str(formData, "facebookUrl"),
     location: str(formData, "location"),
+    // Blank is a real answer here — a lead whose zone nobody knows — so
+    // anything outside the four zones stores as null rather than defaulting.
+    timeZone: isUsTimeZone(str(formData, "timeZone"))
+      ? str(formData, "timeZone")
+      : null,
     staffCountRaw: int(formData, "staffCountRaw"),
     estValue: num(formData, "estValue"),
     nextFollowUp: date(formData, "nextFollowUp"),
@@ -166,6 +172,48 @@ export async function updateLead(id: string, formData: FormData) {
   });
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
+}
+
+// ─── Bulk actions from the pipeline table ──────────────────────────────────
+//
+// Both take the ids the table had selected. Ids arriving from the browser are
+// only ever matched against existing rows — an id for a lead that isn't there
+// updates and deletes nothing — and both are no-ops on an empty list rather
+// than a statement with no WHERE clause, which is the shape of this mistake
+// that costs a pipeline.
+
+// Anything past this is a misclick that got through the confirmation rather
+// than a day's work, and a delete is the one action here with nothing behind
+// it. Not exported: a "use server" module can export nothing but async
+// functions, and nothing outside needs the number.
+const MAX_BULK_LEADS = 200;
+
+export async function deleteLeads(ids: string[]) {
+  const list = leadIds(ids);
+  if (list.length === 0) return;
+  await prisma.lead.deleteMany({ where: { id: { in: list } } });
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+}
+
+export async function moveLeadsStage(ids: string[], stage: string) {
+  if (!LEAD_STAGES.includes(stage as LeadStage)) return;
+  const list = leadIds(ids);
+  if (list.length === 0) return;
+  await prisma.lead.updateMany({
+    where: { id: { in: list } },
+    data: { stage },
+  });
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+}
+
+function leadIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const ids = raw.filter(
+    (id): id is string => typeof id === "string" && id.trim() !== "",
+  );
+  return Array.from(new Set(ids)).slice(0, MAX_BULK_LEADS);
 }
 
 export async function moveLeadStage(id: string, stage: string) {

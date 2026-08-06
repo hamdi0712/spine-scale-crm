@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createLead } from "@/lib/actions/leads";
+import { US_TIME_ZONES } from "@/lib/timezones";
 
 export default function NewLeadPage() {
   return (
@@ -68,6 +69,24 @@ export default function NewLeadPage() {
               placeholder="Clinic's company page"
               className="field"
             />
+          </div>
+          <div>
+            <label className="field-label" htmlFor="timeZone">
+              Time zone
+            </label>
+            <select
+              id="timeZone"
+              name="timeZone"
+              defaultValue=""
+              className="field"
+            >
+              <option value="">Not set</option>
+              {US_TIME_ZONES.map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="field-label" htmlFor="staffCountRaw">

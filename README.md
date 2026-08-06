@@ -103,7 +103,14 @@ again.
   reaching the end of the wizard. Routine field edits are deliberately not
   logged — a log of everything is a log of nothing.
 - **Pipeline** — leads as a drag-and-drop Kanban board or a sortable/filterable
-  table. Each lead has an append-only timestamped activity log and an **ICP
+  table. The table selects: a checkbox per row and one in the header, and with
+  anything selected a bar rides the top of the screen offering a bulk stage
+  change and a bulk delete (which names the count before it does it). Selection
+  only ever covers rows currently on screen — filtering something out of view
+  takes it out of the selection too — and it is state and nothing else, so
+  navigating away or refreshing starts again with nothing selected.
+
+  Each lead has an append-only timestamped activity log and an **ICP
   scorecard**: five Layer 1 disqualifiers (any one stops the scoring), then
   four scored categories out of 10 — Staff Size Fit, Package/Economics, Budget
   Signal, and Automation Gap — banding the lead A-tier (8–10), B-tier (5–7) or
@@ -123,6 +130,16 @@ again.
   and are sourced **LinkedIn** unless the CSV maps a source column of its own,
   and a lead whose clinic name and contact name already exist is skipped — so
   re-importing the same export creates nothing.
+
+  A location column can be mapped to **Time zone (auto-detected from state)**.
+  The US state is read out of whatever the column holds — "Austin, TX",
+  "Portland, Oregon" — and the lead gets that state's zone, with the text kept
+  as the lead's location for the enrichment run to search on. The eight states
+  the zone line runs through take the zone most of their people live in, and a
+  location with no state the lookup recognises — "Greater Boston Area",
+  anything Canadian — imports with no zone at all rather than a guess. The
+  preview says how many of those there are before anything is written, and the
+  zone is a dropdown on the lead afterwards either way.
 
   A scraped headcount is stored as `staffCountRaw`, deliberately alongside the
   scorecard's 0–2 Staff Size Fit band rather than instead of it. It **suggests**

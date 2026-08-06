@@ -42,6 +42,7 @@ import {
   mappedColumns,
 } from "@/lib/leadImport";
 import { LEAD_STAGE_LABELS } from "@/lib/constants";
+import { zoneLabel } from "@/lib/timezones";
 import { suggestedStaffSizeScore } from "@/lib/icp";
 import { fmtMoney } from "@/lib/format";
 import WizardProgress from "@/components/WizardProgress";
@@ -541,6 +542,14 @@ export default function LeadImportWizard({
                     {MAX_IMPORT_ROWS}-row limit are not included.
                   </li>
                 )}
+                {mapping.includes("timeZone") && (
+                  <li className="num">
+                    {leads.filter((l) => l.timeZone === null).length} of{" "}
+                    {leads.length} will import with no time zone — their
+                    location carries no US state the lookup recognises. Set
+                    those by hand on the lead.
+                  </li>
+                )}
                 {mapping.includes("staffCountRaw") && (
                   <li>
                     Staff counts are stored as scraped. They suggest an ICP
@@ -664,6 +673,25 @@ function PreviewCell({
         {suggested != null && (
           <span className="ml-1.5 text-xs text-muted">
             suggests {suggested} pt
+          </span>
+        )}
+      </span>
+    );
+  }
+  // The reading, not the cell: what the state came out as, over the text it
+  // was read from. A location the parser couldn't place shows the text with no
+  // zone against it, which is the row to look at before confirming.
+  if (field === "timeZone") {
+    return (
+      <span className="block max-w-[220px]">
+        {lead.timeZone ? (
+          zoneLabel(lead.timeZone)
+        ) : (
+          <span className="text-muted">no zone read</span>
+        )}
+        {lead.location && (
+          <span className="block truncate text-xs text-muted">
+            {lead.location}
           </span>
         )}
       </span>

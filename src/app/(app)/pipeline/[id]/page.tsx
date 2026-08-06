@@ -20,6 +20,7 @@ import {
 } from "@/lib/icp";
 import { enrichPlan } from "@/lib/leadEnrich";
 import { fmtRelative } from "@/lib/activity";
+import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
@@ -270,6 +271,24 @@ export default async function LeadDetailPage({
                   placeholder="Town or metro — narrows the Maps search"
                   className="field"
                 />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="timeZone">
+                  Time zone
+                </label>
+                <select
+                  id="timeZone"
+                  name="timeZone"
+                  defaultValue={lead.timeZone ?? ""}
+                  className="field"
+                >
+                  <option value="">Not set</option>
+                  {US_TIME_ZONES.map((z) => (
+                    <option key={z.id} value={z.id}>
+                      {z.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="field-label" htmlFor="staffCountRaw">

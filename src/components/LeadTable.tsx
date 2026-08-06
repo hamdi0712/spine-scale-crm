@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { IconBrandLinkedin, IconCheck } from "@tabler/icons-react";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
+import { deleteLeads, moveLeadsStage } from "@/lib/actions/leads";
 import { ICP_TIER_LABELS, ICP_TIER_ORDER, IcpTier } from "@/lib/icp";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
@@ -24,6 +25,12 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
   const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
+  // Selection is state and nothing else — no URL, no storage — so navigating
+  // away or refreshing starts again with nothing selected, which is the only
+  // safe default for a set of rows with a delete button pointed at them.
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [pending, startTransition] = useTransition();
+  const allRef = useRef<HTMLInputElement>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -67,6 +74,67 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
       return cmp * sortDir;
     });
   }, [leads, query, stageFilter, tierFilter, sortKey, sortDir]);
+
+  // Only what is on screen. A row filtered out of view is not a row somebody
+  // chose, and a delete that reached beyond the list they were looking at
+  // would be the worst kind of surprise — so the count, the actions and the
+  // header checkbox all read from here.
+  const chosen = rows.filter((l) => selected.has(l.id));
+  const allChosen = rows.length > 0 && chosen.length === rows.length;
+
+  useEffect(() => {
+    if (allRef.current) {
+      allRef.current.indeterminate = chosen.length > 0 && !allChosen;
+    }
+  }, [chosen.length, allChosen]);
+
+  function toggleOne(id: string, on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleAll(on: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const lead of rows) {
+        if (on) next.add(lead.id);
+        else next.delete(lead.id);
+      }
+      return next;
+    });
+  }
+
+  function runBulk(action: () => Promise<void>) {
+    startTransition(async () => {
+      await action();
+      // Cleared on the way out rather than on the way in, so a failed action
+      // leaves the selection to try again with.
+      setSelected(new Set());
+    });
+  }
+
+  function bulkDelete() {
+    const ids = chosen.map((l) => l.id);
+    if (ids.length === 0) return;
+    if (
+      !confirm(
+        `Delete ${ids.length} lead${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    runBulk(() => deleteLeads(ids));
+  }
+
+  function bulkStage(stage: string) {
+    const ids = chosen.map((l) => l.id);
+    if (ids.length === 0 || stage === "") return;
+    runBulk(() => moveLeadsStage(ids, stage));
+  }
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -130,10 +198,65 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
           {rows.length} lead{rows.length === 1 ? "" : "s"}
         </span>
       </div>
+      {/* Rides the top of the viewport while a long list scrolls under it, so
+          the actions stay with the selection instead of with the header row
+          that made it. Nothing renders at all until something is chosen. */}
+      {chosen.length > 0 && (
+        <div className="sticky top-0 z-20 mb-3">
+          <div className="card flex flex-wrap items-center gap-3 px-4 py-3">
+            <span className="num text-sm font-medium">
+              {chosen.length} selected
+            </span>
+            {/* Full-height controls, like the filter row this sits directly
+                under — a shorter select would sit a few pixels off the
+                buttons beside it, because .field fixes its own height. */}
+            <select
+              value=""
+              disabled={pending}
+              onChange={(e) => bulkStage(e.target.value)}
+              aria-label={`Change stage on ${chosen.length} selected leads`}
+              className="field w-auto disabled:opacity-50"
+            >
+              <option value="">Change stage…</option>
+              {LEAD_STAGES.map((s) => (
+                <option key={s} value={s}>
+                  {LEAD_STAGE_LABELS[s]}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={bulkDelete}
+              disabled={pending}
+              className="btn-danger disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Delete selected
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              disabled={pending}
+              className="btn-ghost ml-auto disabled:opacity-50"
+            >
+              {pending ? "Working…" : "Clear selection"}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="card overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr>
+              <th className="th w-[44px]">
+                <input
+                  ref={allRef}
+                  type="checkbox"
+                  checked={allChosen}
+                  onChange={(e) => toggleAll(e.target.checked)}
+                  aria-label="Select every lead in this list"
+                  className="h-4 w-4 shrink-0 accent-accent"
+                />
+              </th>
               <SortTh k="clinicName">Clinic</SortTh>
               <th className="th">Contact</th>
               <th className="th">Source</th>
@@ -152,7 +275,19 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
           </thead>
           <tbody>
             {rows.map((lead) => (
-              <tr key={lead.id} className="hover:bg-wash/70">
+              <tr
+                key={lead.id}
+                className={selected.has(lead.id) ? "bg-accent/5" : "hover:bg-wash/70"}
+              >
+                <td className="td">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(lead.id)}
+                    onChange={(e) => toggleOne(lead.id, e.target.checked)}
+                    aria-label={`Select ${lead.clinicName}`}
+                    className="h-4 w-4 shrink-0 accent-accent"
+                  />
+                </td>
                 <td className="td">
                   <Link
                     href={`/pipeline/${lead.id}`}
@@ -191,7 +326,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td className="td text-muted" colSpan={8}>
+                <td className="td text-muted" colSpan={9}>
                   No leads match.
                 </td>
               </tr>
