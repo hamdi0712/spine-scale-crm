@@ -19,6 +19,9 @@ export interface ImportField {
   key: ImportFieldKey;
   label: string;
   hint?: string;
+  // Whether more than one source column can point at this field, its values
+  // joined into one. See JOIN_SEPARATOR.
+  joins?: true;
 }
 
 export const IMPORT_FIELD_KEYS = [
@@ -40,8 +43,9 @@ export const IMPORT_FIELDS: ImportField[] = [
     key: "clinicName",
     label: "Clinic name",
     hint: "Required — a row with no clinic name is skipped.",
+    joins: true,
   },
-  { key: "contactName", label: "Contact name" },
+  { key: "contactName", label: "Contact name", joins: true },
   { key: "phone", label: "Phone" },
   { key: "email", label: "Email" },
   {
@@ -163,8 +167,36 @@ export const APIFY_INPUT_PLACEHOLDER = `{
 
 // One entry per detected column, in header order: the Lead field that column
 // fills, or null for "don't import". Column-indexed rather than field-indexed
-// because that is the shape the mapping step edits.
+// because that is the shape the mapping step edits — and, because it is a list
+// rather than a map, two columns can name the same field, which is how the
+// name-style fields below get filled from more than one source.
 export type ColumnMapping = (ImportFieldKey | null)[];
+
+// A name arrives split about as often as it arrives whole — firstName and
+// lastName, or a clinic split across two cells — and a mapping that forces a
+// choice between them throws half the name away. So the fields that hold a
+// name accept several columns and join their values; every other field takes
+// one column, because two phone numbers run together are not a phone number.
+export const JOIN_SEPARATOR = " ";
+
+export function fieldJoinsColumns(key: ImportFieldKey): boolean {
+  return IMPORT_FIELDS.some((f) => f.key === key && f.joins === true);
+}
+
+export const JOINING_FIELD_LABELS: string[] = IMPORT_FIELDS.filter(
+  (f) => f.joins,
+).map((f) => f.label);
+
+// Joins the given columns of a row, in column order — which is the order the
+// mapping step lists them in, so what the user sees there is the order they
+// get. Blanks drop out rather than leaving a doubled separator, so a row with
+// no last name reads "Seth" and not "Seth ".
+export function joinCells(row: string[], columns: number[]): string {
+  return columns
+    .map((i) => (row[i] ?? "").trim())
+    .filter((v) => v !== "")
+    .join(JOIN_SEPARATOR);
+}
 
 export interface ImportedLead {
   clinicName: string;
@@ -201,6 +233,19 @@ export function mappedColumn(
   return mapping.indexOf(key);
 }
 
+// Every column pointing at a field, in column order. One entry for the usual
+// case; more only where the field joins them.
+export function mappedColumns(
+  mapping: ColumnMapping,
+  key: ImportFieldKey,
+): number[] {
+  const out: number[] = [];
+  mapping.forEach((mapped, i) => {
+    if (mapped === key) out.push(i);
+  });
+  return out;
+}
+
 // Reads one CSV row through the mapping. Returns null for a row with no clinic
 // name — there is no lead to create without one.
 export function mapRow(
@@ -208,8 +253,14 @@ export function mapRow(
   mapping: ColumnMapping,
 ): ImportedLead | null {
   const cell = (key: ImportFieldKey): string => {
-    const i = mappedColumn(mapping, key);
-    return i === -1 ? "" : (row[i] ?? "").trim();
+    const columns = mappedColumns(mapping, key);
+    if (columns.length === 0) return "";
+    // A field that does not join reads its first column and ignores any
+    // others. The mapping step never offers a second one, but this mapping
+    // arrived over the wire, and a duplicate there should read as one value
+    // rather than two run together.
+    if (!fieldJoinsColumns(key)) return (row[columns[0]] ?? "").trim();
+    return joinCells(row, columns);
   };
 
   const clinicName = cell("clinicName");

@@ -30,12 +30,16 @@ import {
   ImportSource,
   ImportedLead,
   MAX_IMPORT_ROWS,
+  JOINING_FIELD_LABELS,
   dedupeKey,
+  fieldJoinsColumns,
   importWizardSteps,
   isImportFieldKey,
   isNestedFieldHeader,
+  joinCells,
   mapRow,
   mappedColumn,
+  mappedColumns,
 } from "@/lib/leadImport";
 import { LEAD_STAGE_LABELS } from "@/lib/constants";
 import { suggestedStaffSizeScore } from "@/lib/icp";
@@ -173,12 +177,16 @@ export default function LeadImportWizard({
 
   function setColumn(index: number, value: string) {
     const key = isImportFieldKey(value) ? value : null;
+    // The name-style fields take several columns and join them — first and
+    // last name onto Contact name — so pointing another column at one of those
+    // adds to it. Every other field fills from exactly one column, and
+    // pointing a second at it releases the first rather than silently
+    // importing one of the two.
+    const adds = key !== null && fieldJoinsColumns(key);
     setMapping((prev) =>
       prev.map((current, i) => {
         if (i === index) return key;
-        // A field fills exactly one column — pointing a second column at it
-        // releases the first rather than silently importing one of the two.
-        return key !== null && current === key ? null : current;
+        return !adds && key !== null && current === key ? null : current;
       }),
     );
   }
@@ -394,6 +402,14 @@ export default function LeadImportWizard({
                               </option>
                             ))}
                           </select>
+                          {/* Where a field is filled from more than one
+                              column, each of them says which part of the
+                              result it is, and what the two make together. */}
+                          <JoinNote
+                            mapping={mapping}
+                            index={i}
+                            row={parsed.rows[0]}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -408,6 +424,14 @@ export default function LeadImportWizard({
                     {f.hint}
                   </li>
                 ))}
+                <li className="text-xs leading-relaxed text-muted">
+                  <span className="font-medium text-ink">
+                    {JOINING_FIELD_LABELS.join(" and ")}
+                  </span>{" "}
+                  — take more than one {noun}. Point both a first-name and a
+                  last-name {noun} at Contact name and they are joined with a
+                  space, in the order they are listed above.
+                </li>
                 {/* Only when the run actually produced one, so the note is
                     never an explanation of something not on screen. */}
                 {parsed.headers.some(isNestedFieldHeader) && (
@@ -570,6 +594,48 @@ export default function LeadImportWizard({
       </div>
     </form>
   );
+}
+
+// Says nothing at all unless this column is one of several filling the same
+// field — the ordinary one-column mapping needs no explaining.
+function JoinNote({
+  mapping,
+  index,
+  row,
+}: {
+  mapping: ColumnMapping;
+  index: number;
+  row: string[] | undefined;
+}) {
+  const key = mapping[index];
+  if (!key || !fieldJoinsColumns(key)) return null;
+  const columns = mappedColumns(mapping, key);
+  if (columns.length < 2) return null;
+
+  // Built by the same helper the import uses, so this is the value that will
+  // be written rather than a description of it.
+  const joined = joinCells(row ?? [], columns);
+  return (
+    <p className="mt-1.5 text-xs leading-relaxed text-muted">
+      <span className="num">
+        {ordinal(columns.indexOf(index) + 1)} of {columns.length}
+      </span>{" "}
+      joined
+      {joined !== "" && <> — “{joined}”</>}
+    </p>
+  );
+}
+
+function ordinal(n: number): string {
+  const suffix =
+    n % 10 === 1 && n % 100 !== 11
+      ? "st"
+      : n % 10 === 2 && n % 100 !== 12
+        ? "nd"
+        : n % 10 === 3 && n % 100 !== 13
+          ? "rd"
+          : "th";
+  return `${n}${suffix}`;
 }
 
 function PreviewCell({
