@@ -136,6 +136,23 @@ export type ApifyFetchResult =
   | { ok: true; label: string; headers: string[]; rows: string[][] }
   | { ok: false; error: string };
 
+// Some actors keep the thing worth mapping inside a nested list rather than in
+// a field of its own — a LinkedIn profile scrape returns the employer as
+// currentPositions[0].companyName, and flattening leaves that column holding a
+// JSON blob nobody can map onto Clinic name. So the Apify side pulls those
+// values out into columns of their own, named "<source> → <what was pulled
+// out>". The separator is a character that cannot appear in a dotted path, so
+// a derived column is never confused with one the actor really returned.
+//
+// Declared here rather than beside the Apify client because the mapping step
+// runs in the browser and explains these columns, and nothing client-side may
+// import the server-only module.
+export const NESTED_FIELD_SEPARATOR = " → ";
+
+export function isNestedFieldHeader(header: string): boolean {
+  return header.includes(NESTED_FIELD_SEPARATOR);
+}
+
 // The two things an Apify import needs from the user, and the placeholder that
 // shows what the second one looks like.
 export const APIFY_INPUT_PLACEHOLDER = `{

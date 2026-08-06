@@ -33,6 +33,7 @@ import {
   dedupeKey,
   importWizardSteps,
   isImportFieldKey,
+  isNestedFieldHeader,
   mapRow,
   mappedColumn,
 } from "@/lib/leadImport";
@@ -407,6 +408,18 @@ export default function LeadImportWizard({
                     {f.hint}
                   </li>
                 ))}
+                {/* Only when the run actually produced one, so the note is
+                    never an explanation of something not on screen. */}
+                {parsed.headers.some(isNestedFieldHeader) && (
+                  <li className="text-xs leading-relaxed text-muted">
+                    <span className="font-medium text-ink">
+                      A {noun} written “something → something”
+                    </span>{" "}
+                    — read out of the JSON list above it, from the first entry
+                    carrying a value. The list itself is left in place to check
+                    it against.
+                  </li>
+                )}
               </ul>
 
               {!clinicMapped && (
