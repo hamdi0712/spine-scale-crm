@@ -5,10 +5,10 @@ import {
   addLeadNote,
   convertLeadToClient,
   deleteLead,
-  enrichLead,
   saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
+import { applyEnrichSelection, runLeadEnrichment } from "@/lib/actions/enrich";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
 import {
@@ -16,7 +16,7 @@ import {
   leadTier,
   suggestedStaffSizeScore,
 } from "@/lib/icp";
-import { REVIEWS_STALE_AFTER_DAYS, reviewsAreStale } from "@/lib/leadEnrich";
+import { enrichPlan } from "@/lib/leadEnrich";
 import { fmtRelative } from "@/lib/activity";
 import { fmtDateTime, toDateInput } from "@/lib/format";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
@@ -48,8 +48,14 @@ export default async function LeadDetailPage({
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
   const saveScorecard = saveIcpScorecard.bind(null, lead.id);
-  const enrich = enrichLead.bind(null, lead.id);
+  const runEnrichment = runLeadEnrichment.bind(null, lead.id);
+  const applySelection = applyEnrichSelection.bind(null, lead.id);
   const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
+
+  // What an enrichment run would do with this lead as it stands, worked out
+  // here so the panel can say which actors it is skipping before it runs
+  // anything.
+  const plan = enrichPlan(lead);
 
   // Enrichment is scraped evidence with a date on it, so it is shown as its
   // own thing rather than mixed into the editable details — a one-line summary
@@ -58,7 +64,6 @@ export default async function LeadDetailPage({
     lead.metaAdsSignal !== null ||
     lead.reviewCount !== null ||
     lead.websiteNotes !== null;
-  const reviewsStale = reviewsAreStale(lead.reviewsCheckedAt);
 
   return (
     <div>
@@ -77,31 +82,34 @@ export default async function LeadDetailPage({
               </span>
             )}
           </div>
-          {/* The last enrichment at a glance, dated so nobody quotes it as
-              today's reading. The full values are in the card below. */}
-          {enriched && (
+          {/* The last enrichment at a glance. The run's date leads, because it
+              is the one thing that says how much any of the rest is worth
+              today. The values in full are in the card below. */}
+          {(enriched || lead.enrichedAt) && (
             <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-muted">
-              {lead.metaAdsSignal && (
-                <span className="max-w-[420px] truncate" title={lead.metaAdsSignal}>
-                  Ads: <span className="text-ink">{lead.metaAdsSignal}</span>
+              {lead.enrichedAt && (
+                <span
+                  className="num font-medium text-ink"
+                  title={`Last enrichment run ${fmtDateTime(lead.enrichedAt)}`}
+                >
+                  Enriched {fmtRelative(lead.enrichedAt)}
                 </span>
               )}
-              {lead.reviewCount !== null && (
+              {lead.metaAdsSignal && (
                 <>
-                  {lead.metaAdsSignal && <span aria-hidden>·</span>}
-                  <span className="num">
-                    Reviews: <span className="text-ink">{lead.reviewCount}</span>
+                  {lead.enrichedAt && <span aria-hidden>·</span>}
+                  <span className="max-w-[420px] truncate" title={lead.metaAdsSignal}>
+                    Ads: <span className="text-ink">{lead.metaAdsSignal}</span>
                   </span>
                 </>
               )}
-              {lead.reviewsCheckedAt && (
+              {lead.reviewCount !== null && (
                 <>
-                  <span aria-hidden>·</span>
-                  <span
-                    className={`num ${reviewsStale ? "text-warn" : ""}`}
-                    title={`Review count read ${fmtDateTime(lead.reviewsCheckedAt)}`}
-                  >
-                    checked {fmtRelative(lead.reviewsCheckedAt)}
+                  {(lead.enrichedAt || lead.metaAdsSignal) && (
+                    <span aria-hidden>·</span>
+                  )}
+                  <span className="num">
+                    Reviews: <span className="text-ink">{lead.reviewCount}</span>
                   </span>
                 </>
               )}
@@ -109,7 +117,12 @@ export default async function LeadDetailPage({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <LeadEnrichPanel action={enrich} clinicName={lead.clinicName} />
+          <LeadEnrichPanel
+            run={runEnrichment}
+            applySelection={applySelection}
+            plan={plan}
+            clinicName={lead.clinicName}
+          />
           {lead.client ? (
             <Link href={`/clients/${lead.client.id}`} className="btn">
               View client record →
@@ -218,6 +231,42 @@ export default async function LeadDetailPage({
                 />
               </div>
               <div>
+                <label className="field-label" htmlFor="websiteUrl">
+                  Website URL
+                </label>
+                <input
+                  id="websiteUrl"
+                  name="websiteUrl"
+                  defaultValue={lead.websiteUrl ?? ""}
+                  placeholder="Crawled for website notes"
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="facebookUrl">
+                  Facebook URL
+                </label>
+                <input
+                  id="facebookUrl"
+                  name="facebookUrl"
+                  defaultValue={lead.facebookUrl ?? ""}
+                  placeholder="Page, for the ads library check"
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="location">
+                  Location
+                </label>
+                <input
+                  id="location"
+                  name="location"
+                  defaultValue={lead.location ?? ""}
+                  placeholder="Town or metro — narrows the Maps search"
+                  className="field"
+                />
+              </div>
+              <div>
                 <label className="field-label" htmlFor="staffCountRaw">
                   Staff count
                 </label>
@@ -278,7 +327,10 @@ export default async function LeadDetailPage({
             {/* A launchpad for outreach done by hand, sitting with the contact
                 details it belongs to. Opening a profile is the whole feature —
                 nothing here sends, connects, or messages anyone. */}
-            {(lead.linkedinUrl || lead.companyLinkedinUrl) && (
+            {(lead.linkedinUrl ||
+              lead.companyLinkedinUrl ||
+              lead.websiteUrl ||
+              lead.facebookUrl) && (
               <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-5">
                 {lead.linkedinUrl && (
                   <a
@@ -300,6 +352,26 @@ export default async function LeadDetailPage({
                     View company page ↗
                   </a>
                 )}
+                {lead.websiteUrl && (
+                  <a
+                    href={lead.websiteUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    Visit website ↗
+                  </a>
+                )}
+                {lead.facebookUrl && (
+                  <a
+                    href={lead.facebookUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn h-[34px] px-3.5 text-xs"
+                  >
+                    View Facebook page ↗
+                  </a>
+                )}
               </div>
             )}
             <div className="flex justify-end border-t border-line/60 pt-5">
@@ -316,8 +388,10 @@ export default async function LeadDetailPage({
             <>
               <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
                 <h2 className="display text-xl font-semibold">Enrichment</h2>
-                <p className="text-xs text-muted">
-                  From an actor run — a snapshot, not live
+                <p className="num text-xs text-muted">
+                  {lead.enrichedAt
+                    ? `Last run ${fmtDateTime(lead.enrichedAt)} — a snapshot, not live`
+                    : "From an actor run — a snapshot, not live"}
                 </p>
               </div>
               <div className="card">
@@ -332,13 +406,12 @@ export default async function LeadDetailPage({
                     <div className="field-label mb-1">Review count</div>
                     <p className="num text-sm">
                       {lead.reviewCount}
+                      {/* Its own date, because a run where the Maps actor was
+                          skipped or failed leaves this count older than the
+                          run that sits above it. */}
                       {lead.reviewsCheckedAt && (
-                        <span
-                          className={`ml-2 text-xs ${reviewsStale ? "text-warn" : "text-muted"}`}
-                        >
+                        <span className="ml-2 text-xs text-muted">
                           read {fmtDateTime(lead.reviewsCheckedAt)}
-                          {reviewsStale &&
-                            ` — over ${REVIEWS_STALE_AFTER_DAYS} days old, worth re-running before quoting it`}
                         </span>
                       )}
                     </p>

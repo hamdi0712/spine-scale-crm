@@ -147,20 +147,40 @@ again.
   saying what to do about it. Leave the token unset and only the CSV import
   works; nothing else in the app changes.
 
-  **Enrich this lead**, on a lead's own page, is that same run pointed at one
-  record instead of the pipeline. Same actor ID and JSON input, same
-  server-side call, same errors; the result is flattened by the same code and
-  mapped on the same kind of screen — but the targets are the four things
-  enrichment can say about a clinic (staff count, Meta ads signal, review
-  count, website notes) and the confirm writes them onto the lead already open.
-  It cannot create a lead, it never touches the fields left unmapped, and a run
-  that returns several items says so and lets you pick which one is read.
+  **Enrich this lead**, on a lead's own page, is one press that runs four named
+  actors in turn — a LinkedIn company lookup, the Facebook ads library, a
+  website crawl, and a Google Maps search — and writes what they say onto the
+  lead already open. There is nothing to fill in: the actor IDs are fixed in
+  `src/lib/leadEnrich.ts`, and each input is built from a field the lead
+  already carries (Company LinkedIn URL, Facebook URL, Website URL, and the
+  clinic name with its location). Those fields are edited on the lead like any
+  other, and each actor's whole integration — its ID, the input its schema
+  expects, the output fields it is read from — is one entry in that file.
+
+  A missing input is a skip, not an error. A lead with no Facebook page still
+  gets its website crawled, and the run reports *skipped Facebook Ads Library:
+  no Facebook URL set* rather than failing the batch. One actor's failure is
+  its own for the same reason: each of the four reports separately — written,
+  skipped, failed, or ran and returned nothing readable — and the ones that
+  worked still write.
+
+  Because the four output shapes are known, there is no mapping step: staff
+  count, Meta ads signal, review count and website notes are read out and
+  written directly. The ads signal is built from the whole result rather than
+  one item of it — the ad count and the earliest start date make *3 active ads,
+  running 4mo*. The one thing the run will not decide for itself is identity:
+  when the company lookup or the Maps search comes back with several candidate
+  clinics, that actor's fields are left unwritten and the candidates are listed
+  to choose from. Writing another clinic's review count onto this lead is the
+  one mistake here that would look like a fact afterwards.
 
   What it writes is shown apart from the editable details, because it is a
   different kind of fact: a reading taken on a day, not a field somebody keeps
-  current. The review count carries the time it was read — *Reviews: 128 ·
-  checked 2w ago* under the clinic name — and after 30 days that turns amber
-  and says to re-run before quoting it. Nothing here refreshes itself.
+  current. *Enriched 2d ago* under the clinic name is the headline, because it
+  is the one thing that says what the rest is worth today. The review count
+  keeps its own date alongside it, since a run where the Maps actor was skipped
+  or failed leaves that number older than the run above it. Nothing here
+  refreshes itself.
 
   Imported leads carry their **LinkedIn URLs** through to where outreach
   happens: *View LinkedIn profile* and *View company page* on the lead record,
