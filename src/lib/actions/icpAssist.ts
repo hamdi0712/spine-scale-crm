@@ -16,7 +16,7 @@
 // the browser names.
 
 import { prisma } from "@/lib/prisma";
-import { openAiJson } from "@/lib/openai";
+import { deepSeekJson } from "@/lib/deepseek";
 import {
   IcpAssistResult,
   assistEvidenceLabels,
@@ -54,7 +54,7 @@ export async function suggestIcpScores(
   }
 
   const { system, user } = buildAssistPrompt(lead);
-  const reply = await openAiJson({ system, user });
+  const reply = await deepSeekJson({ system, user });
   if (!reply.ok) {
     return { ok: false, error: reply.error };
   }

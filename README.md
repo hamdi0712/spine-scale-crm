@@ -4,8 +4,8 @@ Single-user internal tool for running the Spine Scale agency: sales pipeline,
 signed clients with delivery checklists, weekly KPI reporting, and a reference
 library. Runs locally against a SQLite file. It can talk to two external
 services and only when pointed at them: Apify, for the lead import and the
-enrichment run, and OpenAI, for the ICP scorecard's scoring assist. Leave
-`APIFY_API_TOKEN` and `OPENAI_API_KEY` unset and nothing in the app calls out
+enrichment run, and DeepSeek, for the ICP scorecard's scoring assist. Leave
+`APIFY_API_TOKEN` and `DEEPSEEK_API_KEY` unset and nothing in the app calls out
 anywhere.
 
 ## Run it locally
@@ -14,7 +14,7 @@ anywhere.
 cp .env.example .env   # then edit APP_PASSWORD in .env
                        # APIFY_API_TOKEN is optional — only the Apify import
                        #   and the enrichment run need it
-                       # OPENAI_API_KEY is optional — only the scorecard's
+                       # DEEPSEEK_API_KEY is optional — only the scorecard's
                        #   scoring assist needs it
 npm install
 npm run dev
@@ -209,8 +209,8 @@ again.
 
   **Suggest remaining scores**, on the lead's ICP scorecard, is the one place
   a model is asked anything. It sends what the enrichment run gathered —
-  website notes, the Meta ads signal, the review count — to OpenAI
-  (`gpt-4o-mini`) along with the framework's own text, and asks for three
+  website notes, the Meta ads signal, the review count — to DeepSeek
+  (`deepseek-v4-flash`) along with the framework's own text, and asks for three
   things: a Package/Consult Economics score with a one-sentence reason, the two
   Automation Gap boxes the evidence can speak to (booking widget, review
   pattern) with the same, and two or three sentences on overall fit. The button
@@ -235,8 +235,8 @@ again.
   as null and leaves that category exactly as it was, because the prompt asks
   for null rather than a guess.
 
-  `OPENAI_API_KEY` lives in `.env` beside the other two and is read only in
-  `src/lib/openai.ts`, which is server-side and sends it as a bearer header. A
+  `DEEPSEEK_API_KEY` lives in `.env` beside the other two and is read only in
+  `src/lib/deepseek.ts`, which is server-side and sends it as a bearer header. A
   missing key, a rejected one, a key without access to the model, spent credit,
   a rate limit, a request that times out, an answer that arrives cut off, and
   an answer that isn't in a shape that reads as scores each come back as their
