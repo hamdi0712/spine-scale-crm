@@ -366,7 +366,21 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
               </p>
             </div>
           ) : (
-            <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            /* Columns come off the room this grid actually has, not off the
+               window. Every other grid in the app uses viewport breakpoints
+               and is right to: they sit in fixed layouts. This one cannot,
+               because the sidebar collapses — 224px of chrome becomes 64px
+               with the window exactly as wide as it was — and a breakpoint
+               would hold three columns through both, or two.
+
+               So: as many 300px-or-wider tracks as fit, and a card is a card
+               whatever else is on screen. auto-fill rather than auto-fit so
+               three results after a filter stay card-width instead of
+               stretching to fill a row meant for three. The min() is what
+               keeps the last column honest below 300px — a track that cannot
+               have its minimum takes the container's width instead of
+               overflowing it. */
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-stretch gap-4">
               {visible.map((row) => (
                 <CandidateCard
                   key={row.id}

@@ -98,10 +98,13 @@ export default async function DiscoveryPage({
   return (
     <div>
       {/* Four actions is more than any other page header carries, so the row
-          is built to take it: the buttons keep their own width (shrink-0) and
-          the title column is the one that gives way, its subtitle wrapping to
-          another line rather than every button wrapping onto two. */}
-      <div className="flex items-end justify-between gap-4">
+          is built to take it. Wide enough for both, they share a line and the
+          buttons keep their own width — the title column is the one that
+          gives way, its subtitle wrapping to another line rather than every
+          button wrapping onto two. Too narrow for both, the whole thing
+          stacks: a shrink-0 row that never yields would push the page wider
+          than the window instead. */}
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <h1 className="display text-[32px] font-semibold">Discovery</h1>
           <p className="mt-1.5 text-sm text-muted">
@@ -109,7 +112,7 @@ export default async function DiscoveryPage({
             pipeline from here without a score
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
           <Link href="/discovery/rejected" className="btn">
             Rejected{rejected > 0 && <span className="num">({rejected})</span>}
           </Link>
