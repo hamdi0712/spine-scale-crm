@@ -14,6 +14,109 @@ datasource db {
 // SQLite has no native enums in Prisma, so stage/status fields are strings
 // constrained by constants in src/lib/constants.ts.
 
+// A scraped clinic that has not yet earned a place in the pipeline.
+//
+// Discovery sits in front of the pipeline, and the rule it exists to enforce
+// is one line long: nothing reaches Pipeline unscored. Every import — CSV or
+// Apify — lands here instead of on Lead, and a candidate only becomes a Lead
+// by scoring 5 or more out of 10 on the framework in src/lib/icp.ts.
+//
+// The enrichment half of this record is deliberately the same shape as Lead's
+// — same four fields, same meanings, written by the same four actors — because
+// promotion copies them across unchanged. What it adds is the verdict: a
+// total, a tier, and the full per-category reasoning behind both.
+//
+// Unlike the Lead scorecard, the score here IS stored rather than derived.
+// That is not a departure from the rule that the framework owns the bands, it
+// is the point of the record: the breakdown is the transcript of one automated
+// run against the evidence it had that day, including what a model said and
+// why. Re-tuning the framework should not silently rewrite the reason a clinic
+// was rejected last month — it should be re-run.
+model DiscoveryCandidate {
+  id String @id @default(cuid())
+
+  // Identity, as the import mapped it. Same columns the CSV wizard has always
+  // offered, so a mapping that used to make a Lead now makes one of these
+  // without a single field being dropped on the way.
+  clinicName         String
+  contactName        String?
+  phone              String?
+  email              String?
+  linkedinUrl        String? // the contact's own profile
+  companyLinkedinUrl String? // the clinic's company page
+  websiteUrl         String? // filled by hand, or by the enrichment run below
+  facebookUrl        String?
+  location           String?
+  timeZone           String? // IANA id, read off the location by the import
+  source             String? // "LinkedIn" unless the import mapped its own
+  staffCountRaw      Int? // headcount exactly as the source reported it
+  estValue           Float? // carried through to the lead if this one promotes
+
+  // Enrichment — written by the four-actor run (src/lib/enrichRun.ts), the
+  // same run and the same readers the lead page uses. Every one of these is a
+  // snapshot of what a scrape saw at one moment, which is why enrichedAt
+  // exists: the scoring below is only ever as good as its date.
+  metaAdsSignal String?
+  reviewCount   Int?
+  websiteNotes  String?
+  enrichedAt    DateTime?
+
+  // Where this candidate is in the queue. Constrained to DISCOVERY_STATUSES in
+  // src/lib/discovery.ts.
+  //
+  //   PENDING   — imported, never processed
+  //   ENRICHING — a run has it right now (or had it when the tab was closed)
+  //   SCORED    — scored, not yet promoted or rejected
+  //   PROMOTED  — became the Lead at promotedLeadId
+  //   REJECTED  — disqualified, or scored C-tier
+  //   FAILED    — an actor failed outright; nothing was scored
+  status String @default("PENDING")
+
+  // Why a run stopped, kept verbatim so the next queue run and the person
+  // reading the list see the same sentence. Null on every status but FAILED.
+  failureReason String?
+
+  // The verdict. Null until the candidate has been scored — a FAILED or
+  // PENDING candidate carries no total, because scoring incomplete evidence is
+  // the one thing this flow must never do.
+  icpTotal Int?
+  icpTier  String? // A | B | C | DISQUALIFIED
+
+  // The whole reasoning behind that total, as JSON: every disqualifier with
+  // the reason it did or didn't fire, every category with its points and a
+  // one-line reason, every automation gap the same, and where each answer came
+  // from — computed from the data, or suggested by the model. Read through
+  // parseBreakdown() in src/lib/discovery.ts, which never throws on a row
+  // written by an older shape.
+  icpBreakdown String?
+
+  // Hoisted out of the breakdown because the rejected list filters and sorts
+  // on them, and digging through JSON to answer "was this one disqualified" is
+  // not something a list view should do.
+  //
+  // disqualified is Layer 1 only — one of the five hard disqualifiers fired.
+  // disqualifiedReason is the sentence behind a REJECTED status either way:
+  // the disqualifier that fired, or "Scored C-tier: 3/10". Two ways of not
+  // being worth pursuing, one place to read why.
+  disqualified       Boolean @default(false)
+  disqualifiedReason String?
+
+  // The lead this became. Set with status PROMOTED and never cleared: the
+  // relation is what stops a candidate being promoted twice. SetNull rather
+  // than Cascade — deleting a lead should not erase the record of it having
+  // been qualified.
+  promotedLeadId String? @unique
+  promotedLead   Lead?   @relation(fields: [promotedLeadId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  // When the queue last finished with this candidate, whichever way it went.
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
 model Lead {
   id           String     @id @default(cuid())
   clinicName   String
@@ -82,6 +185,10 @@ model Lead {
   calls        Call[]
   activity     ActivityLog[]
   client       Client?
+  // The discovery candidate this lead was promoted from, where it came that
+  // way. Leads added by hand have none, which is the whole difference the
+  // field records.
+  candidate    DiscoveryCandidate?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 

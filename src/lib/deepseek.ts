@@ -3,9 +3,10 @@
 // Server-only, on the same terms as src/lib/apify.ts: the key lives in
 // DEEPSEEK_API_KEY, is read here, sent as a bearer header, and never returned
 // to the browser in any form. Nothing in this file may be imported from a
-// client component — the scorecard talks to it through the server action in
-// src/lib/actions/icpAssist.ts, which hands back parsed suggestions and plain
-// error text and nothing else.
+// client component — its two callers are server actions (the lead scorecard's
+// assist in src/lib/actions/icpAssist.ts, and the discovery queue in
+// src/lib/actions/discovery.ts), and both hand back parsed suggestions and
+// plain error text and nothing else.
 //
 // DeepSeek serves an OpenAI-compatible chat-completions API, so this is the
 // same request this file has always made: same path, same bearer header, same
@@ -30,6 +31,11 @@ const API_URL = "https://api.deepseek.com/chat/completions";
 // A scorecard suggestion is a paragraph and three short reasons. This is a
 // ceiling against a runaway generation, not a target — an answer that needs
 // more than this has stopped answering the question.
+//
+// The discovery queue asks a longer question (five disqualifiers, a category
+// and three gaps, each with its own reason) and passes its own ceiling, which
+// is why this is a default rather than the only value. Both are stated where
+// the prompt is, so a prompt that grows carries its ceiling with it.
 const MAX_OUTPUT_TOKENS = 700;
 
 // Long enough for a slow completion, short enough that a hung request gives
@@ -47,9 +53,11 @@ export type DeepSeekResult =
 export async function deepSeekJson({
   system,
   user,
+  maxTokens = MAX_OUTPUT_TOKENS,
 }: {
   system: string;
   user: string;
+  maxTokens?: number;
 }): Promise<DeepSeekResult> {
   const key = process.env.DEEPSEEK_API_KEY?.trim();
   if (!key) {
@@ -92,7 +100,7 @@ export async function deepSeekJson({
         thinking: { type: "disabled" },
         // Scoring the same evidence twice should not give two answers.
         temperature: 0,
-        max_tokens: MAX_OUTPUT_TOKENS,
+        max_tokens: maxTokens,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -147,7 +155,7 @@ export async function deepSeekJson({
     return {
       ok: false,
       error:
-        "DeepSeek's answer ran past its length limit and was cut off. Try again — if it keeps happening, the website notes on this lead are probably too long to summarise in one pass.",
+        "DeepSeek's answer ran past its length limit and was cut off. Try again — if it keeps happening, the website notes on this record are probably too long to summarise in one pass.",
     };
   }
 

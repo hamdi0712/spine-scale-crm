@@ -9,6 +9,7 @@ import {
   IconChartBar,
   IconGitBranch,
   IconLayoutDashboard,
+  IconRadar2,
   IconUsers,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/actions/auth";
@@ -23,6 +24,9 @@ const NAV = [
   // Sits with the dashboard: both read across every record rather than owning
   // one, and the pair is where a day starts.
   { href: "/calendar", label: "Calendar", Glyph: IconCalendarEvent },
+  // Immediately before Pipeline, because that is where it sits in the funnel:
+  // everything scraped lands in Discovery and only what scores gets through.
+  { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
   { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
   { href: "/clients", label: "Clients", Glyph: IconUsers },
   { href: "/reporting", label: "Reporting", Glyph: IconChartBar },

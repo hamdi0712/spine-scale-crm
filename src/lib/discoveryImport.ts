@@ -1,20 +1,28 @@
-// Bulk lead import — everything the CSV wizard and its server action agree on.
+// Bulk discovery import — everything the CSV wizard and its server action
+// agree on.
 //
 // The import is deliberately source-agnostic. It was built for Apify LinkedIn
 // scrapes, but different actors export different headers in a different order,
 // so nothing here matches on column names: the user maps each detected column
-// onto a Lead field by hand, and this module only knows how to read a row once
-// that mapping exists. Adding another source is a mapping, not a code change.
+// onto a candidate field by hand, and this module only knows how to read a row
+// once that mapping exists. Adding another source is a mapping, not a code
+// change.
+//
+// What changed when Discovery arrived is the destination and nothing else. The
+// mapping, the joining, the counting, the duplicate test and the row cap are
+// the ones that have always been here; they now produce DiscoveryCandidate
+// rows rather than Lead rows, because an unscored clinic has no business in
+// the pipeline. A candidate becomes a Lead by scoring, not by being imported.
 //
 // Both sides of the import share these helpers, so the preview the user
 // confirms is produced by exactly the code that writes the rows.
 
 import { zoneFromLocation } from "@/lib/timezones";
 
-// Where every imported lead starts. Stage is always New — an import is the top
-// of the funnel by definition — and the source is LinkedIn unless the CSV
+// Where every imported candidate starts: at the front of the discovery queue,
+// waiting for the next "Process queue". The source is LinkedIn unless the CSV
 // carries its own source column with something in it.
-export const IMPORT_DEFAULT_STAGE = "NEW";
+export const IMPORT_DEFAULT_STATUS = "PENDING";
 export const IMPORT_DEFAULT_SOURCE = "LinkedIn";
 
 export interface ImportField {
@@ -31,7 +39,7 @@ export const IMPORT_FIELD_KEYS = [
   "contactName",
   "phone",
   "email",
-  "leadSource",
+  "source",
   "linkedinUrl",
   "companyLinkedinUrl",
   "timeZone",
@@ -52,8 +60,8 @@ export const IMPORT_FIELDS: ImportField[] = [
   { key: "phone", label: "Phone" },
   { key: "email", label: "Email" },
   {
-    key: "leadSource",
-    label: "Lead source",
+    key: "source",
+    label: "Source",
     hint: `Leave unmapped to stamp every row “${IMPORT_DEFAULT_SOURCE}”.`,
   },
   { key: "linkedinUrl", label: "LinkedIn URL" },
@@ -61,7 +69,7 @@ export const IMPORT_FIELDS: ImportField[] = [
   {
     key: "timeZone",
     label: "Time zone (auto-detected from state)",
-    hint: "Point a location column at it — “Austin, TX”, “Portland, Oregon”. The US state is read out and the lead gets that state's zone; a location with no state in it leaves the zone blank rather than picking one. The text itself is kept as the lead's location, where the enrichment run uses it.",
+    hint: "Point a location column at it — “Austin, TX”, “Portland, Oregon”. The US state is read out and the candidate gets that state's zone; a location with no state in it leaves the zone blank rather than picking one. The text itself is kept as the candidate's location, where the enrichment run uses it.",
   },
   {
     key: "staffCountRaw",
@@ -83,6 +91,9 @@ export const IMPORT_PREVIEW_ROWS = 5;
 // A guard rail rather than a real limit — the whole payload travels through
 // one form post, and an accidental 50k-row export should be caught here rather
 // than half way through writing it.
+//
+// It is also, since Discovery, a bill: every row imported is a row the queue
+// will eventually run four actors and a model call against.
 export const MAX_IMPORT_ROWS = 1000;
 
 // The two ways rows get into the wizard. Everything after step 1 is identical
@@ -173,8 +184,8 @@ export const APIFY_INPUT_PLACEHOLDER = `{
   "maxResults": 100
 }`;
 
-// One entry per detected column, in header order: the Lead field that column
-// fills, or null for "don't import". Column-indexed rather than field-indexed
+// One entry per detected column, in header order: the candidate field that
+// column fills, or null for "don't import". Column-indexed rather than field-indexed
 // because that is the shape the mapping step edits — and, because it is a list
 // rather than a map, two columns can name the same field, which is how the
 // name-style fields below get filled from more than one source.
@@ -206,12 +217,12 @@ export function joinCells(row: string[], columns: number[]): string {
     .join(JOIN_SEPARATOR);
 }
 
-export interface ImportedLead {
+export interface ImportedCandidate {
   clinicName: string;
   contactName: string | null;
   phone: string | null;
   email: string | null;
-  leadSource: string;
+  source: string;
   linkedinUrl: string | null;
   companyLinkedinUrl: string | null;
   // Both read off the one location column: the text as it came, and the zone
@@ -261,11 +272,11 @@ export function mappedColumns(
 }
 
 // Reads one CSV row through the mapping. Returns null for a row with no clinic
-// name — there is no lead to create without one.
+// name — there is no candidate to create without one.
 export function mapRow(
   row: string[],
   mapping: ColumnMapping,
-): ImportedLead | null {
+): ImportedCandidate | null {
   const cell = (key: ImportFieldKey): string => {
     const columns = mappedColumns(mapping, key);
     if (columns.length === 0) return "";
@@ -287,7 +298,7 @@ export function mapRow(
     contactName: blankToNull(cell("contactName")),
     phone: blankToNull(cell("phone")),
     email: blankToNull(cell("email")),
-    leadSource: cell("leadSource") || IMPORT_DEFAULT_SOURCE,
+    source: cell("source") || IMPORT_DEFAULT_SOURCE,
     linkedinUrl: blankToNull(cell("linkedinUrl")),
     companyLinkedinUrl: blankToNull(cell("companyLinkedinUrl")),
     location: blankToNull(location),
@@ -322,7 +333,10 @@ export function parseAmount(v: string): number | null {
 
 // The duplicate test: same clinic and same contact. Case- and
 // whitespace-insensitive so a re-export of the same list matches its own
-// earlier import, and used both against existing leads and within the batch.
+// earlier import, and used within the batch as well as against what is already
+// stored — which, since Discovery, means candidates *and* leads. A clinic that
+// has already been through the queue and become a lead must not come back as a
+// candidate to be scored a second time.
 export function dedupeKey(
   clinicName: string,
   contactName: string | null | undefined,

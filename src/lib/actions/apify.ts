@@ -1,7 +1,7 @@
 "use server";
 
 import { isApifySourceKind, runApifySync } from "@/lib/apify";
-import { ApifyFetchResult } from "@/lib/leadImport";
+import { ApifyFetchResult } from "@/lib/discoveryImport";
 
 // Called straight from the import wizard, which awaits the result rather than
 // posting a form: the run's output has to come back to the browser to be
