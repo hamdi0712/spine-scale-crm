@@ -64,16 +64,12 @@ export default async function RejectedCandidatesPage({
             first, because that is where a decision worth overruling would be
           </p>
         </div>
-        <div className="flex h-[42px] shrink-0 items-center gap-1 rounded-[10px] border border-line bg-surface p-1">
+        <div className="segment">
           {FILTERS.map((f) => (
             <Link
               key={f.key}
               href={f.key === "all" ? "/discovery/rejected" : `/discovery/rejected?filter=${f.key}`}
-              className={`flex h-[32px] items-center rounded-lg px-3.5 text-sm ${
-                filter === f.key
-                  ? "bg-accent/10 font-medium text-accent"
-                  : "text-muted hover:text-ink"
-              }`}
+              className={`segment-item ${filter === f.key ? "segment-item-on" : ""}`}
             >
               {f.label}
             </Link>

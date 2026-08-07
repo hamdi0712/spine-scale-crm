@@ -29,6 +29,10 @@ import {
   DiscoveryStep,
   DiscoveryStepStatus,
 } from "@/lib/discovery";
+import {
+  BATCH_QUEUE_DESCRIPTION,
+  defaultBatchLabel,
+} from "@/lib/discoveryBatch";
 import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
 
 interface QueueItem {
@@ -44,7 +48,10 @@ export default function DiscoveryQueue({
   queued,
 }: {
   loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
-  process: (id: string) => Promise<DiscoveryProcessResult>;
+  process: (
+    id: string,
+    runBatchLabel?: string | null,
+  ) => Promise<DiscoveryProcessResult>;
   // What the page counted when it rendered. Only ever a label on the button —
   // the queue itself is re-read at the moment it starts, because a list that
   // has sat open for an hour is not the queue any more.
@@ -79,7 +86,10 @@ function QueueDialog({
   onClose,
 }: {
   loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
-  process: (id: string) => Promise<DiscoveryProcessResult>;
+  process: (
+    id: string,
+    runBatchLabel?: string | null,
+  ) => Promise<DiscoveryProcessResult>;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -120,6 +130,12 @@ function QueueDialog({
     );
     setPhase("running");
 
+    // One batch for this run, dated now, generated once rather than per
+    // candidate — otherwise a queue that took two hours over midnight would
+    // file its candidates under two different days. It only ever fills a gap
+    // on a candidate that arrived without a batch; every import stamps its own.
+    const runBatchLabel = defaultBatchLabel(new Date(), BATCH_QUEUE_DESCRIPTION);
+
     // One at a time, awaited. In parallel this would finish sooner and cost
     // the same, but four actor runs times eight candidates at once is a shape
     // of spending nobody can watch — and watching it is the point.
@@ -132,7 +148,7 @@ function QueueDialog({
       );
       let result: DiscoveryProcessResult;
       try {
-        result = await process(candidate.id);
+        result = await process(candidate.id, runBatchLabel);
       } catch {
         result = {
           id: candidate.id,

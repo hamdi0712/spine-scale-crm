@@ -11,6 +11,7 @@ import {
   DiscoveryStatus,
   parseBreakdown,
 } from "@/lib/discovery";
+import { MAX_BATCH_LABEL_LENGTH } from "@/lib/discoveryBatch";
 import { ICP_MAX_SCORE, IcpTier } from "@/lib/icp";
 import { fmtDateTime } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
@@ -306,6 +307,23 @@ export default async function DiscoveryCandidatePage({
                   step="any"
                   defaultValue={candidate.estValue ?? ""}
                   className="field num"
+                />
+              </div>
+              {/* The run this one arrived on. Editable like the rest of the
+                  record, and on purpose: a batch named after the actor that
+                  produced it is often not what the run turned out to be, and
+                  renaming it here renames it for this candidate only. */}
+              <div className="col-span-2">
+                <label className="field-label" htmlFor="batchLabel">
+                  Batch
+                </label>
+                <input
+                  id="batchLabel"
+                  name="batchLabel"
+                  defaultValue={candidate.batchLabel ?? ""}
+                  maxLength={MAX_BATCH_LABEL_LENGTH}
+                  placeholder="Which import or queue run this arrived on"
+                  className="field"
                 />
               </div>
             </div>

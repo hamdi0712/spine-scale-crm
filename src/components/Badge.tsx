@@ -137,6 +137,13 @@ const TIER_TONES: Record<IcpTier, Tone> = {
   DISQUALIFIED: "red",
 };
 
+// The tier's colour on its own, for anything that needs to mark a tier without
+// wearing a whole badge — the dots on Discovery's tier quick-filters. Read off
+// the same table the badges use, so a tier is never two different greens.
+export function icpTierDot(tier: IcpTier): string {
+  return TONE_CLS[TIER_TONES[tier]].dot;
+}
+
 // Renders nothing for a lead that has never been scored — absence of a tier
 // is not a C-tier.
 //
@@ -158,6 +165,58 @@ export function IcpTierBadge({
       label={ICP_TIER_LABELS[tier]}
       title={tooltip && action ? action : undefined}
     />
+  );
+}
+
+// The score, big enough to read across a grid of cards — the number itself,
+// with the tier's mark beside it and the tier's colour behind both.
+//
+// It carries the tier rather than repeating it in words: A green and burning,
+// B amber and warm, C grey and cold, disqualified red and struck out. The
+// status pill on the same card is what says where the candidate got to; this
+// says how good it is, and the two never mean the same thing.
+//
+// A candidate nobody has scored gets a dash on the same neutral ground as a
+// C-tier — deliberately quiet — because "not scored" is not a low score, and
+// the title spells that out for anybody who hovers it.
+const TIER_MARKS: Record<IcpTier, string> = {
+  A: "flame",
+  B: "sun",
+  C: "snowflake",
+  DISQUALIFIED: "ban",
+};
+
+export function IcpScoreBadge({
+  tier,
+  total,
+  max,
+}: {
+  tier: IcpTier | null | undefined;
+  total: number | null | undefined;
+  max: number;
+}) {
+  const scored = total != null && tier != null;
+  const cls = TONE_CLS[scored ? TIER_TONES[tier] : "neutral"];
+  const action = scored ? ICP_TIER_ACTIONS[tier] : null;
+  return (
+    <span
+      title={
+        scored
+          ? `${total} of ${max} — ${ICP_TIER_LABELS[tier]}${action ? `. ${action}` : ""}`
+          : "Not scored yet — the next queue run decides this one"
+      }
+      className={`inline-flex h-[28px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 ${cls.pill}`}
+    >
+      {scored && (
+        <Icon name={TIER_MARKS[tier]} className="h-[15px] w-[15px]" />
+      )}
+      <span className="num text-sm font-semibold leading-none">
+        {scored ? total : "—"}
+      </span>
+      <span className="sr-only">
+        {scored ? `out of ${max}, ${ICP_TIER_LABELS[tier]}` : "not scored yet"}
+      </span>
+    </span>
   );
 }
 

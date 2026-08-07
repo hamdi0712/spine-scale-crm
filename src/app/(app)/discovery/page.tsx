@@ -7,7 +7,7 @@ import {
 import { DISCOVERY_QUEUE_STATUSES } from "@/lib/discovery";
 import { IcpTier } from "@/lib/icp";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
-import DiscoveryTable, { DiscoveryRow } from "@/components/DiscoveryTable";
+import DiscoveryList, { DiscoveryRow } from "@/components/DiscoveryList";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +83,8 @@ export default async function DiscoveryPage({
     contactName: c.contactName,
     source: c.source,
     location: c.location,
+    email: c.email,
+    batchLabel: c.batchLabel,
     status: c.status,
     icpTotal: c.icpTotal,
     // The tier is stored on a candidate rather than derived, so it is read
@@ -95,15 +97,22 @@ export default async function DiscoveryPage({
 
   return (
     <div>
-      <div className="flex items-end justify-between gap-4">
-        <div>
+      {/* Four actions is more than any other page header carries, so the row
+          is built to take it. Wide enough for both, they share a line and the
+          buttons keep their own width — the title column is the one that
+          gives way, its subtitle wrapping to another line rather than every
+          button wrapping onto two. Too narrow for both, the whole thing
+          stacks: a shrink-0 row that never yields would push the page wider
+          than the window instead. */}
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
           <h1 className="display text-[32px] font-semibold">Discovery</h1>
           <p className="mt-1.5 text-sm text-muted">
             Scraped clinics waiting to be qualified — nothing reaches the
             pipeline from here without a score
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
           <Link href="/discovery/rejected" className="btn">
             Rejected{rejected > 0 && <span className="num">({rejected})</span>}
           </Link>
@@ -152,7 +161,7 @@ export default async function DiscoveryPage({
         </div>
       ) : (
         <div className="mt-8">
-          <DiscoveryTable rows={rows} />
+          <DiscoveryList rows={rows} />
         </div>
       )}
     </div>

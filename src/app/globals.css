@@ -34,17 +34,35 @@
   .field-label {
     @apply mb-2 block text-xs font-medium tracking-[0.02em] text-muted;
   }
+  /* Every button in the app is a single-line pill: a fixed 42px height, a
+     label that never breaks, and a box that sizes to that label rather than
+     to whatever room a flex row has left. shrink-0 and whitespace-nowrap are
+     on the class rather than on the call sites because a button whose text
+     wrapped onto a second line would break the 42px height every one of
+     these shares — a row of four in a page header is where that showed. */
   .btn {
-    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-line bg-surface px-[18px] text-sm font-medium text-[#4B5563] hover:bg-wash/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
+    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-surface px-[18px] text-sm font-medium text-[#4B5563] hover:bg-wash/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
   }
   .btn-primary {
-    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-accent px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
+    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-accent px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
   }
   .btn-danger {
-    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-bad/30 bg-transparent px-[18px] text-sm font-medium text-bad hover:bg-bad-soft/60 focus:outline-none;
+    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-bad/30 bg-transparent px-[18px] text-sm font-medium text-bad hover:bg-bad-soft/60 focus:outline-none;
   }
   .btn-ghost {
-    @apply inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-transparent bg-transparent px-[18px] text-sm font-medium text-muted hover:bg-wash/70 hover:text-ink focus:outline-none;
+    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-transparent bg-transparent px-[18px] text-sm font-medium text-muted hover:bg-wash/70 hover:text-ink focus:outline-none;
+  }
+  /* The segmented control — the Table/Board toggle on the pipeline, the
+     filters on the rejected list, the grid/table toggle in Discovery. Same
+     42px as a button so it sits level in a row of them. */
+  .segment {
+    @apply flex h-[42px] shrink-0 items-center gap-1 rounded-[10px] border border-line bg-surface p-1;
+  }
+  .segment-item {
+    @apply flex h-[32px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 text-sm text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
+  }
+  .segment-item-on {
+    @apply bg-accent/10 font-medium text-accent;
   }
   /* The active sidebar item is the secondary button's surface — same white
      fill and gray border as .btn — raised off the panel and tinted brand

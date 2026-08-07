@@ -85,6 +85,55 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   flag: <path d="M6 20V4.5h12l-2.5 4 2.5 4H6" />,
+  // The tier marks, hottest to coldest, for the score badge on a discovery
+  // card: A burns, B is warm, C is cold, and a disqualified clinic is struck
+  // out rather than given a temperature it never earned.
+  flame: (
+    <path d="M12 3.5c3 2.9 5.5 5.4 5.5 9a5.5 5.5 0 01-11 0c0-1.7.6-3 1.7-4.2.3 1.1 1 1.9 2 2.4C10.1 8.5 10.7 5.9 12 3.5z" />
+  ),
+  sun: (
+    <>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 3.5v2M12 18.5v2M5.5 12h-2M20.5 12h-2M7.4 7.4L6 6M18 18l-1.4-1.4M7.4 16.6L6 18M18 6l-1.4 1.4" />
+    </>
+  ),
+  snowflake: (
+    <>
+      <path d="M12 3.5v17M4.6 7.75l14.8 8.5M19.4 7.75L4.6 16.25" />
+      <path d="M9.6 5.4L12 3.5l2.4 1.9M9.6 18.6L12 20.5l2.4-1.9" />
+    </>
+  ),
+  ban: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M6.3 6.3l11.4 11.4" />
+    </>
+  ),
+  mapPin: (
+    <>
+      <path d="M12 20.5s6-5.3 6-9.5a6 6 0 10-12 0c0 4.2 6 9.5 6 9.5z" />
+      <circle cx="12" cy="11" r="2.25" />
+    </>
+  ),
+  mail: (
+    <>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+      <path d="M4.6 7.6L12 13l7.4-5.4" />
+    </>
+  ),
+  building: (
+    <>
+      <path d="M4.5 20.5V5.5a1 1 0 011-1h8a1 1 0 011 1v15" />
+      <path d="M14.5 10.5h4a1 1 0 011 1v9M3 20.5h18" />
+      <path d="M8 8.5h3M8 12h3M8 15.5h3" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M4.5 11.2V5.5a1 1 0 011-1h5.7a1 1 0 01.71.3l7.29 7.29a1 1 0 010 1.42l-5.7 5.7a1 1 0 01-1.42 0L4.8 11.91a1 1 0 01-.3-.71z" />
+      <circle cx="8.6" cy="8.6" r="1.2" />
+    </>
+  ),
   arrowUp: <path d="M12 19V6M6.5 11.5L12 6l5.5 5.5" />,
   arrowDown: <path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" />,
   arrowRight: <path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5" />,

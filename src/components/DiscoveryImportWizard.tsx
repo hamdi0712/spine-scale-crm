@@ -48,6 +48,11 @@ import {
   DISCOVERY_STATUS_LABELS,
   DiscoveryStatus,
 } from "@/lib/discovery";
+import {
+  MAX_BATCH_LABEL_LENGTH,
+  defaultBatchLabel,
+  describeFile,
+} from "@/lib/discoveryBatch";
 import { zoneLabel } from "@/lib/timezones";
 import { suggestedStaffSizeScore } from "@/lib/icp";
 import { fmtMoney } from "@/lib/format";
@@ -76,6 +81,11 @@ export default function DiscoveryImportWizard({
   const [mapping, setMapping] = useState<ColumnMapping>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  // The batch every row of this import is filed under. Null means "whatever
+  // the run is called by default" — typing over it pins the label, and loading
+  // a different file or re-running the actor drops back to null so the default
+  // follows the new source rather than the old one.
+  const [batch, setBatch] = useState<string | null>(null);
 
   // Apify step 1 only. Unnamed like every other control here, so none of it
   // posts with the import.
@@ -90,6 +100,22 @@ export default function DiscoveryImportWizard({
   // What the thing being mapped is called, so the copy fits the source it
   // came from: a CSV has columns, a dataset item has fields.
   const noun = source === "csv" ? "column" : "field";
+
+  // What this run is called if nobody renames it: today's date and where the
+  // rows came from — the file, minus its extension, or the actor that was run.
+  const batchDefault = useMemo(
+    () =>
+      defaultBatchLabel(
+        new Date(),
+        source === "apify"
+          ? apifyId.trim()
+          : parsed
+            ? describeFile(parsed.label)
+            : null,
+      ),
+    [source, apifyId, parsed],
+  );
+  const batchLabel = batch ?? batchDefault;
 
   // Every row the mapping can actually turn into a candidate, and what
   // happened to the rest, so the confirm step states all of it before anything
@@ -144,8 +170,10 @@ export default function DiscoveryImportWizard({
         return;
       }
       setParsed({ label: file.name, headers: table.headers, rows: table.rows });
-      // A new file means new columns — start every one of them unmapped.
+      // A new file means new columns — start every one of them unmapped — and
+      // a new batch, so the label follows the file that is loaded now.
       setMapping(table.headers.map(() => null));
+      setBatch(null);
     } catch {
       setParsed(null);
       setMapping([]);
@@ -177,6 +205,7 @@ export default function DiscoveryImportWizard({
         rows: result.rows,
       });
       setMapping(result.headers.map(() => null));
+      setBatch(null);
     } catch {
       setError(
         "The run could not be reached. Check the server is still up and try again.",
@@ -222,6 +251,9 @@ export default function DiscoveryImportWizard({
         name="rows"
         value={JSON.stringify(parsed ? parsed.rows.slice(0, MAX_IMPORT_ROWS) : [])}
       />
+      {/* Only once there is something to import, so the default label is never
+          computed on the server and disagreed with in the browser. */}
+      {parsed && <input type="hidden" name="batchLabel" value={batchLabel} />}
 
       <WizardProgress
         steps={steps}
@@ -473,6 +505,31 @@ export default function DiscoveryImportWizard({
           {/* ─── Step 3 — preview & confirm ─────────────────────────────── */}
           {step === 3 && parsed && (
             <>
+              {/* The batch, named before anything is written. Every row of
+                  this import is filed under it, the Discovery list filters on
+                  it, and it stays editable on the candidate afterwards — so
+                  the point of it here is only that a run gets a name while
+                  somebody still remembers what the run was. */}
+              <div>
+                <label className="field-label" htmlFor="batch-label">
+                  Batch
+                </label>
+                <input
+                  id="batch-label"
+                  value={batchLabel}
+                  onChange={(e) => setBatch(e.target.value)}
+                  maxLength={MAX_BATCH_LABEL_LENGTH}
+                  placeholder={batchDefault}
+                  className="field max-w-md"
+                />
+                <p className="mt-2 text-xs leading-relaxed text-muted">
+                  All {candidates.length} candidate
+                  {candidates.length === 1 ? "" : "s"} import under this label,
+                  and Discovery filters by it. Dated and named after the{" "}
+                  {source === "csv" ? "file" : "actor"} unless you say otherwise.
+                </p>
+              </div>
+
               <div className="overflow-x-auto rounded-[10px] border border-line">
                 <table className="w-full">
                   <thead>
