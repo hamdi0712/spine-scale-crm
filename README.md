@@ -2,15 +2,20 @@
 
 Single-user internal tool for running the Spine Scale agency: sales pipeline,
 signed clients with delivery checklists, weekly KPI reporting, and a reference
-library. Runs locally against a SQLite file. The only external service it can
-talk to is Apify, and only when the lead import is pointed at it — leave
-`APIFY_API_TOKEN` unset and nothing in the app calls out anywhere.
+library. Runs locally against a SQLite file. It can talk to two external
+services and only when pointed at them: Apify, for the lead import and the
+enrichment run, and OpenAI, for the ICP scorecard's scoring assist. Leave
+`APIFY_API_TOKEN` and `OPENAI_API_KEY` unset and nothing in the app calls out
+anywhere.
 
 ## Run it locally
 
 ```bash
 cp .env.example .env   # then edit APP_PASSWORD in .env
-                       # APIFY_API_TOKEN is optional — only the Apify import needs it
+                       # APIFY_API_TOKEN is optional — only the Apify import
+                       #   and the enrichment run need it
+                       # OPENAI_API_KEY is optional — only the scorecard's
+                       #   scoring assist needs it
 npm install
 npm run dev
 ```
@@ -116,7 +121,10 @@ again.
   Signal, and Automation Gap — banding the lead A-tier (8–10), B-tier (5–7) or
   C-tier (0–4). The tier shows as a badge on board cards and table rows. Only
   the raw answers are stored; the total and tier are derived in
-  `src/lib/icp.ts`, so re-tuning the framework needs no migration. Marking a
+  `src/lib/icp.ts`, so re-tuning the framework needs no migration. An enriched
+  lead can have three of those answers suggested by a model — pre-selected,
+  reasoned, and saved by nobody but you (*Suggest remaining scores*, below).
+  Marking a
   lead Won enables one-click **Convert to Client**, which pre-fills a client
   record (including the estimated deal value as the monthly fee), archives the
   lead, and opens the onboarding wizard.
@@ -198,6 +206,42 @@ again.
   keeps its own date alongside it, since a run where the Maps actor was skipped
   or failed leaves that number older than the run above it. Nothing here
   refreshes itself.
+
+  **Suggest remaining scores**, on the lead's ICP scorecard, is the one place
+  a model is asked anything. It sends what the enrichment run gathered —
+  website notes, the Meta ads signal, the review count — to OpenAI
+  (`gpt-4o-mini`) along with the framework's own text, and asks for three
+  things: a Package/Consult Economics score with a one-sentence reason, the two
+  Automation Gap boxes the evidence can speak to (booking widget, review
+  pattern) with the same, and two or three sentences on overall fit. The button
+  is disabled until the lead has been enriched, because without that there is
+  nothing to read and a model asked anyway would write three confident
+  sentences about nothing.
+
+  **It suggests; it never scores.** What comes back is pre-selected on the card
+  with its reasoning printed beside it, in the same brand-tinted note the
+  imported staff count uses, and stored by nothing until somebody presses *Save
+  scorecard* — the server action makes no write at all. A suggestion that
+  landed on top of an answer already there says so (*it replaced the 1 pt you
+  had*), so nothing changes quietly. The reasoning is shown because a score
+  with no reason is not reviewable, which would make the review the button
+  insists on into a formality.
+
+  Three things are deliberately out of its reach. The third Automation Gap box
+  — follow-up/remarketing evidence — is judged on a retargeting pixel and
+  recurring ad creative, neither of which the enrichment run brings back, so it
+  is never suggested. A disqualified lead switches the whole scoring section
+  off, the assist with it. And an answer the evidence cannot support comes back
+  as null and leaves that category exactly as it was, because the prompt asks
+  for null rather than a guess.
+
+  `OPENAI_API_KEY` lives in `.env` beside the other two and is read only in
+  `src/lib/openai.ts`, which is server-side and sends it as a bearer header. A
+  missing key, a rejected one, a key without access to the model, spent credit,
+  a rate limit, a request that times out, an answer that arrives cut off, and
+  an answer that isn't in a shape that reads as scores each come back as their
+  own sentence in a red note on the card, with the card left exactly as it was.
+  Leave the key unset and the scorecard is what it always was, scored by hand.
 
   Imported leads carry their **LinkedIn URLs** through to where outreach
   happens: *View LinkedIn profile* and *View company page* on the lead record,
