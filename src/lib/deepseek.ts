@@ -1,11 +1,17 @@
-// OpenAI — the one model call in the app, behind one function.
+// DeepSeek — the one model call in the app, behind one function.
 //
 // Server-only, on the same terms as src/lib/apify.ts: the key lives in
-// OPENAI_API_KEY, is read here, sent as a bearer header, and never returned to
-// the browser in any form. Nothing in this file may be imported from a client
-// component — the scorecard talks to it through the server action in
+// DEEPSEEK_API_KEY, is read here, sent as a bearer header, and never returned
+// to the browser in any form. Nothing in this file may be imported from a
+// client component — the scorecard talks to it through the server action in
 // src/lib/actions/icpAssist.ts, which hands back parsed suggestions and plain
 // error text and nothing else.
+//
+// DeepSeek serves an OpenAI-compatible chat-completions API, so this is the
+// same request this file has always made: same path, same bearer header, same
+// messages array, same response_format. Only the host, the model and the key
+// changed, plus the one parameter noted at `thinking` below that DeepSeek adds
+// and OpenAI has no equivalent for.
 //
 // What comes back is JSON, asked for as JSON: the caller states the shape in
 // its prompt and response_format pins the model to an object, so reading the
@@ -17,9 +23,9 @@
 // Small, cheap, and fixed. Both the assist's cost and the shape of its answers
 // are calibrated to this model, so it is stated once here rather than being a
 // setting somebody can move without re-reading the prompt.
-export const OPENAI_MODEL = "gpt-4o-mini";
+export const DEEPSEEK_MODEL = "deepseek-v4-flash";
 
-const API_URL = "https://api.openai.com/v1/chat/completions";
+const API_URL = "https://api.deepseek.com/chat/completions";
 
 // A scorecard suggestion is a paragraph and three short reasons. This is a
 // ceiling against a runaway generation, not a target — an answer that needs
@@ -34,23 +40,23 @@ const TIMEOUT_MS = 60_000;
 // keeps it a sentence rather than a stack trace.
 const MAX_DETAIL_CHARS = 300;
 
-export type OpenAiResult =
+export type DeepSeekResult =
   | { ok: true; content: string }
   | { ok: false; error: string };
 
-export async function openAiJson({
+export async function deepSeekJson({
   system,
   user,
 }: {
   system: string;
   user: string;
-}): Promise<OpenAiResult> {
-  const key = process.env.OPENAI_API_KEY?.trim();
+}): Promise<DeepSeekResult> {
+  const key = process.env.DEEPSEEK_API_KEY?.trim();
   if (!key) {
     return {
       ok: false,
       error:
-        "OPENAI_API_KEY is not set. Add it to the .env file and restart the server.",
+        "DEEPSEEK_API_KEY is not set. Add it to the .env file and restart the server.",
     };
   }
 
@@ -65,11 +71,25 @@ export async function openAiJson({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
+        model: DEEPSEEK_MODEL,
         // The reply is read by code, so it is pinned to an object rather than
         // hoped to be one. The prompt still states the shape — this only
         // guarantees valid JSON, not the right JSON.
+        //
+        // DeepSeek honours this on one condition OpenAI shares: the word
+        // "json" has to appear in the prompt or the request is refused. It
+        // does — the system prompt and the REPLY FORMAT block in
+        // src/lib/icpAssist.ts both say it — so this is noted rather than
+        // worked around. Anyone rewriting those prompts needs to keep it.
         response_format: { type: "json_object" },
+        // The one parameter with no OpenAI counterpart, and it is not
+        // optional here. V4 thinks by default, which breaks this call three
+        // ways: the chain of thought comes back in reasoning_content and
+        // leaves `content` empty or partial, the reasoning spends the token
+        // ceiling below before the answer starts, and temperature stops
+        // applying. Off, it is the plain completion this file has always
+        // made.
+        thinking: { type: "disabled" },
         // Scoring the same evidence twice should not give two answers.
         temperature: 0,
         max_tokens: MAX_OUTPUT_TOKENS,
@@ -88,7 +108,7 @@ export async function openAiJson({
     ) {
       return {
         ok: false,
-        error: `OpenAI did not answer within ${Math.round(
+        error: `DeepSeek did not answer within ${Math.round(
           TIMEOUT_MS / 1000,
         )} seconds and the request was given up on. Try again.`,
       };
@@ -96,7 +116,7 @@ export async function openAiJson({
     return {
       ok: false,
       error:
-        "Could not reach OpenAI. Check the server's network connection and try again.",
+        "Could not reach DeepSeek. Check the server's network connection and try again.",
     };
   }
 
@@ -110,7 +130,7 @@ export async function openAiJson({
   } catch {
     return {
       ok: false,
-      error: "OpenAI returned something that is not JSON. Try again.",
+      error: "DeepSeek returned something that is not JSON. Try again.",
     };
   }
 
@@ -127,7 +147,7 @@ export async function openAiJson({
     return {
       ok: false,
       error:
-        "OpenAI's answer ran past its length limit and was cut off. Try again — if it keeps happening, the website notes on this lead are probably too long to summarise in one pass.",
+        "DeepSeek's answer ran past its length limit and was cut off. Try again — if it keeps happening, the website notes on this lead are probably too long to summarise in one pass.",
     };
   }
 
@@ -135,15 +155,15 @@ export async function openAiJson({
   if (typeof content !== "string" || content.trim() === "") {
     return {
       ok: false,
-      error: "OpenAI returned an empty answer. Try again.",
+      error: "DeepSeek returned an empty answer. Try again.",
     };
   }
   return { ok: true, content };
 }
 
-// OpenAI reports failures as { error: { message, type, code } }. The message is
-// its own text and carries no credential, so it is passed through under a
-// heading that says what to do about it.
+// DeepSeek reports failures as { error: { message, type, code } }, the same
+// envelope OpenAI uses. The message is its own text and carries no credential,
+// so it is passed through under a heading that says what to do about it.
 async function errorMessage(response: Response): Promise<string> {
   let detail = "";
   let code = "";
@@ -157,28 +177,36 @@ async function errorMessage(response: Response): Promise<string> {
     // A non-JSON body tells us nothing beyond the status code.
   }
   const suffix = detail
-    ? ` OpenAI said: ${detail.slice(0, MAX_DETAIL_CHARS)}`
+    ? ` DeepSeek said: ${detail.slice(0, MAX_DETAIL_CHARS)}`
     : "";
 
   if (response.status === 401) {
-    return `OpenAI rejected the API key. Check OPENAI_API_KEY in the .env file — it may be mistyped, revoked, or from another account.${suffix}`;
+    return `DeepSeek rejected the API key. Check DEEPSEEK_API_KEY in the .env file — it may be mistyped, revoked, or from another account.${suffix}`;
+  }
+  // Where OpenAI signalled an empty account with a 429 carrying
+  // insufficient_quota, DeepSeek gives it a status of its own. Same sentence,
+  // read off that status — and off the code too, on the same belt-and-braces
+  // as before, since the two are reported independently.
+  if (response.status === 402 || code === "insufficient_balance") {
+    return `This DeepSeek account is out of credit, so the request was refused. Top it up and try again.${suffix}`;
   }
   if (response.status === 403) {
-    return `This key is not allowed to use ${OPENAI_MODEL}. Check the project's model permissions in the OpenAI dashboard.${suffix}`;
+    return `This key is not allowed to use ${DEEPSEEK_MODEL}. Check the key's permissions in the DeepSeek platform console.${suffix}`;
   }
-  if (response.status === 429 || code === "insufficient_quota") {
-    return code === "insufficient_quota"
-      ? `This OpenAI account is out of credit, so the request was refused. Top it up and try again.${suffix}`
-      : `OpenAI is rate-limiting this key. Wait a moment and try again.${suffix}`;
+  if (response.status === 429) {
+    return `DeepSeek is rate-limiting this key. Wait a moment and try again.${suffix}`;
   }
   if (response.status === 404) {
-    return `OpenAI has no model called ${OPENAI_MODEL} available to this key.${suffix}`;
+    return `DeepSeek has no model called ${DEEPSEEK_MODEL} available to this key.${suffix}`;
   }
-  if (response.status === 400) {
-    return `OpenAI would not accept the request.${suffix}`;
+  // 400 is a malformed body, 422 a bad parameter. Both mean the request went
+  // out wrong rather than the account being at fault, and neither is something
+  // the person at the scorecard can act on beyond reporting it.
+  if (response.status === 400 || response.status === 422) {
+    return `DeepSeek would not accept the request.${suffix}`;
   }
   if (response.status >= 500) {
-    return `OpenAI is having trouble (HTTP ${response.status}). Try again in a minute.${suffix}`;
+    return `DeepSeek is having trouble (HTTP ${response.status}). Try again in a minute.${suffix}`;
   }
-  return `The OpenAI request failed (HTTP ${response.status}).${suffix}`;
+  return `The DeepSeek request failed (HTTP ${response.status}).${suffix}`;
 }

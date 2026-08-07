@@ -2,7 +2,7 @@
 
 // The scoring assist's one call.
 //
-// Reads the three enrichment fields off the lead, asks OpenAI to score
+// Reads the three enrichment fields off the lead, asks DeepSeek to score
 // category B and the two Automation Gap boxes against the framework text, and
 // hands the parsed suggestion back to the card.
 //
@@ -16,7 +16,7 @@
 // the browser names.
 
 import { prisma } from "@/lib/prisma";
-import { openAiJson } from "@/lib/openai";
+import { deepSeekJson } from "@/lib/deepseek";
 import {
   IcpAssistResult,
   assistEvidenceLabels,
@@ -54,7 +54,7 @@ export async function suggestIcpScores(
   }
 
   const { system, user } = buildAssistPrompt(lead);
-  const reply = await openAiJson({ system, user });
+  const reply = await deepSeekJson({ system, user });
   if (!reply.ok) {
     return { ok: false, error: reply.error };
   }
@@ -64,7 +64,7 @@ export async function suggestIcpScores(
     return {
       ok: false,
       error:
-        "OpenAI answered, but not in a shape that reads as scores. Nothing has been changed on the card — try again.",
+        "DeepSeek answered, but not in a shape that reads as scores. Nothing has been changed on the card — try again.",
     };
   }
 

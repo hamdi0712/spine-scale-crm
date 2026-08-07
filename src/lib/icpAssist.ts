@@ -121,7 +121,12 @@ const SYSTEM_PROMPT = [
   "You help qualify chiropractic and non-surgical spine clinics against a fixed scorecard for a marketing agency.",
   "You score the evidence you are given and nothing else. You have no knowledge of this clinic beyond the evidence block, and you never infer a fact it does not state — where the evidence cannot support a call, you return null for that item instead of guessing.",
   "You use the scorecard's own option text as written; you do not adjust what a score means to fit a clinic.",
-  "You reply with a single JSON object in exactly the shape requested, and nothing else.",
+  // The lowercase "json" is load-bearing, not a typo. DeepSeek refuses a
+  // request that asks for response_format json_object unless the word appears
+  // in a prompt, and its documentation writes that word in lower case
+  // throughout. Saying it both ways costs a clause and satisfies the check
+  // whichever way it is spelled.
+  "You reply with a single JSON object in exactly the shape requested, and nothing else — your reply is parsed as json, so any prose around it breaks it.",
 ].join(" ");
 
 export function buildAssistPrompt(evidence: IcpAssistEvidence): {
