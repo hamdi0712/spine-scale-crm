@@ -11,6 +11,7 @@ import {
   updateLead,
 } from "@/lib/actions/leads";
 import { applyEnrichSelection, runLeadEnrichment } from "@/lib/actions/enrich";
+import { suggestIcpScores } from "@/lib/actions/icpAssist";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
 import {
@@ -19,6 +20,7 @@ import {
   suggestedStaffSizeScore,
 } from "@/lib/icp";
 import { enrichPlan } from "@/lib/leadEnrich";
+import { hasAssistEvidence } from "@/lib/icpAssist";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDateTime, toDateInput } from "@/lib/format";
@@ -56,6 +58,7 @@ export default async function LeadDetailPage({
   const clearConnectionSent = clearConnectionRequestSent.bind(null, lead.id);
   const runEnrichment = runLeadEnrichment.bind(null, lead.id);
   const applySelection = applyEnrichSelection.bind(null, lead.id);
+  const suggestScores = suggestIcpScores.bind(null, lead.id);
   const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
 
   // What an enrichment run would do with this lead as it stands, worked out
@@ -539,6 +542,13 @@ export default async function LeadDetailPage({
         </div>
         <IcpScorecard
           action={saveScorecard}
+          // Reads the enrichment above and suggests category B and two of the
+          // Automation Gap boxes. Same rule as the staff count below it: the
+          // card pre-selects what comes back and stores none of it until the
+          // card is saved. The same test the action applies decides whether
+          // the button is offered at all.
+          suggestScores={suggestScores}
+          enriched={hasAssistEvidence(lead)}
           // A staff count that came in with the lead (usually from a CSV
           // import) suggests category A's band. Computed here, offered by the
           // card, and stored by nothing until the card is saved.
