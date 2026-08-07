@@ -61,7 +61,7 @@ export default function IcpScorecard({
   // it is not a score until this form is saved, which is the whole point: a
   // number off a scrape is evidence, not a judgement.
   staffSizeSuggestion?: StaffSizeSuggestion | null;
-  // Asks OpenAI to read this lead's enrichment against the framework and
+  // Asks DeepSeek to read this lead's enrichment against the framework and
   // suggest category B and the two Automation Gap boxes. Held to the same rule
   // as the staff-size suggestion above: it pre-selects and explains itself,
   // and nothing it says is stored until this form is saved.
@@ -363,7 +363,7 @@ export default function IcpScorecard({
               {category.key === ASSIST_CATEGORY_KEY &&
                 assist?.packageEconomics && (
                   <SuggestionNote className="mb-2">
-                    OpenAI suggests{" "}
+                    DeepSeek suggests{" "}
                     <span className="num font-medium text-ink">
                       {assist.packageEconomics.points} pt
                     </span>
@@ -501,7 +501,7 @@ export default function IcpScorecard({
                     </label>
                     {suggested && (
                       <SuggestionNote className="mt-1.5">
-                        OpenAI suggests this box{" "}
+                        DeepSeek suggests this box{" "}
                         <span className="font-medium text-ink">
                           {suggested.checked ? "checked" : "left unchecked"}
                         </span>

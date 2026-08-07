@@ -2,7 +2,7 @@
 
 // The scoring assist's one call.
 //
-// Reads the three enrichment fields off the lead, asks OpenAI to score
+// Reads the three enrichment fields off the lead, asks DeepSeek to score
 // category B and the two Automation Gap boxes against the framework text, and
 // hands the parsed suggestion back to the card.
 //
@@ -64,7 +64,7 @@ export async function suggestIcpScores(
     return {
       ok: false,
       error:
-        "OpenAI answered, but not in a shape that reads as scores. Nothing has been changed on the card — try again.",
+        "DeepSeek answered, but not in a shape that reads as scores. Nothing has been changed on the card — try again.",
     };
   }
 
