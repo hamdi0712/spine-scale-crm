@@ -130,10 +130,17 @@ export function buildGoogleSearchInput(query: string): Record<string, unknown> {
   };
 }
 
-// How many dataset items the run asks for. One page of results is one item on
-// the store actor, but a build that returns one item per result would
-// otherwise be cut down to a single link.
+// How many dataset items the run reads. One page of results is one item on the
+// store actor, but a build that returns one item per result would otherwise be
+// cut down to a single link.
 export const GOOGLE_SEARCH_MAX_ITEMS = RESULTS_PER_PAGE;
+
+// This actor bills per event, unlike the four in src/lib/leadEnrich.ts, which
+// bill per result. That one difference is why it cannot be capped the way
+// every other run in this app is capped — see the note in
+// src/lib/googleSearchRun.ts, where the run is made and the cost ceiling it
+// needs instead is set. Nothing about it belongs in this module, which stays
+// free of anything that reaches the network.
 
 // One search, in the shape the rest of this app's actor runs come back in.
 // A search that matched nothing is an empty list rather than an error: nothing

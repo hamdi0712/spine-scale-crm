@@ -9,7 +9,7 @@
 // server actions, and this is a helper two of them call — not an endpoint the
 // browser is allowed to reach on its own.
 
-import { runApifySync } from "@/lib/apify";
+import { APIFY_MIN_CHARGE_USD, runApifySync } from "@/lib/apify";
 import {
   GOOGLE_SEARCH_ACTOR_ID,
   GOOGLE_SEARCH_MAX_ITEMS,
@@ -17,6 +17,27 @@ import {
   buildGoogleSearchInput,
   resultUrls,
 } from "@/lib/googleSearch";
+
+// What one search is allowed to cost, and the one line in this app that exists
+// because of how an actor is billed rather than what it does.
+//
+// This actor bills per event. The four enrichment actors bill per result, and
+// a pay-per-result run is capped by asking for fewer results — which is what
+// maxItems does, and what every other run here relies on. There is no
+// per-result price on a pay-per-event actor for that to work against, so Apify
+// wants a cost ceiling instead and refuses anything below its $0.50 minimum
+// before the run starts: "Maximum cost per run is less than the allowed
+// minimum of $0.50". Capping this actor in items was therefore not a cheap run
+// but no run at all.
+//
+// It is the platform's floor rather than a budget anybody picked. A single
+// query costs a small fraction of it, and what the run actually does is
+// bounded by its input — one page, ten results. Raising this would buy no more
+// search; it would only raise the ceiling on a run that went wrong.
+//
+// Actor-specific on purpose. The default in runApifySync is unchanged and
+// still right for everything else in the app.
+export const GOOGLE_SEARCH_MAX_CHARGE_USD = APIFY_MIN_CHARGE_USD;
 
 export async function runGoogleSearch(
   query: string,
@@ -34,7 +55,11 @@ export async function runGoogleSearch(
       // bulk import goes through, so there is one path into an actor run
       // rather than a checked one and a trusted one.
       input: JSON.stringify(buildGoogleSearchInput(query)),
+      // The cap in money, not in items — see above. maxItems still bounds what
+      // is read back out of the dataset; it is only the *run's* ceiling that
+      // has to be expressed as a cost for this one.
       maxItems: GOOGLE_SEARCH_MAX_ITEMS,
+      maxTotalChargeUsd: GOOGLE_SEARCH_MAX_CHARGE_USD,
     });
   } catch {
     return {

@@ -21,6 +21,16 @@ export const APIFY_SOURCE_KINDS = ["actor", "task"] as const;
 
 export type ApifySourceKind = (typeof APIFY_SOURCE_KINDS)[number];
 
+// The smallest run cost Apify will accept a cap at. A pay-per-event actor is
+// capped in money rather than in results, and asking for a ceiling below this
+// is refused before the run starts — "Maximum cost per run is less than the
+// allowed minimum of $0.50" — rather than run more cheaply.
+//
+// It is a ceiling and not a price. A search that costs a fraction of a cent
+// still costs a fraction of a cent with this set; what the number buys is a
+// run that starts, and a bound on what one runaway run can spend.
+export const APIFY_MIN_CHARGE_USD = 0.5;
+
 // How long the actor itself is allowed to run, and how long we wait on the
 // socket. The client timeout sits above the run timeout so a run that hits its
 // own limit reports the actor's failure rather than our abort.
@@ -55,11 +65,21 @@ export async function runApifySync({
   // whole run; enriching one record wants the handful it takes to see what came
   // back. Never taken from the browser — each caller states its own ceiling.
   maxItems = MAX_IMPORT_ROWS,
+  // What this run is allowed to cost, in US dollars, for an actor that bills
+  // per event rather than per result. See the note above APIFY_MIN_CHARGE_USD:
+  // an actor billed that way has to be capped in money, and capping it in
+  // items — which is what maxItems does — is what Apify refuses outright.
+  //
+  // Left unset for every actor that bills per result, which is all four of the
+  // enrichment ones and both bulk imports: for those, maxItems is both the
+  // ceiling worth having and the one Apify wants.
+  maxTotalChargeUsd,
 }: {
   kind: ApifySourceKind;
   id: string;
   input: string;
   maxItems?: number;
+  maxTotalChargeUsd?: number;
 }): Promise<ApifyFetchResult> {
   const token = process.env.APIFY_API_TOKEN;
   if (!token) {
@@ -98,10 +118,27 @@ export async function runApifySync({
     };
   }
 
+  // How the run is capped, and it is one or the other rather than both.
+  //
+  // maxItems is a cap in *results*, and on a pay-per-result actor Apify reads
+  // it as the cost ceiling too — the two are the same number there. On a
+  // pay-per-event actor there is no per-result price for it to multiply, so
+  // sending it caps a run at a cost Apify computes as far below its own
+  // minimum and the run is refused before it starts. Those actors are capped
+  // in money instead, and how many results come back is settled by the input
+  // and by limit.
+  //
+  // limit is on both paths regardless: it is the dataset read, not the run,
+  // and it is what stops a chatty actor's whole output being parsed to answer
+  // a question the first few items answer.
+  const cap =
+    maxTotalChargeUsd === undefined
+      ? `maxItems=${maxItems}`
+      : `maxTotalChargeUsd=${chargeCap(maxTotalChargeUsd)}`;
   const path = kind === "task" ? "actor-tasks" : "acts";
   const url =
     `${API_BASE}/${path}/${encodeURIComponent(actorId)}/run-sync-get-dataset-items` +
-    `?timeout=${APIFY_RUN_TIMEOUT_SECONDS}&maxItems=${maxItems}&limit=${maxItems}`;
+    `?timeout=${APIFY_RUN_TIMEOUT_SECONDS}&${cap}&limit=${maxItems}`;
 
   let response: Response;
   try {
@@ -169,6 +206,15 @@ export async function runApifySync({
     headers: table.headers,
     rows: table.rows,
   };
+}
+
+// The cost ceiling as Apify will take it: never below the platform minimum,
+// because a cap under it is a run that does not start, and rounded to cents
+// because that is the unit the ceiling is expressed in. Held here rather than
+// at the call sites so no caller can set one Apify refuses.
+function chargeCap(usd: number): string {
+  const wanted = Number.isFinite(usd) ? usd : APIFY_MIN_CHARGE_USD;
+  return Math.max(APIFY_MIN_CHARGE_USD, Math.round(wanted * 100) / 100).toFixed(2);
 }
 
 function timeoutMessage(): string {
