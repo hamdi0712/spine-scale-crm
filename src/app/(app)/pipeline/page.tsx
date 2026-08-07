@@ -51,24 +51,16 @@ export default async function PipelinePage({
         <div className="flex items-center gap-2">
           {/* Table first, because table is what loads. A toggle whose second
               item is the default reads as though the first one were. */}
-          <div className="flex h-[42px] items-center gap-1 rounded-[10px] border border-line bg-surface p-1">
+          <div className="segment">
             <Link
               href="/pipeline"
-              className={`flex h-[32px] items-center rounded-lg px-3.5 text-sm ${
-                view === "table"
-                  ? "bg-accent/10 font-medium text-accent"
-                  : "text-muted hover:text-ink"
-              }`}
+              className={`segment-item ${view === "table" ? "segment-item-on" : ""}`}
             >
               Table
             </Link>
             <Link
               href="/pipeline?view=board"
-              className={`flex h-[32px] items-center rounded-lg px-3.5 text-sm ${
-                view === "board"
-                  ? "bg-accent/10 font-medium text-accent"
-                  : "text-muted hover:text-ink"
-              }`}
+              className={`segment-item ${view === "board" ? "segment-item-on" : ""}`}
             >
               Board
             </Link>

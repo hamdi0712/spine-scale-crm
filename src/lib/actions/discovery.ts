@@ -66,6 +66,11 @@ import {
   mappedColumn,
   readMapping,
 } from "@/lib/discoveryImport";
+import {
+  BATCH_QUEUE_DESCRIPTION,
+  defaultBatchLabel,
+  readBatchLabel,
+} from "@/lib/discoveryBatch";
 import { isUsTimeZone } from "@/lib/timezones";
 
 // The stage a promoted candidate's lead starts at. An import is the top of the
@@ -99,6 +104,13 @@ export async function importDiscoveryCandidates(formData: FormData) {
     Array.isArray(rawMapping) ? rawMapping.length : 0,
   );
   if (mappedColumn(mapping, "clinicName") === -1) redirect("/discovery/import");
+
+  // One label for the whole run, read from what the wizard showed on the
+  // confirm step — so the batch every row is filed under is the one the person
+  // importing had in front of them. A post that carries none is still a run
+  // and still gets a batch; it is dated here rather than left null.
+  const batchLabel =
+    readBatchLabel(formData.get("batchLabel")) ?? defaultBatchLabel(new Date());
 
   const capped = rows.slice(0, MAX_IMPORT_ROWS);
   const summary: ImportSummary = {
@@ -144,7 +156,7 @@ export async function importDiscoveryCandidates(formData: FormData) {
     await prisma.$transaction(
       toCreate.map((candidate) =>
         prisma.discoveryCandidate.create({
-          data: { ...candidate, status: IMPORT_DEFAULT_STATUS },
+          data: { ...candidate, status: IMPORT_DEFAULT_STATUS, batchLabel },
         }),
       ),
     );
@@ -201,6 +213,11 @@ export async function updateDiscoveryCandidate(id: string, formData: FormData) {
       timeZone: isUsTimeZone(zone) ? zone : null,
       staffCountRaw: int(formData, "staffCountRaw"),
       estValue: num(formData, "estValue"),
+      // The batch is a label somebody is allowed to correct — a run named
+      // after the actor it came from is often not what it turned out to be.
+      // Cleared to null rather than to "", which is what every candidate that
+      // predates batches carries and what the filter groups them under.
+      batchLabel: readBatchLabel(formData.get("batchLabel")),
     },
   });
   revalidatePath("/discovery");
@@ -249,14 +266,23 @@ export async function discoveryQueue(): Promise<
 // component, which awaits each result before asking for the next — so the four
 // actor runs and the model call in here are the reason a queue of thirty takes
 // the best part of an hour, and why it says so.
+//
+// runBatchLabel is the queue run's own batch, generated once when the run
+// starts and passed with every candidate in it. It only ever fills a gap: a
+// candidate imported with a batch keeps the one it arrived on, and one from
+// before batches existed — or from an import that somehow wrote none — is
+// filed under the run that first picked it up, which is the truest thing left
+// to say about where it came from.
 export async function processDiscoveryCandidate(
   id: string,
+  runBatchLabel?: string | null,
 ): Promise<DiscoveryProcessResult> {
   const candidate = await prisma.discoveryCandidate.findUnique({
     where: { id },
     select: {
       id: true,
       clinicName: true,
+      batchLabel: true,
       companyLinkedinUrl: true,
       facebookUrl: true,
       websiteUrl: true,
@@ -303,7 +329,14 @@ export async function processDiscoveryCandidate(
 
   await prisma.discoveryCandidate.update({
     where: { id },
-    data: { status: "ENRICHING", failureReason: null },
+    data: {
+      status: "ENRICHING",
+      failureReason: null,
+      batchLabel:
+        candidate.batchLabel ??
+        readBatchLabel(runBatchLabel) ??
+        defaultBatchLabel(new Date(), BATCH_QUEUE_DESCRIPTION),
+    },
   });
 
   // ─── 1. Enrichment ───────────────────────────────────────────────────────

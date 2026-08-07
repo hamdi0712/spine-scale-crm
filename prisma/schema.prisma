@@ -52,6 +52,19 @@ model DiscoveryCandidate {
   staffCountRaw      Int? // headcount exactly as the source reported it
   estValue           Float? // carried through to the lead if this one promotes
 
+  // Which run this candidate arrived on — "Aug 7, 2026 — LinkedIn search".
+  // Generated once, per run rather than per row, by whatever created the
+  // record: the import stamps every candidate it writes, and a queue run
+  // stamps anything it picks up that never got one. See src/lib/discoveryBatch.ts.
+  //
+  // It is a label and not a foreign key, deliberately. A batch has no
+  // properties of its own worth a table — it is the answer to "where did this
+  // one come from", it is editable so a run can be renamed to what it actually
+  // was, and renaming it on one candidate is meant to leave the rest alone.
+  // Null on every candidate imported before batches existed, which the filter
+  // reads as its own group rather than pretending they share one.
+  batchLabel String?
+
   // Enrichment — written by the four-actor run (src/lib/enrichRun.ts), the
   // same run and the same readers the lead page uses. Every one of these is a
   // snapshot of what a scrape saw at one moment, which is why enrichedAt
@@ -115,6 +128,7 @@ model DiscoveryCandidate {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([batchLabel])
 }
 
 model Lead {
