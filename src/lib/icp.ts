@@ -171,10 +171,16 @@ export const ICP_CATEGORIES: IcpCategory[] = [
   },
 ];
 
-// A raw headcount read onto category A's bands, for leads imported with a
-// staff count attached (src/lib/leadImport.ts). It is only ever a suggestion:
-// the scorecard pre-selects it, and nothing is stored until someone opens the
-// card and saves it — scoring is a decision, not a side effect of an import.
+// A raw headcount read onto category A's bands, for a record that arrived with
+// a staff count attached (src/lib/discoveryImport.ts).
+//
+// On a lead it is only ever a suggestion: the scorecard pre-selects it, and
+// nothing is stored until someone opens the card and saves it — scoring a lead
+// is a decision, not a side effect of an import. The discovery queue calls the
+// same function and does store what it returns (staffSizeScore in
+// src/lib/discovery.ts), because deciding is the whole job of the queue. One
+// set of bands either way, so a candidate and the lead it becomes can never
+// read the same headcount two different ways.
 //
 // 16–20 is read as the borderline band, so a clinic on exactly 20 scores 1
 // rather than falling into "20+".

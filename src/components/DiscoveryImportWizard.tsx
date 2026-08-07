@@ -1,12 +1,15 @@
 "use client";
 
-// The lead import — pick a source, map its columns, preview, confirm.
+// The discovery import — pick a source, map its columns, preview, confirm.
 //
 // Two sources feed the same three steps. A CSV is parsed in the browser, so
 // the file never leaves it until the last step; an Apify run happens on the
 // server, because the API token lives there and nowhere else. Both arrive at
 // step 2 as the same thing: a list of detected columns and the rows behind
 // them, which is why there is one wizard rather than two.
+//
+// What it creates is a discovery candidate, never a lead. Nothing imported has
+// been looked at yet, and the pipeline is for clinics that have been.
 //
 // Nothing about the columns is ever guessed — every one starts unmapped,
 // because the whole point is that two actors scraping the same thing return
@@ -22,13 +25,13 @@ import {
   APIFY_INPUT_PLACEHOLDER,
   ColumnMapping,
   IMPORT_DEFAULT_SOURCE,
-  IMPORT_DEFAULT_STAGE,
+  IMPORT_DEFAULT_STATUS,
   IMPORT_FIELDS,
   IMPORT_PREVIEW_ROWS,
   IMPORT_SOURCE_META,
   ImportFieldKey,
   ImportSource,
-  ImportedLead,
+  ImportedCandidate,
   MAX_IMPORT_ROWS,
   JOINING_FIELD_LABELS,
   dedupeKey,
@@ -40,8 +43,11 @@ import {
   mapRow,
   mappedColumn,
   mappedColumns,
-} from "@/lib/leadImport";
-import { LEAD_STAGE_LABELS } from "@/lib/constants";
+} from "@/lib/discoveryImport";
+import {
+  DISCOVERY_STATUS_LABELS,
+  DiscoveryStatus,
+} from "@/lib/discovery";
 import { zoneLabel } from "@/lib/timezones";
 import { suggestedStaffSizeScore } from "@/lib/icp";
 import { fmtMoney } from "@/lib/format";
@@ -55,7 +61,7 @@ interface Loaded {
   rows: string[][];
 }
 
-export default function LeadImportWizard({
+export default function DiscoveryImportWizard({
   action,
   source,
 }: {
@@ -85,40 +91,44 @@ export default function LeadImportWizard({
   // came from: a CSV has columns, a dataset item has fields.
   const noun = source === "csv" ? "column" : "field";
 
-  // Every row the mapping can actually turn into a lead, and what happened to
-  // the rest, so the confirm step states all of it before anything is written.
+  // Every row the mapping can actually turn into a candidate, and what
+  // happened to the rest, so the confirm step states all of it before anything
+  // is written.
   //
-  // Repeats inside the file are counted here because they can be. Leads
-  // already in the pipeline are not — that check belongs to the import itself,
-  // and is described rather than counted on this step.
-  const { leads, unusable, repeated } = useMemo(() => {
-    if (!parsed || !clinicMapped) return { leads: [], unusable: 0, repeated: 0 };
+  // Repeats inside the file are counted here because they can be. Clinics
+  // already in Discovery or already in the pipeline are not — that check
+  // belongs to the import itself, and is described rather than counted on this
+  // step.
+  const { candidates, unusable, repeated } = useMemo(() => {
+    if (!parsed || !clinicMapped) {
+      return { candidates: [], unusable: 0, repeated: 0 };
+    }
     const capped = parsed.rows.slice(0, MAX_IMPORT_ROWS);
-    const out: ImportedLead[] = [];
+    const out: ImportedCandidate[] = [];
     const seen = new Set<string>();
     let unusable = 0;
     let repeated = 0;
     for (const row of capped) {
-      const lead = mapRow(row, mapping);
-      if (!lead) {
+      const candidate = mapRow(row, mapping);
+      if (!candidate) {
         unusable++;
         continue;
       }
-      const key = dedupeKey(lead.clinicName, lead.contactName);
+      const key = dedupeKey(candidate.clinicName, candidate.contactName);
       if (seen.has(key)) {
         repeated++;
         continue;
       }
       seen.add(key);
-      out.push(lead);
+      out.push(candidate);
     }
-    return { leads: out, unusable, repeated };
+    return { candidates: out, unusable, repeated };
   }, [parsed, mapping, clinicMapped]);
 
   const overCap = parsed ? parsed.rows.length - Math.min(parsed.rows.length, MAX_IMPORT_ROWS) : 0;
 
   // The columns the preview shows: whatever was mapped, in field order rather
-  // than column order, so the table reads like the lead record it becomes.
+  // than column order, so the table reads like the record it becomes.
   const previewFields = IMPORT_FIELDS.filter((f) => mapping.includes(f.key));
 
   async function readFile(file: File) {
@@ -453,7 +463,7 @@ export default function LeadImportWizard({
                     Map a {noun} to Clinic name to continue
                   </p>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                    It is the one field a lead cannot be created without.
+                    It is the one field a candidate cannot be created without.
                   </p>
                 </div>
               )}
@@ -472,31 +482,37 @@ export default function LeadImportWizard({
                           {f.label}
                         </th>
                       ))}
-                      <th className="th">Stage</th>
-                      {!mapping.includes("leadSource") && (
+                      <th className="th">Status</th>
+                      {!mapping.includes("source") && (
                         <th className="th">Source</th>
                       )}
                     </tr>
                   </thead>
                   <tbody>
-                    {leads.slice(0, IMPORT_PREVIEW_ROWS).map((lead, i) => (
-                      <tr key={i}>
-                        {previewFields.map((f) => (
-                          <td key={f.key} className="td whitespace-nowrap">
-                            <PreviewCell field={f.key} lead={lead} />
+                    {candidates
+                      .slice(0, IMPORT_PREVIEW_ROWS)
+                      .map((candidate, i) => (
+                        <tr key={i}>
+                          {previewFields.map((f) => (
+                            <td key={f.key} className="td whitespace-nowrap">
+                              <PreviewCell field={f.key} candidate={candidate} />
+                            </td>
+                          ))}
+                          <td className="td whitespace-nowrap text-muted">
+                            {
+                              DISCOVERY_STATUS_LABELS[
+                                IMPORT_DEFAULT_STATUS as DiscoveryStatus
+                              ]
+                            }
                           </td>
-                        ))}
-                        <td className="td whitespace-nowrap text-muted">
-                          {LEAD_STAGE_LABELS[IMPORT_DEFAULT_STAGE]}
-                        </td>
-                        {!mapping.includes("leadSource") && (
-                          <td className="td text-muted">
-                            {IMPORT_DEFAULT_SOURCE}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                    {leads.length === 0 && (
+                          {!mapping.includes("source") && (
+                            <td className="td text-muted">
+                              {IMPORT_DEFAULT_SOURCE}
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    {candidates.length === 0 && (
                       <tr>
                         <td
                           className="td text-muted"
@@ -513,15 +529,21 @@ export default function LeadImportWizard({
               <ul className="space-y-1.5 text-xs leading-relaxed text-muted">
                 <li className="num">
                   <span className="font-medium text-ink">
-                    {leads.length} lead{leads.length === 1 ? "" : "s"}
+                    {candidates.length} candidate
+                    {candidates.length === 1 ? "" : "s"}
                   </span>{" "}
                   ready to import — showing the first{" "}
-                  {Math.min(leads.length, IMPORT_PREVIEW_ROWS)}.
+                  {Math.min(candidates.length, IMPORT_PREVIEW_ROWS)}.
                 </li>
                 <li>
-                  A lead with the same clinic name and contact name as an
-                  existing one is skipped, so re-importing the same export
-                  creates nothing.
+                  These land in Discovery, not the pipeline. Nothing here is a
+                  lead until “Process queue” has enriched it, scored it against
+                  the ICP framework, and found it worth pursuing.
+                </li>
+                <li>
+                  A row whose clinic name and contact name already exist — as a
+                  candidate or as a lead — is skipped, so re-importing the same
+                  export creates nothing and nothing gets scored twice.
                 </li>
                 {repeated > 0 && (
                   <li className="num">
@@ -544,17 +566,18 @@ export default function LeadImportWizard({
                 )}
                 {mapping.includes("timeZone") && (
                   <li className="num">
-                    {leads.filter((l) => l.timeZone === null).length} of{" "}
-                    {leads.length} will import with no time zone — their
+                    {candidates.filter((c) => c.timeZone === null).length} of{" "}
+                    {candidates.length} will import with no time zone — their
                     location carries no US state the lookup recognises. Set
-                    those by hand on the lead.
+                    those by hand on the candidate.
                   </li>
                 )}
                 {mapping.includes("staffCountRaw") && (
                   <li>
-                    Staff counts are stored as scraped. They suggest an ICP
-                    Staff Size Fit score on the lead’s scorecard, but nothing is
-                    scored until you open it and save.
+                    Staff counts are stored as scraped. The queue reads them
+                    onto the ICP framework’s Staff Size Fit band when it scores,
+                    and the band travels to the lead’s scorecard if the
+                    candidate is promoted.
                   </li>
                 )}
               </ul>
@@ -593,10 +616,11 @@ export default function LeadImportWizard({
           {step === 3 && (
             <button
               type="submit"
-              disabled={leads.length === 0}
+              disabled={candidates.length === 0}
               className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Import {leads.length} lead{leads.length === 1 ? "" : "s"} →
+              Import {candidates.length} candidate
+              {candidates.length === 1 ? "" : "s"} →
             </button>
           )}
         </div>
@@ -649,30 +673,30 @@ function ordinal(n: number): string {
 
 function PreviewCell({
   field,
-  lead,
+  candidate,
 }: {
   field: ImportFieldKey;
-  lead: ImportedLead;
+  candidate: ImportedCandidate;
 }) {
   if (field === "estValue") {
     return (
       <span className="num">
-        {lead.estValue != null ? fmtMoney(lead.estValue) : "—"}
+        {candidate.estValue != null ? fmtMoney(candidate.estValue) : "—"}
       </span>
     );
   }
   if (field === "staffCountRaw") {
-    // The suggested band is shown here and nowhere near the database — it is
-    // what the scorecard will offer, not what the import will store.
-    const suggested = suggestedStaffSizeScore(lead.staffCountRaw);
-    return lead.staffCountRaw == null ? (
+    // The band this headcount will read onto, shown here and nowhere near the
+    // database — it is what the queue will score, not what the import stores.
+    const suggested = suggestedStaffSizeScore(candidate.staffCountRaw);
+    return candidate.staffCountRaw == null ? (
       <span className="text-muted">—</span>
     ) : (
       <span className="num">
-        {lead.staffCountRaw}
+        {candidate.staffCountRaw}
         {suggested != null && (
           <span className="ml-1.5 text-xs text-muted">
-            suggests {suggested} pt
+            scores {suggested} pt
           </span>
         )}
       </span>
@@ -684,28 +708,28 @@ function PreviewCell({
   if (field === "timeZone") {
     return (
       <span className="block max-w-[220px]">
-        {lead.timeZone ? (
-          zoneLabel(lead.timeZone)
+        {candidate.timeZone ? (
+          zoneLabel(candidate.timeZone)
         ) : (
           <span className="text-muted">no zone read</span>
         )}
-        {lead.location && (
+        {candidate.location && (
           <span className="block truncate text-xs text-muted">
-            {lead.location}
+            {candidate.location}
           </span>
         )}
       </span>
     );
   }
   if (field === "linkedinUrl" || field === "companyLinkedinUrl") {
-    const value = lead[field];
+    const value = candidate[field];
     return value ? (
       <span className="block max-w-[220px] truncate text-muted">{value}</span>
     ) : (
       <span className="text-muted">—</span>
     );
   }
-  const value = lead[field];
+  const value = candidate[field];
   return typeof value === "string" && value !== "" ? (
     <span className={field === "clinicName" ? "font-medium" : "text-muted"}>
       {value}

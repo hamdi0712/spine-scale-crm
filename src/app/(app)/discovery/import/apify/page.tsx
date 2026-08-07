@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { importLeads } from "@/lib/actions/leads";
-import LeadImportWizard from "@/components/LeadImportWizard";
+import { importDiscoveryCandidates } from "@/lib/actions/discovery";
+import DiscoveryImportWizard from "@/components/DiscoveryImportWizard";
 
 // The live half of the import: same three steps, same mapping, same confirm —
 // the rows arrive from an actor run instead of a file. The token stays on the
@@ -10,8 +10,11 @@ export default function ApifyImportPage() {
     <div className="max-w-4xl">
       <div className="mb-6 flex items-end justify-between gap-4">
         <div>
-          <Link href="/pipeline" className="text-sm text-accent hover:underline">
-            ← Pipeline
+          <Link
+            href="/discovery"
+            className="text-sm text-accent hover:underline"
+          >
+            ← Discovery
           </Link>
           <h1 className="display mt-2 text-[32px] font-semibold">
             Import from Apify
@@ -21,11 +24,11 @@ export default function ApifyImportPage() {
             and duplicate checks as the CSV import
           </p>
         </div>
-        <Link href="/pipeline/import" className="btn shrink-0">
+        <Link href="/discovery/import" className="btn shrink-0">
           Import a CSV
         </Link>
       </div>
-      <LeadImportWizard action={importLeads} source="apify" />
+      <DiscoveryImportWizard action={importDiscoveryCandidates} source="apify" />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // Enrichment — the four actors, what each needs, and what each writes.
 //
-// The bulk import (src/lib/leadImport.ts) maps whatever an unknown actor
+// The bulk import (src/lib/discoveryImport.ts) maps whatever an unknown actor
 // returns, because the point of it is that any actor will do. This is the
 // opposite arrangement: four named actors whose output shapes are known, run
 // together, read by code rather than by hand. That is what lets "Enrich this
@@ -21,15 +21,23 @@
 // Nothing here touches the network or the database: the actor definitions are
 // data, the readers are pure, and src/lib/actions/enrich.ts does the running.
 
-import { parseCount } from "@/lib/leadImport";
+import { parseCount } from "@/lib/discoveryImport";
 
 // ─── The fields enrichment can write ───────────────────────────────────────
 
 // Deliberately short, and deliberately not the lead's identity: enrichment
 // adds evidence about a clinic, and nothing that would change who the lead is
 // — the clinic name, the contact, the stage — can be reached from this flow.
+//
+// The website URL is the one field here that is also an *input*: the crawler
+// runs on it. It is in this list because both the company lookup and the Maps
+// search report it, and a record that arrived from a LinkedIn scrape with no
+// website is a record whose crawl would otherwise be skipped forever for want
+// of a field two of the other actors already know. It is filled and never
+// overwritten — see fillableWebsiteUrl below.
 export const ENRICH_FIELD_KEYS = [
   "staffCountRaw",
+  "websiteUrl",
   "metaAdsSignal",
   "reviewCount",
   "websiteNotes",
@@ -39,6 +47,7 @@ export type EnrichFieldKey = (typeof ENRICH_FIELD_KEYS)[number];
 
 export const ENRICH_FIELD_LABELS: Record<EnrichFieldKey, string> = {
   staffCountRaw: "Staff count",
+  websiteUrl: "Website URL",
   metaAdsSignal: "Meta ads signal",
   reviewCount: "Review count",
   websiteNotes: "Website notes",
@@ -51,6 +60,7 @@ export const ENRICH_FIELD_LABELS: Record<EnrichFieldKey, string> = {
 // blank a field somebody filled in by hand.
 export type EnrichUpdate = Partial<{
   staffCountRaw: number;
+  websiteUrl: string;
   metaAdsSignal: string;
   reviewCount: number;
   websiteNotes: string;
@@ -69,6 +79,10 @@ const WEBSITE_NOTES_MAX_PAGES = 3;
 // Longest a freeform signal is allowed to be. Ours are built, not copied, so
 // this only ever catches a chosen item posted back from the browser.
 const SIGNAL_MAX_CHARS = 200;
+
+// Long enough for any address a clinic actually uses, short enough that a
+// paragraph pasted into a website field is refused rather than stored.
+const WEBSITE_URL_MAX_CHARS = 500;
 
 // A headcount or a review count above this is a misread — a phone number, an
 // id, a timestamp that happened to sit under a plausible key — not a clinic.
@@ -160,16 +174,20 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     requires: "companyLinkedinUrl",
     requiresLabel: "Company LinkedIn URL",
     maxItems: 5,
-    writes: ["staffCountRaw"],
+    writes: ["staffCountRaw", "websiteUrl"],
     identifies: true,
     identityFields: ["name", "universalName", "website", "linkedinUrl"],
     buildInput: (inputs) => ({ companies: [inputs.companyLinkedinUrl] }),
     // employeeCount is the field this actor reports headcount in. parseCount
     // takes the lower end of anything banded, so a range answers conservatively.
-    read: (table) => {
-      const count = plausibleCount(cell(table, 0, ["employeeCount"]));
-      return count === null ? {} : { staffCountRaw: count };
-    },
+    //
+    // The website comes off the same record, from the field a company page
+    // puts its own link in. It runs first of the four, so a website read here
+    // is a website the crawler two actors later can already work from.
+    read: (table) => ({
+      ...countUpdate(cell(table, 0, ["employeeCount"])),
+      ...websiteUpdate(cell(table, 0, ["website", "websiteUrl"])),
+    }),
   },
   {
     key: "facebookAds",
@@ -230,7 +248,7 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     requires: "clinicName",
     requiresLabel: "Clinic name",
     maxItems: 5,
-    writes: ["reviewCount"],
+    writes: ["reviewCount", "websiteUrl"],
     identifies: true,
     identityFields: ["title", "address", "reviewsCount", "totalScore", "url"],
     buildInput: (inputs) => ({
@@ -252,7 +270,13 @@ export const ENRICH_ACTORS: EnrichActor[] = [
           "userRatingCount",
         ]),
       );
-      return count === null ? {} : { reviewCount: count };
+      return {
+        ...(count === null ? {} : { reviewCount: count }),
+        // "website" only, never "url": on a Maps record that second field is
+        // the listing's own page on Google, and crawling that would fill the
+        // website notes with Google's chrome instead of the clinic's copy.
+        ...websiteUpdate(cell(table, 0, ["website"])),
+      };
     },
   },
 ];
@@ -278,16 +302,29 @@ export interface EnrichPlanEntry {
 }
 
 export function enrichPlan(inputs: EnrichInputs): EnrichPlanEntry[] {
+  // The one thing the plan cannot state flatly. The company lookup runs before
+  // the crawler and reports a website of its own, so a record with no website
+  // today may well have one by the time the crawler's turn comes round — which
+  // makes "skipped" a prediction here rather than a fact, and it says so.
+  const websiteMayArrive =
+    (inputs.websiteUrl ?? "").trim() === "" &&
+    (inputs.companyLinkedinUrl ?? "").trim() !== "";
+
   return ENRICH_ACTORS.map((actor) => {
     const value = inputs[actor.requires];
     const has = typeof value === "string" && value.trim() !== "";
+    const mayArrive = !has && actor.requires === "websiteUrl" && websiteMayArrive;
     return {
       key: actor.key,
       label: actor.label,
       actorId: actor.actorId,
       writes: actor.writes.map((f) => ENRICH_FIELD_LABELS[f]),
       willRun: has,
-      skipReason: has ? null : `no ${actor.requiresLabel} set`,
+      skipReason: has
+        ? null
+        : mayArrive
+          ? "no Website URL set — unless Company Details finds one first"
+          : `no ${actor.requiresLabel} set`,
     };
   });
 }
@@ -379,6 +416,56 @@ function plausibleCount(raw: string): number | null {
   const n = parseCount(raw);
   if (n === null || n < 0 || n > MAX_PLAUSIBLE_COUNT) return null;
   return n;
+}
+
+// The two above as partial updates, so an actor whose reader answers more than
+// one field can compose them without each one having to spell out the "nothing
+// found means touch nothing" rule again.
+function countUpdate(raw: string): EnrichUpdate {
+  const count = plausibleCount(raw);
+  return count === null ? {} : { staffCountRaw: count };
+}
+
+function websiteUpdate(raw: string): EnrichUpdate {
+  const url = plausibleWebsite(raw);
+  return url === null ? {} : { websiteUrl: url };
+}
+
+// A scraped website, held to something the crawler could actually be pointed
+// at. A bare "clinicname.com" is taken as https, because that is what a
+// company page's website field usually holds and prefixing it is not a guess
+// about anything. Anything that is not an http(s) address with a dotted host —
+// a mailto:, an "N/A", a Facebook page pasted into the wrong field — is
+// discarded rather than stored, because this value goes on to be requested.
+function plausibleWebsite(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === "" || trimmed.length > WEBSITE_URL_MAX_CHARS) return null;
+  const withScheme = /^https?:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  // A hostname with no dot in it is a local name, not a clinic's site.
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)) return null;
+  return url.toString();
+}
+
+// Whether a scraped website may be written onto this record. Filled, never
+// overwritten: a URL somebody typed in is a decision, and an actor's idea of
+// which site belongs to a clinic of this name is not a good enough reason to
+// replace one. Blank is the only state this field is allowed to move out of.
+export function fillableWebsiteUrl(
+  update: EnrichUpdate,
+  current: string | null | undefined,
+): boolean {
+  return (
+    update.websiteUrl !== undefined && (current ?? "").trim() === ""
+  );
 }
 
 // The ads signal, built from the whole result rather than from any one item:
@@ -522,6 +609,10 @@ export function sanitizeEnrichUpdate(update: EnrichUpdate): EnrichUpdate {
     if (Number.isFinite(n) && n >= 0 && n <= MAX_PLAUSIBLE_COUNT) {
       out.reviewCount = n;
     }
+  }
+  if (typeof update.websiteUrl === "string") {
+    const url = plausibleWebsite(update.websiteUrl);
+    if (url !== null) out.websiteUrl = url;
   }
   if (typeof update.metaAdsSignal === "string") {
     const v = update.metaAdsSignal.trim().slice(0, SIGNAL_MAX_CHARS);

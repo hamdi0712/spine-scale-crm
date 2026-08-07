@@ -11,6 +11,11 @@ import {
 } from "@/lib/adhub";
 import { CALL_STATUS_LABELS, CallStatus } from "@/lib/calls";
 import {
+  DISCOVERY_STATUS_LABELS,
+  DISCOVERY_STATUS_MEANINGS,
+  DiscoveryStatus,
+} from "@/lib/discovery";
+import {
   HEALTH_ACTIONS,
   HEALTH_LABELS,
   HealthStatus,
@@ -84,6 +89,32 @@ const STAGE_TONES: Record<string, Tone> = {
 export function StageBadge({ stage }: { stage: string }) {
   const label = LEAD_STAGE_LABELS[stage as LeadStage] ?? stage;
   return <Pill tone={STAGE_TONES[stage] ?? "neutral"} label={label} />;
+}
+
+// A candidate's place in the discovery queue. Blue and teal for work still in
+// front of the queue, indigo for scored-but-undecided, green for the one that
+// made it through — and neutral for a rejection, because being rejected is a
+// decision the framework made and not a fault. Red is kept for Failed, which
+// is the only one of the six that means something went wrong.
+const DISCOVERY_TONES: Record<DiscoveryStatus, Tone> = {
+  PENDING: "blue",
+  ENRICHING: "teal",
+  SCORED: "indigo",
+  PROMOTED: "green",
+  REJECTED: "neutral",
+  FAILED: "red",
+};
+
+export function DiscoveryStatusBadge({ status }: { status: string }) {
+  const known = status as DiscoveryStatus;
+  const label = DISCOVERY_STATUS_LABELS[known] ?? status;
+  return (
+    <Pill
+      tone={DISCOVERY_TONES[known] ?? "neutral"}
+      label={label}
+      title={DISCOVERY_STATUS_MEANINGS[known]}
+    />
+  );
 }
 
 export function ClientStatusBadge({ status }: { status: string }) {

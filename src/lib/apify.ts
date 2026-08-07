@@ -1,4 +1,4 @@
-// Apify — the live half of the lead import.
+// Apify — the live half of the discovery import, and every enrichment run.
 //
 // Server-only: the token lives in APIFY_API_TOKEN and is read here, sent as a
 // bearer header, and never returned to the browser in any form. Nothing in
@@ -15,7 +15,7 @@ import {
   ApifyFetchResult,
   MAX_IMPORT_ROWS,
   NESTED_FIELD_SEPARATOR,
-} from "@/lib/leadImport";
+} from "@/lib/discoveryImport";
 
 export const APIFY_SOURCE_KINDS = ["actor", "task"] as const;
 
@@ -52,7 +52,7 @@ export async function runApifySync({
   id,
   input,
   // How many dataset items to ask for and keep. The bulk import wants the
-  // whole run; enriching one lead wants the handful it takes to see what came
+  // whole run; enriching one record wants the handful it takes to see what came
   // back. Never taken from the browser — each caller states its own ceiling.
   maxItems = MAX_IMPORT_ROWS,
 }: {
@@ -291,7 +291,7 @@ function withNestedFields(flat: Record<string, string>): Record<string, string> 
 // employer, the current company, whichever the actor listed first. Entries
 // that carry nothing for it are stepped over rather than ending the search: a
 // profile whose first position predates the company name being recorded still
-// has one further down, and a blank column would look like a lead with no
+// has one further down, and a blank column would look like a candidate with no
 // clinic rather than a scrape that needed one more line read.
 //
 // Returns null — no column — rather than "" when the list holds nothing
