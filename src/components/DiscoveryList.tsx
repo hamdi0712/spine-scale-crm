@@ -229,10 +229,13 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
           placeholder="Search clinic, contact, source, location…"
           className="field w-full max-w-xs"
         />
+        {/* w-auto sizes the box to its label, so the native chevron lands on
+            top of the 14px px-3.5 padding rather than beside it. The extra
+            right padding restores the breathing room full-width fields get. */}
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="field w-auto"
+          className="field w-auto pr-9"
         >
           <option value="ALL">All statuses</option>
           {DISCOVERY_STATUSES.map((s) => (
