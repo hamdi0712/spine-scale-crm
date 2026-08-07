@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
+  addDiscoveryCandidateByName,
   discoveryQueue,
   processDiscoveryCandidate,
 } from "@/lib/actions/discovery";
 import { DISCOVERY_QUEUE_STATUSES } from "@/lib/discovery";
 import { IcpTier } from "@/lib/icp";
+import AddClinicByName from "@/components/AddClinicByName";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
 import DiscoveryList, { DiscoveryRow } from "@/components/DiscoveryList";
 
@@ -97,7 +99,7 @@ export default async function DiscoveryPage({
 
   return (
     <div>
-      {/* Four actions is more than any other page header carries, so the row
+      {/* Five actions is more than any other page header carries, so the row
           is built to take it. Wide enough for both, they share a line and the
           buttons keep their own width — the title column is the one that
           gives way, its subtitle wrapping to another line rather than every
@@ -122,6 +124,9 @@ export default async function DiscoveryPage({
           <Link href="/discovery/import/apify" className="btn">
             Import from Apify
           </Link>
+          {/* The single-record way in, beside the two bulk ones — a name
+              instead of a file, and the same Pending candidate at the end. */}
+          <AddClinicByName add={addDiscoveryCandidateByName} />
           <DiscoveryQueue
             loadQueue={discoveryQueue}
             process={processDiscoveryCandidate}
@@ -145,15 +150,17 @@ export default async function DiscoveryPage({
         <div className="card mt-8 px-6 py-10 text-center">
           <p className="text-sm font-medium">Nothing in Discovery yet</p>
           <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
-            Imports land here rather than in the pipeline. Bring in a CSV export
-            or run an Apify actor, then press Process queue — each candidate is
-            enriched, scored against the ICP framework, and either promoted to a
-            lead or rejected with its reasoning kept.
+            Imports land here rather than in the pipeline. Bring in a CSV export,
+            run an Apify actor, or add a single clinic by name — then press
+            Process queue, and each candidate is enriched, scored against the ICP
+            framework, and either promoted to a lead or rejected with its
+            reasoning kept.
           </p>
-          <div className="mt-5 flex justify-center gap-2">
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
             <Link href="/discovery/import" className="btn">
               Import CSV
             </Link>
+            <AddClinicByName add={addDiscoveryCandidateByName} />
             <Link href="/discovery/import/apify" className="btn-primary">
               Import from Apify
             </Link>

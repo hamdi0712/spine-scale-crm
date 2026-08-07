@@ -1,5 +1,11 @@
 // Running the four actors — the part both enrichment callers share.
 //
+// Four, plus one lookup that is not one of them: a record with no Facebook URL
+// has its page searched for (src/lib/googleSearch.ts) immediately before the
+// ads actor that needs it, because otherwise that actor is skipped on every
+// run this record ever gets. Found, the URL is used by this run and returned
+// to be saved; not found, the ads step is skipped exactly as it was before.
+//
 // There are two of them now. The lead page runs this against a Lead and writes
 // what comes back onto that lead; the discovery queue runs it against a
 // DiscoveryCandidate as step one of the scoring chain. They differ in what
@@ -26,8 +32,11 @@ import {
   candidateLabel,
   enrichFieldsWritten,
   enrichValuePreview,
+  needsFacebookLookup,
   sanitizeEnrichUpdate,
 } from "@/lib/leadEnrich";
+import { facebookSearchQuery, firstFacebookPage } from "@/lib/googleSearch";
+import { runGoogleSearch } from "@/lib/googleSearchRun";
 
 export interface EnrichActorsResult {
   // One entry per actor, always — a run of four reports four things.
@@ -62,6 +71,29 @@ export async function runEnrichActors(
   // sooner, but they are billed to a live account and a mistyped URL is
   // cheaper to notice one run at a time.
   for (const actor of ENRICH_ACTORS) {
+    // The one step that runs in front of an actor rather than as one.
+    //
+    // Without a Facebook URL the ads step is skipped, and on a record that
+    // never had one it is skipped on every run forever — so before giving up
+    // on it, the clinic's name is searched for the page. What comes back is
+    // used by this run and merged into the update, which is what stops the
+    // next run having to search again.
+    //
+    // Nothing about the skip itself changes: a search that finds no usable
+    // page leaves live.facebookUrl empty, and the check below skips the ads
+    // actor for exactly the reason it always did.
+    if (actor.key === "facebookAds" && needsFacebookLookup(live)) {
+      const found = await lookUpFacebookUrl(live, outcomes);
+      if (found !== null) {
+        live.facebookUrl = found;
+        // Merged here rather than with the ads actor's own result. The two are
+        // separate findings: the page was found whether or not the run that
+        // follows reads an ad off it, and a failed ads run must not cost the
+        // record the URL that would have made the next one cheaper.
+        merged = { ...merged, facebookUrl: found };
+      }
+    }
+
     const required = live[actor.requires];
     if (typeof required !== "string" || required.trim() === "") {
       outcomes.push({
@@ -157,6 +189,56 @@ export async function runEnrichActors(
   }
 
   return { outcomes, update: merged };
+}
+
+// The Facebook page lookup: one search, the first result on facebook.com, and
+// an outcome saying which of those two it got to. Reports through the same
+// outcome list as the actors — a step that spends money reports what it spent
+// it on, whether or not it found anything.
+//
+// Returns the URL, or null for every way of not having one. A failed search is
+// the run's own affair and not the record's: the caller carries on to the same
+// skip it would have reached without this step at all.
+async function lookUpFacebookUrl(
+  live: EnrichInputs,
+  outcomes: EnrichOutcome[],
+): Promise<string | null> {
+  const query = facebookSearchQuery(live.clinicName, live.location);
+  const search = await runGoogleSearch(query);
+
+  if (!search.ok) {
+    outcomes.push({
+      key: "facebookLookup",
+      status: "failed",
+      detail:
+        search.error ??
+        "The search for a Facebook page failed, so the Facebook Ads step had no URL to run on.",
+    });
+    return null;
+  }
+
+  // The first result on facebook.com, which is what the search was for. It is
+  // sanitized on the way through rather than trusted, because this value is
+  // about to be stored and handed to another actor.
+  const page = firstFacebookPage(search.urls);
+  const url =
+    page === null ? undefined : sanitizeEnrichUpdate({ facebookUrl: page }).facebookUrl;
+  if (url === undefined) {
+    outcomes.push({
+      key: "facebookLookup",
+      status: "empty",
+      detail: `searched for “${query}” and nothing in the results was a Facebook page — the Facebook Ads step is skipped, as it was before`,
+    });
+    return null;
+  }
+
+  outcomes.push({
+    key: "facebookLookup",
+    status: "wrote",
+    fields: ["facebookUrl"],
+    values: [enrichValuePreview("facebookUrl", { facebookUrl: url })],
+  });
+  return url;
 }
 
 function omitWebsite(update: EnrichUpdate): EnrichUpdate {

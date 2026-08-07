@@ -12,6 +12,10 @@
 //
 //   A missing input is a skip, not an error. A lead with no Facebook page
 //   still gets its website crawled; the run reports what it left out and why.
+//   The one missing input that is now worth going and finding is the Facebook
+//   URL — a search for the page runs in front of the ads actor that needs it
+//   (src/lib/enrichRun.ts), and finding nothing leaves the skip exactly as it
+//   was. Every other missing input is still a skip and nothing more.
 //
 //   A run that comes back with several *candidate records* — the Maps search
 //   found three clinics of that name — is the one case nothing can be read
@@ -22,6 +26,7 @@
 // data, the readers are pure, and src/lib/actions/enrich.ts does the running.
 
 import { parseCount } from "@/lib/discoveryImport";
+import { GOOGLE_SEARCH_ACTOR_ID } from "@/lib/googleSearch";
 
 // ─── The fields enrichment can write ───────────────────────────────────────
 
@@ -35,9 +40,19 @@ import { parseCount } from "@/lib/discoveryImport";
 // website is a record whose crawl would otherwise be skipped forever for want
 // of a field two of the other actors already know. It is filled and never
 // overwritten — see fillableWebsiteUrl below.
+//
+// The Facebook URL is here on the same footing and for the same reason: the
+// ads actor cannot run without one, and a record that arrived from a CSV with
+// no Facebook page would have that step skipped on every run forever. The
+// Google Search lookup in src/lib/enrichRun.ts fills it once so the runs after
+// this one have it already. It is filled and never overwritten, but by a
+// different mechanism to the website's: the lookup only runs on a record whose
+// Facebook URL is blank (needsFacebookLookup below), so a URL somebody typed
+// in is never searched against in the first place.
 export const ENRICH_FIELD_KEYS = [
   "staffCountRaw",
   "websiteUrl",
+  "facebookUrl",
   "metaAdsSignal",
   "reviewCount",
   "websiteNotes",
@@ -48,6 +63,7 @@ export type EnrichFieldKey = (typeof ENRICH_FIELD_KEYS)[number];
 export const ENRICH_FIELD_LABELS: Record<EnrichFieldKey, string> = {
   staffCountRaw: "Staff count",
   websiteUrl: "Website URL",
+  facebookUrl: "Facebook URL",
   metaAdsSignal: "Meta ads signal",
   reviewCount: "Review count",
   websiteNotes: "Website notes",
@@ -61,6 +77,7 @@ export const ENRICH_FIELD_LABELS: Record<EnrichFieldKey, string> = {
 export type EnrichUpdate = Partial<{
   staffCountRaw: number;
   websiteUrl: string;
+  facebookUrl: string;
   metaAdsSignal: string;
   reviewCount: number;
   websiteNotes: string;
@@ -122,14 +139,33 @@ export interface EnrichTable {
   rows: string[][];
 }
 
+// The four actors, and the one lookup that runs in front of one of them.
+//
+// facebookLookup is not a fifth actor in ENRICH_ACTORS and deliberately so: it
+// reads nothing about a clinic, it only turns a name into the URL the ads
+// actor needs, and it runs only on records that haven't got one. It is a key
+// here because it reports an outcome like everything else in a run — the panel
+// and the queue both list what happened, and a step that quietly happened or
+// quietly didn't would be the one part of a run nobody could see.
 export const ENRICH_ACTOR_KEYS = [
   "companyDetails",
+  "facebookLookup",
   "facebookAds",
   "websiteContent",
   "googleReviews",
 ] as const;
 
 export type EnrichActorKey = (typeof ENRICH_ACTOR_KEYS)[number];
+
+// The name each step goes by in a report. Read from ENRICH_ACTORS where there
+// is one; the lookup has no entry there and carries its own.
+export const ENRICH_STEP_LABELS: Record<EnrichActorKey, string> = {
+  companyDetails: "Company Details",
+  facebookLookup: "Facebook page lookup",
+  facebookAds: "Facebook Ads Library",
+  websiteContent: "Website Content Crawler",
+  googleReviews: "Google Maps Reviews",
+};
 
 export interface EnrichActor {
   key: EnrichActorKey;
@@ -310,11 +346,26 @@ export function enrichPlan(inputs: EnrichInputs): EnrichPlanEntry[] {
     (inputs.websiteUrl ?? "").trim() === "" &&
     (inputs.companyLinkedinUrl ?? "").trim() !== "";
 
-  return ENRICH_ACTORS.map((actor) => {
+  // The same shape of prediction for the ads actor, and the reason the lookup
+  // row appears at all: a record with no Facebook URL is about to have one
+  // searched for, so the ads step below it is a maybe rather than a skip.
+  const lookupWillRun = needsFacebookLookup(inputs);
+
+  const entries: EnrichPlanEntry[] = [];
+  for (const actor of ENRICH_ACTORS) {
+    // Listed immediately above the actor it exists to feed, because that is
+    // the order it runs in and the only reason it runs at all.
+    if (actor.key === "facebookAds" && lookupWillRun) {
+      entries.push(FACEBOOK_LOOKUP_PLAN_ENTRY);
+    }
+
     const value = inputs[actor.requires];
     const has = typeof value === "string" && value.trim() !== "";
-    const mayArrive = !has && actor.requires === "websiteUrl" && websiteMayArrive;
-    return {
+    const mayArrive =
+      !has &&
+      ((actor.requires === "websiteUrl" && websiteMayArrive) ||
+        (actor.requires === "facebookUrl" && lookupWillRun));
+    entries.push({
       key: actor.key,
       label: actor.label,
       actorId: actor.actorId,
@@ -323,11 +374,36 @@ export function enrichPlan(inputs: EnrichInputs): EnrichPlanEntry[] {
       skipReason: has
         ? null
         : mayArrive
-          ? "no Website URL set — unless Company Details finds one first"
+          ? actor.requires === "websiteUrl"
+            ? "no Website URL set — unless Company Details finds one first"
+            : `no ${actor.requiresLabel} set — unless ${ENRICH_STEP_LABELS.facebookLookup} finds one first`
           : `no ${actor.requiresLabel} set`,
-    };
-  });
+    });
+  }
+  return entries;
 }
+
+// Whether this run will search for a Facebook page: it has a clinic name to
+// search on, and no Facebook URL already. A record that has one is left alone
+// — the URL on the record is somebody's answer, and a search result is not a
+// good enough reason to go looking for a second opinion.
+export function needsFacebookLookup(inputs: EnrichInputs): boolean {
+  return (
+    (inputs.facebookUrl ?? "").trim() === "" && inputs.clinicName.trim() !== ""
+  );
+}
+
+// The lookup's row in the plan. Fixed, because unlike the four it has no
+// inputs of its own to vary on — it runs when there is a name and no Facebook
+// URL, and that is the whole condition.
+const FACEBOOK_LOOKUP_PLAN_ENTRY: EnrichPlanEntry = {
+  key: "facebookLookup",
+  label: ENRICH_STEP_LABELS.facebookLookup,
+  actorId: GOOGLE_SEARCH_ACTOR_ID,
+  writes: [ENRICH_FIELD_LABELS.facebookUrl],
+  willRun: true,
+  skipReason: null,
+};
 
 // ─── What a run reports back ───────────────────────────────────────────────
 
@@ -453,6 +529,21 @@ function plausibleWebsite(raw: string): string | null {
   // A hostname with no dot in it is a local name, not a clinic's site.
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(url.hostname)) return null;
   return url.toString();
+}
+
+// The same test for a Facebook page, plus the one thing that makes it a
+// Facebook page: the host. A search result is only ever written into this
+// field when it is a link on facebook.com — the ads actor is pointed at
+// whatever ends up here, and a directory listing that mentioned the clinic
+// would cost a run and come back with nothing.
+function plausibleFacebookUrl(raw: string): string | null {
+  const url = plausibleWebsite(raw);
+  if (url === null) return null;
+  const host = new URL(url).hostname.toLowerCase();
+  const isFacebook = ["facebook.com", "fb.com"].some(
+    (d) => host === d || host.endsWith(`.${d}`),
+  );
+  return isFacebook ? url : null;
 }
 
 // Whether a scraped website may be written onto this record. Filled, never
@@ -613,6 +704,10 @@ export function sanitizeEnrichUpdate(update: EnrichUpdate): EnrichUpdate {
   if (typeof update.websiteUrl === "string") {
     const url = plausibleWebsite(update.websiteUrl);
     if (url !== null) out.websiteUrl = url;
+  }
+  if (typeof update.facebookUrl === "string") {
+    const url = plausibleFacebookUrl(update.facebookUrl);
+    if (url !== null) out.facebookUrl = url;
   }
   if (typeof update.metaAdsSignal === "string") {
     const v = update.metaAdsSignal.trim().slice(0, SIGNAL_MAX_CHARS);

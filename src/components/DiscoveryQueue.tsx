@@ -246,7 +246,8 @@ function QueueDialog({
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
               It is not a background job. Each candidate takes four actor runs
-              and a model call in turn, so a few minutes each is normal. Close
+              and a model call in turn — five when it has no Facebook URL and
+              one has to be searched for — so a few minutes each is normal. Close
               this tab, navigate away, or put the machine to sleep and the queue
               stops after whatever candidate is in flight — everything it never
               reached stays exactly as it is, and pressing this again picks up
@@ -270,7 +271,8 @@ function QueueDialog({
               <li>
                 <span className="num font-medium text-ink">1.</span> Enrich —
                 the same four actors the lead page runs, from whatever URLs the
-                candidate carries.
+                candidate carries. A candidate with no Facebook URL gets one
+                searched for by name first, and keeps it.
               </li>
               <li>
                 <span className="num font-medium text-ink">2.</span> Score Staff
