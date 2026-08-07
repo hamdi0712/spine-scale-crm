@@ -1,7 +1,8 @@
 "use client";
 
 // Enrich this lead — one press, four actors, run from what the lead already
-// carries.
+// carries, plus the Facebook page lookup in front of the ads actor when the
+// lead has no Facebook URL for it to run on.
 //
 // There is nothing to fill in here, which is the point of it: the actor IDs
 // are fixed (src/lib/leadEnrich.ts) and every input is built from a field on
@@ -197,8 +198,9 @@ function EnrichDialog({
               Enrich this lead
             </h2>
             <p className="mt-0.5 truncate text-xs leading-relaxed text-muted">
-              {clinicName} — four actors, run from this lead’s own fields.
-              Nothing new is created.
+              {clinicName} — four actors, run from this lead’s own fields, and
+              a search for the Facebook page when there isn’t one. Nothing new
+              is created.
             </p>
           </div>
           <button

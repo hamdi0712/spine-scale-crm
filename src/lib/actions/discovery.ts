@@ -27,7 +27,7 @@ import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
 import { deepSeekJson } from "@/lib/deepseek";
 import {
-  ENRICH_ACTORS,
+  ENRICH_STEP_LABELS,
   EnrichInputs,
   EnrichOutcome,
   EnrichUpdate,
@@ -71,7 +71,17 @@ import {
   defaultBatchLabel,
   readBatchLabel,
 } from "@/lib/discoveryBatch";
-import { isUsTimeZone } from "@/lib/timezones";
+import {
+  ADD_BY_NAME_BATCH_DESCRIPTION,
+  ADD_BY_NAME_SOURCE,
+  AddByNameResult,
+  clinicNameKey,
+  readClinicName,
+  readLocation,
+} from "@/lib/discoveryAddByName";
+import { firstClinicWebsite, websiteSearchQuery } from "@/lib/googleSearch";
+import { runGoogleSearch } from "@/lib/googleSearchRun";
+import { isUsTimeZone, zoneFromLocation } from "@/lib/timezones";
 
 // The stage a promoted candidate's lead starts at. An import is the top of the
 // funnel by definition, and passing through Discovery does not advance it —
@@ -177,6 +187,94 @@ function parseJson<T>(formData: FormData, key: string): T | null {
   } catch {
     return null;
   }
+}
+
+// ─── Add one clinic, by name ───────────────────────────────────────────────
+
+// The single-record entry point, beside the two bulk ones: a name, optionally
+// a town, a Google search for the clinic's website, and one Pending candidate.
+//
+// It creates a candidate and nothing else, exactly as the imports do. It
+// writes no status but Pending, no score, no tier, no breakdown — this is a
+// way in, not a way round: the candidate it makes goes through the same
+// Process Queue and the same chain as one that arrived in a CSV of four
+// hundred, and nothing downstream can tell the difference beyond the source
+// and batch labels saying how it got here.
+//
+// Called straight from the dialog, which awaits the result rather than posting
+// a form: the search takes as long as an actor run takes, and what it found —
+// or didn't — has to come back to the browser to be read.
+export async function addDiscoveryCandidateByName(args: {
+  clinicName: string;
+  location?: string | null;
+}): Promise<AddByNameResult> {
+  const clinicName = readClinicName(args?.clinicName);
+  if (clinicName === null) {
+    return { ok: false, error: "Enter the clinic's name." };
+  }
+  const location = readLocation(args?.location);
+
+  // Already here — as a candidate, or as a lead it was promoted into. Checked
+  // before the search rather than after, because a search costs a run and the
+  // answer to "add this clinic" is already no.
+  const key = clinicNameKey(clinicName);
+  const [candidates, leads] = await Promise.all([
+    prisma.discoveryCandidate.findMany({
+      select: { id: true, clinicName: true, status: true },
+    }),
+    prisma.lead.findMany({ select: { id: true, clinicName: true } }),
+  ]);
+  const existingCandidate = candidates.find(
+    (c) => clinicNameKey(c.clinicName) === key,
+  );
+  if (existingCandidate) {
+    return {
+      ok: false,
+      error: `${clinicName} is already in Discovery.`,
+      duplicateId: existingCandidate.id,
+      duplicateStatus: existingCandidate.status,
+    };
+  }
+  if (leads.some((l) => clinicNameKey(l.clinicName) === key)) {
+    return {
+      ok: false,
+      error: `${clinicName} has already been through Discovery and is in the pipeline.`,
+    };
+  }
+
+  // The search. A failure here is not a reason to lose the name: the candidate
+  // is created either way, because the Maps actor in the enrichment chain
+  // searches on the clinic name alone and can still find something to score
+  // on. The result says which of the three happened — found, found nothing,
+  // or could not run — and the dialog reports it rather than smoothing it over.
+  const query = websiteSearchQuery(clinicName, location);
+  const search = await runGoogleSearch(query);
+  const websiteUrl = search.ok ? firstClinicWebsite(search.urls) : null;
+
+  const created = await prisma.discoveryCandidate.create({
+    data: {
+      clinicName,
+      websiteUrl,
+      location,
+      // Read off the location the same way the bulk import reads it, so a
+      // by-name candidate carries the zone a mapped one would have carried.
+      timeZone: zoneFromLocation(location),
+      source: ADD_BY_NAME_SOURCE,
+      status: IMPORT_DEFAULT_STATUS,
+      batchLabel: defaultBatchLabel(new Date(), ADD_BY_NAME_BATCH_DESCRIPTION),
+    },
+    select: { id: true },
+  });
+
+  revalidatePath("/discovery");
+  return {
+    ok: true,
+    id: created.id,
+    clinicName,
+    websiteUrl,
+    query,
+    ...(search.ok ? {} : { searchError: search.error }),
+  };
 }
 
 // ─── Editing a candidate ───────────────────────────────────────────────────
@@ -367,9 +465,9 @@ export async function processDiscoveryCandidate(
   }
 
   for (const outcome of outcomes) {
-    const actor = ENRICH_ACTORS.find((a) => a.key === outcome.key);
+    const label = ENRICH_STEP_LABELS[outcome.key] ?? outcome.key;
     steps.push({
-      label: actor?.label ?? outcome.key,
+      label,
       status:
         outcome.status === "wrote"
           ? "ok"
@@ -384,7 +482,7 @@ export async function processDiscoveryCandidate(
           : outcome.detail,
     });
     if (outcome.status !== "wrote" && outcome.status !== "failed") {
-      notes.push(`${actor?.label ?? outcome.key}: ${outcome.detail}`);
+      notes.push(`${label}: ${outcome.detail}`);
     }
   }
 
@@ -400,17 +498,24 @@ export async function processDiscoveryCandidate(
   // nobody can see from the numbers, so nothing is scored on it. The candidate
   // goes to Failed with the actor's own sentence and the next queue run picks
   // it up again.
+  //
+  // The Facebook page lookup is the one exception, and it is one because of
+  // what it is: a search for a URL the candidate hasn't got, in front of a
+  // step that was going to be skipped without it. A search that fails leaves
+  // the run exactly where it stood before the lookup existed — the ads step
+  // skipped for want of a Facebook URL — and failing a candidate over it would
+  // reject clinics this app used to score.
   const failed = outcomes.filter(
     (o): o is Extract<EnrichOutcome, { status: "failed" }> =>
-      o.status === "failed",
+      o.status === "failed" && o.key !== "facebookLookup",
   );
   if (failed.length > 0) {
-    const actorName = (key: string) =>
-      ENRICH_ACTORS.find((a) => a.key === key)?.label ?? key;
     return failCandidate(
       candidate,
       steps,
-      failed.map((f) => `${actorName(f.key)}: ${f.detail}`).join(" · "),
+      failed
+        .map((f) => `${ENRICH_STEP_LABELS[f.key] ?? f.key}: ${f.detail}`)
+        .join(" · "),
     );
   }
 
