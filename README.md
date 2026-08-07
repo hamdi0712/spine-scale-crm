@@ -1,4 +1,4 @@
-# Spine Scale — Internal Ops CRM
+# Spine Scale — An AI-powered lead qualification platform with a built-in CRM
 
 Single-user internal tool for running the Spine Scale agency: automated lead
 discovery, sales pipeline, signed clients with delivery checklists, weekly KPI
