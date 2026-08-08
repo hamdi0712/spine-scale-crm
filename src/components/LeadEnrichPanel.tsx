@@ -1,8 +1,9 @@
 "use client";
 
 // Enrich this lead — one press, four actors, run from what the lead already
-// carries, plus the Facebook page lookup in front of the ads actor when the
-// lead has no Facebook URL for it to run on.
+// carries, plus a Google search in front of either step whose URL the lead
+// hasn't got — the Facebook page before the ads actor, the website before the
+// crawler when nothing else in the run has reported one.
 //
 // There is nothing to fill in here, which is the point of it: the actor IDs
 // are fixed (src/lib/leadEnrich.ts) and every input is built from a field on

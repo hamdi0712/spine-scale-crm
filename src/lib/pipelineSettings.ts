@@ -52,7 +52,11 @@ export type PipelineStepKey = (typeof PIPELINE_STEP_KEYS)[number];
 
 export const PIPELINE_STEP_LABELS: Record<PipelineStepKey, string> = {
   companyDetails: "Company Details",
-  facebookLookup: "Facebook page lookup",
+  // One row for both of the run's lookups. It is keyed facebookLookup because
+  // the Facebook page was the only thing it searched for when the column was
+  // written; renaming the column would be a migration for a label, and the
+  // run's own names for the two searches are in ENRICH_STEP_LABELS.
+  facebookLookup: "Google Search",
   facebookAds: "Facebook Ads Library",
   websiteContent: "Website Content Crawler",
   googleReviews: "Google Maps Reviews",
@@ -64,7 +68,7 @@ export const PIPELINE_STEP_BLURBS: Record<PipelineStepKey, string> = {
   companyDetails:
     "Reads the clinic's LinkedIn company page for a headcount and a website. Needs a Company LinkedIn URL.",
   facebookLookup:
-    "Searches Google for the clinic's Facebook page when the record hasn't got one, and saves what it finds. Needs a clinic name.",
+    "Fills in a missing URL by searching for it, and saves what it finds: the Facebook page before the ads step, and the website before the crawler when nothing else has reported one. Needs a clinic name.",
   facebookAds:
     "Counts what the clinic is running in the Meta ads library and how long it has been at it. Needs a Facebook URL.",
   websiteContent:
@@ -235,6 +239,13 @@ export interface PipelineStepRate {
 
 export const PIPELINE_STEP_RATES: Record<PipelineStepKey, PipelineStepRate> = {
   companyDetails: { usdPerUnit: 0.01, unitsPerCandidate: 1, unit: "company page" },
+  // One search, not two, although this step can run twice on one candidate —
+  // once for a Facebook page and once for a website. Most candidates need
+  // neither or one: an import that carries a website never searches for one,
+  // and a search only happens after the two actors that report a website for
+  // free have come back without it. Same reasoning as the ads cap below —
+  // a little low on the record that needs everything, rather than double on
+  // every record that doesn't.
   facebookLookup: { usdPerUnit: 0.004, unitsPerCandidate: 1, unit: "search" },
   facebookAds: { usdPerUnit: 0.003, unitsPerCandidate: 10, unit: "ad" },
   websiteContent: { usdPerUnit: 0.001, unitsPerCandidate: 3, unit: "page" },

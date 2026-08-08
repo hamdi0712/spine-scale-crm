@@ -300,8 +300,10 @@ function QueueDialog({
                 >
                   Pipeline Settings
                 </Link>
-                . A candidate with no Facebook URL gets one searched for by
-                name first, and keeps it.
+                . A missing Facebook URL is searched for before the ads step,
+                and a missing website before the crawler once nothing else has
+                reported one — both saved back, so the next run needn&rsquo;t
+                search again.
               </li>
               <li>
                 <span className="num font-medium text-ink">2.</span> Score Staff
