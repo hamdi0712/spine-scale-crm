@@ -115,6 +115,24 @@ model DiscoveryCandidate {
   disqualified       Boolean @default(false)
   disqualifiedReason String?
 
+  // ─── Second look ─────────────────────────────────────────────────────────
+  //
+  // Written only by "Check for second looks" on the rejected list
+  // (src/lib/actions/secondLook.ts), and read only by that list. Nothing here
+  // takes part in scoring, in the queue, or in promotion: a flag is a note
+  // asking somebody to re-read a rejection, and the only thing that can act on
+  // it is a person pressing Promote anyway.
+  //
+  // secondLookAt marks that the sweep looked at this candidate at all, which is
+  // what separates "examined and found clear-cut" from "never examined" — the
+  // sweep caps how many rejections it sends to the model per run, so the two
+  // are genuinely different states. A candidate the run did not reach keeps
+  // whatever it had.
+  secondLookFlagged Boolean   @default(false)
+  secondLookReason  String? // one sentence on why it is worth re-reading
+  secondLookSource  String? // "computed" | "assist", the same split the breakdown records
+  secondLookAt      DateTime?
+
   // The lead this became. Set with status PROMOTED and never cleared: the
   // relation is what stops a candidate being promoted twice. SetNull rather
   // than Cascade — deleting a lead should not erase the record of it having
@@ -130,6 +148,40 @@ model DiscoveryCandidate {
 
   @@index([status])
   @@index([batchLabel])
+}
+
+// The dashboard's AI notes — one short paragraph on what most needs attention
+// today, and the cache that stops it being rewritten on every page load.
+//
+// Exactly one row, at the fixed id in src/lib/dailyDigest.ts, on the same terms
+// as PipelineSettings below: every read is a findUnique on that id and every
+// write an upsert of it, so there is no path that creates a second row. No row
+// at all is the normal state of a fresh install and reads as "nothing written
+// yet".
+//
+// This is a cache and nothing else. Every number the paragraph talks about is
+// counted live from the records that own it at the moment the digest is
+// written — nothing here is a source of truth for anything, and deleting the
+// row costs one model call and no information. That is why the snapshot is
+// stored beside the text: a paragraph two hours old should be read against the
+// numbers it was actually written from, not against today's.
+model DailyDigest {
+  id String @id
+
+  // The paragraph, as the model wrote it, held to a length by
+  // src/lib/dailyDigest.ts on the way in.
+  body String
+
+  // The counts the paragraph was written from, as JSON — read back through
+  // parseDigestSnapshot(), which never throws on a row written by an older
+  // shape. Shown under the note so what it read is visible beside what it said.
+  snapshot String
+
+  // When the model wrote it. The freshness rule is one constant
+  // (DIGEST_MAX_AGE_MS) and this is the only thing it is measured against.
+  generatedAt DateTime
+
+  updatedAt DateTime @updatedAt
 }
 
 model Lead {

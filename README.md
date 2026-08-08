@@ -71,6 +71,19 @@ again.
   deliberately does not suggest a best time to prospect — nothing in the
   reporting data supports one yet.
 
+  **AI notes**, directly under Now, is one short paragraph on what most needs
+  attention today. Everything it is given is counted here first — active
+  clients, who is at risk and why, follow-ups and calls already overdue, how
+  many candidates are waiting in the Discovery queue, how many were promoted
+  this week — and the model's only job is to say which of it matters most and
+  why that one rather than the others. The counts it read are printed under the
+  paragraph in the app's own words, so a note that misreads one is caught by
+  the person reading it rather than believed. It is cached for four hours: the
+  dashboard renders whatever is stored and asks for a new note only when that
+  one has aged out, or when you press **Refresh note**. It changes nothing and
+  nothing downstream reads it. With no `DEEPSEEK_API_KEY` set the card says so
+  once, quietly, and the rest of the dashboard is unaffected.
+
   **Recent activity** is the milestone feed (below), **Client health** ranks
   the live clients worst-first with a sparkline of recent show rate, and
   **Pipeline snapshot** breaks open pipeline value down by stage as a donut.
@@ -251,6 +264,26 @@ again.
   this run produced — flags and all, still editable. It says "pursue this
   anyway", not "the evidence was different".
 
+  **Check for second looks**, at the top of that list, is the sweep that says
+  which rejections to start with. It splits the work the same way the scoring
+  does. What can be worked out is worked out: a clinic that scored one point
+  under the promotion bar is a near miss, and one a disqualifier stopped whose
+  categories still added up past the bar is the *disqualified, and would have
+  scored 8* case — both are arithmetic, and neither costs a model call. What is
+  left is a judgement about language, and only that is asked for: does a
+  disqualifier's stored reason name something specific and observed, or is it a
+  hedge dressed as a finding ("the site does not clearly say the clinic is
+  non-surgical")? Flagged rows sort to the top of the list with a marker and
+  the sentence behind it, and the marker says which of the two passes found it.
+  One sweep reads at most 25 disqualified rejections, highest score first, and
+  says how many it did not reach. A failed call writes nothing at all rather
+  than leaving half the list marked from today and half from last week.
+
+  It flags; it never promotes. Nothing downstream reads a flag, no status
+  moves, and the only thing that can act on one is a person pressing **Promote
+  anyway** — the same button, with the same confirmation on it, that was
+  already there.
+
   `APIFY_API_TOKEN` lives in `.env` beside `APP_PASSWORD` and is read only in
   `src/lib/apify.ts`, which is server-side and sends it as a bearer header —
   never in a URL, never in a payload the browser sees. A missing token, a
@@ -345,8 +378,9 @@ again.
   or failed leaves that number older than the run above it. Nothing here
   refreshes itself.
 
-  **Suggest remaining scores**, on the lead's ICP scorecard, is the one place
-  a model is asked anything. It sends what the enrichment run gathered —
+  **Suggest remaining scores**, on the lead's ICP scorecard, is where a model
+  is asked to read one lead's own evidence. It sends what the enrichment run
+  gathered —
   website notes, the Meta ads signal, the review count — to DeepSeek
   (`deepseek-v4-flash`) along with the framework's own text, and asks for three
   things: a Package/Consult Economics score with a one-sentence reason, the two

@@ -11,6 +11,7 @@ import {
 } from "@/lib/adhub";
 import { CALL_STATUS_LABELS, CallStatus } from "@/lib/calls";
 import {
+  DISCOVERY_SOURCE_LABELS,
   DISCOVERY_STATUS_LABELS,
   DISCOVERY_STATUS_MEANINGS,
   DiscoveryStatus,
@@ -22,6 +23,7 @@ import {
   Trend,
 } from "@/lib/health";
 import { ICP_TIER_ACTIONS, ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
+import { IconSparkles } from "@tabler/icons-react";
 import Icon from "@/components/Icons";
 import {
   CHECKLIST_STATUS_LABELS,
@@ -72,6 +74,41 @@ function Pill({
     >
       <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cls.dot}`} />
       {label}
+    </span>
+  );
+}
+
+// The second-look marker on a rejected candidate. It wears the AI treatment's
+// violet and its sparkle rather than a status tone, because it is not a status:
+// the candidate is still rejected, and this says a person might want to
+// re-read why. Nothing acts on it — see src/lib/secondLook.ts.
+//
+// The reason is on the pill's title as well as printed beside it in the list,
+// so the marker carries its own explanation wherever it ends up.
+// The label is the same three words whichever rule found the flag. There are
+// three of those rules and they mean different things — a near miss, a
+// disqualified clinic whose categories cleared the bar anyway, thin reasoning —
+// and a pill short enough to sit in a row of badges cannot say which without
+// getting one of them wrong. The sentence beside it in the list says exactly
+// which; this marks the row.
+export function SecondLookBadge({
+  reason,
+  source,
+}: {
+  reason: string | null;
+  source: string | null;
+}) {
+  // Which pass found it, in the same two words the breakdown uses for a scored
+  // line, so "Computed" and "DeepSeek" mean one thing across the app.
+  const found =
+    DISCOVERY_SOURCE_LABELS[source === "assist" ? "assist" : "computed"];
+  return (
+    <span
+      title={`${reason ?? "Flagged for a second look."} (${found})`}
+      className="inline-flex h-[22px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-ai/10 px-2.5 text-xs font-medium text-ai"
+    >
+      <IconSparkles size={13} stroke={1.75} aria-hidden />
+      Second look
     </span>
   );
 }

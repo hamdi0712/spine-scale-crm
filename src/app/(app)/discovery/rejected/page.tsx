@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { promoteDiscoveryCandidate } from "@/lib/actions/discovery";
+import { checkForSecondLooks } from "@/lib/actions/secondLook";
 import { parseBreakdown } from "@/lib/discovery";
 import { ICP_MAX_SCORE, IcpTier } from "@/lib/icp";
 import { fmtDate } from "@/lib/format";
-import { IcpTierBadge } from "@/components/Badge";
+import { fmtRelative } from "@/lib/activity";
+import { IcpTierBadge, SecondLookBadge } from "@/components/Badge";
 import ConfirmForm from "@/components/ConfirmForm";
 import DiscoveryBreakdownView from "@/components/DiscoveryBreakdown";
+import SecondLookPanel from "@/components/SecondLookPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -42,14 +45,36 @@ export default async function RejectedCandidatesPage({
         ? "ctier"
         : "all";
 
-  const candidates = await prisma.discoveryCandidate.findMany({
-    where: {
-      status: "REJECTED",
-      ...(filter === "disqualified" ? { disqualified: true } : {}),
-      ...(filter === "ctier" ? { disqualified: false } : {}),
-    },
-    orderBy: [{ icpTotal: "desc" }, { createdAt: "desc" }],
-  });
+  const now = new Date();
+
+  // Flagged first, then the order this page has always used. A second-look flag
+  // is exactly the signal the sort was reaching for — "where a decision worth
+  // overruling would be" — and it knows something the score does not: a clinic
+  // disqualified on thin reasoning can be sitting at 2/10 and still be the row
+  // most worth reading. Within each group, highest score first as before.
+  const [candidates, rejectedTotal, lastSwept] = await Promise.all([
+    prisma.discoveryCandidate.findMany({
+      where: {
+        status: "REJECTED",
+        ...(filter === "disqualified" ? { disqualified: true } : {}),
+        ...(filter === "ctier" ? { disqualified: false } : {}),
+      },
+      orderBy: [
+        { secondLookFlagged: "desc" },
+        { icpTotal: "desc" },
+        { createdAt: "desc" },
+      ],
+    }),
+    // The whole list, not the filtered view — the sweep reads every rejection
+    // regardless of which tab is open, so the button's state should not change
+    // with the filter.
+    prisma.discoveryCandidate.count({ where: { status: "REJECTED" } }),
+    prisma.discoveryCandidate.findFirst({
+      where: { status: "REJECTED", secondLookAt: { not: null } },
+      orderBy: { secondLookAt: "desc" },
+      select: { secondLookAt: true },
+    }),
+  ]);
 
   return (
     <div className="max-w-4xl">
@@ -76,6 +101,16 @@ export default async function RejectedCandidatesPage({
           ))}
         </div>
       </div>
+
+      <SecondLookPanel
+        check={checkForSecondLooks}
+        rejected={rejectedTotal}
+        lastRunAge={
+          lastSwept?.secondLookAt
+            ? fmtRelative(lastSwept.secondLookAt, now)
+            : null
+        }
+      />
 
       {candidates.length === 0 ? (
         <div className="card mt-8 px-6 py-10 text-center">
@@ -110,11 +145,25 @@ export default async function RejectedCandidatesPage({
                           {candidate.icpTotal} / {ICP_MAX_SCORE}
                         </span>
                       )}
+                      {candidate.secondLookFlagged && (
+                        <SecondLookBadge
+                          reason={candidate.secondLookReason}
+                          source={candidate.secondLookSource}
+                        />
+                      )}
                     </div>
                     <p className="mt-1 text-sm">
                       {candidate.disqualifiedReason ??
                         "Rejected, with no reason recorded."}
                     </p>
+                    {/* The flag's own sentence, under the rejection it
+                        disagrees with rather than beside it: the rejection is
+                        still what happened, and this is a note about it. */}
+                    {candidate.secondLookFlagged && candidate.secondLookReason && (
+                      <p className="mt-1 text-xs leading-relaxed text-ai">
+                        Worth a second look — {candidate.secondLookReason}
+                      </p>
+                    )}
                     <p className="num mt-0.5 text-xs text-muted">
                       {[
                         candidate.contactName,
