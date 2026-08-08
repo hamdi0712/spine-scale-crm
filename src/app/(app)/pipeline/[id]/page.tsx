@@ -11,6 +11,7 @@ import {
   updateLead,
 } from "@/lib/actions/leads";
 import { applyEnrichSelection, runLeadEnrichment } from "@/lib/actions/enrich";
+import { generateOutreachHook } from "@/lib/actions/outreachHook";
 import { suggestIcpScores } from "@/lib/actions/icpAssist";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
@@ -29,6 +30,7 @@ import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
+import OutreachHookPanel from "@/components/OutreachHookPanel";
 import IcpScorecard from "@/components/IcpScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 
@@ -60,6 +62,7 @@ export default async function LeadDetailPage({
   const runEnrichment = runLeadEnrichment.bind(null, lead.id);
   const applySelection = applyEnrichSelection.bind(null, lead.id);
   const suggestScores = suggestIcpScores.bind(null, lead.id);
+  const writeHook = generateOutreachHook.bind(null, lead.id);
   const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
 
   // What an enrichment run would do with this lead as it stands, worked out
@@ -360,6 +363,11 @@ export default async function LeadDetailPage({
               lead.companyLinkedinUrl ||
               lead.websiteUrl ||
               lead.facebookUrl ||
+              // The hook needs no URL of its own — it is written from the
+              // enrichment evidence — so an enriched lead opens this row for
+              // it even with nothing to link to.
+              hasAssistEvidence(lead) ||
+              lead.outreachHook ||
               // A mark outlives the URL it was made against: a profile link
               // deleted later shouldn't take the record of the outreach with it.
               lead.connectionRequestSentAt) && (
@@ -431,6 +439,17 @@ export default async function LeadDetailPage({
                     clear={clearConnectionSent}
                   />
                 )}
+                {/* The other thing in this row that prepares rather than
+                    opens. It drafts the first line of the request the button
+                    above records the sending of — and, like that one, sends
+                    nothing itself. */}
+                <OutreachHookPanel
+                  generate={writeHook}
+                  clinicName={lead.clinicName}
+                  contactName={lead.contactName}
+                  storedHook={lead.outreachHook}
+                  enriched={hasAssistEvidence(lead)}
+                />
               </div>
             )}
             <div className="flex justify-end border-t border-line/60 pt-5">

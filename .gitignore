@@ -10,9 +10,10 @@
 *.pem
 npm-debug.log*
 
-# local database — never commit real data
-prisma/dev.db
-prisma/dev.db-journal
+# local database — never commit real data. The glob covers the throwaway
+# databases a migration or build check creates alongside dev.db.
+prisma/*.db
+prisma/*.db-journal
 
 # local env — real password lives here, never committed
 .env
