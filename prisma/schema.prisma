@@ -196,6 +196,16 @@ model Lead {
   // the other, and a count that didn't get re-read shouldn't look like it did.
   reviewsCheckedAt DateTime?
 
+  // One true, specific line about this clinic, written from the enrichment
+  // evidence above for the top of a connection request
+  // (src/lib/outreachHook.ts). Stored so it survives a page load and can be
+  // read back later; regenerating replaces it.
+  //
+  // It is a draft and nothing more. Nothing in this app sends it, and there is
+  // no "sent" flag beside it — the request is still made by hand on LinkedIn,
+  // and connectionRequestSentAt above is where that is recorded.
+  outreachHook String?
+
   notes        LeadNote[]
   calls        Call[]
   activity     ActivityLog[]
