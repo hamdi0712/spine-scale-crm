@@ -67,7 +67,8 @@ export const DISCOVERY_STATUS_MEANINGS: Record<DiscoveryStatus, string> = {
   SCORED: "Scored, but neither promoted nor rejected — the next run finishes it",
   PROMOTED: "Became a lead in the pipeline — by scoring 5+, or by override",
   REJECTED: "Disqualified, or scored C-tier — kept with its reasoning",
-  FAILED: "An actor failed outright, so nothing was scored on partial evidence",
+  FAILED:
+    "An actor failed, or too little was gathered to attempt the card — either way nothing was scored",
 };
 
 export function isDiscoveryStatus(v: unknown): v is DiscoveryStatus {

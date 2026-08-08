@@ -325,8 +325,10 @@ function QueueDialog({
                 <span className="num">{settings.promotionThreshold}</span> or
                 more becomes a lead with its scorecard pre-filled; anything
                 disqualified or under the bar is rejected with its reasoning
-                kept; an actor that fails outright stops that candidate before
-                anything is scored.
+                kept. An actor that fails outright stops that candidate before
+                anything is scored, and so does evidence too thin to attempt
+                the card — two or more categories with nothing behind them is a
+                Failed with the missing inputs named, not a low score.
               </li>
             </ol>
           )}

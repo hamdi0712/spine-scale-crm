@@ -20,6 +20,14 @@
 // only ever moves forward — a candidate is processed from the top each time
 // rather than resumed — because scoring on half a run's evidence is the one
 // thing this flow exists to prevent.
+//
+// Three gates enforce that, and they are the same rule at three depths. An
+// actor that failed outright stops the candidate, because the evidence is
+// incomplete in a way the numbers would not show. Nothing gathered at all
+// stops it, because a total would be a number put on an empty page. And two
+// or more scored categories with nothing to attempt them on stop it too, with
+// the missing inputs named — a clinic nobody managed to look at is not a
+// clinic that scored badly, and a stored 3/10 would say it was.
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -50,10 +58,13 @@ import {
 } from "@/lib/discovery";
 import {
   DISCOVERY_ASSIST_MAX_TOKENS,
+  MIN_UNGATHERED_TO_FAIL,
   buildDiscoveryPrompt,
   parseDiscoverySuggestion,
   precheckGaps,
   precheckNote,
+  ungatheredFailureReason,
+  ungatheredItems,
 } from "@/lib/discoveryAssist";
 import { assistEvidenceLabels, hasAssistEvidence } from "@/lib/icpAssist";
 import { ICP_MAX_SCORE, IcpGapKey } from "@/lib/icp";
@@ -605,6 +616,39 @@ export async function processDiscoveryCandidate(
         : "not answered"
     }, ${Object.keys(suggestion.gaps).length}/3 gaps answered`,
   });
+
+  // ─── The partial-evidence gate ───────────────────────────────────────────
+  //
+  // The same rule as the "nothing was gathered" gate above, one step in. That
+  // one catches a candidate with no evidence at all; this catches one whose
+  // evidence covered so little of the card that the total would be arithmetic
+  // on absences — two or more scored categories that were never attempted,
+  // because what they are read from was never gathered.
+  //
+  // It runs after the model rather than before it, and that is deliberate
+  // despite costing a call on a candidate that is about to fail. Only the
+  // model's answer distinguishes the two cases this rule turns on: a category
+  // it declined after reading real evidence is a finding and must not count,
+  // and a category it answered from evidence this code did not expect it to
+  // use has been attempted whatever the inputs suggest. Guessing either from
+  // the inputs alone would fail candidates that scored perfectly well.
+  const ungathered = ungatheredItems(enriched, suggestion);
+  if (ungathered.length >= MIN_UNGATHERED_TO_FAIL) {
+    const reason = ungatheredFailureReason(ungathered, enriched, {
+      // The website URL as it stands *after* enrichment: the company lookup
+      // and the Maps search both report one, and a candidate that arrived
+      // without a website may well have gained one in this very run.
+      websiteUrl: update.websiteUrl ?? candidate.websiteUrl,
+      companyLinkedinUrl: candidate.companyLinkedinUrl,
+      facebookUrl: update.facebookUrl ?? candidate.facebookUrl,
+    });
+    steps.push({
+      label: "Evidence check",
+      status: "failed",
+      detail: reason,
+    });
+    return failCandidate(candidate, steps, reason);
+  }
 
   // ─── 4. Combine ──────────────────────────────────────────────────────────
   //
