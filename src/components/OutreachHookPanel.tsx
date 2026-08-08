@@ -25,6 +25,7 @@ import {
   OutreachHookResult,
   connectionNote,
 } from "@/lib/outreachHook";
+import AiButton from "@/components/AiButton";
 
 type Panel =
   | { kind: "note"; evidence: string | null; basedOn: string[] }
@@ -115,8 +116,7 @@ export default function OutreachHookPanel({
 
   return (
     <>
-      <button
-        type="button"
+      <AiButton
         onClick={() => void run()}
         disabled={running || !enriched}
         title={
@@ -124,14 +124,14 @@ export default function OutreachHookPanel({
             ? "Writes one line about this clinic from its enrichment evidence. Nothing is sent."
             : "Run “Enrich this lead” first — there is no evidence to write a hook from yet."
         }
-        className="btn h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
       >
         {running
           ? "Writing…"
           : panel?.kind === "note"
             ? "Regenerate hook"
             : "Generate outreach hook"}
-      </button>
+      </AiButton>
 
       {/* w-full inside the wrapping flex row, so the draft takes a line of its
           own under the buttons rather than squeezing in beside them. */}

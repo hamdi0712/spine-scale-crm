@@ -36,6 +36,7 @@ import {
 import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
 import { PipelineSettings } from "@/lib/pipelineSettings";
 import CostEstimate from "@/components/CostEstimate";
+import AiButton from "@/components/AiButton";
 
 interface QueueItem {
   id: string;
@@ -68,14 +69,13 @@ export default function DiscoveryQueue({
 
   return (
     <>
-      <button
-        type="button"
+      <AiButton
         onClick={() => setOpen(true)}
         disabled={queued === 0}
-        className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+        className="disabled:cursor-not-allowed disabled:opacity-50"
       >
         Process queue{queued > 0 && <span className="num">({queued})</span>}
-      </button>
+      </AiButton>
       {open && (
         <QueueDialog
           loadQueue={loadQueue}
@@ -415,14 +415,18 @@ function QueueDialog({
             >
               {stopping ? "Stopping after this one…" : "Stop after this one"}
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void start()}
-              className={phase === "finished" ? "btn" : "btn-primary"}
-            >
-              {phase === "finished" ? "Run again" : "Start"}
+          ) : phase === "finished" ? (
+            /* Run again stays the plain button it has always been: once the
+               batch has finished the emphasis belongs to Done, and a lit AI
+               pill beside it would fight over that. */
+            <button type="button" onClick={() => void start()} className="btn">
+              Run again
             </button>
+          ) : (
+            /* Start is the press that actually spends the model calls — the
+               dialog above it is the plan, this is the commit — so it wears
+               the AI button in place of the primary one. */
+            <AiButton onClick={() => void start()}>Start</AiButton>
           )}
           <button
             type="button"

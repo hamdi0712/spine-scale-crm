@@ -26,6 +26,7 @@ import {
 } from "@/lib/icpAssist";
 import { fmtDate } from "@/lib/format";
 import { IcpTierBadge } from "@/components/Badge";
+import AiButton from "@/components/AiButton";
 
 export type IcpScorecardValues = Record<IcpDisqualifierKey, boolean> &
   Record<IcpGapKey, boolean> &
@@ -287,18 +288,17 @@ export default function IcpScorecard({
                       : "Run “Enrich this lead” first. The suggestion is made from the website notes, the Meta ads signal and the review count, and this lead has none of them yet."}
                   </p>
                 </div>
-                <button
-                  type="button"
+                <AiButton
                   onClick={() => void askForSuggestions()}
                   disabled={!enriched || asking}
-                  className="btn h-[34px] shrink-0 px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {asking
                     ? "Asking…"
                     : assist
                       ? "Suggest again"
                       : "Suggest remaining scores"}
-                </button>
+                </AiButton>
               </div>
 
               {assistError && (
