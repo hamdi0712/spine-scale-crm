@@ -38,6 +38,7 @@ import { deepSeekJson } from "@/lib/deepseek";
 import {
   ENRICH_STEP_LABELS,
   EnrichInputs,
+  isEnrichLookupKey,
   EnrichOutcome,
   EnrichUpdate,
   enrichFieldsWritten,
@@ -530,15 +531,20 @@ export async function processDiscoveryCandidate(
   // goes to Failed with the actor's own sentence and the next queue run picks
   // it up again.
   //
-  // The Facebook page lookup is the one exception, and it is one because of
-  // what it is: a search for a URL the candidate hasn't got, in front of a
-  // step that was going to be skipped without it. A search that fails leaves
-  // the run exactly where it stood before the lookup existed — the ads step
-  // skipped for want of a Facebook URL — and failing a candidate over it would
-  // reject clinics this app used to score.
+  // The two lookups are the exception, and they are one because of what they
+  // are: a search for a URL the candidate hasn't got, in front of a step that
+  // was going to be skipped without it. A search that fails leaves the run
+  // exactly where it stood before that lookup existed — the ads step skipped
+  // for want of a Facebook URL, the crawler skipped for want of a website —
+  // and failing a candidate over it would reject clinics this app used to
+  // score.
+  //
+  // What a failed website lookup *can* still do is leave the card too thin to
+  // attempt, and the gate below catches that on the evidence rather than on
+  // the search: no notes is no notes however the URL went missing.
   const failed = outcomes.filter(
     (o): o is Extract<EnrichOutcome, { status: "failed" }> =>
-      o.status === "failed" && o.key !== "facebookLookup",
+      o.status === "failed" && !isEnrichLookupKey(o.key),
   );
   if (failed.length > 0) {
     return failCandidate(

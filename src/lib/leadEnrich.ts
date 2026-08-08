@@ -144,29 +144,60 @@ export interface EnrichTable {
   rows: string[][];
 }
 
-// The four actors, and the one lookup that runs in front of one of them.
+// The four actors, and the two lookups that run in front of two of them.
 //
-// facebookLookup is not a fifth actor in ENRICH_ACTORS and deliberately so: it
-// reads nothing about a clinic, it only turns a name into the URL the ads
-// actor needs, and it runs only on records that haven't got one. It is a key
-// here because it reports an outcome like everything else in a run — the panel
-// and the queue both list what happened, and a step that quietly happened or
-// quietly didn't would be the one part of a run nobody could see.
+// Neither lookup is an actor in ENRICH_ACTORS and deliberately so: they read
+// nothing about a clinic, they only turn a name into a URL another step cannot
+// run without, and each runs only on a record that hasn't got that URL. They
+// are keys here because they report an outcome like everything else in a run —
+// the panel and the queue both list what happened, and a step that quietly
+// happened or quietly didn't would be the one part of a run nobody could see.
 //
-// The list itself is the settings row's, imported rather than repeated: a step
+// Both are the same actor and the same switch. In Pipeline Settings they are
+// one step, "Google Search", because that is what a person turning it off
+// means: stop searching Google. That row is keyed facebookLookup, which is
+// what it was called when the Facebook page was the only thing it looked up —
+// LOOKUP_SETTINGS_KEY below is where the two names are reconciled.
+//
+// The step list is the settings row's, imported rather than repeated: a step
 // that can be turned off in Pipeline Settings and a step that reports an
 // outcome in a run are the same step, and two lists would be two chances to
-// disagree about which five those are.
-export const ENRICH_ACTOR_KEYS = PIPELINE_STEP_KEYS;
+// disagree about which five those are. The lookups are added on top, because
+// they report outcomes without being separately switchable.
+export const ENRICH_LOOKUP_KEYS = ["facebookLookup", "websiteLookup"] as const;
 
-export type EnrichActorKey = PipelineStepKey;
+export type EnrichLookupKey = (typeof ENRICH_LOOKUP_KEYS)[number];
+
+export const ENRICH_ACTOR_KEYS = [
+  ...PIPELINE_STEP_KEYS,
+  "websiteLookup" as const,
+];
+
+export type EnrichActorKey = PipelineStepKey | EnrichLookupKey;
+
+export function isEnrichLookupKey(key: string): key is EnrichLookupKey {
+  return (ENRICH_LOOKUP_KEYS as readonly string[]).includes(key);
+}
+
+// The settings step both lookups answer to. One switch and one actor ID for
+// "search Google", whichever of the two URLs is being searched for.
+export const LOOKUP_SETTINGS_KEY: PipelineStepKey = "facebookLookup";
 
 // The name each step goes by in a report — the settings page's names, so a
 // step somebody turned off is called the same thing in the run that skips it.
-export const ENRICH_STEP_LABELS = PIPELINE_STEP_LABELS;
+// The two lookups carry their own, because the settings page has one row for
+// what a run reports as two steps.
+export const ENRICH_STEP_LABELS: Record<EnrichActorKey, string> = {
+  ...PIPELINE_STEP_LABELS,
+  facebookLookup: "Facebook page lookup",
+  websiteLookup: "Website lookup",
+};
 
 export interface EnrichActor {
-  key: EnrichActorKey;
+  // A settings step rather than any outcome key: every entry in ENRICH_ACTORS
+  // is one of the switchable steps, and the two lookups are not entries here.
+  // Typed this way so settings.steps[actor.key] needs no widening anywhere.
+  key: PipelineStepKey;
   label: string;
   // The Apify actor is deliberately not here any more. Which actor a step runs
   // is a setting (src/lib/pipelineSettings.ts), read per run from the stored
@@ -254,30 +285,23 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     },
   },
   {
-    key: "websiteContent",
-    label: "Website Content Crawler",
-    requires: "websiteUrl",
-    requiresLabel: "Website URL",
-    maxItems: WEBSITE_NOTES_MAX_PAGES,
-    writes: ["websiteNotes"],
-    identifies: false,
-    identityFields: [],
-    buildInput: (inputs) => ({
-      startUrls: [{ url: inputs.websiteUrl }],
-      maxCrawlPages: WEBSITE_NOTES_MAX_PAGES,
-      // The cheap crawler: this is reading copy off a clinic's marketing site,
-      // not rendering an application.
-      crawlerType: "cheerio",
-      saveMarkdown: false,
-    }),
-    read: (table) => {
-      const notes = crawledText(table);
-      return notes === null ? {} : { websiteNotes: notes };
-    },
-  },
-  {
     key: "googleReviews",
     label: "Google Maps Reviews",
+    // Ahead of the crawler, which is a change from how this chain used to run
+    // and the reason it now feeds it.
+    //
+    // This actor reports a website as well as a review count, and while it ran
+    // last that website was found *after* the one step that needed it — so a
+    // clinic Maps knew the site for still had its crawl skipped, and had to
+    // wait for the next run to use what this run already knew. Moving it up
+    // costs nothing (it needs only the clinic name, which is always there) and
+    // means the two actors that report a website both report it before the
+    // crawler's turn.
+    //
+    // It is also what makes the website lookup in src/lib/enrichRun.ts a last
+    // resort rather than a first guess: by the time it runs, both of the
+    // actors that might have known the URL for free have already said.
+    //
     // The one actor with no URL to work from: it searches by name, which is
     // why it is also the one most likely to come back with several clinics.
     requires: "clinicName",
@@ -314,6 +338,28 @@ export const ENRICH_ACTORS: EnrichActor[] = [
       };
     },
   },
+  {
+    key: "websiteContent",
+    label: "Website Content Crawler",
+    requires: "websiteUrl",
+    requiresLabel: "Website URL",
+    maxItems: WEBSITE_NOTES_MAX_PAGES,
+    writes: ["websiteNotes"],
+    identifies: false,
+    identityFields: [],
+    buildInput: (inputs) => ({
+      startUrls: [{ url: inputs.websiteUrl }],
+      maxCrawlPages: WEBSITE_NOTES_MAX_PAGES,
+      // The cheap crawler: this is reading copy off a clinic's marketing site,
+      // not rendering an application.
+      crawlerType: "cheerio",
+      saveMarkdown: false,
+    }),
+    read: (table) => {
+      const notes = crawledText(table);
+      return notes === null ? {} : { websiteNotes: notes };
+    },
+  },
 ];
 
 export function enrichActor(key: string): EnrichActor | null {
@@ -345,29 +391,42 @@ export function enrichPlan(
   inputs: EnrichInputs,
   settings: PipelineSettings,
 ): EnrichPlanEntry[] {
-  // The one thing the plan cannot state flatly. The company lookup runs before
-  // the crawler and reports a website of its own, so a record with no website
-  // today may well have one by the time the crawler's turn comes round — which
-  // makes "skipped" a prediction here rather than a fact, and it says so.
+  const searchOn = settings.steps[LOOKUP_SETTINGS_KEY].enabled;
+
+  // The one thing the plan cannot state flatly. Three steps before the crawler
+  // can each hand it a website it hasn't got — the company lookup and the Maps
+  // search report one, and the lookup searches for one when neither did — so a
+  // record with no website today may well have one by the time the crawler's
+  // turn comes round. That makes "skipped" a prediction here rather than a
+  // fact, and it says so.
   const websiteMayArrive =
     (inputs.websiteUrl ?? "").trim() === "" &&
-    (inputs.companyLinkedinUrl ?? "").trim() !== "" &&
-    settings.steps.companyDetails.enabled;
+    (((inputs.companyLinkedinUrl ?? "").trim() !== "" &&
+      settings.steps.companyDetails.enabled) ||
+      settings.steps.googleReviews.enabled ||
+      (needsWebsiteLookup(inputs) && searchOn));
 
   // The same shape of prediction for the ads actor, and the reason the lookup
   // row appears at all: a record with no Facebook URL is about to have one
   // searched for, so the ads step below it is a maybe rather than a skip.
-  const lookupWillRun =
-    needsFacebookLookup(inputs) && settings.steps.facebookLookup.enabled;
+  const lookupWillRun = needsFacebookLookup(inputs) && searchOn;
 
   const entries: EnrichPlanEntry[] = [];
   for (const actor of ENRICH_ACTORS) {
-    // Listed immediately above the actor it exists to feed, because that is
-    // the order it runs in and the only reason it runs at all. Shown whenever
-    // the record needs one, on or off — a row that vanished when it was turned
-    // off would leave the plan quietly one step shorter with no way to see why.
+    // Each lookup is listed immediately above the actor it exists to feed,
+    // because that is the order it runs in and the only reason it runs at all.
+    // Shown whenever the record needs one, on or off — a row that vanished when
+    // it was turned off would leave the plan quietly one step shorter with no
+    // way to see why.
     if (actor.key === "facebookAds" && needsFacebookLookup(inputs)) {
-      entries.push(lookupPlanEntry(settings));
+      entries.push(lookupPlanEntry("facebookLookup", settings));
+    }
+    // The website lookup is a prediction in a way the Facebook one is not: the
+    // two actors above the crawler may yet report a website, and then it will
+    // not run at all. Listed anyway, saying exactly that, because a step that
+    // might spend money is worth seeing before it does.
+    if (actor.key === "websiteContent" && needsWebsiteLookup(inputs)) {
+      entries.push(lookupPlanEntry("websiteLookup", settings));
     }
 
     const value = inputs[actor.requires];
@@ -392,7 +451,7 @@ export function enrichPlan(
           ? null
           : mayArrive
             ? actor.requires === "websiteUrl"
-              ? "no Website URL set — unless Company Details finds one first"
+              ? "no Website URL set — unless a step above finds one first"
               : `no ${actor.requiresLabel} set — unless ${ENRICH_STEP_LABELS.facebookLookup} finds one first`
             : `no ${actor.requiresLabel} set`,
     });
@@ -410,19 +469,40 @@ export function needsFacebookLookup(inputs: EnrichInputs): boolean {
   );
 }
 
-// The lookup's row in the plan. Simpler than the four's, because unlike them
-// it has no input of its own to be missing — it is called for when there is a
-// name and no Facebook URL, so the only thing left that can stop it is being
-// turned off.
-function lookupPlanEntry(settings: PipelineSettings): EnrichPlanEntry {
-  const on = settings.steps.facebookLookup.enabled;
+// Whether this run will search for a website: it has a clinic name to search
+// on, and no website already. Same rule as the Facebook one, and the same
+// reason for it — a URL on the record is somebody's answer, and a search
+// result is not grounds for a second opinion.
+//
+// It is a "will it be needed", not a "will it run". Whether it actually runs
+// is settled during the run by whether the two actors ahead of the crawler
+// reported a website first, which nothing can know from here.
+export function needsWebsiteLookup(inputs: EnrichInputs): boolean {
+  return (
+    (inputs.websiteUrl ?? "").trim() === "" && inputs.clinicName.trim() !== ""
+  );
+}
+
+// A lookup's row in the plan. Simpler than an actor's, because unlike them a
+// lookup has no input of its own to be missing — it is called for when there
+// is a name and no URL — so being turned off is the only thing that stops it
+// outright, and for the website one, being beaten to the answer.
+function lookupPlanEntry(
+  key: EnrichLookupKey,
+  settings: PipelineSettings,
+): EnrichPlanEntry {
+  const step = settings.steps[LOOKUP_SETTINGS_KEY];
+  const writes =
+    key === "facebookLookup"
+      ? ENRICH_FIELD_LABELS.facebookUrl
+      : ENRICH_FIELD_LABELS.websiteUrl;
   return {
-    key: "facebookLookup",
-    label: ENRICH_STEP_LABELS.facebookLookup,
-    actorId: settings.steps.facebookLookup.actorId,
-    writes: [ENRICH_FIELD_LABELS.facebookUrl],
-    willRun: on,
-    skipReason: on ? null : STEP_TURNED_OFF_REASON,
+    key,
+    label: ENRICH_STEP_LABELS[key],
+    actorId: step.actorId,
+    writes: [writes],
+    willRun: step.enabled,
+    skipReason: step.enabled ? null : STEP_TURNED_OFF_REASON,
   };
 }
 
