@@ -419,6 +419,224 @@ function readText(raw: unknown, max: number): string {
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
 
+// ─── Scoring on partial evidence ───────────────────────────────────────────
+//
+// The queue already refuses to score a candidate nothing was gathered for.
+// This is the same rule applied one step in: a candidate two of whose scored
+// categories were never *attempted* is not a low-scoring clinic either, it is
+// a clinic nobody has looked at properly, and a stored 3/10 with the reasoning
+// to match would say otherwise for as long as the record exists.
+//
+// The distinction this turns on, and the only one that matters here, is
+// between a category that scored nothing because the evidence said nothing
+// relevant and a category that scored nothing because the evidence for it was
+// never gathered at all. The first is a real finding — Budget Signal scoring 0
+// off a clinic with no ads and no reviews is the framework working — and is
+// left alone. The second is an absence, and two of them mean the total is
+// arithmetic on guesses.
+//
+// Which input each item needs is not invented here: it is read straight off
+// the TASK block above, where each item is told what to return null on. Change
+// a rule there and the matching entry below has to move with it, which is why
+// the two live in the same file.
+
+// The five the framework actually scores through evidence. Budget Signal is
+// deliberately not among them: it is computed from the ads signal and the
+// review count, both of whose absence is itself the finding, so it always has
+// an answer and can never be "not attempted".
+export type ScoredItemKey = "icpStaffSize" | "icpPackageEconomics" | IcpGapKey;
+
+// The gathered fields an item can be attempted from.
+export type EvidenceInputKey =
+  | "staffCountRaw"
+  | "websiteNotes"
+  | "reviewCount"
+  | "metaAdsSignal";
+
+export interface ScoredItemInputs {
+  staffCountRaw: number | null;
+  websiteNotes: string | null;
+  metaAdsSignal: string | null;
+  reviewCount: number | null;
+}
+
+// What each item can be attempted from — any one of them is enough, which is
+// why the two gaps with a fallback have two. A gap the model can answer off
+// the ads signal alone has been answered off real evidence even with no
+// website notes, and is not an absence.
+const SCORED_ITEM_NEEDS: Record<ScoredItemKey, EvidenceInputKey[]> = {
+  // Arithmetic on the headcount, and nothing else can stand in for it.
+  icpStaffSize: ["staffCountRaw"],
+  // "Return null if the notes say nothing either way about how this clinic
+  // sells its care."
+  icpPackageEconomics: ["websiteNotes"],
+  // "Return null if the notes are silent on how patients book."
+  icpGapBooking: ["websiteNotes"],
+  // "Return null if you have neither a review count nor anything in the notes
+  // to weigh it against."
+  icpGapReviews: ["websiteNotes", "reviewCount"],
+  // "…the ads signal … and any lead-magnet, newsletter or mailing-list copy in
+  // the website notes … return null rather than guess if you have neither."
+  icpGapRemarketing: ["websiteNotes", "metaAdsSignal"],
+};
+
+// Two. One category with nothing behind it is a thin card and the framework
+// already handles it — Staff Size scores 0 with the absence named, and says
+// so on the breakdown. Two is the point at which the total stops describing
+// the clinic and starts describing the run.
+export const MIN_UNGATHERED_TO_FAIL = 2;
+
+export interface UngatheredItem {
+  key: ScoredItemKey;
+  // As the breakdown labels it, so the failure names what a reader would go
+  // looking for.
+  label: string;
+  needs: EvidenceInputKey[];
+}
+
+// The scored items that were never attempted: nothing to attempt them on, and
+// no answer for them either.
+//
+// Both halves are required, and each covers a case the other gets wrong. An
+// item the model answered anyway is an item it found something real to answer
+// from, whatever this module thinks it needed — so it is not an absence. An
+// item with its input present but no answer is the model having read the
+// evidence and declined, which is a finding and not this rule's business.
+export function ungatheredItems(
+  inputs: ScoredItemInputs,
+  suggestion: DiscoveryAssistSuggestion | null,
+): UngatheredItem[] {
+  return scoredItems().filter(({ key, needs }) => {
+    const attemptable = needs.some((need) => hasInput(inputs, need));
+    return !attemptable && !wasAnswered(key, inputs, suggestion);
+  });
+}
+
+function scoredItems(): UngatheredItem[] {
+  const category = (key: "icpStaffSize" | "icpPackageEconomics") => {
+    const found = ICP_CATEGORIES.find((c) => c.key === key)!;
+    return `${found.letter} — ${found.title}`;
+  };
+  return [
+    { key: "icpStaffSize" as const, label: category("icpStaffSize") },
+    {
+      key: "icpPackageEconomics" as const,
+      label: category("icpPackageEconomics"),
+    },
+    ...ICP_GAPS.map((gap) => ({
+      key: gap.key,
+      label: `D — ${gap.label}`,
+    })),
+  ].map((item) => ({ ...item, needs: SCORED_ITEM_NEEDS[item.key] }));
+}
+
+function hasInput(inputs: ScoredItemInputs, key: EvidenceInputKey): boolean {
+  switch (key) {
+    case "staffCountRaw":
+      return inputs.staffCountRaw !== null;
+    case "reviewCount":
+      return inputs.reviewCount !== null;
+    case "websiteNotes":
+      return (inputs.websiteNotes ?? "").trim() !== "";
+    case "metaAdsSignal":
+      return (inputs.metaAdsSignal ?? "").trim() !== "";
+  }
+}
+
+function wasAnswered(
+  key: ScoredItemKey,
+  inputs: ScoredItemInputs,
+  suggestion: DiscoveryAssistSuggestion | null,
+): boolean {
+  // Staff Size is arithmetic rather than an answer from the model: it has one
+  // exactly when there is a headcount to do the arithmetic on.
+  if (key === "icpStaffSize") return inputs.staffCountRaw !== null;
+  if (key === "icpPackageEconomics") {
+    return (suggestion?.packageEconomics ?? null) !== null;
+  }
+  return (suggestion?.gaps?.[key] ?? null) !== null;
+}
+
+// What to go and fix, in the order it is worth fixing: the website first,
+// because it is the input four of the five items read.
+const MISSING_INPUT_ORDER: EvidenceInputKey[] = [
+  "websiteNotes",
+  "staffCountRaw",
+  "reviewCount",
+  "metaAdsSignal",
+];
+
+// The candidate's own URLs, for telling the two kinds of absence apart. A
+// website URL nobody has filled in is a field to fill in; a website URL that
+// was crawled and gave nothing back is not, and saying "Missing: website URL"
+// about a candidate that plainly has one would send somebody looking for a
+// field that is already there.
+export interface CandidateUrls {
+  websiteUrl: string | null;
+  companyLinkedinUrl: string | null;
+  facebookUrl: string | null;
+}
+
+export function missingInputPhrases(
+  items: UngatheredItem[],
+  inputs: ScoredItemInputs,
+  urls: CandidateUrls,
+): string[] {
+  const wanted = new Set<EvidenceInputKey>();
+  for (const item of items) {
+    // The first need only, where an item has more than one.
+    //
+    // Those are alternatives — either the website notes or the review count
+    // will do for the reviews gap — so listing both would read as two things
+    // that have to be fixed when fixing one is enough. The first is the one
+    // the item is really read from, and the one that usually unblocks the
+    // others too: four of the five items are attempted from the website.
+    const primary = item.needs[0];
+    if (primary !== undefined && !hasInput(inputs, primary)) wanted.add(primary);
+  }
+  return MISSING_INPUT_ORDER.filter((key) => wanted.has(key)).map((key) =>
+    missingInputPhrase(key, urls),
+  );
+}
+
+function missingInputPhrase(key: EvidenceInputKey, urls: CandidateUrls): string {
+  const has = (v: string | null) => (v ?? "").trim() !== "";
+  switch (key) {
+    case "websiteNotes":
+      return has(urls.websiteUrl)
+        ? "website notes (the crawler returned nothing from the website URL on this candidate)"
+        : "website URL";
+    case "staffCountRaw":
+      return has(urls.companyLinkedinUrl)
+        ? "staff count (the company page reported none)"
+        : "company LinkedIn URL";
+    case "reviewCount":
+      return "Google reviews (the Maps search found no listing to count)";
+    case "metaAdsSignal":
+      return has(urls.facebookUrl)
+        ? "ads signal (the ads library returned nothing)"
+        : "Facebook URL";
+  }
+}
+
+// The sentence the candidate is failed with. Names what is missing first,
+// because that is the thing to act on, and what it cost second.
+export function ungatheredFailureReason(
+  items: UngatheredItem[],
+  inputs: ScoredItemInputs,
+  urls: CandidateUrls,
+): string {
+  const missing = missingInputPhrases(items, inputs, urls);
+  const total = Object.keys(SCORED_ITEM_NEEDS).length;
+  return [
+    `Missing: ${missing.join(", ")}.`,
+    `${items.length} of the ${total} scored categories had nothing to attempt them on`,
+    `(${items.map((i) => i.label).join("; ")}),`,
+    "so nothing was scored rather than putting a total on the gaps.",
+    "Add what is missing on the candidate and run the queue again.",
+  ].join(" ");
+}
+
 // How the pre-check reads in the stored breakdown, appended to whatever reason
 // the model gave so a gap's line says both halves of how it was decided.
 export function precheckNote(scan: GapPrecheck): string {

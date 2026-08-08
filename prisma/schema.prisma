@@ -82,7 +82,8 @@ model DiscoveryCandidate {
   //   SCORED    — scored, not yet promoted or rejected
   //   PROMOTED  — became the Lead at promotedLeadId
   //   REJECTED  — disqualified, or scored C-tier
-  //   FAILED    — an actor failed outright; nothing was scored
+  //   FAILED    — an actor failed outright, or two or more scored categories
+  //                had no evidence to attempt them on; nothing was scored
   status String @default("PENDING")
 
   // Why a run stopped, kept verbatim so the next queue run and the person
