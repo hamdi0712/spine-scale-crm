@@ -34,6 +34,8 @@ import {
   defaultBatchLabel,
 } from "@/lib/discoveryBatch";
 import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
+import { PipelineSettings } from "@/lib/pipelineSettings";
+import CostEstimate from "@/components/CostEstimate";
 
 interface QueueItem {
   id: string;
@@ -46,6 +48,7 @@ export default function DiscoveryQueue({
   loadQueue,
   process,
   queued,
+  settings,
 }: {
   loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
   process: (
@@ -56,6 +59,10 @@ export default function DiscoveryQueue({
   // the queue itself is re-read at the moment it starts, because a list that
   // has sat open for an hour is not the queue any more.
   queued: number;
+  // Which steps are on, for the estimate. The run itself reads the settings
+  // again on the server, per candidate — these are for the sentence the dialog
+  // shows before anything is spent.
+  settings: PipelineSettings;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -73,6 +80,8 @@ export default function DiscoveryQueue({
         <QueueDialog
           loadQueue={loadQueue}
           process={process}
+          queued={queued}
+          settings={settings}
           onClose={() => setOpen(false)}
         />
       )}
@@ -83,6 +92,8 @@ export default function DiscoveryQueue({
 function QueueDialog({
   loadQueue,
   process,
+  queued,
+  settings,
   onClose,
 }: {
   loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
@@ -90,6 +101,8 @@ function QueueDialog({
     id: string,
     runBatchLabel?: string | null,
   ) => Promise<DiscoveryProcessResult>;
+  queued: number;
+  settings: PipelineSettings;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -245,9 +258,9 @@ function QueueDialog({
               This runs here, in this tab, while you watch it
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
-              It is not a background job. Each candidate takes four actor runs
-              and a model call in turn — five when it has no Facebook URL and
-              one has to be searched for — so a few minutes each is normal. Close
+              It is not a background job. Each candidate takes an actor run per
+              enabled step and a model call, in turn, so a few minutes each is
+              normal. Close
               this tab, navigate away, or put the machine to sleep and the queue
               stops after whatever candidate is in flight — everything it never
               reached stays exactly as it is, and pressing this again picks up
@@ -266,13 +279,29 @@ function QueueDialog({
             </div>
           )}
 
+          {/* What it will cost, before the press that spends it. Quoted
+              against the count the page had while planning, and against the
+              queue as actually read once it has been — the second is the real
+              number, and it is the one left on screen afterwards. */}
+          <CostEstimate
+            candidates={phase === "planning" ? queued : items.length}
+            settings={settings}
+          />
+
           {phase === "planning" && (
             <ol className="space-y-2 text-xs leading-relaxed text-muted">
               <li>
                 <span className="num font-medium text-ink">1.</span> Enrich —
-                the same four actors the lead page runs, from whatever URLs the
-                candidate carries. A candidate with no Facebook URL gets one
-                searched for by name first, and keeps it.
+                the same steps the lead page runs, from whatever URLs the
+                candidate carries, and only the ones switched on in{" "}
+                <Link
+                  href="/pipeline/settings"
+                  className="text-accent hover:underline"
+                >
+                  Pipeline Settings
+                </Link>
+                . A candidate with no Facebook URL gets one searched for by
+                name first, and keeps it.
               </li>
               <li>
                 <span className="num font-medium text-ink">2.</span> Score Staff
@@ -291,11 +320,13 @@ function QueueDialog({
                 breakdown.
               </li>
               <li>
-                <span className="num font-medium text-ink">5.</span> A-tier or
-                B-tier becomes a lead with its scorecard pre-filled; anything
-                disqualified or C-tier is rejected with its reasoning kept; an
-                actor that fails outright stops that candidate before anything
-                is scored.
+                <span className="num font-medium text-ink">5.</span> Anything
+                scoring{" "}
+                <span className="num">{settings.promotionThreshold}</span> or
+                more becomes a lead with its scorecard pre-filled; anything
+                disqualified or under the bar is rejected with its reasoning
+                kept; an actor that fails outright stops that candidate before
+                anything is scored.
               </li>
             </ol>
           )}

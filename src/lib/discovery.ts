@@ -34,6 +34,7 @@ import {
   suggestedStaffSizeScore,
   tierForScore,
 } from "@/lib/icp";
+import { DEFAULT_PROMOTION_THRESHOLD } from "@/lib/pipelineSettings";
 
 // ─── Status ────────────────────────────────────────────────────────────────
 
@@ -457,12 +458,21 @@ export function triggeredDisqualifiers(
 // Why this candidate was rejected, in one sentence, for whichever of the two
 // reasons applies. Stored on the record so the rejected list reads without
 // having to open the JSON.
-export function rejectionReason(breakdown: DiscoveryBreakdown): string {
+export function rejectionReason(
+  breakdown: DiscoveryBreakdown,
+  threshold: number = DEFAULT_PROMOTION_THRESHOLD,
+): string {
   const triggered = triggeredDisqualifiers(breakdown);
   if (triggered.length > 0) {
     return `Disqualified: ${triggered.map((d) => d.label).join("; ")}`;
   }
-  return `Scored C-tier: ${breakdown.total}/${ICP_MAX_SCORE}`;
+  // Below the bar. Worded against the threshold in force rather than against
+  // the tier, because the two only agree at the default: raise the bar to 8
+  // and a B-tier clinic is rejected, and telling that clinic it "scored C-tier"
+  // would be plainly false.
+  return threshold === DEFAULT_PROMOTION_THRESHOLD
+    ? `Scored C-tier: ${breakdown.total}/${ICP_MAX_SCORE}`
+    : `Scored ${breakdown.total}/${ICP_MAX_SCORE} — below the promotion threshold of ${threshold}`;
 }
 
 // ─── Turning a breakdown into a lead's scorecard ───────────────────────────

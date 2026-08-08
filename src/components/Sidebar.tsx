@@ -10,6 +10,7 @@ import {
   IconGitBranch,
   IconLayoutDashboard,
   IconRadar2,
+  IconSettings,
   IconUsers,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/actions/auth";
@@ -28,11 +29,39 @@ const NAV = [
   // everything scraped lands in Discovery and only what scores gets through.
   { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
   { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
+  // Under Pipeline because it decides that pipeline's entrance: which
+  // enrichment steps Discovery spends money on, and the score a candidate has
+  // to clear to arrive here at all.
+  { href: "/pipeline/settings", label: "Pipeline Settings", Glyph: IconSettings },
   { href: "/clients", label: "Clients", Glyph: IconUsers },
   { href: "/reporting", label: "Reporting", Glyph: IconChartBar },
   { href: "/ad-hub", label: "Ad Hub", Glyph: IconBulb },
   { href: "/library", label: "Library", Glyph: IconBook },
 ];
+
+// Which nav item the current path belongs to: the longest href that is a
+// prefix of it, and exactly one of them.
+//
+// A plain startsWith would light two items at once now that one nav item sits
+// inside another's path — /pipeline/settings starts with /pipeline as well as
+// with itself. Longest match settles it, and settles it the same way for any
+// nested item added later. Dashboard is the exception it always was: "/" is a
+// prefix of everything, so it only matches itself.
+function activeHref(pathname: string): string | null {
+  let best: string | null = null;
+  for (const item of NAV) {
+    if (item.href === "/") {
+      if (pathname === "/") return "/";
+      continue;
+    }
+    const matches =
+      pathname === item.href || pathname.startsWith(`${item.href}/`);
+    if (matches && (best === null || item.href.length > best.length)) {
+      best = item.href;
+    }
+  }
+  return best;
+}
 
 // Long enough to read as a fade, short enough to stay out of the way. Colour,
 // border and the active card's shadow all ease together; nothing moves.
@@ -87,10 +116,7 @@ export default function Sidebar({
       )}
       <nav className={`flex-1 space-y-1 py-1 ${collapsed ? "px-2" : "px-3"}`}>
         {NAV.map((item) => {
-          const active =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
+          const active = item.href === activeHref(pathname);
           return (
             <Link
               key={item.href}

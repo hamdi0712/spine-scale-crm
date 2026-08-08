@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { importDiscoveryCandidates } from "@/lib/actions/discovery";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import DiscoveryImportWizard from "@/components/DiscoveryImportWizard";
+
+// Reads the pipeline settings for the confirm step's cost estimate, so this
+// page is per-request like every other one that touches the database — a
+// prerendered estimate would be the settings as they stood at build time.
+export const dynamic = "force-dynamic";
 
 // The live half of the import: same three steps, same mapping, same confirm —
 // the rows arrive from an actor run instead of a file. The token stays on the
 // server (src/lib/apify.ts); this page never sees it.
-export default function ApifyImportPage() {
+export default async function ApifyImportPage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-6 flex items-end justify-between gap-4">
@@ -28,7 +34,11 @@ export default function ApifyImportPage() {
           Import a CSV
         </Link>
       </div>
-      <DiscoveryImportWizard action={importDiscoveryCandidates} source="apify" />
+      <DiscoveryImportWizard
+        action={importDiscoveryCandidates}
+        source="apify"
+        settings={await loadPipelineSettings()}
+      />
     </div>
   );
 }

@@ -25,6 +25,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { deepSeekJson } from "@/lib/deepseek";
 import {
   ENRICH_STEP_LABELS,
@@ -247,8 +248,20 @@ export async function addDiscoveryCandidateByName(args: {
   // searches on the clinic name alone and can still find something to score
   // on. The result says which of the three happened — found, found nothing,
   // or could not run — and the dialog reports it rather than smoothing it over.
+  // Run under whichever search actor Pipeline Settings names, because a swap
+  // made there is a swap of "how this app searches Google" and this is the
+  // other place it does that.
+  //
+  // The step's on/off switch is deliberately not read here. That toggle turns
+  // off the Facebook fallback inside the enrichment chain; it is not a switch
+  // for this button, and a form that silently stopped finding websites because
+  // of a setting about Facebook would be indefensible.
+  const settings = await loadPipelineSettings();
   const query = websiteSearchQuery(clinicName, location);
-  const search = await runGoogleSearch(query);
+  const search = await runGoogleSearch(
+    query,
+    settings.steps.facebookLookup.actorId,
+  );
   const websiteUrl = search.ok ? firstClinicWebsite(search.urls) : null;
 
   const created = await prisma.discoveryCandidate.create({
@@ -450,11 +463,18 @@ export async function processDiscoveryCandidate(
     location: candidate.location,
   };
 
+  // Read once, at the top of this candidate's run, and used for both halves of
+  // it — which actors run, and the bar the total is judged against at the end.
+  // One read per candidate rather than one per run: a queue that took an hour
+  // should honour a setting changed halfway through it.
+  const settings = await loadPipelineSettings();
+
   let outcomes: EnrichOutcome[];
   let update: EnrichUpdate;
   try {
     ({ outcomes, update } = await runEnrichActors(inputs, {
       onChoice: "skip",
+      settings,
     }));
   } catch {
     return failCandidate(
@@ -629,8 +649,13 @@ export async function processDiscoveryCandidate(
   });
 
   // ─── 5, 6, 7. The verdict ────────────────────────────────────────────────
-  if (breakdown.tier === "DISQUALIFIED" || breakdown.total < 5) {
-    const reason = rejectionReason(breakdown);
+  //
+  // The bar is a setting now (Pipeline Settings), defaulting to the 5 this was
+  // hardcoded at. A disqualifier still stops a candidate whatever the bar says
+  // — Layer 1 is "any yes = STOP", not a score to clear.
+  const threshold = settings.promotionThreshold;
+  if (breakdown.tier === "DISQUALIFIED" || breakdown.total < threshold) {
+    const reason = rejectionReason(breakdown, threshold);
     await prisma.discoveryCandidate.update({
       where: { id },
       data: {

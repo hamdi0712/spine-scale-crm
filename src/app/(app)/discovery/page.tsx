@@ -8,6 +8,7 @@ import {
 import { DISCOVERY_QUEUE_STATUSES } from "@/lib/discovery";
 import { IcpTier } from "@/lib/icp";
 import AddClinicByName from "@/components/AddClinicByName";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
 import DiscoveryList, { DiscoveryRow } from "@/components/DiscoveryList";
 
@@ -71,6 +72,9 @@ export default async function DiscoveryPage({
   };
 }) {
   const summary = importSummary(searchParams);
+  // The settings the queue quotes its estimate from — read here so the dialog
+  // opens with a number rather than fetching one.
+  const settings = await loadPipelineSettings();
   const [candidates, queued, rejected] = await Promise.all([
     prisma.discoveryCandidate.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.discoveryCandidate.count({
@@ -131,6 +135,7 @@ export default async function DiscoveryPage({
             loadQueue={discoveryQueue}
             process={processDiscoveryCandidate}
             queued={queued}
+            settings={settings}
           />
         </div>
       </div>

@@ -39,8 +39,13 @@ import {
 // still right for everything else in the app.
 export const GOOGLE_SEARCH_MAX_CHARGE_USD = APIFY_MIN_CHARGE_USD;
 
+// actorId is the one Pipeline Settings has for this step, and defaults to the
+// store actor this app shipped with when a caller has no settings to hand —
+// the two places that search are the enrichment chain and the by-name add, and
+// only the first of them has a run's settings loaded.
 export async function runGoogleSearch(
   query: string,
+  actorId: string = GOOGLE_SEARCH_ACTOR_ID,
 ): Promise<GoogleSearchResult> {
   if (query.trim() === "") {
     return { ok: false, urls: [], error: "There was nothing to search for." };
@@ -50,7 +55,7 @@ export async function runGoogleSearch(
   try {
     result = await runApifySync({
       kind: "actor",
-      id: GOOGLE_SEARCH_ACTOR_ID,
+      id: actorId,
       // Built here and immediately re-read by the same JSON validation the
       // bulk import goes through, so there is one path into an actor run
       // rather than a checked one and a trusted one.

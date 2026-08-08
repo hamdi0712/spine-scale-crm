@@ -26,7 +26,12 @@
 // data, the readers are pure, and src/lib/actions/enrich.ts does the running.
 
 import { parseCount } from "@/lib/discoveryImport";
-import { GOOGLE_SEARCH_ACTOR_ID } from "@/lib/googleSearch";
+import {
+  PIPELINE_STEP_KEYS,
+  PIPELINE_STEP_LABELS,
+  PipelineSettings,
+  PipelineStepKey,
+} from "@/lib/pipelineSettings";
 
 // ─── The fields enrichment can write ───────────────────────────────────────
 
@@ -147,32 +152,28 @@ export interface EnrichTable {
 // here because it reports an outcome like everything else in a run — the panel
 // and the queue both list what happened, and a step that quietly happened or
 // quietly didn't would be the one part of a run nobody could see.
-export const ENRICH_ACTOR_KEYS = [
-  "companyDetails",
-  "facebookLookup",
-  "facebookAds",
-  "websiteContent",
-  "googleReviews",
-] as const;
+//
+// The list itself is the settings row's, imported rather than repeated: a step
+// that can be turned off in Pipeline Settings and a step that reports an
+// outcome in a run are the same step, and two lists would be two chances to
+// disagree about which five those are.
+export const ENRICH_ACTOR_KEYS = PIPELINE_STEP_KEYS;
 
-export type EnrichActorKey = (typeof ENRICH_ACTOR_KEYS)[number];
+export type EnrichActorKey = PipelineStepKey;
 
-// The name each step goes by in a report. Read from ENRICH_ACTORS where there
-// is one; the lookup has no entry there and carries its own.
-export const ENRICH_STEP_LABELS: Record<EnrichActorKey, string> = {
-  companyDetails: "Company Details",
-  facebookLookup: "Facebook page lookup",
-  facebookAds: "Facebook Ads Library",
-  websiteContent: "Website Content Crawler",
-  googleReviews: "Google Maps Reviews",
-};
+// The name each step goes by in a report — the settings page's names, so a
+// step somebody turned off is called the same thing in the run that skips it.
+export const ENRICH_STEP_LABELS = PIPELINE_STEP_LABELS;
 
 export interface EnrichActor {
   key: EnrichActorKey;
   label: string;
-  // The Apify actor this runs. See the note above ENRICH_ACTORS before
-  // changing one.
-  actorId: string;
+  // The Apify actor is deliberately not here any more. Which actor a step runs
+  // is a setting (src/lib/pipelineSettings.ts), read per run from the stored
+  // row and defaulted to the ID this app shipped with. What stays here is
+  // everything that cannot be a setting: the input a step's schema expects and
+  // the fields its output is read from.
+  //
   // The lead field the input is built from. An empty one skips the actor.
   requires: keyof EnrichInputs;
   requiresLabel: string;
@@ -192,21 +193,22 @@ export interface EnrichActor {
   read(table: EnrichTable): EnrichUpdate;
 }
 
-// The four actors, by ID.
+// The four actors — what each is asked, and how each is read.
 //
-// These are the confirmed store actors, addressed the way the Apify console
-// shows them (`username~name`; a pasted `username/name` normalises to the
-// same thing). Each entry is the whole integration: the ID, the input its
-// schema expects, and the fields its output is read from. Swapping an actor
-// for another that does the same job is an edit to one entry here and to
-// nothing else in the app — and if a swapped actor names its output fields
-// differently, adding the new name to that reader's candidate list is the
-// entire change.
+// The IDs they run under used to be here and now live in Pipeline Settings,
+// defaulting to the same store actors as before (DEFAULT_ACTOR_IDS in
+// src/lib/pipelineSettings.ts). Swapping one for another that does the same
+// job is a field on that page rather than an edit here.
+//
+// What did not move is the half an actor cannot describe about itself: the
+// input its schema expects, and the output field names its reader looks for.
+// A swapped-in actor that names its output differently still needs its name
+// adding to that reader's candidate list below — which is the honest limit of
+// what a settings page can promise, and is said out loud on it.
 export const ENRICH_ACTORS: EnrichActor[] = [
   {
     key: "companyDetails",
     label: "Company Details",
-    actorId: "harvestapi~linkedin-company",
     requires: "companyLinkedinUrl",
     requiresLabel: "Company LinkedIn URL",
     maxItems: 5,
@@ -228,7 +230,6 @@ export const ENRICH_ACTORS: EnrichActor[] = [
   {
     key: "facebookAds",
     label: "Facebook Ads Library",
-    actorId: "apify~facebook-ads-scraper",
     requires: "facebookUrl",
     requiresLabel: "Facebook URL",
     // One item per ad, so this is the only ceiling that is a real limit rather
@@ -255,7 +256,6 @@ export const ENRICH_ACTORS: EnrichActor[] = [
   {
     key: "websiteContent",
     label: "Website Content Crawler",
-    actorId: "apify~website-content-crawler",
     requires: "websiteUrl",
     requiresLabel: "Website URL",
     maxItems: WEBSITE_NOTES_MAX_PAGES,
@@ -278,7 +278,6 @@ export const ENRICH_ACTORS: EnrichActor[] = [
   {
     key: "googleReviews",
     label: "Google Maps Reviews",
-    actorId: "compass~crawler-google-places",
     // The one actor with no URL to work from: it searches by name, which is
     // why it is also the one most likely to come back with several clinics.
     requires: "clinicName",
@@ -337,30 +336,43 @@ export interface EnrichPlanEntry {
   skipReason: string | null;
 }
 
-export function enrichPlan(inputs: EnrichInputs): EnrichPlanEntry[] {
+// The skip reason for a step somebody turned off. Worded as a decision rather
+// than a shortcoming, because that is what it is — and it names the page it
+// was decided on, so the way to undo it is in the sentence.
+export const STEP_TURNED_OFF_REASON = "turned off in Pipeline Settings";
+
+export function enrichPlan(
+  inputs: EnrichInputs,
+  settings: PipelineSettings,
+): EnrichPlanEntry[] {
   // The one thing the plan cannot state flatly. The company lookup runs before
   // the crawler and reports a website of its own, so a record with no website
   // today may well have one by the time the crawler's turn comes round — which
   // makes "skipped" a prediction here rather than a fact, and it says so.
   const websiteMayArrive =
     (inputs.websiteUrl ?? "").trim() === "" &&
-    (inputs.companyLinkedinUrl ?? "").trim() !== "";
+    (inputs.companyLinkedinUrl ?? "").trim() !== "" &&
+    settings.steps.companyDetails.enabled;
 
   // The same shape of prediction for the ads actor, and the reason the lookup
   // row appears at all: a record with no Facebook URL is about to have one
   // searched for, so the ads step below it is a maybe rather than a skip.
-  const lookupWillRun = needsFacebookLookup(inputs);
+  const lookupWillRun =
+    needsFacebookLookup(inputs) && settings.steps.facebookLookup.enabled;
 
   const entries: EnrichPlanEntry[] = [];
   for (const actor of ENRICH_ACTORS) {
     // Listed immediately above the actor it exists to feed, because that is
-    // the order it runs in and the only reason it runs at all.
-    if (actor.key === "facebookAds" && lookupWillRun) {
-      entries.push(FACEBOOK_LOOKUP_PLAN_ENTRY);
+    // the order it runs in and the only reason it runs at all. Shown whenever
+    // the record needs one, on or off — a row that vanished when it was turned
+    // off would leave the plan quietly one step shorter with no way to see why.
+    if (actor.key === "facebookAds" && needsFacebookLookup(inputs)) {
+      entries.push(lookupPlanEntry(settings));
     }
 
     const value = inputs[actor.requires];
     const has = typeof value === "string" && value.trim() !== "";
+    const on = settings.steps[actor.key].enabled;
     const mayArrive =
       !has &&
       ((actor.requires === "websiteUrl" && websiteMayArrive) ||
@@ -368,16 +380,21 @@ export function enrichPlan(inputs: EnrichInputs): EnrichPlanEntry[] {
     entries.push({
       key: actor.key,
       label: actor.label,
-      actorId: actor.actorId,
+      actorId: settings.steps[actor.key].actorId,
       writes: actor.writes.map((f) => ENRICH_FIELD_LABELS[f]),
-      willRun: has,
-      skipReason: has
-        ? null
-        : mayArrive
-          ? actor.requires === "websiteUrl"
-            ? "no Website URL set — unless Company Details finds one first"
-            : `no ${actor.requiresLabel} set — unless ${ENRICH_STEP_LABELS.facebookLookup} finds one first`
-          : `no ${actor.requiresLabel} set`,
+      willRun: on && has,
+      // Off beats missing. A step that is turned off would not run whatever
+      // the record carried, so saying "no Website URL set" about it would send
+      // somebody to fill in a field that changes nothing.
+      skipReason: !on
+        ? STEP_TURNED_OFF_REASON
+        : has
+          ? null
+          : mayArrive
+            ? actor.requires === "websiteUrl"
+              ? "no Website URL set — unless Company Details finds one first"
+              : `no ${actor.requiresLabel} set — unless ${ENRICH_STEP_LABELS.facebookLookup} finds one first`
+            : `no ${actor.requiresLabel} set`,
     });
   }
   return entries;
@@ -393,17 +410,21 @@ export function needsFacebookLookup(inputs: EnrichInputs): boolean {
   );
 }
 
-// The lookup's row in the plan. Fixed, because unlike the four it has no
-// inputs of its own to vary on — it runs when there is a name and no Facebook
-// URL, and that is the whole condition.
-const FACEBOOK_LOOKUP_PLAN_ENTRY: EnrichPlanEntry = {
-  key: "facebookLookup",
-  label: ENRICH_STEP_LABELS.facebookLookup,
-  actorId: GOOGLE_SEARCH_ACTOR_ID,
-  writes: [ENRICH_FIELD_LABELS.facebookUrl],
-  willRun: true,
-  skipReason: null,
-};
+// The lookup's row in the plan. Simpler than the four's, because unlike them
+// it has no input of its own to be missing — it is called for when there is a
+// name and no Facebook URL, so the only thing left that can stop it is being
+// turned off.
+function lookupPlanEntry(settings: PipelineSettings): EnrichPlanEntry {
+  const on = settings.steps.facebookLookup.enabled;
+  return {
+    key: "facebookLookup",
+    label: ENRICH_STEP_LABELS.facebookLookup,
+    actorId: settings.steps.facebookLookup.actorId,
+    writes: [ENRICH_FIELD_LABELS.facebookUrl],
+    willRun: on,
+    skipReason: on ? null : STEP_TURNED_OFF_REASON,
+  };
+}
 
 // ─── What a run reports back ───────────────────────────────────────────────
 

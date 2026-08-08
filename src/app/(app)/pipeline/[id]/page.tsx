@@ -20,6 +20,7 @@ import {
   suggestedStaffSizeScore,
 } from "@/lib/icp";
 import { enrichPlan } from "@/lib/leadEnrich";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { hasAssistEvidence } from "@/lib/icpAssist";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES } from "@/lib/timezones";
@@ -63,8 +64,9 @@ export default async function LeadDetailPage({
 
   // What an enrichment run would do with this lead as it stands, worked out
   // here so the panel can say which actors it is skipping before it runs
-  // anything.
-  const plan = enrichPlan(lead);
+  // anything — including any step turned off in Pipeline Settings, which the
+  // plan reads from the same row the run will.
+  const plan = enrichPlan(lead, await loadPipelineSettings());
 
   // Enrichment is scraped evidence with a date on it, so it is shown as its
   // own thing rather than mixed into the editable details — a one-line summary
