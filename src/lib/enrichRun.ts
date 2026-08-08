@@ -1,4 +1,10 @@
-// Running the four actors — the part both enrichment callers share.
+// Running the actors — the part both enrichment callers share.
+//
+// Which of them run, and which actor each one runs, comes in as settings
+// (src/lib/pipelineSettings.ts) rather than being decided here: the caller
+// reads the row and hands it over, so a lead page run and a queue run cannot
+// end up honouring different settings. A step switched off is skipped on
+// exactly the terms a step with a missing input is skipped.
 //
 // Four, plus one lookup that is not one of them: a record with no Facebook URL
 // has its page searched for (src/lib/googleSearch.ts) immediately before the
@@ -34,7 +40,9 @@ import {
   enrichValuePreview,
   needsFacebookLookup,
   sanitizeEnrichUpdate,
+  STEP_TURNED_OFF_REASON,
 } from "@/lib/leadEnrich";
+import { PipelineSettings } from "@/lib/pipelineSettings";
 import { facebookSearchQuery, firstFacebookPage } from "@/lib/googleSearch";
 import { runGoogleSearch } from "@/lib/googleSearchRun";
 
@@ -55,7 +63,10 @@ export type ChoiceHandling = "ask" | "skip";
 
 export async function runEnrichActors(
   inputs: EnrichInputs,
-  { onChoice = "ask" }: { onChoice?: ChoiceHandling } = {},
+  {
+    onChoice = "ask",
+    settings,
+  }: { onChoice?: ChoiceHandling; settings: PipelineSettings },
 ): Promise<EnrichActorsResult> {
   const outcomes: EnrichOutcome[] = [];
   let merged: EnrichUpdate = {};
@@ -82,8 +93,12 @@ export async function runEnrichActors(
     // Nothing about the skip itself changes: a search that finds no usable
     // page leaves live.facebookUrl empty, and the check below skips the ads
     // actor for exactly the reason it always did.
-    if (actor.key === "facebookAds" && needsFacebookLookup(live)) {
-      const found = await lookUpFacebookUrl(live, outcomes);
+    if (
+      actor.key === "facebookAds" &&
+      needsFacebookLookup(live) &&
+      settings.steps.facebookLookup.enabled
+    ) {
+      const found = await lookUpFacebookUrl(live, outcomes, settings);
       if (found !== null) {
         live.facebookUrl = found;
         // Merged here rather than with the ads actor's own result. The two are
@@ -92,6 +107,19 @@ export async function runEnrichActors(
         // record the URL that would have made the next one cheaper.
         merged = { ...merged, facebookUrl: found };
       }
+    }
+
+    // Turned off in Pipeline Settings. Skipped on exactly the terms a step
+    // with no URL to work from is skipped — reported, never fatal, and the
+    // rest of the chain carries on — so nothing downstream had to learn a new
+    // kind of nothing when the toggles arrived.
+    if (!settings.steps[actor.key].enabled) {
+      outcomes.push({
+        key: actor.key,
+        status: "skipped",
+        detail: STEP_TURNED_OFF_REASON,
+      });
+      continue;
     }
 
     const required = live[actor.requires];
@@ -110,7 +138,9 @@ export async function runEnrichActors(
     try {
       result = await runApifySync({
         kind: "actor",
-        id: actor.actorId,
+        // The actor this step runs, as Pipeline Settings has it — the ID this
+        // app shipped with unless somebody has changed it.
+        id: settings.steps[actor.key].actorId,
         // Built here and immediately re-read by the same JSON validation the
         // bulk import goes through, so there is one path into an actor run
         // rather than a checked one and a trusted one.
@@ -202,9 +232,13 @@ export async function runEnrichActors(
 async function lookUpFacebookUrl(
   live: EnrichInputs,
   outcomes: EnrichOutcome[],
+  settings: PipelineSettings,
 ): Promise<string | null> {
   const query = facebookSearchQuery(live.clinicName, live.location);
-  const search = await runGoogleSearch(query);
+  const search = await runGoogleSearch(
+    query,
+    settings.steps.facebookLookup.actorId,
+  );
 
   if (!search.ok) {
     outcomes.push({

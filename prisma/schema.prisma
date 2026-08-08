@@ -580,3 +580,56 @@ model PerformanceLog {
   notes       String?
   createdAt   DateTime @default(now())
 }
+
+// How the discovery chain runs — the one row of settings behind every
+// enrichment run and every scoring verdict.
+//
+// Everything here was a constant in the source until it wasn't. The five steps
+// and their actor IDs lived in src/lib/leadEnrich.ts, and the promotion
+// threshold lived as a bare 5 in src/lib/actions/discovery.ts; swapping an
+// actor for a cheaper one, or turning off a step whose credits had run out,
+// meant an edit and a deploy. They are a row now so that is a form instead.
+//
+// Exactly one row, at the fixed id in src/lib/pipelineSettings.ts. Not a
+// singleton by convention but by that id: every read is a findUnique on it and
+// every write an upsert of it, so there is no path that creates a second row
+// and no question about which one is in force. A database with no row at all
+// is the normal state of a fresh install and reads as the defaults below.
+//
+// What is deliberately NOT here: anything about what the actors are asked, or
+// how a score is worked out. The inputs each actor is built with, the ICP
+// framework, the tier bands and the disqualifiers are the app's own reasoning
+// and stay in code where they can be read and reviewed. This row says which
+// steps run, what they are called, and where the bar sits.
+model PipelineSettings {
+  id String @id
+
+  // One pair per step: whether it runs at all, and the actor it runs. A step
+  // turned off here is skipped exactly the way a step with no URL to work from
+  // is skipped — reported, and never fatal.
+  //
+  // The defaults are the IDs that were hardcoded before this table existed, so
+  // an install that never opens the settings page behaves as it always did.
+  companyDetailsEnabled Boolean @default(true)
+  companyDetailsActorId String  @default("harvestapi~linkedin-company")
+
+  facebookLookupEnabled Boolean @default(true)
+  facebookLookupActorId String  @default("apify~google-search-scraper")
+
+  facebookAdsEnabled Boolean @default(true)
+  facebookAdsActorId String  @default("apify~facebook-ads-scraper")
+
+  websiteContentEnabled Boolean @default(true)
+  websiteContentActorId String  @default("apify~website-content-crawler")
+
+  googleReviewsEnabled Boolean @default(true)
+  googleReviewsActorId String  @default("compass~crawler-google-places")
+
+  // The score a candidate must reach to be promoted rather than rejected,
+  // out of ICP_MAX_SCORE. It is the promotion bar and not a tier band: the
+  // A/B/C bands are the framework's (src/lib/icp.ts) and are not editable
+  // here, because re-tiering every clinic in the app is not a setting.
+  promotionThreshold Int @default(5)
+
+  updatedAt DateTime @updatedAt
+}

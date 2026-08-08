@@ -198,9 +198,9 @@ function EnrichDialog({
               Enrich this lead
             </h2>
             <p className="mt-0.5 truncate text-xs leading-relaxed text-muted">
-              {clinicName} — four actors, run from this lead’s own fields, and
-              a search for the Facebook page when there isn’t one. Nothing new
-              is created.
+              {clinicName} — {runnable.length} step
+              {runnable.length === 1 ? "" : "s"}, run from this lead’s own
+              fields. Nothing new is created.
             </p>
           </div>
           <button

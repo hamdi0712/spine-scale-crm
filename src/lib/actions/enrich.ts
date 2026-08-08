@@ -19,6 +19,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import {
   ENRICH_FIELD_LABELS,
   EnrichInputs,
@@ -59,8 +60,12 @@ export async function runLeadEnrichment(
   const inputs: EnrichInputs = lead;
   // "ask": several candidate clinics coming back is a question for the person
   // whose lead this is, and this dialog is where they answer it.
+  //
+  // The settings are read at the moment the button is pressed rather than when
+  // the page rendered, so a step turned off in another tab is off for this run.
   const { outcomes, update } = await runEnrichActors(inputs, {
     onChoice: "ask",
+    settings: await loadPipelineSettings(),
   });
 
   const enrichedAt = await writeEnrichment(leadId, update);

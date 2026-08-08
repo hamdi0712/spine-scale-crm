@@ -16,10 +16,18 @@ import {
   MAX_IMPORT_ROWS,
   NESTED_FIELD_SEPARATOR,
 } from "@/lib/discoveryImport";
+import { ApifySourceKind, normalizeApifyId } from "@/lib/apifyId";
 
-export const APIFY_SOURCE_KINDS = ["actor", "task"] as const;
-
-export type ApifySourceKind = (typeof APIFY_SOURCE_KINDS)[number];
+// Re-exported so every existing caller still imports these from here. Their
+// definitions moved to src/lib/apifyId.ts, which is pure — the settings form
+// validates an actor ID as it is typed, and must not pull this module (and the
+// token it reads) toward the browser to do it.
+export {
+  APIFY_SOURCE_KINDS,
+  isApifySourceKind,
+  normalizeApifyId,
+} from "@/lib/apifyId";
+export type { ApifySourceKind } from "@/lib/apifyId";
 
 // The smallest run cost Apify will accept a cap at. A pay-per-event actor is
 // capped in money rather than in results, and asking for a ceiling below this
@@ -38,24 +46,6 @@ export const APIFY_RUN_TIMEOUT_SECONDS = 120;
 const APIFY_CLIENT_TIMEOUT_MS = (APIFY_RUN_TIMEOUT_SECONDS + 15) * 1000;
 
 const API_BASE = "https://api.apify.com/v2";
-
-// Actor and task ids are either the 17-character id or `username~name`. The
-// console shows the latter with a slash, so a pasted `username/name` is
-// accepted and normalised. Anything outside this shape is refused rather than
-// pasted into the URL — the id is a path segment, and a path segment is not
-// somewhere to put unvalidated input.
-const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9~._-]{0,127}$/;
-
-export function normalizeApifyId(raw: string): string | null {
-  const id = raw.trim().replace(/^\/+|\/+$/g, "").replace(/\//g, "~");
-  return ID_PATTERN.test(id) ? id : null;
-}
-
-export function isApifySourceKind(v: unknown): v is ApifySourceKind {
-  return (
-    typeof v === "string" && APIFY_SOURCE_KINDS.includes(v as ApifySourceKind)
-  );
-}
 
 export async function runApifySync({
   kind,

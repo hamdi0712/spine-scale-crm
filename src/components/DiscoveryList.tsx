@@ -36,6 +36,7 @@ import {
   BATCH_NONE,
   batchOptions,
 } from "@/lib/discoveryBatch";
+import { SOURCE_ALL, sourceKey, sourceOptions } from "@/lib/discoverySource";
 import { deleteDiscoveryCandidates } from "@/lib/actions/discovery";
 import {
   ICP_MAX_SCORE,
@@ -85,6 +86,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [batchFilter, setBatchFilter] = useState<string>(BATCH_ALL);
+  const [sourceFilter, setSourceFilter] = useState<string>(SOURCE_ALL);
   // One tier at a time, and pressing the one already on clears it — three
   // buttons that could each be half-on would be a set of checkboxes wearing a
   // segmented control's clothes.
@@ -103,12 +105,20 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
   // it would be a dropdown you could not get back out of.
   const batches = useMemo(() => batchOptions(rows), [rows]);
 
+  // Same rule as the batches above: counted across the whole list rather than
+  // across what is currently filtered, so choosing one source never removes
+  // the option that would take you back.
+  const sources = useMemo(() => sourceOptions(rows), [rows]);
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = rows.filter((r) => {
       if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
       if (tierFilter !== null && r.icpTier !== tierFilter) return false;
       if (batchFilter !== BATCH_ALL && (r.batchLabel ?? BATCH_NONE) !== batchFilter) {
+        return false;
+      }
+      if (sourceFilter !== SOURCE_ALL && sourceKey(r.source) !== sourceFilter) {
         return false;
       }
       if (!q) return true;
@@ -142,7 +152,16 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
       }
       return cmp * sortDir;
     });
-  }, [rows, query, statusFilter, tierFilter, batchFilter, sortKey, sortDir]);
+  }, [
+    rows,
+    query,
+    statusFilter,
+    tierFilter,
+    batchFilter,
+    sourceFilter,
+    sortKey,
+    sortDir,
+  ]);
 
   const chosen = visible.filter((r) => selected.has(r.id));
   const allChosen = visible.length > 0 && chosen.length === visible.length;
@@ -244,6 +263,26 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
             </option>
           ))}
         </select>
+        {/* Where these came from — "LinkedIn", "Added by name", or whatever a
+            CSV's own source column said. Read off the candidates rather than
+            listed here, because the import maps that column and the values are
+            therefore not ours to enumerate. Offered on the same terms as the
+            batches: only once there is more than one to choose between. */}
+        {sources.length > 1 && (
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            aria-label="Filter by source"
+            className="field w-auto max-w-[230px] pr-9"
+          >
+            <option value={SOURCE_ALL}>All sources</option>
+            {sources.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label} ({s.count})
+              </option>
+            ))}
+          </select>
+        )}
         {/* Which run these came in on. Only offered once there is more than
             one batch to choose between — a dropdown with a single option is
             a label pretending to be a control. */}

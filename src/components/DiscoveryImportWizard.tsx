@@ -56,6 +56,8 @@ import {
 import { zoneLabel } from "@/lib/timezones";
 import { suggestedStaffSizeScore } from "@/lib/icp";
 import { fmtMoney } from "@/lib/format";
+import { PipelineSettings } from "@/lib/pipelineSettings";
+import CostEstimate from "@/components/CostEstimate";
 import WizardProgress from "@/components/WizardProgress";
 
 // What either source hands to step 2: what it was, what columns it found, and
@@ -69,9 +71,14 @@ interface Loaded {
 export default function DiscoveryImportWizard({
   action,
   source,
+  settings,
 }: {
   action: (formData: FormData) => Promise<void>;
   source: ImportSource;
+  // Only for the cost estimate on the confirm step. The import itself neither
+  // reads nor spends anything these describe — it writes candidates, and the
+  // chain they describe runs later, at the queue.
+  settings: PipelineSettings;
 }) {
   const steps = importWizardSteps(source);
   const sourceMeta = IMPORT_SOURCE_META[source];
@@ -529,6 +536,16 @@ export default function DiscoveryImportWizard({
                   {source === "csv" ? "file" : "actor"} unless you say otherwise.
                 </p>
               </div>
+
+              {/* What these candidates will cost once they are processed —
+                  which is not what this import costs. Importing writes rows
+                  and spends nothing; the actor runs happen at the queue, and
+                  this is the first screen where the number of them is known. */}
+              <CostEstimate
+                candidates={candidates.length}
+                settings={settings}
+                note="Nothing is spent by this import — the actors run when you press Process queue."
+              />
 
               <div className="overflow-x-auto rounded-[10px] border border-line">
                 <table className="w-full">
