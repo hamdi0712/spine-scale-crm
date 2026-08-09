@@ -75,9 +75,13 @@ again.
   toggleable from the client record.
 
   **US business hours** is the four-zone strip: local time and an open /
-  opening-soon / closed badge per zone, on 9–5 local Monday to Friday. It
-  deliberately does not suggest a best time to prospect — nothing in the
-  reporting data supports one yet.
+  opening-soon / closed badge per zone, on 9–5 local Monday to Friday, as four
+  frosted tiles over a nighttime map of the country. The map is decoration and
+  the only picture in the app — drawn, not photographed, from the US Census
+  Bureau's public-domain boundary data with 66 real metros as its city lights,
+  so the bright places are the places that actually are. Nothing is measured
+  off it and no data feeds it. The panel deliberately does not suggest a best
+  time to prospect — nothing in the reporting data supports one yet.
 
   **Recent activity** is the milestone feed (below), **Client health** ranks
   the live clients worst-first with a sparkline of recent show rate, and
@@ -86,7 +90,10 @@ again.
   donut uses an ordered ramp derived from the brand palette — deep blue through
   the primary `#126DFB` to a tint of the secondary teal `#3FD1C8` — stepped by
   lightness so neighbouring segments stay apart, with every segment named and
-  valued in the legend.
+  valued in the legend. That ramp is the dashboard's whole colour system: the
+  four KPI cards take one step each from it, in its own order, so the row at
+  the top of the page and the chart at the bottom are the same five colours
+  read at two sizes. It lives in `src/lib/dashboardPalette.ts`.
 
 - **Calendar** — a month grid over dates that already live on other records:
   every call (scheduled or held, on leads and clients alike), every lead's next

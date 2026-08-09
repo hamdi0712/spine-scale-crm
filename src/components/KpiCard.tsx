@@ -6,39 +6,30 @@
 // the bottom edge that is decoration and nothing more — see DECORATIVE_CURVE.
 
 import Icon from "@/components/Icons";
+import { EMPTY_RAMP, STAGE_RAMP } from "@/lib/dashboardPalette";
 
-// Four tones, one per card, in the order the row runs.
+// The four cards take their colour from the pipeline donut's palette, one step
+// each, in the donut's own order — so the KPI row and the chart at the bottom
+// of the page are visibly the same five-colour system read at two sizes.
 //
-// The lavender is #5A5FE0 — the indigo the status badges already use — rather
-// than the app's #7C3AED violet. Violet has one meaning in this app now: a
-// control or a panel whose contents came from a model. A KPI card is counted
-// from the database, so painting one violet would say something about it that
-// is not true.
-export type KpiTone = "blue" | "teal" | "indigo";
+// Each step is a pair. The soft value is the donut's empty-state ramp and it is
+// the light under the glass; the strong value is the live ramp at the same
+// index and it is the glyph on top. Both arrays are declared in
+// src/components/PipelineDonut.tsx and imported rather than copied, so a change
+// to the chart's palette moves these with it.
+//
+// Taking a step each is what separates the cards. Active clients and Pipeline
+// value used to be the same blue, which made two of the four read as one; they
+// are now steps 0 and 2 — blue and indigo — and no two cards in the row share a
+// hue.
+export type KpiTone = 0 | 1 | 2 | 3 | 4;
 
-const KPI_TONES: Record<
-  KpiTone,
-  { disc: string; glyph: string; curve: string; halo: string }
-> = {
-  blue: {
-    disc: "linear-gradient(135deg, #EAF1FE, #D6E5FD)",
-    glyph: "#126DFB",
-    curve: "#126DFB",
-    halo: "rgba(18, 109, 251, 0.16)",
-  },
-  teal: {
-    disc: "linear-gradient(135deg, #E3F7F5, #CBEFEA)",
-    glyph: "#0E9F94",
-    curve: "#0E9F94",
-    halo: "rgba(14, 159, 148, 0.16)",
-  },
-  indigo: {
-    disc: "linear-gradient(135deg, #EDEEFD, #DEE0FB)",
-    glyph: "#5A5FE0",
-    curve: "#5A5FE0",
-    halo: "rgba(90, 95, 224, 0.16)",
-  },
-};
+// Percentage → rgba, so a hex from the shared palette can be used at the alphas
+// the glass wants without a second set of colours being written down anywhere.
+function alpha(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
 
 // The line along the bottom of every card, and it is ornament — it is not
 // this metric's history, and there is no history stored to draw one from.
@@ -68,9 +59,10 @@ export default function KpiCard({
   kpi: Kpi;
   tone: KpiTone;
 }) {
-  const t = KPI_TONES[tone];
-  // Keyed on the label rather than the tone: two of the four cards are blue,
-  // and two elements sharing a DOM id is invalid however alike they look.
+  const soft = EMPTY_RAMP[tone];
+  const strong = STAGE_RAMP[tone];
+  // Keyed on the label rather than the tone, so no two cards can ever share a
+  // DOM id even if the palette is re-pointed.
   const fillId = `kpi-curve-${kpi.label.replace(/[^a-zA-Z0-9]/g, "")}`;
 
   return (
@@ -81,7 +73,14 @@ export default function KpiCard({
         </div>
         <div
           className="kpi-mark"
-          style={{ background: t.disc, color: t.glyph }}
+          style={
+            {
+              color: strong,
+              "--mark-tint": alpha(soft, 0.95),
+              "--mark-tint-soft": alpha(soft, 0.35),
+              "--mark-shadow": alpha(strong, 0.14),
+            } as React.CSSProperties
+          }
         >
           <Icon name={kpi.icon} className="h-[19px] w-[19px]" />
         </div>
@@ -115,8 +114,8 @@ export default function KpiCard({
       >
         <defs>
           <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={t.curve} stopOpacity="0.14" />
-            <stop offset="100%" stopColor={t.curve} stopOpacity="0" />
+            <stop offset="0%" stopColor={strong} stopOpacity="0.14" />
+            <stop offset="100%" stopColor={strong} stopOpacity="0" />
           </linearGradient>
         </defs>
         <path
@@ -126,7 +125,7 @@ export default function KpiCard({
         <path
           d={DECORATIVE_CURVE}
           fill="none"
-          stroke={t.curve}
+          stroke={strong}
           strokeOpacity="0.45"
           strokeWidth="2"
           strokeLinecap="round"

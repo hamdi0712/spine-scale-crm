@@ -2,39 +2,16 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { fmtMoney } from "@/lib/format";
+import {
+  EMPTY_LIGHT,
+  EMPTY_RAMP,
+  RAMP_LIGHT,
+  STAGE_RAMP,
+} from "@/lib/dashboardPalette";
 
 // Open pipeline value split by stage: a donut with the total in the middle and
-// a labelled legend beside it.
-//
-// Colour. Pipeline stages are a sequence, not a set of unrelated categories —
-// a lead moves New → Contacted → Discovery → Proposal → Negotiating — so the
-// segments take an ordered ramp rather than eight arbitrary hues, and the
-// reader sees the order in the colour. The ramp is built from the two brand
-// colours: it starts on a deep shade of the primary blue (#126DFB), passes
-// through the primary itself, and ends on a tint of the secondary teal
-// (#3FD1C8). Steps are spaced by lightness — each is at least 0.06 OKLCH L
-// from its neighbour — so adjacent segments stay apart, and the lightest step
-// still clears 2:1 against the white card. The two lightest steps sit under
-// 3:1, which is why every segment is also named and valued in the legend
-// rather than relying on colour alone.
-const STAGE_RAMP = ["#0C46A2", "#0959D2", "#126DFB", "#00A2B0", "#38BCB4"];
-
-// Each segment is filled with a gradient rather than a flat colour: the ramp's
-// own step, lightened at the top of the arc and landing on the step itself at
-// the bottom. The step stays the darker stop on purpose — the contrast floor
-// documented above is measured against it, so lightening the top adds depth
-// without moving the number the ramp was checked at.
-const RAMP_LIGHT = ["#1A63C8", "#2D7BEA", "#4C93FF", "#22BFCB", "#63D3CB"];
-
-// An empty pipeline. It used to be one flat grey ring, which was honest and
-// looked broken. This is the same shape in a soft blue → indigo → teal ramp:
-// desaturated well below the live ramp above, so a populated donut and an empty
-// one are never mistaken for each other, and paired — as it always was — with
-// zeroes in the legend and a zero in the middle. The colour is the card being
-// composed rather than the pipeline being described.
-const EMPTY_RAMP = ["#9CC4F2", "#A8B8EE", "#B2ADE9", "#9FCBDD", "#8FD6CC"];
-const EMPTY_LIGHT = ["#C8DDF8", "#CFD8F5", "#D5D2F2", "#CBE2EC", "#C2EAE3"];
-
+// a labelled legend beside it. The ramp it is drawn in lives in
+// src/lib/dashboardPalette.ts, where the KPI row reads it too.
 export interface PipelineSlice {
   stage: string;
   label: string;
@@ -49,25 +26,24 @@ export default function PipelineDonut({
   total: number;
 }) {
   // Recharts draws nothing for an all-zero dataset, and an empty ring reads as
-  // a bug. An empty pipeline gets a plain grey ring and honest zeroes.
+  // a bug. An empty pipeline is drawn as a full ring in the soft ramp, with
+  // honest zeroes in the legend and in the middle.
   const drawn = total > 0 ? slices : slices.map((s) => ({ ...s, value: 1 }));
 
   return (
-    <div className="flex items-center gap-5">
-      <div className="relative h-[132px] w-[132px] shrink-0">
-        {/* Depth, in the same language as the primary buttons: a soft
-            brand-tinted shadow under the ring and lightly rounded segment ends,
-            so the donut reads as a raised object rather than flat vector fill.
-            The shadow sits on the chart only — the total in the middle stays
-            crisp because it is a sibling, not a child. */}
-        {/* The lift is drawn for a saturated ring. On the pale empty ramp the
-            same shadow reads as haze around it rather than as depth under it,
-            so the empty state takes a lighter one. */}
-        <ResponsiveContainer
-          width="100%"
-          height="100%"
-          className={total > 0 ? "donut-elevated" : "donut-elevated-soft"}
-        >
+    <div className="flex items-center gap-4">
+      {/* The chart is flat now — no drop shadow under the ring, no lift on the
+          segments. What gives it depth instead is the surface behind it: a
+          frosted disc, the same glass the KPI marks and the empty-state glyphs
+          are drawn in, sized a little proud of the ring so it reads as
+          something the chart is resting on rather than a container around it.
+
+          The disc is a sibling of the chart rather than its parent, so it can
+          be wider than the ring without boxing it in, and the total in the
+          middle stays crisp above both. */}
+      <div className="relative h-[142px] w-[142px] shrink-0">
+        <div className="donut-glass" aria-hidden />
+        <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <defs>
               {STAGE_RAMP.map((base, i) => (

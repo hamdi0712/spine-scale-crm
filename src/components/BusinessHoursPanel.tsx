@@ -77,7 +77,7 @@ export default function BusinessHoursPanel() {
           // line across the row rather than stepping with the text above them.
           <li
             key={zone.id}
-            className="flex h-full flex-col rounded-[14px] border border-white/[0.14] bg-white/[0.07] p-3 backdrop-blur-sm"
+            className="zone-tile flex h-full flex-col rounded-[16px] p-3 backdrop-blur-md"
           >
             <span className="flex items-center gap-1.5">
               <span

@@ -82,9 +82,9 @@
     @apply overflow-hidden rounded-2xl border border-line bg-surface shadow-card;
   }
   /* ─── Dashboard only ──────────────────────────────────────────────────────
-     The four classes below are used by the dashboard and nothing else. They
+     The classes below are used by the dashboard and nothing else. They
      are here rather than inline because each needs a gradient or a shadow
-     Tailwind has no utility for, the same reason .donut-elevated lives here.
+     Tailwind has no utility for, the same reason .nav-active's lift does.
      None of them redefines anything another page uses. */
 
   /* The KPI card. A rounder corner than .card and a shadow that is diffusion
@@ -93,16 +93,31 @@
   .card-kpi {
     @apply relative overflow-hidden rounded-[20px] border border-line bg-surface;
   }
-  /* The tinted circle a KPI's glyph sits in. The colour comes from the card's
-     own tone (see KPI_TONES in src/components/KpiCard.tsx); this is the shape
-     and the inner lift the tones share. */
+  /* The frosted disc a KPI's glyph sits in. The colour arrives per card as a
+     custom property, off the pipeline palette in src/lib/dashboardPalette.ts;
+     the
+     shape, the border and the depth are shared, so four cards in four colours
+     are still one object drawn four times. */
   .kpi-mark {
-    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full;
+    @apply relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/70 backdrop-blur-[6px];
   }
-  /* The business-hours widget: a dark navy field for a strip that is about
-     other people's daylight rather than about this agency's numbers. */
+  /* The same glass on a dark ground, for the clock at the head of the
+     business-hours widget. Same construction, inverted materials: the border
+     and the highlight come from white at low alpha instead of near-solid. */
+  .glass-mark-dark {
+    @apply relative flex shrink-0 items-center justify-center overflow-hidden rounded-[12px] border border-white/20 backdrop-blur-[6px];
+  }
+  /* The disc behind the pipeline donut. The ring itself is flat now — this is
+     the surface it rests on, and it is glass rather than a card: no hard edge,
+     no fill of its own to speak of, just enough substance to sit the chart on
+     something. */
+  .donut-glass {
+    @apply absolute inset-0 rounded-full border border-white/70 backdrop-blur-[6px];
+  }
+  /* The business-hours widget: a dark navy glass field for the one panel that
+     is about other people's daylight rather than this agency's numbers. */
   .hero-navy {
-    @apply relative overflow-hidden rounded-[20px];
+    @apply relative overflow-hidden rounded-[26px];
   }
   /* The soft disc behind an empty card's glyph. Big, quiet, and centred over
      the copy that was already there. */
@@ -295,38 +310,113 @@
     0 8px 24px rgba(28, 27, 39, 0.06);
 }
 
-/* The inner lift on a KPI's tinted circle: a lit top edge and a shadow tight
-   enough to seat the disc without darkening the pastel it is drawn in. */
-.kpi-mark {
+/* Frosted glass with a coloured light under it, in three parts: a diagonal
+   wash of the card's own tone for the light, a white sheen across the top-left
+   for the frost, and an inner top highlight plus a tinted drop for the depth.
+   The tone arrives as --mark-tint and the light never reaches full strength —
+   the effect has to survive four of them in a row without the row turning into
+   a paint chart. */
+.kpi-mark,
+.glass-mark-dark {
+  background-image:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(255, 255, 255, 0.16) 46%,
+      rgba(255, 255, 255, 0) 62%
+    ),
+    linear-gradient(
+      145deg,
+      var(--mark-tint, rgba(18, 109, 251, 0.5)),
+      var(--mark-tint-soft, rgba(18, 109, 251, 0.18))
+    );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    0 1px 2px rgba(28, 27, 39, 0.06);
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -6px 12px -6px var(--mark-tint, rgba(18, 109, 251, 0.5)),
+    0 2px 6px var(--mark-shadow, rgba(28, 27, 39, 0.08));
 }
 
-/* The business-hours field, in three layers, painted top-down:
-     1. a soft blue radial glow off the top-left, the light in the scene;
-     2. a dot grid — the map texture, at 14px, faint enough to read as paper
-        rather than as data;
-     3. the navy gradient itself.
-   The dots are a grid rather than a real map: a real coastline at this
-   opacity would be a picture of somewhere, and the widget is about four US
-   zones, not about a place. */
+/* On navy the frost is the same construction with the white pulled right down:
+   at the strength that reads as glass on a white card, the same sheen on a dark
+   ground reads as a light grey button. */
+.glass-mark-dark {
+  background-image:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.28),
+      rgba(255, 255, 255, 0.06) 48%,
+      rgba(255, 255, 255, 0) 64%
+    ),
+    linear-gradient(
+      145deg,
+      var(--mark-tint, rgba(96, 165, 250, 0.45)),
+      var(--mark-tint-soft, rgba(96, 165, 250, 0.12))
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 2px 8px rgba(4, 16, 36, 0.35);
+}
+
+/* The donut's surface. Weaker than the KPI marks — it is 150px across rather
+   than 44, and the same alphas at that size stop being a highlight and become a
+   plate. */
+.donut-glass {
+  background-image:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.6),
+      rgba(255, 255, 255, 0.1) 55%,
+      rgba(255, 255, 255, 0) 70%
+    ),
+    linear-gradient(
+      145deg,
+      rgba(18, 109, 251, 0.14),
+      rgba(63, 209, 200, 0.11)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 1px 2px rgba(28, 27, 39, 0.05),
+    0 12px 28px rgba(18, 109, 251, 0.13);
+}
+
+/* The business-hours field: the ground the map is embedded in.
+   Two layers only, because the map is a component of its own and sits between
+   this and the content — a wide blue glow off the top, which is the light in
+   the scene, over a navy that is lighter at the top and deeper at the bottom.
+
+   The edge treatment is the glass: a hairline of white inside the top edge
+   catching that light, a darker hairline at the bottom, and the border below.
+   overflow-hidden lives on the class so the map is cut by the radius. */
 .hero-navy {
   background-image:
     radial-gradient(
-      70% 90% at 18% 0%,
-      rgba(59, 130, 246, 0.38),
-      rgba(59, 130, 246, 0) 62%
+      90% 70% at 30% -10%,
+      rgba(68, 141, 233, 0.4),
+      rgba(68, 141, 233, 0) 68%
     ),
-    radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px),
-    linear-gradient(135deg, #19365e, #071a36);
-  background-size:
-    100% 100%,
-    14px 14px,
-    100% 100%;
+    linear-gradient(168deg, #1d456f 0%, #12305a 42%, #071a36 100%);
+  border: 1px solid rgba(126, 173, 232, 0.22);
   box-shadow:
+    inset 0 1px 0 rgba(190, 219, 255, 0.28),
+    inset 0 -1px 0 rgba(3, 12, 28, 0.5),
     0 1px 2px rgba(7, 26, 54, 0.2),
-    0 10px 28px rgba(7, 26, 54, 0.22);
+    0 16px 40px rgba(7, 26, 54, 0.28);
+}
+
+/* The frosted tiles that float over the map. Translucent on purpose and by a
+   wide margin — the map has to stay readable around and through them, so the
+   fill is a wash rather than a panel, and it is the border and the top
+   highlight that give the tile its edges. */
+.zone-tile {
+  background-image: linear-gradient(
+    160deg,
+    rgba(150, 194, 248, 0.14),
+    rgba(8, 26, 54, 0.42)
+  );
+  border: 1px solid rgba(150, 191, 240, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(198, 224, 255, 0.24),
+    0 6px 18px rgba(4, 16, 36, 0.3);
 }
 
 /* The glow behind an empty card's glyph. Undirected and wide, at an opacity
@@ -337,26 +427,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.8),
     0 0 0 8px var(--empty-halo, rgba(18, 109, 251, 0.05)),
     0 6px 20px var(--empty-halo, rgba(18, 109, 251, 0.05));
-}
-
-/* The pipeline donut gets a lighter reading of the primary button's lift: the
-   same brand-tinted, lit-from-above shadow, softened and scaled down for a
-   chart rather than a control. drop-shadow (not box-shadow) so it follows the
-   ring itself rather than the box around it — a tight contact shadow for the
-   edge, a wide diffuse one for the elevation. */
-.donut-elevated {
-  filter:
-    drop-shadow(0 2px 2px rgba(12, 70, 162, 0.12))
-    drop-shadow(0 8px 14px rgba(18, 109, 251, 0.2));
-}
-
-/* The same lift for the empty ring, at about a third the strength. The ramp an
-   empty pipeline is drawn in is pale enough that the full shadow spreads wider
-   than the ring itself and reads as haze rather than as depth. */
-.donut-elevated-soft {
-  filter:
-    drop-shadow(0 2px 2px rgba(12, 70, 162, 0.05))
-    drop-shadow(0 8px 14px rgba(18, 109, 251, 0.08));
 }
 
 /* Single-line controls get a fixed 42px height; multi-line fields keep

@@ -22,6 +22,7 @@ import Icon from "@/components/Icons";
 import KpiCard, { KpiTone } from "@/components/KpiCard";
 import PipelineDonut from "@/components/PipelineDonut";
 import TodaysFocus from "@/components/TodaysFocus";
+import UsNightMap from "@/components/UsNightMap";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +33,14 @@ export const dynamic = "force-dynamic";
 const ACTIVITY_ROWS = 3;
 const HEALTH_ROWS = 2;
 
-// One tone per KPI card, in the order the row runs: clients, MRR, pipeline,
-// follow-ups. Blue for the two counting the business as it stands, teal for
-// the money, indigo for the one that is about time running out. Positional
-// rather than keyed off the label, because the labels are composed above and
-// the row's order is what the reader actually sees.
-const KPI_TONES: KpiTone[] = ["blue", "teal", "blue", "indigo"];
+// One step of the pipeline palette per KPI card, taken in the palette's own
+// order: clients, MRR, pipeline value and follow-ups against steps 0 to 3 —
+// blue, blue-indigo, indigo, indigo-teal. The row therefore runs the same ramp
+// the donut at the bottom of the page is drawn in, and no two cards land on the
+// same hue; clients and pipeline value in particular used to share one blue.
+// Positional rather than keyed off the label, because the labels are composed
+// below and the row's order is what the reader actually sees.
+const KPI_TONES: KpiTone[] = [0, 1, 2, 3];
 
 export default async function DashboardPage() {
   const now = new Date();
@@ -309,15 +312,39 @@ export default async function DashboardPage() {
             Text goes to white and its supporting tiers to white at reduced
             opacity — .text-muted is a grey mixed for paper. */}
         <section className="hero-navy p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="display flex items-center gap-2.5 text-xl font-semibold text-white">
-              <Icon name="clock" className="h-[18px] w-[18px] text-[#7FB0F5]" />
-              US business hours
-            </h2>
-            <span className="text-xs text-white/60">9–5 local, Mon–Fri</span>
-          </div>
-          <div className="mt-5">
-            <BusinessHoursPanel />
+          {/* Layer 1 of 3. The map is the bottom of the stack and the only
+              thing in the section that is absolutely positioned — it spans the
+              whole field, is cut by the container's radius, and fades on every
+              edge so it is embedded in the glass rather than pasted onto it. */}
+          <UsNightMap />
+
+          {/* Layers 2 and 3 — header, then tiles — share one relative wrapper,
+              which is what lifts them clear of the map without either needing a
+              z-index of its own. */}
+          <div className="relative">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="display flex items-center gap-3 text-xl font-semibold text-white">
+                <span
+                  className="glass-mark-dark h-9 w-9"
+                  style={
+                    {
+                      "--mark-tint": "rgba(126, 176, 245, 0.5)",
+                      "--mark-tint-soft": "rgba(126, 176, 245, 0.12)",
+                    } as React.CSSProperties
+                  }
+                >
+                  <Icon
+                    name="clock"
+                    className="h-[18px] w-[18px] text-[#CFE4FF]"
+                  />
+                </span>
+                US business hours
+              </h2>
+              <span className="text-xs text-white/60">Mon–Fri · 9–5 local</span>
+            </div>
+            <div className="mt-6">
+              <BusinessHoursPanel />
+            </div>
           </div>
         </section>
       </div>
