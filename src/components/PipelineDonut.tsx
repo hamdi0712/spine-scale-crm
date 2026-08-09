@@ -2,23 +2,16 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { fmtMoney } from "@/lib/format";
+import {
+  EMPTY_LIGHT,
+  EMPTY_RAMP,
+  RAMP_LIGHT,
+  STAGE_RAMP,
+} from "@/lib/dashboardPalette";
 
 // Open pipeline value split by stage: a donut with the total in the middle and
-// a labelled legend beside it.
-//
-// Colour. Pipeline stages are a sequence, not a set of unrelated categories —
-// a lead moves New → Contacted → Discovery → Proposal → Negotiating — so the
-// segments take an ordered ramp rather than eight arbitrary hues, and the
-// reader sees the order in the colour. The ramp is built from the two brand
-// colours: it starts on a deep shade of the primary blue (#126DFB), passes
-// through the primary itself, and ends on a tint of the secondary teal
-// (#3FD1C8). Steps are spaced by lightness — each is at least 0.06 OKLCH L
-// from its neighbour — so adjacent segments stay apart, and the lightest step
-// still clears 2:1 against the white card. The two lightest steps sit under
-// 3:1, which is why every segment is also named and valued in the legend
-// rather than relying on colour alone.
-const STAGE_RAMP = ["#0C46A2", "#0959D2", "#126DFB", "#00A2B0", "#38BCB4"];
-
+// a labelled legend beside it. The ramp it is drawn in lives in
+// src/lib/dashboardPalette.ts, where the KPI row reads it too.
 export interface PipelineSlice {
   stage: string;
   label: string;
@@ -33,23 +26,49 @@ export default function PipelineDonut({
   total: number;
 }) {
   // Recharts draws nothing for an all-zero dataset, and an empty ring reads as
-  // a bug. An empty pipeline gets a plain grey ring and honest zeroes.
+  // a bug. An empty pipeline is drawn as a full ring in the soft ramp, with
+  // honest zeroes in the legend and in the middle.
   const drawn = total > 0 ? slices : slices.map((s) => ({ ...s, value: 1 }));
 
   return (
-    <div className="flex items-center gap-5">
-      <div className="relative h-[132px] w-[132px] shrink-0">
-        {/* Depth, in the same language as the primary buttons: a soft
-            brand-tinted shadow under the ring and lightly rounded segment ends,
-            so the donut reads as a raised object rather than flat vector fill.
-            The shadow sits on the chart only — the total in the middle stays
-            crisp because it is a sibling, not a child. */}
-        <ResponsiveContainer
-          width="100%"
-          height="100%"
-          className="donut-elevated"
-        >
+    <div className="flex items-center gap-4">
+      {/* The chart is flat and the ring is one closed circle. What sits behind
+          it is light rather than a container: a wash that fades out before the
+          disc's own edge, so there is nothing with a rim to be read as a second
+          circle around the first. It is a sibling of the chart, not its parent,
+          and the total in the middle stays crisp above both. */}
+      <div className="relative h-[142px] w-[142px] shrink-0">
+        <div className="donut-glass" aria-hidden />
+        <ResponsiveContainer width="100%" height="100%">
           <PieChart>
+            <defs>
+              {STAGE_RAMP.map((base, i) => (
+                <linearGradient
+                  key={base}
+                  id={`donut-step-${i}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor={RAMP_LIGHT[i]} />
+                  <stop offset="100%" stopColor={base} />
+                </linearGradient>
+              ))}
+              {EMPTY_RAMP.map((base, i) => (
+                <linearGradient
+                  key={base}
+                  id={`donut-empty-${i}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor={EMPTY_LIGHT[i]} />
+                  <stop offset="100%" stopColor={base} />
+                </linearGradient>
+              ))}
+            </defs>
             <Pie
               data={drawn}
               dataKey="value"
@@ -58,20 +77,22 @@ export default function PipelineDonut({
               outerRadius={64}
               startAngle={90}
               endAngle={-270}
-              // A 2px gap of card surface between segments keeps neighbouring
-              // steps from bleeding into one another.
-              paddingAngle={total > 0 ? 2 : 0}
-              // Softened, not pilled: 3px against a 20px-thick ring takes the
-              // hard vector corners off where segments meet while keeping the
-              // ring reading as a ring.
-              cornerRadius={3}
+              // No gaps and no rounded ends: the ring is one clean, closed
+              // circle. Segments are told apart by colour and by the legend
+              // beside them, which is what they were always told apart by —
+              // the gaps and the soft corners were breaking the circle to
+              // repeat information the legend already carries.
+              paddingAngle={0}
+              cornerRadius={0}
               stroke="none"
               isAnimationActive={false}
             >
               {drawn.map((slice, i) => (
                 <Cell
                   key={slice.stage}
-                  fill={total > 0 ? STAGE_RAMP[i % STAGE_RAMP.length] : "#E7E9EE"}
+                  fill={`url(#donut-${total > 0 ? "step" : "empty"}-${
+                    i % STAGE_RAMP.length
+                  })`}
                 />
               ))}
             </Pie>

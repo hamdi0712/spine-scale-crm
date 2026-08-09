@@ -55,6 +55,14 @@ again.
   follow-ups due in 7 days), then two panels side by side and three cards
   below.
 
+  The curve along the bottom of each KPI card is ornament, not data. There is
+  no stored history of what MRR or pipeline value was last month, so there is
+  nothing to plot; it is the same path on all four cards for that reason, since
+  four different-looking curves would read as four different trends. The same
+  restraint governs the numbers above them — "added this month" is shown
+  because the date each client went active is recorded, and no month-on-month
+  percentage is shown because nothing in the database supports one.
+
   **Now** carries **Today's focus**: one merged list of everything that wants
   doing today, drawn from four places and ordered by urgency — calls scheduled
   for today or already overdue (soonest first), then onboarding items that are
@@ -67,22 +75,26 @@ again.
   toggleable from the client record.
 
   **US business hours** is the four-zone strip: local time and an open /
-  opening-soon / closed badge per zone, on 9–5 local Monday to Friday. It
-  deliberately does not suggest a best time to prospect — nothing in the
-  reporting data supports one yet.
+  opening-soon / closed badge per zone, on 9–5 local Monday to Friday, as four
+  frosted tiles over a nighttime satellite view of the country.
 
-  **AI notes**, directly under Now, is one short paragraph on what most needs
-  attention today. Everything it is given is counted here first — active
-  clients, who is at risk and why, follow-ups and calls already overdue, how
-  many candidates are waiting in the Discovery queue, how many were promoted
-  this week — and the model's only job is to say which of it matters most and
-  why that one rather than the others. The counts it read are printed under the
-  paragraph in the app's own words, so a note that misreads one is caught by
-  the person reading it rather than believed. It is cached for four hours: the
-  dashboard renders whatever is stored and asks for a new note only when that
-  one has aged out, or when you press **Refresh note**. It changes nothing and
-  nothing downstream reads it. With no `DEEPSEEK_API_KEY` set the card says so
-  once, quietly, and the rest of the dashboard is unaffected.
+  That view is decoration and the only picture in the app. It is a rendered
+  image (`public/us-night-map.jpg`, ~115KB) rather than live vector artwork,
+  because terrain, cloud and grain are things you render rather than draw —
+  as SVG it read as SVG. `tools/us-night-map.generator.html` builds the scene
+  and the asset is a screenshot of it, kept in the repo so the picture can be
+  re-made and audited instead of being of unknown origin. Everything in it is
+  either real or procedural and nothing else: the coastline, Great Lakes and
+  state lines are the US Census Bureau's public-domain boundary data, the city
+  lights are a generated field — 66 real metros, a halo of suburbs around each,
+  strings along the corridors between them and a thin scatter of small towns
+  weighted east — so the eastern seaboard crowds and the mountain west goes
+  dark. The terrain, the weather and the atmosphere are noise run through
+  lighting and blur filters. No third-party
+  imagery is involved. Nothing is measured off it and no data feeds it.
+
+  The panel deliberately does not suggest a best time to prospect — nothing in
+  the reporting data supports one yet.
 
   **Recent activity** is the milestone feed (below), **Client health** ranks
   the live clients worst-first with a sparkline of recent show rate, and
@@ -91,7 +103,11 @@ again.
   donut uses an ordered ramp derived from the brand palette — deep blue through
   the primary `#126DFB` to a tint of the secondary teal `#3FD1C8` — stepped by
   lightness so neighbouring segments stay apart, with every segment named and
-  valued in the legend.
+  valued in the legend. The ramp lives in `src/lib/dashboardPalette.ts`. The
+  four KPI cards along the top take four named hues of their own — purple,
+  emerald, blue and amber — rather than four steps of that ramp, because four
+  steps of one blue-to-teal sequence can only be so far apart and two of the
+  cards kept reading as the same blue.
 
 - **Calendar** — a month grid over dates that already live on other records:
   every call (scheduled or held, on leads and clients alike), every lead's next

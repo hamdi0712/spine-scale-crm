@@ -9,16 +9,21 @@ import { businessHours, OpenState } from "@/lib/businessHours";
 import { US_TIME_ZONES, fmtTimeInZone, zoneAbbr } from "@/lib/timezones";
 import Icon from "@/components/Icons";
 
+// The panel sits on navy now, so the dot and the badge are drawn for a dark
+// ground: the state colours lightened to stay legible on it, and the badge's
+// fill turned translucent so it takes its body from whatever is behind it. The
+// three states are the same three states, and Closed is deliberately the
+// quietest of them — most of the map is closed most of the time.
 const DOT: Record<OpenState, string> = {
-  open: "bg-ok",
-  "opening-soon": "bg-warn",
-  closed: "bg-line",
+  open: "bg-[#4ADE9E]",
+  "opening-soon": "bg-[#F0C069]",
+  closed: "bg-white/25",
 };
 
 const BADGE: Record<OpenState, string> = {
-  open: "bg-ok-soft text-ok",
-  "opening-soon": "bg-warn-soft text-warn",
-  closed: "bg-wash text-muted",
+  open: "bg-[#1FAA6D]/25 text-[#8FE9C0]",
+  "opening-soon": "bg-[#D89B2D]/25 text-[#F5D49B]",
+  closed: "bg-white/10 text-white/70",
 };
 
 // Ticks slowly — the badges change on the hour, not the second.
@@ -51,38 +56,57 @@ export function BusinessHoursChip() {
   );
 }
 
+// Four glass tiles across, rather than four rows down. The zones are peers —
+// nobody reads this list top to bottom looking for one of them, they scan it
+// for which are lit — and a row of tiles says "four places, at once" where a
+// stacked list said "a ranking".
+//
+// Two columns below the sm breakpoint: at four across, a tile is narrower than
+// the time inside it.
 export default function BusinessHoursPanel() {
   const now = useNow();
 
   return (
-    <ul>
+    <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       {US_TIME_ZONES.map((zone) => {
         const hours = now ? businessHours(now, zone.id) : null;
         const state: OpenState = hours?.state ?? "closed";
         return (
+          // h-full with the badge pushed down by mt-auto: the four tiles are
+          // the same height whatever their contents, so the badges sit on one
+          // line across the row rather than stepping with the text above them.
           <li
             key={zone.id}
-            className="flex items-center gap-3 border-b border-line/60 py-3.5 last:border-b-0"
+            className="zone-tile flex h-full flex-col rounded-[16px] p-3 backdrop-blur-md"
           >
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${now ? DOT[state] : "bg-line"}`}
-              aria-hidden
-            />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">
-              {zone.label}
-              <span className="ml-1.5 text-xs font-normal text-muted">
-                {now ? `(${zoneAbbr(now, zone.id)})` : ""}
+            <span className="flex items-center gap-1.5">
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  now ? DOT[state] : "bg-white/25"
+                }`}
+                aria-hidden
+              />
+              <span className="min-w-0 truncate text-xs font-medium text-white/75">
+                {zone.label}
               </span>
             </span>
-            <span className="num shrink-0 text-sm font-medium">
+            {/* nowrap at 17px: four tiles across a half-width card leaves about
+                120px of room, and "11:10 AM" at a larger size spent it by
+                breaking over two lines. */}
+            <span className="num mt-2 block whitespace-nowrap text-[17px] font-semibold leading-none tracking-tight text-white">
               {now ? fmtTimeInZone(now, zone.id) : "—:—"}
             </span>
-            <span
-              className={`inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-medium ${
-                now ? BADGE[state] : "bg-wash text-muted"
-              }`}
-            >
-              {hours ? hours.label : "—"}
+            <span className="mt-1 block text-[11px] text-white/60">
+              {now ? zoneAbbr(now, zone.id) : " "}
+            </span>
+            <span className="mt-auto block pt-2.5">
+              <span
+                className={`inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-medium ${
+                  now ? BADGE[state] : "bg-white/10 text-white/70"
+                }`}
+              >
+                {hours ? hours.label : "—"}
+              </span>
             </span>
           </li>
         );
