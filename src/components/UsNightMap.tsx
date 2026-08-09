@@ -65,7 +65,7 @@ export default function UsNightMap() {
       <img
         src="/us-night-map.jpg"
         alt=""
-        className="h-full w-full object-cover object-[50%_30%]"
+        className="h-full w-full object-cover object-[50%_42%]"
       />
 
       {/* Depth, in two passes over the top. Vertical: the band between the
@@ -79,14 +79,14 @@ export default function UsNightMap() {
         className="absolute inset-0"
         style={{
           backgroundImage:
-            "linear-gradient(to bottom, rgba(9,29,58,0.62) 0%, rgba(9,29,58,0.3) 18%, rgba(9,29,58,0.06) 42%, rgba(9,29,58,0.34) 72%, rgba(7,23,48,0.72) 100%)",
+            "linear-gradient(to bottom, rgba(9,29,58,0.58) 0%, rgba(9,29,58,0.2) 20%, rgba(9,29,58,0) 44%, rgba(9,29,58,0.18) 70%, rgba(7,23,48,0.52) 100%)",
         }}
       />
       <div
         className="absolute inset-0"
         style={{
           backgroundImage:
-            "linear-gradient(to right, rgba(9,29,58,0.8) 0%, rgba(9,29,58,0) 16%, rgba(9,29,58,0) 84%, rgba(9,29,58,0.8) 100%)",
+            "linear-gradient(to right, rgba(9,29,58,0.72) 0%, rgba(9,29,58,0) 15%, rgba(9,29,58,0) 85%, rgba(9,29,58,0.72) 100%)",
         }}
       />
     </div>

@@ -32,15 +32,11 @@ export default function PipelineDonut({
 
   return (
     <div className="flex items-center gap-4">
-      {/* The chart is flat now — no drop shadow under the ring, no lift on the
-          segments. What gives it depth instead is the surface behind it: a
-          frosted disc, the same glass the KPI marks and the empty-state glyphs
-          are drawn in, sized a little proud of the ring so it reads as
-          something the chart is resting on rather than a container around it.
-
-          The disc is a sibling of the chart rather than its parent, so it can
-          be wider than the ring without boxing it in, and the total in the
-          middle stays crisp above both. */}
+      {/* The chart is flat and the ring is one closed circle. What sits behind
+          it is light rather than a container: a wash that fades out before the
+          disc's own edge, so there is nothing with a rim to be read as a second
+          circle around the first. It is a sibling of the chart, not its parent,
+          and the total in the middle stays crisp above both. */}
       <div className="relative h-[142px] w-[142px] shrink-0">
         <div className="donut-glass" aria-hidden />
         <ResponsiveContainer width="100%" height="100%">
@@ -81,13 +77,13 @@ export default function PipelineDonut({
               outerRadius={64}
               startAngle={90}
               endAngle={-270}
-              // A 2px gap of card surface between segments keeps neighbouring
-              // steps from bleeding into one another.
-              paddingAngle={total > 0 ? 2 : 0}
-              // Softened, not pilled: 3px against a 20px-thick ring takes the
-              // hard vector corners off where segments meet while keeping the
-              // ring reading as a ring.
-              cornerRadius={3}
+              // No gaps and no rounded ends: the ring is one clean, closed
+              // circle. Segments are told apart by colour and by the legend
+              // beside them, which is what they were always told apart by —
+              // the gaps and the soft corners were breaking the circle to
+              // repeat information the legend already carries.
+              paddingAngle={0}
+              cornerRadius={0}
               stroke="none"
               isAnimationActive={false}
             >

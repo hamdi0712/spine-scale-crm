@@ -12,7 +12,6 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import Icon from "@/components/Icons";
-import { EMPTY_RAMP, STAGE_RAMP } from "@/lib/dashboardPalette";
 
 // Tabler, the same set the sidebar's nav is drawn in, at the sidebar's own
 // 1.75 stroke. The in-house set is still what the rest of the dashboard uses
@@ -27,21 +26,27 @@ const GLYPHS = {
 
 export type KpiGlyph = keyof typeof GLYPHS;
 
-// The four cards take their colour from the pipeline donut's palette — the same
-// five-step ramp the chart at the bottom of the page is drawn in, so the two
-// are one system read at two sizes.
+// One colour per card, given rather than derived — these four are the palette
+// for this row and they are named here in full.
 //
-// Which four steps is a separate question from what order the ramp runs in, and
-// the answer here is: the four furthest apart. Steps 0, 4, 1 and 2 give blue,
-// teal, blue-indigo and indigo, so no two cards in the row share a hue —
-// clients and pipeline value in particular used to be the same blue, which made
-// two of the four read as one. Money takes the teal because that is the step
-// that reads least like the others, and it is the number people look for first.
+// They sit outside the pipeline ramp on purpose: that ramp is one sequence from
+// blue to teal, and four steps of a sequence can only be so far apart, which is
+// what kept clients and pipeline value reading as the same blue. Four hues from
+// four parts of the wheel do not have that problem, and each card gets an
+// identity a reader can name.
 //
-// Each step is a pair. The soft value is the empty-state ramp and it is the
-// light under the glass; the strong value is the live ramp at the same index
-// and it is the glyph on top. Both live in src/lib/dashboardPalette.ts.
-export type KpiTone = 0 | 1 | 2 | 3 | 4;
+// The purple is the same #7C3AED the AI treatment uses elsewhere in the app.
+// That is worth knowing rather than worrying about: nothing on this page is
+// model-generated, so the two never appear together, and the AI meaning is
+// carried by the sparkle and the gradient rather than by the hue alone.
+export type KpiTone = "purple" | "emerald" | "blue" | "amber";
+
+const KPI_TONES: Record<KpiTone, string> = {
+  purple: "#7C3AED", // people, and the brand
+  emerald: "#10B981", // revenue
+  blue: "#3B82F6", // pipeline
+  amber: "#F59E0B", // attention
+};
 
 // Hex → rgba, so a colour from the shared palette can be used at the alphas the
 // glass wants without a second set of colours being written down anywhere.
@@ -72,8 +77,7 @@ export interface Kpi {
 }
 
 export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
-  const soft = EMPTY_RAMP[tone];
-  const strong = STAGE_RAMP[tone];
+  const hue = KPI_TONES[tone];
   const Glyph = GLYPHS[kpi.icon];
   // Keyed on the label rather than the tone, so no two cards can ever share a
   // DOM id even if the palette is re-pointed.
@@ -85,14 +89,16 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
         <div className="text-xs font-medium tracking-[0.02em] text-muted">
           {kpi.label}
         </div>
+        {/* The same disc the empty-state glyphs in Recent activity and Client
+            health are drawn in: a circle, a soft wash of the card's own hue,
+            and a wide halo behind it. One treatment, three places. */}
         <div
           className="kpi-mark"
           style={
             {
-              color: strong,
-              "--mark-tint": alpha(soft, 0.62),
-              "--mark-tint-soft": alpha(soft, 0.24),
-              "--mark-shadow": alpha(strong, 0.1),
+              color: hue,
+              background: `linear-gradient(140deg, ${alpha(hue, 0.2)}, ${alpha(hue, 0.09)})`,
+              "--mark-halo": alpha(hue, 0.1),
             } as React.CSSProperties
           }
         >
@@ -128,8 +134,8 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
       >
         <defs>
           <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={strong} stopOpacity="0.14" />
-            <stop offset="100%" stopColor={strong} stopOpacity="0" />
+            <stop offset="0%" stopColor={hue} stopOpacity="0.14" />
+            <stop offset="100%" stopColor={hue} stopOpacity="0" />
           </linearGradient>
         </defs>
         <path
@@ -139,7 +145,7 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
         <path
           d={DECORATIVE_CURVE}
           fill="none"
-          stroke={strong}
+          stroke={hue}
           strokeOpacity="0.45"
           strokeWidth="2"
           strokeLinecap="round"

@@ -39,10 +39,10 @@ function Row({ item, mounted }: { item: FocusItem; mounted: boolean }) {
     <li>
       <Link
         href={item.href}
-        className="flex items-center gap-3 rounded-[12px] border border-line/70 bg-wash/40 px-3 py-2.5 transition-colors hover:border-line hover:bg-wash/80"
+        className="glass-panel glass-panel-hover flex items-center gap-3 px-3 py-2.5 transition-all"
       >
         <span
-          className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border ${tone.box}`}
+          className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border bg-white/70 ${tone.box}`}
           aria-hidden
         >
           <Icon name={item.icon} className="h-3 w-3" />
@@ -73,7 +73,7 @@ export default function TodaysFocus({
 
   if (visible.length === 0 && hidden.length === 0) {
     return (
-      <p className="rounded-[12px] border border-line/70 bg-wash/40 px-3 py-5 text-sm text-muted">
+      <p className="glass-panel px-3 py-5 text-sm text-muted">
         Nothing scheduled, overdue or blocking today.
       </p>
     );

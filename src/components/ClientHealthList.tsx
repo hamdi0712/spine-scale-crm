@@ -81,8 +81,11 @@ export default function ClientHealthList({
         </p>
         {/* The app's own secondary button rather than a text link: this is the
             one thing there is to do on an empty card, and it should look like
-            something to press. Same .btn every other page uses. */}
-        <Link href="/clients/new" className="btn mt-4">
+            something to press. .btn unchanged — its colours, its height and its
+            border are the ones every other page uses — with the corner taken
+            round on this instance only, because a pill is what an empty card's
+            single invitation should look like. */}
+        <Link href="/clients/new" className="btn mt-4 !rounded-full">
           <Icon name="plus" className="h-4 w-4" />
           New client
         </Link>

@@ -79,16 +79,18 @@ again.
   frosted tiles over a nighttime satellite view of the country.
 
   That view is decoration and the only picture in the app. It is a rendered
-  image (`public/us-night-map.jpg`, 95KB) rather than live vector artwork,
+  image (`public/us-night-map.jpg`, ~115KB) rather than live vector artwork,
   because terrain, cloud and grain are things you render rather than draw —
   as SVG it read as SVG. `tools/us-night-map.generator.html` builds the scene
   and the asset is a screenshot of it, kept in the repo so the picture can be
   re-made and audited instead of being of unknown origin. Everything in it is
   either real or procedural and nothing else: the coastline, Great Lakes and
   state lines are the US Census Bureau's public-domain boundary data, the city
-  lights are 66 real metros scattered into spills so the eastern seaboard
-  crowds and the mountain west goes dark, and the terrain, weather and
-  atmosphere are noise run through lighting and blur filters. No third-party
+  lights are a generated field — 66 real metros, a halo of suburbs around each,
+  strings along the corridors between them and a thin scatter of small towns
+  weighted east — so the eastern seaboard crowds and the mountain west goes
+  dark. The terrain, the weather and the atmosphere are noise run through
+  lighting and blur filters. No third-party
   imagery is involved. Nothing is measured off it and no data feeds it.
 
   The panel deliberately does not suggest a best time to prospect — nothing in
@@ -101,10 +103,11 @@ again.
   donut uses an ordered ramp derived from the brand palette — deep blue through
   the primary `#126DFB` to a tint of the secondary teal `#3FD1C8` — stepped by
   lightness so neighbouring segments stay apart, with every segment named and
-  valued in the legend. That ramp is the dashboard's whole colour system: the
-  four KPI cards take one step each from it, in its own order, so the row at
-  the top of the page and the chart at the bottom are the same five colours
-  read at two sizes. It lives in `src/lib/dashboardPalette.ts`.
+  valued in the legend. The ramp lives in `src/lib/dashboardPalette.ts`. The
+  four KPI cards along the top take four named hues of their own — purple,
+  emerald, blue and amber — rather than four steps of that ramp, because four
+  steps of one blue-to-teal sequence can only be so far apart and two of the
+  cards kept reading as the same blue.
 
 - **Calendar** — a month grid over dates that already live on other records:
   every call (scheduled or held, on leads and clients alike), every lead's next

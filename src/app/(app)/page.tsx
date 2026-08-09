@@ -33,15 +33,10 @@ export const dynamic = "force-dynamic";
 const ACTIVITY_ROWS = 3;
 const HEALTH_ROWS = 2;
 
-// One step of the pipeline palette per KPI card, chosen for distance rather
-// than for adjacency: steps 0, 4, 1 and 2 give blue, teal, blue-indigo and
-// indigo, which is the widest spread four steps of that ramp can make. The row
-// is therefore drawn in the same colours as the donut at the bottom of the page
-// while no two cards share a hue. Money takes the teal — the step that reads
-// least like the rest — because it is the number people look for first.
-// Positional rather than keyed off the label, because the labels are composed
-// below and the row's order is what the reader actually sees.
-const KPI_TONES: KpiTone[] = [0, 4, 1, 2];
+// One hue per KPI card, in the order the row runs: people, revenue, pipeline,
+// attention. Positional rather than keyed off the label, because the labels
+// are composed below and the row's order is what the reader actually sees.
+const KPI_TONES: KpiTone[] = ["purple", "emerald", "blue", "amber"];
 
 export default async function DashboardPage() {
   const now = new Date();
@@ -269,13 +264,8 @@ export default async function DashboardPage() {
           {/* The banner is the one lit surface inside a white card: a shallow
               blue gradient with a pale edge, so the headline sits on glass
               rather than on a flat tint. */}
-          <div
-            className="mt-4 flex items-center gap-4 rounded-[18px] border border-[#DCE8FB] p-4"
-            style={{
-              backgroundImage: "linear-gradient(135deg, #F1F5FF, #E7F2FF)",
-            }}
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-white/70 text-accent shadow-[0_1px_2px_rgba(28,27,39,0.06)]">
+          <div className="glass-panel mt-4 flex items-center gap-4 !rounded-[18px] p-4">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-accent shadow-[0_1px_2px_rgba(28,27,39,0.07)]">
               <Icon name="bell" />
             </span>
             <span className="min-w-0 flex-1">
