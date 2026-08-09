@@ -76,12 +76,23 @@ again.
 
   **US business hours** is the four-zone strip: local time and an open /
   opening-soon / closed badge per zone, on 9–5 local Monday to Friday, as four
-  frosted tiles over a nighttime map of the country. The map is decoration and
-  the only picture in the app — drawn, not photographed, from the US Census
-  Bureau's public-domain boundary data with 66 real metros as its city lights,
-  so the bright places are the places that actually are. Nothing is measured
-  off it and no data feeds it. The panel deliberately does not suggest a best
-  time to prospect — nothing in the reporting data supports one yet.
+  frosted tiles over a nighttime satellite view of the country.
+
+  That view is decoration and the only picture in the app. It is a rendered
+  image (`public/us-night-map.jpg`, 95KB) rather than live vector artwork,
+  because terrain, cloud and grain are things you render rather than draw —
+  as SVG it read as SVG. `tools/us-night-map.generator.html` builds the scene
+  and the asset is a screenshot of it, kept in the repo so the picture can be
+  re-made and audited instead of being of unknown origin. Everything in it is
+  either real or procedural and nothing else: the coastline, Great Lakes and
+  state lines are the US Census Bureau's public-domain boundary data, the city
+  lights are 66 real metros scattered into spills so the eastern seaboard
+  crowds and the mountain west goes dark, and the terrain, weather and
+  atmosphere are noise run through lighting and blur filters. No third-party
+  imagery is involved. Nothing is measured off it and no data feeds it.
+
+  The panel deliberately does not suggest a best time to prospect — nothing in
+  the reporting data supports one yet.
 
   **Recent activity** is the milestone feed (below), **Client health** ranks
   the live clients worst-first with a sparkline of recent show rate, and

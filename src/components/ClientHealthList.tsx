@@ -10,6 +10,7 @@ import Link from "next/link";
 import { ClientHealth, HEALTH_ACTIONS } from "@/lib/health";
 import { HealthBadge, TrendArrow } from "@/components/Badge";
 import EmptyMark from "@/components/EmptyMark";
+import Icon from "@/components/Icons";
 import Sparkline from "@/components/Sparkline";
 
 const SPARK_TONE: Record<string, "green" | "amber" | "red" | "neutral"> = {
@@ -71,14 +72,19 @@ export default function ClientHealthList({
     return (
       <div className="px-2 py-8 text-center">
         <EmptyMark icon="clients" tone="teal" />
-        <p className="mt-4 text-sm text-muted">
+        <p className="mt-4 text-sm font-medium">
           Your next client will show up here
         </p>
-        <Link
-          href="/clients/new"
-          className="mt-2 inline-block text-xs font-medium text-accent hover:underline"
-        >
-          + New client
+        <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
+          Track performance, campaign results and growth across all your clinic
+          partners.
+        </p>
+        {/* The app's own secondary button rather than a text link: this is the
+            one thing there is to do on an empty card, and it should look like
+            something to press. Same .btn every other page uses. */}
+        <Link href="/clients/new" className="btn mt-4">
+          <Icon name="plus" className="h-4 w-4" />
+          New client
         </Link>
       </div>
     );

@@ -9,8 +9,18 @@
 // It says nothing the copy does not. Every one of these cards already explains
 // in words what will appear in it and when — this is the picture over that
 // sentence, not a replacement for it.
+//
+// Glyphs come from Tabler at the sidebar's 1.75 stroke, the same family the KPI
+// marks and the navigation are drawn in.
 
-import Icon from "@/components/Icons";
+import { IconActivity, IconUsers } from "@tabler/icons-react";
+
+const GLYPHS = {
+  activity: IconActivity,
+  clients: IconUsers,
+} as const;
+
+export type EmptyGlyph = keyof typeof GLYPHS;
 
 type MarkTone = "blue" | "teal" | "indigo";
 
@@ -36,10 +46,11 @@ export default function EmptyMark({
   icon,
   tone = "blue",
 }: {
-  icon: string;
+  icon: EmptyGlyph;
   tone?: MarkTone;
 }) {
   const t = TONES[tone];
+  const Glyph = GLYPHS[icon];
   return (
     <div
       className="empty-mark"
@@ -51,7 +62,7 @@ export default function EmptyMark({
         } as React.CSSProperties
       }
     >
-      <Icon name={icon} className="h-7 w-7" />
+      <Glyph size={27} stroke={1.75} aria-hidden />
     </div>
   );
 }

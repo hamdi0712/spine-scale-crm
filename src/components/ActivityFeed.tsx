@@ -48,7 +48,7 @@ export default function ActivityFeed({
       "No milestones logged yet. Converting a lead, generating a report, signing a contract, collecting an invoice, a health change or finishing onboarding will each land here.";
     return illustrateEmpty ? (
       <div className="px-2 py-8 text-center">
-        <EmptyMark icon="pulse" tone="blue" />
+        <EmptyMark icon="activity" tone="blue" />
         <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-muted">
           {copy}
         </p>

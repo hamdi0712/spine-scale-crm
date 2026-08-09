@@ -19,7 +19,7 @@ import ClientHealthList, {
 } from "@/components/ClientHealthList";
 import Greeting from "@/components/Greeting";
 import Icon from "@/components/Icons";
-import KpiCard, { KpiTone } from "@/components/KpiCard";
+import KpiCard, { Kpi, KpiTone } from "@/components/KpiCard";
 import PipelineDonut from "@/components/PipelineDonut";
 import TodaysFocus from "@/components/TodaysFocus";
 import UsNightMap from "@/components/UsNightMap";
@@ -33,14 +33,15 @@ export const dynamic = "force-dynamic";
 const ACTIVITY_ROWS = 3;
 const HEALTH_ROWS = 2;
 
-// One step of the pipeline palette per KPI card, taken in the palette's own
-// order: clients, MRR, pipeline value and follow-ups against steps 0 to 3 —
-// blue, blue-indigo, indigo, indigo-teal. The row therefore runs the same ramp
-// the donut at the bottom of the page is drawn in, and no two cards land on the
-// same hue; clients and pipeline value in particular used to share one blue.
+// One step of the pipeline palette per KPI card, chosen for distance rather
+// than for adjacency: steps 0, 4, 1 and 2 give blue, teal, blue-indigo and
+// indigo, which is the widest spread four steps of that ramp can make. The row
+// is therefore drawn in the same colours as the donut at the bottom of the page
+// while no two cards share a hue. Money takes the teal — the step that reads
+// least like the rest — because it is the number people look for first.
 // Positional rather than keyed off the label, because the labels are composed
 // below and the row's order is what the reader actually sees.
-const KPI_TONES: KpiTone[] = [0, 1, 2, 3];
+const KPI_TONES: KpiTone[] = [0, 4, 1, 2];
 
 export default async function DashboardPage() {
   const now = new Date();
@@ -107,13 +108,7 @@ export default async function DashboardPage() {
   );
   const mrrAdded = newThisMonth.reduce((s, c) => s + (c.monthlyFee ?? 0), 0);
 
-  const kpis: {
-    label: string;
-    value: string;
-    icon: string;
-    delta: string;
-    tone: "up" | "alert" | "flat";
-  }[] = [
+  const kpis: Kpi[] = [
     {
       label: "Active clients",
       value: String(activeClients.length),
@@ -320,8 +315,14 @@ export default async function DashboardPage() {
 
           {/* Layers 2 and 3 — header, then tiles — share one relative wrapper,
               which is what lifts them clear of the map without either needing a
-              z-index of its own. */}
-          <div className="relative">
+              z-index of its own.
+
+              It is a column with the tiles pushed to the bottom, so whatever
+              height this panel is handed by the card beside it becomes open
+              space between the header and the tiles — and that space is where
+              the country shows. Without it the tiles sit straight under the
+              header and cover the one part of the picture worth seeing. */}
+          <div className="relative flex h-full min-h-[300px] flex-col">
             <div className="flex items-center justify-between gap-3">
               <h2 className="display flex items-center gap-3 text-xl font-semibold text-white">
                 <span
@@ -342,7 +343,7 @@ export default async function DashboardPage() {
               </h2>
               <span className="text-xs text-white/60">Mon–Fri · 9–5 local</span>
             </div>
-            <div className="mt-6">
+            <div className="mt-auto pt-8">
               <BusinessHoursPanel />
             </div>
           </div>

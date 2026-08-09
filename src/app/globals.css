@@ -99,7 +99,7 @@
      shape, the border and the depth are shared, so four cards in four colours
      are still one object drawn four times. */
   .kpi-mark {
-    @apply relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/70 backdrop-blur-[6px];
+    @apply relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[13px] border border-white/70 backdrop-blur-[6px];
   }
   /* The same glass on a dark ground, for the clock at the head of the
      business-hours widget. Same construction, inverted materials: the border
@@ -313,9 +313,9 @@
 /* Frosted glass with a coloured light under it, in three parts: a diagonal
    wash of the card's own tone for the light, a white sheen across the top-left
    for the frost, and an inner top highlight plus a tinted drop for the depth.
-   The tone arrives as --mark-tint and the light never reaches full strength —
-   the effect has to survive four of them in a row without the row turning into
-   a paint chart. */
+   The tone arrives as --mark-tint and the light is held well down — these are
+   four soft chips in a row at the top of a page, not four buttons, and the
+   number underneath each one is what the card is for. */
 .kpi-mark,
 .glass-mark-dark {
   background-image:
