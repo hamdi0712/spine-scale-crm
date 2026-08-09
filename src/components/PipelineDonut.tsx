@@ -19,6 +19,22 @@ import { fmtMoney } from "@/lib/format";
 // rather than relying on colour alone.
 const STAGE_RAMP = ["#0C46A2", "#0959D2", "#126DFB", "#00A2B0", "#38BCB4"];
 
+// Each segment is filled with a gradient rather than a flat colour: the ramp's
+// own step, lightened at the top of the arc and landing on the step itself at
+// the bottom. The step stays the darker stop on purpose — the contrast floor
+// documented above is measured against it, so lightening the top adds depth
+// without moving the number the ramp was checked at.
+const RAMP_LIGHT = ["#1A63C8", "#2D7BEA", "#4C93FF", "#22BFCB", "#63D3CB"];
+
+// An empty pipeline. It used to be one flat grey ring, which was honest and
+// looked broken. This is the same shape in a soft blue → indigo → teal ramp:
+// desaturated well below the live ramp above, so a populated donut and an empty
+// one are never mistaken for each other, and paired — as it always was — with
+// zeroes in the legend and a zero in the middle. The colour is the card being
+// composed rather than the pipeline being described.
+const EMPTY_RAMP = ["#9CC4F2", "#A8B8EE", "#B2ADE9", "#9FCBDD", "#8FD6CC"];
+const EMPTY_LIGHT = ["#C8DDF8", "#CFD8F5", "#D5D2F2", "#CBE2EC", "#C2EAE3"];
+
 export interface PipelineSlice {
   stage: string;
   label: string;
@@ -44,12 +60,43 @@ export default function PipelineDonut({
             so the donut reads as a raised object rather than flat vector fill.
             The shadow sits on the chart only — the total in the middle stays
             crisp because it is a sibling, not a child. */}
+        {/* The lift is drawn for a saturated ring. On the pale empty ramp the
+            same shadow reads as haze around it rather than as depth under it,
+            so the empty state takes a lighter one. */}
         <ResponsiveContainer
           width="100%"
           height="100%"
-          className="donut-elevated"
+          className={total > 0 ? "donut-elevated" : "donut-elevated-soft"}
         >
           <PieChart>
+            <defs>
+              {STAGE_RAMP.map((base, i) => (
+                <linearGradient
+                  key={base}
+                  id={`donut-step-${i}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor={RAMP_LIGHT[i]} />
+                  <stop offset="100%" stopColor={base} />
+                </linearGradient>
+              ))}
+              {EMPTY_RAMP.map((base, i) => (
+                <linearGradient
+                  key={base}
+                  id={`donut-empty-${i}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor={EMPTY_LIGHT[i]} />
+                  <stop offset="100%" stopColor={base} />
+                </linearGradient>
+              ))}
+            </defs>
             <Pie
               data={drawn}
               dataKey="value"
@@ -71,7 +118,9 @@ export default function PipelineDonut({
               {drawn.map((slice, i) => (
                 <Cell
                   key={slice.stage}
-                  fill={total > 0 ? STAGE_RAMP[i % STAGE_RAMP.length] : "#E7E9EE"}
+                  fill={`url(#donut-${total > 0 ? "step" : "empty"}-${
+                    i % STAGE_RAMP.length
+                  })`}
                 />
               ))}
             </Pie>

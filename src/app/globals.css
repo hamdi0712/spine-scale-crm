@@ -81,6 +81,34 @@
   .card {
     @apply overflow-hidden rounded-2xl border border-line bg-surface shadow-card;
   }
+  /* ─── Dashboard only ──────────────────────────────────────────────────────
+     The four classes below are used by the dashboard and nothing else. They
+     are here rather than inline because each needs a gradient or a shadow
+     Tailwind has no utility for, the same reason .donut-elevated lives here.
+     None of them redefines anything another page uses. */
+
+  /* The KPI card. A rounder corner than .card and a shadow that is diffusion
+     rather than a contact edge — the row reads as four soft tiles, and the
+     number on each is the loudest thing in it. */
+  .card-kpi {
+    @apply relative overflow-hidden rounded-[20px] border border-line bg-surface;
+  }
+  /* The tinted circle a KPI's glyph sits in. The colour comes from the card's
+     own tone (see KPI_TONES in src/components/KpiCard.tsx); this is the shape
+     and the inner lift the tones share. */
+  .kpi-mark {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-full;
+  }
+  /* The business-hours widget: a dark navy field for a strip that is about
+     other people's daylight rather than about this agency's numbers. */
+  .hero-navy {
+    @apply relative overflow-hidden rounded-[20px];
+  }
+  /* The soft disc behind an empty card's glyph. Big, quiet, and centred over
+     the copy that was already there. */
+  .empty-mark {
+    @apply mx-auto flex h-16 w-16 items-center justify-center rounded-full;
+  }
   /* A card whose whole subject is a model's reading — the dashboard's AI
      notes, the rejected list's second-look sweep. Same shape as .card to the
      pixel; the border picks up the ai violet and the glow below replaces the
@@ -166,11 +194,18 @@
    wide diffuse one for the elevation — recoloured from brand blue to violet:
    lighter violet at the top, deep indigo at the bottom.
 
-   What it adds is the glow. Two undirected halos, a tight bright one and a
-   wide faint one, both in the ai violet rather than the gradient's indigo, so
-   the pill reads as lit from within rather than merely raised off the page.
-   They sit outside the directional shadows in the list so the elevation still
-   reads underneath the bloom. */
+   What it adds is the glow. Two undirected halos, a tight one and a wide
+   fainter one, both in the ai violet rather than the gradient's indigo, so the
+   pill reads as lit from within rather than merely raised off the page. They
+   sit outside the directional shadows in the list so the elevation still reads
+   underneath the bloom.
+
+   The halos are at roughly half the strength they were first drawn at — both
+   radii and both alphas pulled down together. At the original intensity the
+   bloom carried far enough to wash the controls next to it, which made an
+   assist button the loudest thing on a page whatever else was on it. The fill,
+   the sparkle and the whole elevation stack are untouched: this is the glow
+   turned down, not the treatment softened. */
 .btn-ai {
   background-image: linear-gradient(to bottom, #a78bfa, #4b32c3);
   box-shadow:
@@ -178,8 +213,8 @@
     inset 0 -2px 0 rgba(0, 0, 0, 0.14),
     0 1px 2px rgba(49, 30, 122, 0.35),
     0 6px 16px rgba(75, 50, 195, 0.35),
-    0 0 18px rgba(124, 58, 237, 0.5),
-    0 0 38px rgba(124, 58, 237, 0.28);
+    0 0 12px rgba(124, 58, 237, 0.26),
+    0 0 26px rgba(124, 58, 237, 0.14);
   transition:
     background-image 0.15s ease,
     box-shadow 0.15s ease,
@@ -192,15 +227,15 @@
     inset 0 -2px 0 rgba(0, 0, 0, 0.14),
     0 1px 2px rgba(49, 30, 122, 0.35),
     0 8px 20px rgba(75, 50, 195, 0.4),
-    0 0 22px rgba(124, 58, 237, 0.6),
-    0 0 46px rgba(124, 58, 237, 0.34);
+    0 0 15px rgba(124, 58, 237, 0.32),
+    0 0 32px rgba(124, 58, 237, 0.18);
 }
 .btn-ai:active:not(:disabled) {
   background-image: linear-gradient(to bottom, #8b5cf6, #3f2aa8);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 2px 6px rgba(49, 30, 122, 0.3),
-    0 0 14px rgba(124, 58, 237, 0.4);
+    0 0 10px rgba(124, 58, 237, 0.2);
   transform: translateY(1px);
 }
 /* A disabled assist is not waiting to be pressed, and a glow that survives
@@ -248,6 +283,62 @@
     0 6px 16px rgba(28, 27, 39, 0.12);
 }
 
+/* ─── Dashboard only ────────────────────────────────────────────────────────
+   The shadows and fields behind the four classes declared in the components
+   layer above. Same rule: nothing here is reachable from another page. */
+
+/* Diffusion rather than a contact edge. Two soft neutral shadows and no tight
+   1px seat, so the tile reads as resting on the page rather than cut into it. */
+.card-kpi {
+  box-shadow:
+    0 1px 2px rgba(28, 27, 39, 0.03),
+    0 8px 24px rgba(28, 27, 39, 0.06);
+}
+
+/* The inner lift on a KPI's tinted circle: a lit top edge and a shadow tight
+   enough to seat the disc without darkening the pastel it is drawn in. */
+.kpi-mark {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    0 1px 2px rgba(28, 27, 39, 0.06);
+}
+
+/* The business-hours field, in three layers, painted top-down:
+     1. a soft blue radial glow off the top-left, the light in the scene;
+     2. a dot grid — the map texture, at 14px, faint enough to read as paper
+        rather than as data;
+     3. the navy gradient itself.
+   The dots are a grid rather than a real map: a real coastline at this
+   opacity would be a picture of somewhere, and the widget is about four US
+   zones, not about a place. */
+.hero-navy {
+  background-image:
+    radial-gradient(
+      70% 90% at 18% 0%,
+      rgba(59, 130, 246, 0.38),
+      rgba(59, 130, 246, 0) 62%
+    ),
+    radial-gradient(rgba(255, 255, 255, 0.11) 1px, transparent 1px),
+    linear-gradient(135deg, #19365e, #071a36);
+  background-size:
+    100% 100%,
+    14px 14px,
+    100% 100%;
+  box-shadow:
+    0 1px 2px rgba(7, 26, 54, 0.2),
+    0 10px 28px rgba(7, 26, 54, 0.22);
+}
+
+/* The glow behind an empty card's glyph. Undirected and wide, at an opacity
+   that reads as light rather than as a second ring. The colour arrives as a
+   custom property so one class serves every tone. */
+.empty-mark {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 0 0 8px var(--empty-halo, rgba(18, 109, 251, 0.05)),
+    0 6px 20px var(--empty-halo, rgba(18, 109, 251, 0.05));
+}
+
 /* The pipeline donut gets a lighter reading of the primary button's lift: the
    same brand-tinted, lit-from-above shadow, softened and scaled down for a
    chart rather than a control. drop-shadow (not box-shadow) so it follows the
@@ -257,6 +348,15 @@
   filter:
     drop-shadow(0 2px 2px rgba(12, 70, 162, 0.12))
     drop-shadow(0 8px 14px rgba(18, 109, 251, 0.2));
+}
+
+/* The same lift for the empty ring, at about a third the strength. The ramp an
+   empty pipeline is drawn in is pale enough that the full shadow spreads wider
+   than the ring itself and reads as haze rather than as depth. */
+.donut-elevated-soft {
+  filter:
+    drop-shadow(0 2px 2px rgba(12, 70, 162, 0.05))
+    drop-shadow(0 8px 14px rgba(18, 109, 251, 0.08));
 }
 
 /* Single-line controls get a fixed 42px height; multi-line fields keep

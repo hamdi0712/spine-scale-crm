@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { ClientHealth, HEALTH_ACTIONS } from "@/lib/health";
 import { HealthBadge, TrendArrow } from "@/components/Badge";
+import EmptyMark from "@/components/EmptyMark";
 import Sparkline from "@/components/Sparkline";
 
 const SPARK_TONE: Record<string, "green" | "amber" | "red" | "neutral"> = {
@@ -68,8 +69,11 @@ export default function ClientHealthList({
 }) {
   if (rows.length === 0 && !teaser) {
     return (
-      <div className="py-6">
-        <p className="text-sm text-muted">Your next client will show up here</p>
+      <div className="px-2 py-8 text-center">
+        <EmptyMark icon="clients" tone="teal" />
+        <p className="mt-4 text-sm text-muted">
+          Your next client will show up here
+        </p>
         <Link
           href="/clients/new"
           className="mt-2 inline-block text-xs font-medium text-accent hover:underline"

@@ -150,51 +150,17 @@ model DiscoveryCandidate {
   @@index([batchLabel])
 }
 
-// The dashboard's AI notes — one short paragraph on what most needs attention
-// today, and the cache that stops it being rewritten on every page load.
-//
-// Exactly one row, at the fixed id in src/lib/dailyDigest.ts, on the same terms
-// as PipelineSettings below: every read is a findUnique on that id and every
-// write an upsert of it, so there is no path that creates a second row. No row
-// at all is the normal state of a fresh install and reads as "nothing written
-// yet".
-//
-// This is a cache and nothing else. Every number the paragraph talks about is
-// counted live from the records that own it at the moment the digest is
-// written — nothing here is a source of truth for anything, and deleting the
-// row costs one model call and no information. That is why the snapshot is
-// stored beside the text: a paragraph two hours old should be read against the
-// numbers it was actually written from, not against today's.
-model DailyDigest {
-  id String @id
-
-  // The paragraph, as the model wrote it, held to a length by
-  // src/lib/dailyDigest.ts on the way in.
-  body String
-
-  // The counts the paragraph was written from, as JSON — read back through
-  // parseDigestSnapshot(), which never throws on a row written by an older
-  // shape. Shown under the note so what it read is visible beside what it said.
-  snapshot String
-
-  // When the model wrote it. The freshness rule is one constant
-  // (DIGEST_MAX_AGE_MS) and this is the only thing it is measured against.
-  generatedAt DateTime
-
-  updatedAt DateTime @updatedAt
-}
-
 model Lead {
-  id           String     @id @default(cuid())
+  id           String    @id @default(cuid())
   clinicName   String
   contactName  String?
   phone        String?
   email        String?
   leadSource   String?
-  stage        String     @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST
+  stage        String    @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST
   estValue     Float?
   nextFollowUp DateTime?
-  archived     Boolean    @default(false) // set when converted to a client (or otherwise closed out)
+  archived     Boolean   @default(false) // set when converted to a client (or otherwise closed out)
 
   // Prospecting detail, mostly arriving through the CSV import
   // (src/lib/leadImport.ts) but editable by hand like everything else.
@@ -234,9 +200,9 @@ model Lead {
   // forever. The ads signal is left freeform on purpose — "3 active ads,
   // running 4mo" is the useful shape, and no schema of ours would survive the
   // next actor's idea of how to report it.
-  metaAdsSignal    String?
-  reviewCount      Int?
-  websiteNotes     String? // crawled copy, as long as the actor returned it
+  metaAdsSignal String?
+  reviewCount   Int?
+  websiteNotes  String? // crawled copy, as long as the actor returned it
 
   // When the enrichment run last wrote anything at all. One date for the whole
   // record rather than one per field: the run does all four actors together,
@@ -258,38 +224,38 @@ model Lead {
   // and connectionRequestSentAt above is where that is recorded.
   outreachHook String?
 
-  notes        LeadNote[]
-  calls        Call[]
-  activity     ActivityLog[]
-  client       Client?
+  notes     LeadNote[]
+  calls     Call[]
+  activity  ActivityLog[]
+  client    Client?
   // The discovery candidate this lead was promoted from, where it came that
   // way. Leads added by hand have none, which is the whole difference the
   // field records.
-  candidate    DiscoveryCandidate?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  candidate DiscoveryCandidate?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
 
   // ICP scorecard. Only the raw answers live here — the total (out of 10) and
   // the A/B/C tier are derived in src/lib/icp.ts so re-tuning the framework
   // never needs a migration or a backfill.
 
   // Layer 1 — hard disqualifiers. Any one of these true stops the scoring.
-  icpDqSurgicalPractice Boolean   @default(false)
-  icpDqSoloNoStaff      Boolean   @default(false)
-  icpDqFranchiseLocked  Boolean   @default(false)
-  icpDqSystemComplete   Boolean   @default(false)
-  icpDqOutOfRegion      Boolean   @default(false)
+  icpDqSurgicalPractice Boolean @default(false)
+  icpDqSoloNoStaff      Boolean @default(false)
+  icpDqFranchiseLocked  Boolean @default(false)
+  icpDqSystemComplete   Boolean @default(false)
+  icpDqOutOfRegion      Boolean @default(false)
   icpDqTriggered        String? // labels of whichever disqualifiers fired, stamped on save
 
   // Scored categories. Null until the lead has been scored on that category.
-  icpStaffSize          Int? // A — Staff Size Fit, 0–2
-  icpPackageEconomics   Int? // B — Package / Consult Economics, 0–3
-  icpBudgetSignal       Int? // C — Budget Signal, 0–2
+  icpStaffSize        Int? // A — Staff Size Fit, 0–2
+  icpPackageEconomics Int? // B — Package / Consult Economics, 0–3
+  icpBudgetSignal     Int? // C — Budget Signal, 0–2
 
   // D — Automation Gap. Each gap found is worth 1 point, 3 max.
-  icpGapBooking     Boolean   @default(false)
-  icpGapReviews     Boolean   @default(false)
-  icpGapRemarketing Boolean   @default(false)
+  icpGapBooking     Boolean @default(false)
+  icpGapReviews     Boolean @default(false)
+  icpGapRemarketing Boolean @default(false)
 
   icpScoredAt DateTime? // null = never scored; drives whether a tier badge shows
   icpNotes    String?
@@ -341,12 +307,12 @@ model Client {
   notes         String?
   leadId        String?         @unique
   lead          Lead?           @relation(fields: [leadId], references: [id])
-  checklist    ChecklistItem[]
-  reports      WeeklyReport[]
-  calls        Call[]
-  activity     ActivityLog[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  checklist     ChecklistItem[]
+  reports       WeeklyReport[]
+  calls         Call[]
+  activity      ActivityLog[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   // IANA zone id, constrained to the four US zones in src/lib/timezones.ts.
   // Drives the client's local-time badge and the kickoff-call comparison.
@@ -519,11 +485,11 @@ model Persona {
   name         String
   demographics String?
 
-  wantsToBeSeenAs String? // characteristics they want others to see
+  wantsToBeSeenAs   String? // characteristics they want others to see
   believesAboutSelf String? // what they believe about themselves
-  wantsToAchieve String? // what they want to achieve
-  triedAndFailed String? // other solutions tried and failed
-  reasonForFailure String? // why those failed them
+  wantsToAchieve    String? // what they want to achieve
+  triedAndFailed    String? // other solutions tried and failed
+  reasonForFailure  String? // why those failed them
 
   concepts  Concept[]
   createdAt DateTime  @default(now())
@@ -586,16 +552,16 @@ model Concept {
 // points at the one it was duplicated from, so a concept's iteration history
 // stays readable instead of being overwritten in place.
 model Creative {
-  id             String @id @default(cuid())
+  id             String  @id @default(cuid())
   conceptId      String
   concept        Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
   creativeNumber Int     @default(1) // batch/creative number within the concept
   creativeType   String  @default("PHOTO") // PHOTO | VIDEO | UGC
 
-  conceptHeadline String  @default("") // the hook — bold, predominant text
-  adHeadline      String  @default("") // 40–50 characters
-  adCopy          String  @default("")
-  cta             String  @default("")
+  conceptHeadline String @default("") // the hook — bold, predominant text
+  adHeadline      String @default("") // 40–50 characters
+  adCopy          String @default("")
+  cta             String @default("")
 
   // READY is gated on every compliance item being checked — enforced in
   // src/lib/actions/adhub.ts, not by the database.

@@ -10,11 +10,23 @@ import { FocusItem, FocusTone } from "@/lib/focus";
 import { fmtTimeInZone } from "@/lib/timezones";
 import Icon from "@/components/Icons";
 
-const TONE: Record<FocusTone, { chip: string; icon: string }> = {
-  red: { chip: "bg-bad-soft text-bad", icon: "bg-bad-soft text-bad" },
-  amber: { chip: "bg-warn-soft text-warn", icon: "bg-warn-soft text-warn" },
-  blue: { chip: "bg-[#E8F0FE] text-accent", icon: "bg-accent/10 text-accent" },
-  neutral: { chip: "bg-wash text-muted", icon: "bg-wash text-muted" },
+// `box` is the circular checkbox at the head of a row: a ring in the item's own
+// tone with the item's glyph inside it. It is drawn as a checkbox and is not
+// one — these items are finished by acting on the record behind them (holding
+// the call, sending the follow-up), not by ticking a box here, and a checkbox
+// that could be ticked but stored nothing would be a lie about what the row
+// does. The row is a link, as it has always been.
+const TONE: Record<FocusTone, { chip: string; box: string }> = {
+  red: { chip: "bg-bad-soft text-bad", box: "border-bad/35 bg-bad-soft text-bad" },
+  amber: {
+    chip: "bg-warn-soft text-warn",
+    box: "border-warn/35 bg-warn-soft text-warn",
+  },
+  blue: {
+    chip: "bg-[#E8F0FE] text-accent",
+    box: "border-accent/30 bg-accent/10 text-accent",
+  },
+  neutral: { chip: "bg-wash text-muted", box: "border-line bg-wash text-muted" },
 };
 
 // Call times are stored as instants, so the wall-clock reading belongs to
@@ -27,12 +39,13 @@ function Row({ item, mounted }: { item: FocusItem; mounted: boolean }) {
     <li>
       <Link
         href={item.href}
-        className="flex items-center gap-3 rounded-[10px] px-2 py-2.5 hover:bg-wash/70"
+        className="flex items-center gap-3 rounded-[12px] border border-line/70 bg-wash/40 px-3 py-2.5 transition-colors hover:border-line hover:bg-wash/80"
       >
         <span
-          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${tone.icon}`}
+          className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border ${tone.box}`}
+          aria-hidden
         >
-          <Icon name={item.icon} className="h-3.5 w-3.5" />
+          <Icon name={item.icon} className="h-3 w-3" />
         </span>
         <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
         <span
@@ -60,7 +73,7 @@ export default function TodaysFocus({
 
   if (visible.length === 0 && hidden.length === 0) {
     return (
-      <p className="px-2 py-6 text-sm text-muted">
+      <p className="rounded-[12px] border border-line/70 bg-wash/40 px-3 py-5 text-sm text-muted">
         Nothing scheduled, overdue or blocking today.
       </p>
     );
@@ -71,7 +84,9 @@ export default function TodaysFocus({
   // and reads it off this attribute rather than hoisting the state.
   return (
     <div data-focus-expanded={expanded || undefined}>
-      <ul className="-mx-2">
+      {/* Rows are separate tiles now rather than a divided list, so they get
+          space between them instead of a rule. */}
+      <ul className="space-y-2">
         {visible.map((item) => (
           <Row key={item.id} item={item} mounted={mounted} />
         ))}
@@ -82,7 +97,7 @@ export default function TodaysFocus({
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="mt-1 inline-flex items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-xs font-medium text-accent hover:bg-accent/[0.06]"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-[10px] px-2 py-1.5 text-xs font-medium text-accent hover:bg-accent/[0.06]"
         >
           <Icon
             name="chevronDown"

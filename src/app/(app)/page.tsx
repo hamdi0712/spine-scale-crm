@@ -9,12 +9,7 @@ import {
 import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
 import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
 import { fmtMoney } from "@/lib/format";
-import { fmtRelative } from "@/lib/activity";
-import { isDigestFresh } from "@/lib/dailyDigest";
-import { loadDigest } from "@/lib/digestStore";
-import { generateDailyDigest } from "@/lib/actions/dailyDigest";
 import ActivityFeed from "@/components/ActivityFeed";
-import AiNotes from "@/components/AiNotes";
 import BusinessHoursPanel, {
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
@@ -24,6 +19,7 @@ import ClientHealthList, {
 } from "@/components/ClientHealthList";
 import Greeting from "@/components/Greeting";
 import Icon from "@/components/Icons";
+import KpiCard, { KpiTone } from "@/components/KpiCard";
 import PipelineDonut from "@/components/PipelineDonut";
 import TodaysFocus from "@/components/TodaysFocus";
 
@@ -35,6 +31,13 @@ export const dynamic = "force-dynamic";
 // list from.
 const ACTIVITY_ROWS = 3;
 const HEALTH_ROWS = 2;
+
+// One tone per KPI card, in the order the row runs: clients, MRR, pipeline,
+// follow-ups. Blue for the two counting the business as it stands, teal for
+// the money, indigo for the one that is about time running out. Positional
+// rather than keyed off the label, because the labels are composed above and
+// the row's order is what the reader actually sees.
+const KPI_TONES: KpiTone[] = ["blue", "teal", "blue", "indigo"];
 
 export default async function DashboardPage() {
   const now = new Date();
@@ -49,7 +52,6 @@ export default async function DashboardPage() {
     focusCalls,
     focusClients,
     activity,
-    digest,
   ] = await Promise.all([
     prisma.client.findMany({
       where: { status: "ACTIVE" },
@@ -81,10 +83,6 @@ export default async function DashboardPage() {
       orderBy: { createdAt: "desc" },
       take: ACTIVITY_ROWS,
     }),
-    // The cached note only. Writing one is a model call and belongs to an
-    // action the card invokes, never to rendering a page — a dashboard that
-    // waited on DeepSeek before painting would be a dashboard nobody opens.
-    loadDigest(),
   ]);
 
   // ─── Headline numbers ────────────────────────────────────────────────────
@@ -198,15 +196,6 @@ export default async function DashboardPage() {
       }
     : null;
 
-  // ─── AI notes ────────────────────────────────────────────────────────────
-
-  // The card decides whether to ask for a new note; the server decides whether
-  // the one it is handed is still good, because the cache and the clock are
-  // both here. Whether the assist is configured at all is answered here too, as
-  // a boolean — the key itself never leaves the server.
-  const digestFresh = isDigestFresh(digest, now);
-  const digestConfigured = (process.env.DEEPSEEK_API_KEY ?? "").trim() !== "";
-
   // ─── Pipeline snapshot ───────────────────────────────────────────────────
 
   const slices = OPEN_STAGES.map((stage) => ({
@@ -234,34 +223,8 @@ export default async function DashboardPage() {
       </div>
 
       <div className="mt-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
-        {kpis.map((kpi) => (
-          <div key={kpi.label} className="card p-6">
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-xs font-medium tracking-[0.02em] text-muted">
-                {kpi.label}
-              </div>
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-accent/10 text-accent">
-                <Icon name={kpi.icon} />
-              </div>
-            </div>
-            <div className="num mt-2 text-[28px] font-semibold leading-none tracking-tight">
-              {kpi.value}
-            </div>
-            <div
-              className={`mt-2.5 flex items-center gap-1 text-xs ${
-                kpi.tone === "up"
-                  ? "text-ok"
-                  : kpi.tone === "alert"
-                    ? "text-bad"
-                    : "text-muted"
-              }`}
-            >
-              {kpi.tone !== "flat" && (
-                <Icon name="arrowUp" className="h-3.5 w-3.5" />
-              )}
-              {kpi.delta}
-            </div>
-          </div>
+        {kpis.map((kpi, i) => (
+          <KpiCard key={kpi.label} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
       </div>
 
@@ -282,13 +245,19 @@ export default async function DashboardPage() {
         <section className="card self-stretch p-6">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
+            {/* Nothing wrong is stated quietly: a muted pill whose only colour
+                is the dot. Something overdue keeps the red — an understated
+                alert is not an alert — but takes the same pill, so the two
+                states are one object in two tones rather than two objects. */}
             <span
-              className={`inline-flex items-center gap-2 text-xs font-medium ${
-                summary.overdue > 0 ? "text-bad" : "text-ok"
+              className={`inline-flex h-[24px] items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium ${
+                summary.overdue > 0
+                  ? "bg-bad-soft text-bad"
+                  : "bg-wash text-muted"
               }`}
             >
               <span
-                className={`h-2 w-2 rounded-full ${
+                className={`h-1.5 w-1.5 rounded-full ${
                   summary.overdue > 0 ? "bg-bad" : "bg-ok"
                 }`}
                 aria-hidden
@@ -299,8 +268,16 @@ export default async function DashboardPage() {
             </span>
           </div>
 
-          <div className="mt-4 flex items-center gap-4 rounded-xl bg-accent/[0.06] p-4">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-accent/10 text-accent">
+          {/* The banner is the one lit surface inside a white card: a shallow
+              blue gradient with a pale edge, so the headline sits on glass
+              rather than on a flat tint. */}
+          <div
+            className="mt-4 flex items-center gap-4 rounded-[18px] border border-[#DCE8FB] p-4"
+            style={{
+              backgroundImage: "linear-gradient(135deg, #F1F5FF, #E7F2FF)",
+            }}
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-white/70 text-accent shadow-[0_1px_2px_rgba(28,27,39,0.06)]">
               <Icon name="bell" />
             </span>
             <span className="min-w-0 flex-1">
@@ -326,38 +303,23 @@ export default async function DashboardPage() {
           <TodaysFocus visible={visible} hidden={hidden} />
         </section>
 
-        <section className="card p-6">
+        {/* The one dark surface on the dashboard, and it earns it by being
+            about somewhere else: every other card counts this agency's own
+            records, and this one is four clocks in other people's daylight.
+            Text goes to white and its supporting tiers to white at reduced
+            opacity — .text-muted is a grey mixed for paper. */}
+        <section className="hero-navy p-6">
           <div className="flex items-center justify-between gap-3">
-            <h2 className="display flex items-center gap-2.5 text-xl font-semibold">
-              <Icon name="clock" className="h-[18px] w-[18px] text-accent" />
+            <h2 className="display flex items-center gap-2.5 text-xl font-semibold text-white">
+              <Icon name="clock" className="h-[18px] w-[18px] text-[#7FB0F5]" />
               US business hours
             </h2>
-            <span className="text-xs text-muted">9–5 local, Mon–Fri</span>
+            <span className="text-xs text-white/60">9–5 local, Mon–Fri</span>
           </div>
-          <BusinessHoursPanel />
+          <div className="mt-5">
+            <BusinessHoursPanel />
+          </div>
         </section>
-      </div>
-
-      {/* Directly under Now, and full width rather than beside it: the note is
-          prose about everything on this page, and a column of it wedged next to
-          a list would read as a third feed. Its own paragraph is held to
-          max-w-3xl inside the card so the lines stay readable on a wide
-          screen. */}
-      <div className="mt-6">
-        <AiNotes
-          generate={generateDailyDigest}
-          initial={
-            digest
-              ? {
-                  body: digest.body,
-                  snapshot: digest.snapshot,
-                  age: fmtRelative(digest.generatedAt, now),
-                }
-              : null
-          }
-          stale={!digestFresh}
-          configured={digestConfigured}
-        />
       </div>
 
       {/* These three always stand level, in every state — an empty feed, a
@@ -390,6 +352,7 @@ export default async function DashboardPage() {
                   : null,
             }))}
             now={now}
+            illustrateEmpty
           />
         </section>
 

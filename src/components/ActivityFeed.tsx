@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 import { activityIcon, fmtRelative } from "@/lib/activity";
+import EmptyMark from "@/components/EmptyMark";
 import Icon from "@/components/Icons";
 
 export interface ActivityEntry {
@@ -33,17 +34,27 @@ function Row({ entry, now }: { entry: ActivityEntry; now: Date }) {
 export default function ActivityFeed({
   entries,
   now,
+  // The dashboard card draws its empty state as a composition — a glyph over
+  // the copy. Off by default, so /activity, which is a page rather than a card
+  // and has room to say more, keeps the plain paragraph it has always had.
+  illustrateEmpty = false,
 }: {
   entries: ActivityEntry[];
   now: Date;
+  illustrateEmpty?: boolean;
 }) {
   if (entries.length === 0) {
-    return (
-      <p className="py-6 text-sm text-muted">
-        No milestones logged yet. Converting a lead, generating a report,
-        signing a contract, collecting an invoice, a health change or finishing
-        onboarding will each land here.
-      </p>
+    const copy =
+      "No milestones logged yet. Converting a lead, generating a report, signing a contract, collecting an invoice, a health change or finishing onboarding will each land here.";
+    return illustrateEmpty ? (
+      <div className="px-2 py-8 text-center">
+        <EmptyMark icon="pulse" tone="blue" />
+        <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-muted">
+          {copy}
+        </p>
+      </div>
+    ) : (
+      <p className="py-6 text-sm text-muted">{copy}</p>
     );
   }
   return (

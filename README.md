@@ -55,6 +55,14 @@ again.
   follow-ups due in 7 days), then two panels side by side and three cards
   below.
 
+  The curve along the bottom of each KPI card is ornament, not data. There is
+  no stored history of what MRR or pipeline value was last month, so there is
+  nothing to plot; it is the same path on all four cards for that reason, since
+  four different-looking curves would read as four different trends. The same
+  restraint governs the numbers above them — "added this month" is shown
+  because the date each client went active is recorded, and no month-on-month
+  percentage is shown because nothing in the database supports one.
+
   **Now** carries **Today's focus**: one merged list of everything that wants
   doing today, drawn from four places and ordered by urgency — calls scheduled
   for today or already overdue (soonest first), then onboarding items that are
@@ -70,19 +78,6 @@ again.
   opening-soon / closed badge per zone, on 9–5 local Monday to Friday. It
   deliberately does not suggest a best time to prospect — nothing in the
   reporting data supports one yet.
-
-  **AI notes**, directly under Now, is one short paragraph on what most needs
-  attention today. Everything it is given is counted here first — active
-  clients, who is at risk and why, follow-ups and calls already overdue, how
-  many candidates are waiting in the Discovery queue, how many were promoted
-  this week — and the model's only job is to say which of it matters most and
-  why that one rather than the others. The counts it read are printed under the
-  paragraph in the app's own words, so a note that misreads one is caught by
-  the person reading it rather than believed. It is cached for four hours: the
-  dashboard renders whatever is stored and asks for a new note only when that
-  one has aged out, or when you press **Refresh note**. It changes nothing and
-  nothing downstream reads it. With no `DEEPSEEK_API_KEY` set the card says so
-  once, quietly, and the rest of the dashboard is unaffected.
 
   **Recent activity** is the milestone feed (below), **Client health** ranks
   the live clients worst-first with a sparkline of recent show rate, and
