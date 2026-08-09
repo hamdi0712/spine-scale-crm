@@ -23,8 +23,10 @@ import {
   DigestResult,
   DigestSnapshot,
   digestBasedOn,
+  segmentNote,
 } from "@/lib/dailyDigest";
 import AiButton from "@/components/AiButton";
+import AiMark from "@/components/AiMark";
 
 interface Note {
   body: string;
@@ -93,9 +95,10 @@ export default function AiNotes({
   }, []);
 
   return (
-    <section className="card p-6">
+    <section className="card-ai p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="display flex items-center gap-2.5 text-xl font-semibold">
+          <AiMark />
           AI notes
           {note && (
             <span className="text-xs font-normal text-muted">{note.age}</span>
@@ -130,12 +133,34 @@ export default function AiNotes({
 
       {note ? (
         <>
-          <p className="mt-4 max-w-3xl text-sm leading-relaxed">{note.body}</p>
-          {/* The counts it was handed, in the app's own words. Kept small and
-              muted: it is the receipt for the paragraph, not a second KPI row. */}
-          <p className="num mt-2.5 text-xs leading-relaxed text-muted">
-            Read from {digestBasedOn(note.snapshot).join(" · ")}
+          {/* leading-7 rather than leading-relaxed: the chips are taller than
+              the text they sit in, and at the tighter leading successive lines
+              would touch. */}
+          <p className="mt-4 max-w-3xl text-sm leading-7">
+            {segmentNote(
+              note.body,
+              note.snapshot.atRiskNames.map((c) => c.clinicName),
+            ).map((segment, i) =>
+              segment.entity ? (
+                <span key={i} className="chip-ai">
+                  {segment.text}
+                </span>
+              ) : (
+                segment.text
+              ),
+            )}
           </p>
+          {/* The counts it was handed, in the app's own words — one pill each.
+              Muted on purpose: it is the receipt for the paragraph above, and a
+              row of coloured badges here would compete with the KPI cards for
+              the same job. */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {digestBasedOn(note.snapshot).map((stat) => (
+              <span key={stat} className="chip-stat num">
+                {stat}
+              </span>
+            ))}
+          </div>
           {/* A stored note outlives the key that wrote it. Saying so beats
               both alternatives: hiding a good note, and showing it beside a
               notice claiming the feature is off. */}

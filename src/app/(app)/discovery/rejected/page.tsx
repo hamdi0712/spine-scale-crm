@@ -127,7 +127,14 @@ export default async function RejectedCandidatesPage({
             const breakdown = parseBreakdown(candidate.icpBreakdown);
             const promote = promoteDiscoveryCandidate.bind(null, candidate.id);
             return (
-              <div key={candidate.id} className="card">
+              // A flagged row wears the same violet-edged glow the sweep's own
+              // panel does, so the thing the sweep marked and the sweep that
+              // marked it are visibly the same feature. Everything else about
+              // the row is unchanged — this is still a rejection, shown in full.
+              <div
+                key={candidate.id}
+                className={candidate.secondLookFlagged ? "card-ai" : "card"}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2.5">

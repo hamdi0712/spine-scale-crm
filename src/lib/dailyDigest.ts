@@ -264,6 +264,70 @@ function readNames(raw: unknown): { clinicName: string; reason: string }[] {
   });
 }
 
+// ─── Naming the clinic in the sentence ─────────────────────────────────────
+
+// One run of the note's text, and whether it is a clinic the note was handed by
+// name. The card renders an entity run as a tinted chip and everything else as
+// prose.
+export interface NoteSegment {
+  text: string;
+  entity: boolean;
+}
+
+// Splits the note around the clinic names it was given.
+//
+// Only names from the snapshot are marked, and that limit is the feature rather
+// than a shortcut: those are the clinics the app itself named in the prompt, so
+// a chip is the app recognising its own record rather than the card guessing at
+// which capitalised words in a generated paragraph are real. A clinic the model
+// mentioned that was never in the snapshot stays plain text — as it should,
+// since nothing here can vouch for it.
+//
+// Matching is case-insensitive but the note's own casing is what renders, and a
+// name only matches on word boundaries: "Harbor Chiropractic" must not light up
+// inside "Harborview Chiropractic". Longest names first, so a clinic whose name
+// contains another clinic's name is chipped whole.
+export function segmentNote(body: string, names: string[]): NoteSegment[] {
+  const wanted = Array.from(
+    new Set(names.map((n) => n.trim()).filter((n) => n !== "")),
+  ).sort((a, b) => b.length - a.length);
+  if (wanted.length === 0) return [{ text: body, entity: false }];
+
+  const haystack = body.toLowerCase();
+  const segments: NoteSegment[] = [];
+  let plain = "";
+  let i = 0;
+
+  const push = (text: string, entity: boolean) => {
+    if (text !== "") segments.push({ text, entity });
+  };
+
+  while (i < body.length) {
+    const hit = wanted.find((name) => {
+      const lower = name.toLowerCase();
+      if (!haystack.startsWith(lower, i)) return false;
+      return (
+        !isWordChar(body[i - 1]) && !isWordChar(body[i + name.length])
+      );
+    });
+    if (hit) {
+      push(plain, false);
+      plain = "";
+      push(body.slice(i, i + hit.length), true);
+      i += hit.length;
+      continue;
+    }
+    plain += body[i];
+    i += 1;
+  }
+  push(plain, false);
+  return segments;
+}
+
+function isWordChar(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9]/.test(char);
+}
+
 // What the note was written from, in the app's own words, for the line under
 // it. The counts are shown rather than only sent, so a paragraph that got a
 // number wrong is caught by the reader rather than believed.

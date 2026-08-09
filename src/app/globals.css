@@ -81,6 +81,34 @@
   .card {
     @apply overflow-hidden rounded-2xl border border-line bg-surface shadow-card;
   }
+  /* A card whose whole subject is a model's reading — the dashboard's AI
+     notes, the rejected list's second-look sweep. Same shape as .card to the
+     pixel; the border picks up the ai violet and the glow below replaces the
+     flat card shadow. Nothing that merely contains an AI control wears this,
+     only a panel that is one. */
+  .card-ai {
+    @apply overflow-hidden rounded-2xl border border-ai/25 bg-surface;
+  }
+  /* The gradient mark that stands at the head of an AI panel — a rounded
+     square in the button's own violet, with a sparkle in it. Same 10px radius
+     and same footprint as the tinted icon squares on the KPI cards, so it sits
+     in the row they established rather than starting a second one. Rendered
+     through <AiMark>, which carries the icon and the sizes. */
+  .ai-mark {
+    @apply inline-flex shrink-0 items-center justify-center rounded-[10px] text-white;
+  }
+  /* A name inside a sentence the model wrote — the clinic it is telling you to
+     deal with today. Tinted rather than bolded: the paragraph stays prose, and
+     the eye still lands on the thing that has to be acted on. */
+  .chip-ai {
+    @apply mx-[1px] inline-flex items-center rounded-md bg-ai/10 px-1.5 font-medium text-ai;
+  }
+  /* One count, in its own pill. The muted chip the Ad Hub already uses for a
+     fact that is not a status, reused here so the receipt under an AI note and
+     a creative's type chip are the same object. */
+  .chip-stat {
+    @apply inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full bg-wash px-2.5 text-xs font-medium text-muted;
+  }
   .th {
     @apply border-b border-line px-4 py-3 text-left text-xs font-medium tracking-[0.02em] text-muted;
   }
@@ -180,6 +208,33 @@
    recognisably the AI one; the lift and the bloom go. */
 .btn-ai:disabled {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* The AI panel's glow — the button's ambient halo, scaled for something the
+   size of a card and pulled right down. Two undirected violet bloods over the
+   card's own contact shadow, at roughly a fifth of the button's strength: at
+   the button's intensity a full-width card would light the page, and this has
+   to sit in a column beside plain white cards without shouting over them.
+
+   The glow is the point rather than the elevation, so there is no wide
+   directional shadow here — a card does not hover, it is lit. */
+.card-ai {
+  box-shadow:
+    0 1px 2px rgba(28, 27, 39, 0.05),
+    0 0 20px rgba(124, 58, 237, 0.1),
+    0 0 52px rgba(124, 58, 237, 0.07);
+}
+
+/* The gradient in the mark is the button's, top to bottom, so the two read as
+   one family across a card. The glow under it is tighter and weaker again —
+   it is a 36px square, and the button's halo around something this small would
+   be a smudge. */
+.ai-mark {
+  background-image: linear-gradient(to bottom, #a78bfa, #4b32c3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 1px 2px rgba(49, 30, 122, 0.28),
+    0 0 12px rgba(124, 58, 237, 0.35);
 }
 
 /* The active nav card borrows the primary button's lift — a tight contact

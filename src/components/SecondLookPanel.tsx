@@ -21,6 +21,7 @@ import {
   summariseRun,
 } from "@/lib/secondLook";
 import AiButton from "@/components/AiButton";
+import AiMark from "@/components/AiMark";
 
 export default function SecondLookPanel({
   check,
@@ -64,16 +65,23 @@ export default function SecondLookPanel({
     }
   }
 
+  // The AI notes card's treatment, at panel scale: the same violet-edged glow
+  // and the same gradient mark, so the app's two model-read surfaces are
+  // recognisably the same thing on two different pages. The 10px radius stays —
+  // this sits inside a page of cards rather than being one.
   return (
-    <div className="mt-8 rounded-[10px] border border-line bg-wash/50 p-4">
+    <div className="card-ai mt-8 !rounded-[10px] p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Second looks</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
-            {rejected === 0
-              ? "Nothing has been rejected yet, so there is nothing to re-read."
-              : "Re-reads every rejection above against the promotion bar and the reasoning that ended each run, and marks the ones worth a second human look — a score that landed just under the bar, or a disqualifier whose stated reason does not really establish it. It flags; it never promotes."}
-          </p>
+        <div className="flex min-w-0 items-start gap-2.5">
+          <AiMark size="sm" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Second looks</p>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              {rejected === 0
+                ? "Nothing has been rejected yet, so there is nothing to re-read."
+                : "Re-reads every rejection above against the promotion bar and the reasoning that ended each run, and marks the ones worth a second human look — a score that landed just under the bar, or a disqualifier whose stated reason does not really establish it. It flags; it never promotes."}
+            </p>
+          </div>
         </div>
         <AiButton
           onClick={() => void run()}
