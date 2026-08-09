@@ -46,6 +46,14 @@
   .btn-primary {
     @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-accent px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
   }
+  /* The AI button. Every control that spends a model call wears this and
+     nothing else does, so a violet pill with a sparkle on it always means the
+     same thing. Layout is the primary button's to the pixel — same height,
+     radius, padding, gap and label size — because this is a colour treatment,
+     not a second shape. Use it through <AiButton>, which carries the icon. */
+  .btn-ai {
+    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-ai-deep px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ai/40;
+  }
   .btn-danger {
     @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-bad/30 bg-transparent px-[18px] text-sm font-medium text-bad hover:bg-bad-soft/60 focus:outline-none;
   }
@@ -72,6 +80,34 @@
   }
   .card {
     @apply overflow-hidden rounded-2xl border border-line bg-surface shadow-card;
+  }
+  /* A card whose whole subject is a model's reading — the dashboard's AI
+     notes, the rejected list's second-look sweep. Same shape as .card to the
+     pixel; the border picks up the ai violet and the glow below replaces the
+     flat card shadow. Nothing that merely contains an AI control wears this,
+     only a panel that is one. */
+  .card-ai {
+    @apply overflow-hidden rounded-2xl border border-ai/25 bg-surface;
+  }
+  /* The gradient mark that stands at the head of an AI panel — a rounded
+     square in the button's own violet, with a sparkle in it. Same 10px radius
+     and same footprint as the tinted icon squares on the KPI cards, so it sits
+     in the row they established rather than starting a second one. Rendered
+     through <AiMark>, which carries the icon and the sizes. */
+  .ai-mark {
+    @apply inline-flex shrink-0 items-center justify-center rounded-[10px] text-white;
+  }
+  /* A name inside a sentence the model wrote — the clinic it is telling you to
+     deal with today. Tinted rather than bolded: the paragraph stays prose, and
+     the eye still lands on the thing that has to be acted on. */
+  .chip-ai {
+    @apply mx-[1px] inline-flex items-center rounded-md bg-ai/10 px-1.5 font-medium text-ai;
+  }
+  /* One count, in its own pill. The muted chip the Ad Hub already uses for a
+     fact that is not a status, reused here so the receipt under an AI note and
+     a creative's type chip are the same object. */
+  .chip-stat {
+    @apply inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full bg-wash px-2.5 text-xs font-medium text-muted;
   }
   .th {
     @apply border-b border-line px-4 py-3 text-left text-xs font-medium tracking-[0.02em] text-muted;
@@ -123,6 +159,82 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 2px 6px rgba(18, 109, 251, 0.3);
   transform: translateY(1px);
+}
+
+/* The AI button is built the same way as the primary one — gradient fill,
+   glossy top edge, bottom bevel, a tight contact shadow to seat the edge and a
+   wide diffuse one for the elevation — recoloured from brand blue to violet:
+   lighter violet at the top, deep indigo at the bottom.
+
+   What it adds is the glow. Two undirected halos, a tight bright one and a
+   wide faint one, both in the ai violet rather than the gradient's indigo, so
+   the pill reads as lit from within rather than merely raised off the page.
+   They sit outside the directional shadows in the list so the elevation still
+   reads underneath the bloom. */
+.btn-ai {
+  background-image: linear-gradient(to bottom, #a78bfa, #4b32c3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.14),
+    0 1px 2px rgba(49, 30, 122, 0.35),
+    0 6px 16px rgba(75, 50, 195, 0.35),
+    0 0 18px rgba(124, 58, 237, 0.5),
+    0 0 38px rgba(124, 58, 237, 0.28);
+  transition:
+    background-image 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.btn-ai:hover:not(:disabled) {
+  background-image: linear-gradient(to bottom, #b8a0fc, #5941d6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.14),
+    0 1px 2px rgba(49, 30, 122, 0.35),
+    0 8px 20px rgba(75, 50, 195, 0.4),
+    0 0 22px rgba(124, 58, 237, 0.6),
+    0 0 46px rgba(124, 58, 237, 0.34);
+}
+.btn-ai:active:not(:disabled) {
+  background-image: linear-gradient(to bottom, #8b5cf6, #3f2aa8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 2px 6px rgba(49, 30, 122, 0.3),
+    0 0 14px rgba(124, 58, 237, 0.4);
+  transform: translateY(1px);
+}
+/* A disabled assist is not waiting to be pressed, and a glow that survives
+   being greyed out would say it is. The fill stays so the button is still
+   recognisably the AI one; the lift and the bloom go. */
+.btn-ai:disabled {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* The AI panel's glow — the button's ambient halo, scaled for something the
+   size of a card and pulled right down. Two undirected violet bloods over the
+   card's own contact shadow, at roughly a fifth of the button's strength: at
+   the button's intensity a full-width card would light the page, and this has
+   to sit in a column beside plain white cards without shouting over them.
+
+   The glow is the point rather than the elevation, so there is no wide
+   directional shadow here — a card does not hover, it is lit. */
+.card-ai {
+  box-shadow:
+    0 1px 2px rgba(28, 27, 39, 0.05),
+    0 0 20px rgba(124, 58, 237, 0.1),
+    0 0 52px rgba(124, 58, 237, 0.07);
+}
+
+/* The gradient in the mark is the button's, top to bottom, so the two read as
+   one family across a card. The glow under it is tighter and weaker again —
+   it is a 36px square, and the button's halo around something this small would
+   be a smudge. */
+.ai-mark {
+  background-image: linear-gradient(to bottom, #a78bfa, #4b32c3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 1px 2px rgba(49, 30, 122, 0.28),
+    0 0 12px rgba(124, 58, 237, 0.35);
 }
 
 /* The active nav card borrows the primary button's lift — a tight contact

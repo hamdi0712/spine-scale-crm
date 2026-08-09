@@ -9,7 +9,12 @@ import {
 import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
 import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
 import { fmtMoney } from "@/lib/format";
+import { fmtRelative } from "@/lib/activity";
+import { isDigestFresh } from "@/lib/dailyDigest";
+import { loadDigest } from "@/lib/digestStore";
+import { generateDailyDigest } from "@/lib/actions/dailyDigest";
 import ActivityFeed from "@/components/ActivityFeed";
+import AiNotes from "@/components/AiNotes";
 import BusinessHoursPanel, {
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
@@ -44,6 +49,7 @@ export default async function DashboardPage() {
     focusCalls,
     focusClients,
     activity,
+    digest,
   ] = await Promise.all([
     prisma.client.findMany({
       where: { status: "ACTIVE" },
@@ -75,6 +81,10 @@ export default async function DashboardPage() {
       orderBy: { createdAt: "desc" },
       take: ACTIVITY_ROWS,
     }),
+    // The cached note only. Writing one is a model call and belongs to an
+    // action the card invokes, never to rendering a page — a dashboard that
+    // waited on DeepSeek before painting would be a dashboard nobody opens.
+    loadDigest(),
   ]);
 
   // ─── Headline numbers ────────────────────────────────────────────────────
@@ -187,6 +197,15 @@ export default async function DashboardPage() {
           LEAD_STAGE_LABELS[teaserLead.stage as LeadStage] ?? teaserLead.stage,
       }
     : null;
+
+  // ─── AI notes ────────────────────────────────────────────────────────────
+
+  // The card decides whether to ask for a new note; the server decides whether
+  // the one it is handed is still good, because the cache and the clock are
+  // both here. Whether the assist is configured at all is answered here too, as
+  // a boolean — the key itself never leaves the server.
+  const digestFresh = isDigestFresh(digest, now);
+  const digestConfigured = (process.env.DEEPSEEK_API_KEY ?? "").trim() !== "";
 
   // ─── Pipeline snapshot ───────────────────────────────────────────────────
 
@@ -317,6 +336,28 @@ export default async function DashboardPage() {
           </div>
           <BusinessHoursPanel />
         </section>
+      </div>
+
+      {/* Directly under Now, and full width rather than beside it: the note is
+          prose about everything on this page, and a column of it wedged next to
+          a list would read as a third feed. Its own paragraph is held to
+          max-w-3xl inside the card so the lines stay readable on a wide
+          screen. */}
+      <div className="mt-6">
+        <AiNotes
+          generate={generateDailyDigest}
+          initial={
+            digest
+              ? {
+                  body: digest.body,
+                  snapshot: digest.snapshot,
+                  age: fmtRelative(digest.generatedAt, now),
+                }
+              : null
+          }
+          stale={!digestFresh}
+          configured={digestConfigured}
+        />
       </div>
 
       {/* These three always stand level, in every state — an empty feed, a
