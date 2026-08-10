@@ -13,14 +13,12 @@ import ActivityFeed from "@/components/ActivityFeed";
 import BusinessHoursPanel, {
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
-import ClientHealthList, {
-  HealthRow,
-  HealthTeaser,
-} from "@/components/ClientHealthList";
+import ClientHealthList, { HealthRow } from "@/components/ClientHealthList";
 import Greeting from "@/components/Greeting";
 import Icon from "@/components/Icons";
 import KpiCard, { Kpi, KpiTone } from "@/components/KpiCard";
 import PipelineDonut from "@/components/PipelineDonut";
+import PipelineStats, { PipelineStat } from "@/components/PipelineStats";
 import TodaysFocus from "@/components/TodaysFocus";
 import UsNightMap from "@/components/UsNightMap";
 
@@ -166,34 +164,6 @@ export default async function DashboardPage() {
       health: computeHealth(client, client.reports),
     }));
 
-  // The spare slot, when there is one, goes to the lead closest to closing —
-  // furthest along the open stages, then the largest of those, then by name so
-  // the pick never wobbles between renders. Better a real thing coming than a
-  // dashed outline of nothing.
-  //
-  // Only when there is already a client to sit above it. With none, the card
-  // has an empty state that says what it is for and offers the one thing there
-  // is to do about it, and a lone dashed row in front of that is worse than
-  // both.
-  const teaserLead =
-    healthRows.length > 0 && healthRows.length < HEALTH_ROWS
-      ? [...openLeads].sort(
-          (a, b) =>
-            OPEN_STAGES.indexOf(b.stage as LeadStage) -
-              OPEN_STAGES.indexOf(a.stage as LeadStage) ||
-            (b.estValue ?? 0) - (a.estValue ?? 0) ||
-            a.clinicName.localeCompare(b.clinicName),
-        )[0]
-      : undefined;
-  const healthTeaser: HealthTeaser | null = teaserLead
-    ? {
-        id: teaserLead.id,
-        clinicName: teaserLead.clinicName,
-        stageLabel:
-          LEAD_STAGE_LABELS[teaserLead.stage as LeadStage] ?? teaserLead.stage,
-      }
-    : null;
-
   // ─── Pipeline snapshot ───────────────────────────────────────────────────
 
   const slices = OPEN_STAGES.map((stage) => ({
@@ -203,6 +173,35 @@ export default async function DashboardPage() {
       .filter((l) => l.stage === stage)
       .reduce((s, l) => s + (l.estValue ?? 0), 0),
   }));
+
+  const atStage = (stage: LeadStage) =>
+    openLeads.filter((l) => l.stage === stage).length;
+
+  // Averaged over the leads that carry an estimate, not over all of them. A
+  // lead nobody has valued yet is an unknown, and counting it as a zero would
+  // report an average that falls every time somebody adds a lead — which is
+  // the opposite of what the number is for. Where none carry one there is
+  // nothing to average and the tile says so with a dash.
+  const valued = openLeads.filter((l) => l.estValue != null);
+  const avgDeal =
+    valued.length > 0
+      ? valued.reduce((s, l) => s + (l.estValue ?? 0), 0) / valued.length
+      : null;
+
+  const pipelineStats: PipelineStat[] = [
+    { key: "newLeads", value: String(atStage("NEW")) },
+    { key: "discovery", value: String(atStage("DISCOVERY")) },
+    { key: "proposals", value: String(atStage("PROPOSAL")) },
+    { key: "negotiating", value: String(atStage("NEGOTIATING")) },
+    {
+      key: "avgDeal",
+      value: avgDeal === null ? "—" : fmtMoney(avgDeal),
+      title:
+        valued.length > 0
+          ? `Averaged over the ${valued.length} open lead${valued.length === 1 ? "" : "s"} that carries an estimate`
+          : "No open lead carries an estimated value yet",
+    },
+  ];
 
   return (
     <div>
@@ -346,10 +345,11 @@ export default async function DashboardPage() {
       </div>
 
       {/* These three always stand level, in every state — an empty feed, a
-          single teaser row and the donut all end up the same height as the
-          tallest of them. None of them expands in place, so there is nothing
-          to make it conditional on: all three "View all" links leave for a
-          page of their own.
+          single client row and the donut all end up the same height as the
+          tallest of them, which is the pipeline card now that it carries a
+          strip of counts under its chart. None of them expands in place, so
+          there is nothing to make it conditional on: all three "View all"
+          links leave for a page of their own.
 
           The stretch reaches the bordered card directly because each section
           carries .card itself and is the grid item — no wrapper in between to
@@ -386,7 +386,7 @@ export default async function DashboardPage() {
               View all
             </Link>
           </div>
-          <ClientHealthList rows={healthRows} teaser={healthTeaser} />
+          <ClientHealthList rows={healthRows} />
         </section>
 
         <section className="card p-6">
@@ -397,6 +397,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <PipelineDonut slices={slices} total={pipelineValue} />
+          <PipelineStats stats={pipelineStats} />
         </section>
       </div>
     </div>

@@ -2,9 +2,13 @@
 // gone, and what the status is asking of you.
 //
 // Only live clients appear. A client still being onboarded has delivery
-// progress, not health, and the clients table shows that instead. Where there
-// are not yet enough of them to fill the card, the spare slot goes to the
-// pipeline rather than to whitespace — see HealthTeaser below.
+// progress, not health, and the clients table shows that instead.
+//
+// With no live clients the card is its empty state — the glyph, what the card
+// will track, and the one thing there is to do about it. It used to preview the
+// nearest lead in the pipeline instead, which put a row about a lead inside a
+// card about clients; the pipeline has two cards of its own on this page and
+// does not need a third.
 
 import Link from "next/link";
 import { ClientHealth, HEALTH_ACTIONS } from "@/lib/health";
@@ -27,52 +31,7 @@ export interface HealthRow {
   health: ClientHealth;
 }
 
-// What fills the card's spare slot when there is one active client but not two:
-// the lead closest to closing, chosen in src/app/(app)/page.tsx. A row here is
-// a promise of what the card will be rather than a placeholder for it — so it
-// is a real link into the pipeline, drawn dashed and muted so it is never
-// mistaken for a client that already exists.
-//
-// It fills a slot; it does not stand in for the card. With no clients at all
-// there is no slot to fill and nothing for the row to sit under, and a lone
-// dashed row is a worse answer than the empty state — which says what the card
-// is for and offers the one thing there is to do about it.
-export interface HealthTeaser {
-  id: string;
-  clinicName: string;
-  stageLabel: string; // "Proposal Sent"
-}
-
-function PipelineTeaser({ teaser }: { teaser: HealthTeaser }) {
-  return (
-    <Link
-      href={`/pipeline/${teaser.id}`}
-      className="mt-3 block rounded-[10px] border border-dashed border-line px-3 py-3 hover:opacity-80"
-    >
-      <span className="flex items-center gap-2.5">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted">
-          {teaser.clinicName}
-        </span>
-        <span className="inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
-          In pipeline
-        </span>
-      </span>
-      <span className="mt-1 block truncate text-xs text-muted">
-        {teaser.stageLabel} · will track health here once active.
-      </span>
-    </Link>
-  );
-}
-
-export default function ClientHealthList({
-  rows,
-  teaser = null,
-}: {
-  rows: HealthRow[];
-  teaser?: HealthTeaser | null;
-}) {
-  // No clients is the empty state, whatever else was passed. A teaser handed in
-  // alongside an empty list is ignored rather than rendered on its own.
+export default function ClientHealthList({ rows }: { rows: HealthRow[] }) {
   if (rows.length === 0) {
     return (
       <div className="px-2 py-8 text-center">
@@ -134,7 +93,6 @@ export default function ClientHealthList({
           </li>
         ))}
       </ul>
-      {teaser && <PipelineTeaser teaser={teaser} />}
     </div>
   );
 }
