@@ -44,17 +44,26 @@ export default function ActivityFeed({
   illustrateEmpty?: boolean;
 }) {
   if (entries.length === 0) {
-    const copy =
-      "No milestones logged yet. Converting a lead, generating a report, signing a contract, collecting an invoice, a health change or finishing onboarding will each land here.";
+    // Two versions of the same sentence, because the two places it appears are
+    // not the same size. The page has room to name all six events; the card is
+    // a third of a dashboard row, where the full list set six lines of grey
+    // under the glyph and turned an empty card into the heaviest thing on the
+    // page. The short one names the shape of what lands here and leaves the
+    // enumeration to the page the "View all" link goes to.
     return illustrateEmpty ? (
       <div className="px-2 py-8 text-center">
         <EmptyMark icon="activity" tone="blue" />
-        <p className="mx-auto mt-4 max-w-xs text-sm leading-relaxed text-muted">
-          {copy}
+        <p className="mt-4 text-sm font-medium">No milestones logged yet</p>
+        <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
+          Conversions, reports, contracts and invoices land here as they happen.
         </p>
       </div>
     ) : (
-      <p className="py-6 text-sm text-muted">{copy}</p>
+      <p className="py-6 text-sm text-muted">
+        No milestones logged yet. Converting a lead, generating a report,
+        signing a contract, collecting an invoice, a health change or finishing
+        onboarding will each land here.
+      </p>
     );
   }
   return (

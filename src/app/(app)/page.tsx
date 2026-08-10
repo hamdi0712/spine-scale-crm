@@ -170,8 +170,13 @@ export default async function DashboardPage() {
   // furthest along the open stages, then the largest of those, then by name so
   // the pick never wobbles between renders. Better a real thing coming than a
   // dashed outline of nothing.
+  //
+  // Only when there is already a client to sit above it. With none, the card
+  // has an empty state that says what it is for and offers the one thing there
+  // is to do about it, and a lone dashed row in front of that is worse than
+  // both.
   const teaserLead =
-    healthRows.length < HEALTH_ROWS
+    healthRows.length > 0 && healthRows.length < HEALTH_ROWS
       ? [...openLeads].sort(
           (a, b) =>
             OPEN_STAGES.indexOf(b.stage as LeadStage) -

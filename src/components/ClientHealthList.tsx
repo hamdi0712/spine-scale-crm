@@ -27,24 +27,27 @@ export interface HealthRow {
   health: ClientHealth;
 }
 
-// What fills the card's spare slot when there are not yet two active clients:
+// What fills the card's spare slot when there is one active client but not two:
 // the lead closest to closing, chosen in src/app/(app)/page.tsx. A row here is
 // a promise of what the card will be rather than a placeholder for it — so it
 // is a real link into the pipeline, drawn dashed and muted so it is never
 // mistaken for a client that already exists.
+//
+// It fills a slot; it does not stand in for the card. With no clients at all
+// there is no slot to fill and nothing for the row to sit under, and a lone
+// dashed row is a worse answer than the empty state — which says what the card
+// is for and offers the one thing there is to do about it.
 export interface HealthTeaser {
   id: string;
   clinicName: string;
   stageLabel: string; // "Proposal Sent"
 }
 
-function PipelineTeaser({ teaser, alone }: { teaser: HealthTeaser; alone: boolean }) {
+function PipelineTeaser({ teaser }: { teaser: HealthTeaser }) {
   return (
     <Link
       href={`/pipeline/${teaser.id}`}
-      className={`block rounded-[10px] border border-dashed border-line px-3 py-3 hover:opacity-80 ${
-        alone ? "" : "mt-3"
-      }`}
+      className="mt-3 block rounded-[10px] border border-dashed border-line px-3 py-3 hover:opacity-80"
     >
       <span className="flex items-center gap-2.5">
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted">
@@ -68,7 +71,9 @@ export default function ClientHealthList({
   rows: HealthRow[];
   teaser?: HealthTeaser | null;
 }) {
-  if (rows.length === 0 && !teaser) {
+  // No clients is the empty state, whatever else was passed. A teaser handed in
+  // alongside an empty list is ignored rather than rendered on its own.
+  if (rows.length === 0) {
     return (
       <div className="px-2 py-8 text-center">
         <EmptyMark icon="clients" tone="teal" />
@@ -94,44 +99,42 @@ export default function ClientHealthList({
   }
   return (
     <div>
-      {rows.length > 0 && (
-        <ul className="divide-y divide-line/60">
-          {rows.map((row) => (
-            <li key={row.id}>
-              {/* Two lines rather than one: the clinic name and the badge are
-                  what the card is for, and squeezing the sparkline in beside
-                  them at this width would truncate both. */}
-              <Link
-                href={`/reporting/${row.id}`}
-                className="block py-3 hover:opacity-80"
-                title={row.health.reason}
-              >
-                <span className="flex items-center gap-2.5">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {row.clinicName}
-                  </span>
-                  <TrendArrow trend={row.health.trend} />
-                  <HealthBadge
-                    status={row.health.status}
-                    reason={row.health.reason}
-                  />
+      <ul className="divide-y divide-line/60">
+        {rows.map((row) => (
+          <li key={row.id}>
+            {/* Two lines rather than one: the clinic name and the badge are
+                what the card is for, and squeezing the sparkline in beside
+                them at this width would truncate both. */}
+            <Link
+              href={`/reporting/${row.id}`}
+              className="block py-3 hover:opacity-80"
+              title={row.health.reason}
+            >
+              <span className="flex items-center gap-2.5">
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                  {row.clinicName}
                 </span>
-                <span className="mt-1 flex items-center gap-2.5">
-                  <span className="min-w-0 flex-1 truncate text-xs text-muted">
-                    {row.detail}
-                  </span>
-                  <Sparkline
-                    points={row.health.weeks.map((w) => w.showRate)}
-                    tone={SPARK_TONE[row.health.status]}
-                    label={`${row.clinicName} — ${HEALTH_ACTIONS[row.health.status]}`}
-                  />
+                <TrendArrow trend={row.health.trend} />
+                <HealthBadge
+                  status={row.health.status}
+                  reason={row.health.reason}
+                />
+              </span>
+              <span className="mt-1 flex items-center gap-2.5">
+                <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                  {row.detail}
                 </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-      {teaser && <PipelineTeaser teaser={teaser} alone={rows.length === 0} />}
+                <Sparkline
+                  points={row.health.weeks.map((w) => w.showRate)}
+                  tone={SPARK_TONE[row.health.status]}
+                  label={`${row.clinicName} — ${HEALTH_ACTIONS[row.health.status]}`}
+                />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {teaser && <PipelineTeaser teaser={teaser} />}
     </div>
   );
 }
