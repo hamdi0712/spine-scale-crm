@@ -14,6 +14,7 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/actions/auth";
+import AiButton from "@/components/AiButton";
 import Icon from "@/components/Icons";
 import { LogoIconChip } from "@/components/Logo";
 
@@ -71,9 +72,11 @@ const NAV_MOTION =
 export default function Sidebar({
   collapsed,
   onToggle,
+  onOpenCopilot,
 }: {
   collapsed: boolean;
   onToggle: () => void;
+  onOpenCopilot: () => void;
 }) {
   const pathname = usePathname();
   return (
@@ -136,6 +139,22 @@ export default function Sidebar({
           );
         })}
       </nav>
+      {/* The copilot's trigger. It wears .btn-ai through <AiButton> for the
+          reason every other assist does: a violet pill with a sparkle on it
+          spends a model call, and this is the only control in the nav that
+          does. It is a button rather than a nav item because it opens a panel
+          over whatever page you are on instead of taking you somewhere —
+          which is also why it sits below the nav rather than in it. */}
+      <div className={`py-3 ${collapsed ? "px-2" : "px-3"}`}>
+        <AiButton
+          onClick={onOpenCopilot}
+          title={collapsed ? "AI Copilot" : undefined}
+          aria-label={collapsed ? "AI Copilot" : undefined}
+          className={`w-full ${collapsed ? "justify-center !px-0" : ""}`}
+        >
+          {!collapsed && "AI Copilot"}
+        </AiButton>
+      </div>
       <form
         action={logout}
         className={`border-t border-line/60 py-3 ${collapsed ? "px-2" : "px-3"}`}

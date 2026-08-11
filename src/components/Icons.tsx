@@ -134,6 +134,7 @@ const PATHS: Record<string, React.ReactNode> = {
       <circle cx="8.6" cy="8.6" r="1.2" />
     </>
   ),
+  close: <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />,
   arrowUp: <path d="M12 19V6M6.5 11.5L12 6l5.5 5.5" />,
   arrowDown: <path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" />,
   arrowRight: <path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5" />,
