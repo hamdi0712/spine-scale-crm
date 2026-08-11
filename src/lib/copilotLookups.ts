@@ -1,0 +1,891 @@
+// The eight things the copilot can look up, and the only way it reaches the
+// database.
+//
+// Read this file as the copilot's permissions, because that is what it is.
+// The model is never handed Prisma, a query, a table name or a filter it
+// composes itself — it is handed the eight functions below by name, each of
+// which runs a query written here, in full, by hand. There is no
+// prisma.*.create, .update, .upsert or .delete anywhere in this file and there
+// must never be one: the read-only guarantee the copilot is sold on is this
+// file having no way to write, not a promise the model is asked to keep.
+//
+// What each function returns is composed for a reader rather than dumped: the
+// same labels and computed values the pages show (health status and its
+// reason, ICP tier and its action, KPI flags against their bands) so an answer
+// about a client says what the client page says. Ids come back too, because
+// the summary lookups are how the model finds the id a detail lookup needs.
+//
+// Scraped text is the one thing handled specially. Website crawls and review
+// counts come from third-party pages nobody here wrote, so they are nested
+// under UNTRUSTED_CONTENT_KEY with the warning that names them for what they
+// are. The system prompt in src/lib/copilot.ts is the other half of that; the
+// fence is worth nothing without it and it is worth nothing without the fence.
+//
+// Server-only: this imports Prisma. It is called from
+// src/lib/actions/copilot.ts and from nowhere else.
+
+import { prisma } from "@/lib/prisma";
+import {
+  UNTRUSTED_CONTENT_KEY,
+  UNTRUSTED_CONTENT_WARNING,
+} from "@/lib/copilot";
+import {
+  CLIENT_STATUS_LABELS,
+  ClientStatus,
+  LEAD_STAGES,
+  LEAD_STAGE_LABELS,
+  LeadStage,
+} from "@/lib/constants";
+import {
+  DISCOVERY_STATUSES,
+  DISCOVERY_STATUS_LABELS,
+  DISCOVERY_STATUS_MEANINGS,
+  DiscoveryStatus,
+  parseBreakdown,
+} from "@/lib/discovery";
+import {
+  HEALTH_ACTIONS,
+  HEALTH_LABELS,
+  HEALTH_WINDOW_WEEKS,
+  computeHealth,
+  isHealthScored,
+} from "@/lib/health";
+import {
+  ICP_CATEGORIES,
+  ICP_DISQUALIFIERS,
+  ICP_GAPS,
+  ICP_MAX_SCORE,
+  ICP_TIER_ACTIONS,
+  ICP_TIER_LABELS,
+  ICP_TIER_ORDER,
+  IcpTier,
+  leadTier,
+  scoreIcp,
+} from "@/lib/icp";
+import { computeMetrics } from "@/lib/kpi";
+import { CALL_STATUS_LABELS, CALL_TYPE_LABELS, isCallOverdue } from "@/lib/calls";
+import {
+  CONTRACT_STATUS_LABELS,
+  INVOICE_STATUS_LABELS,
+  ONBOARDING_TOTAL_STEPS,
+  invoiceTotals,
+  isOnboarding,
+  stepMeta,
+} from "@/lib/onboarding";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
+
+// ─── Ceilings ──────────────────────────────────────────────────────────────
+//
+// Every list here is capped. A lookup's result is going back into a model's
+// context on every subsequent round of the conversation, so an uncapped list
+// is not a big answer — it is a bill that grows with the database. Where a cap
+// bites, the result says so, because a truncated list the model thinks is
+// complete is worse than no list.
+
+const LEADS_MAX = 60;
+const LEAD_NOTES_MAX = 15;
+const CALLS_MAX = 15;
+const DISCOVERY_RECENT_MAX = 12;
+const CLIENTS_MAX = 60;
+const REPORT_WEEKS_MAX = 12;
+const FOLLOW_UPS_MAX = 30;
+const ACTIVITY_MAX = 25;
+
+// How far ahead "coming up" reaches, matching the dashboard's own window.
+const UPCOMING_DAYS = 7;
+
+// How much of a website crawl to pass on. The crawler stores up to 20k
+// characters across three pages; a question about a clinic is answered by the
+// first page of it, and the rest is a blog that would crowd out every other
+// lookup in the conversation.
+const SCRAPED_NOTES_MAX_CHARS = 1500;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// ─── Shared shaping ────────────────────────────────────────────────────────
+
+// Dates go to the model as ISO strings. Unambiguous, sorts correctly, and the
+// model can do the "three weeks ago" arithmetic against `now`, which every
+// result carries.
+function iso(d: Date | null | undefined): string | null {
+  return d ? d.toISOString() : null;
+}
+
+function day(d: Date | null | undefined): string | null {
+  return d ? d.toISOString().slice(0, 10) : null;
+}
+
+function round(n: number | null): number | null {
+  return n === null ? null : Math.round(n * 100) / 100;
+}
+
+// The fence around third-party text. Null when a record has none, so a clinic
+// that has never been enriched does not arrive carrying an empty warning.
+function scraped(record: {
+  websiteNotes: string | null;
+  metaAdsSignal: string | null;
+  reviewCount: number | null;
+}): Record<string, unknown> | null {
+  const { websiteNotes, metaAdsSignal, reviewCount } = record;
+  if (!websiteNotes && !metaAdsSignal && reviewCount === null) return null;
+  const notes = websiteNotes?.slice(0, SCRAPED_NOTES_MAX_CHARS) ?? null;
+  return {
+    warning: UNTRUSTED_CONTENT_WARNING,
+    websiteNotes: notes,
+    websiteNotesTruncated:
+      websiteNotes !== null && websiteNotes.length > SCRAPED_NOTES_MAX_CHARS,
+    metaAdsSignal,
+    googleReviewCount: reviewCount,
+  };
+}
+
+function stageLabel(stage: string): string {
+  return LEAD_STAGE_LABELS[stage as LeadStage] ?? stage;
+}
+
+function tierLabel(tier: IcpTier | null): string {
+  return tier === null ? "Not scored" : ICP_TIER_LABELS[tier];
+}
+
+// A list that hit its ceiling says so in the same breath as the count, so the
+// model can qualify an answer instead of stating a total it was not given.
+function listMeta(returned: number, total: number, cap: number) {
+  return {
+    returned,
+    totalMatching: total,
+    truncated: total > cap,
+    ...(total > cap
+      ? {
+          note: `Only the first ${cap} are listed. Say so if the answer depends on the whole list.`,
+        }
+      : {}),
+  };
+}
+
+// ─── 1. Pipeline leads ─────────────────────────────────────────────────────
+
+export async function getPipelineLeads(args: {
+  tier?: string;
+  stage?: string;
+}): Promise<unknown> {
+  const stage =
+    args.stage && (LEAD_STAGES as readonly string[]).includes(args.stage)
+      ? (args.stage as LeadStage)
+      : null;
+  const tier =
+    args.tier === "UNSCORED"
+      ? "UNSCORED"
+      : args.tier && (ICP_TIER_ORDER as string[]).includes(args.tier)
+        ? (args.tier as IcpTier)
+        : null;
+
+  const leads = await prisma.lead.findMany({
+    where: { archived: false, ...(stage ? { stage } : {}) },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  // Tier is computed from the scorecard rather than stored, so it is filtered
+  // here rather than in the query — the same rule the pipeline table follows.
+  const matching = leads.filter((lead) => {
+    if (tier === null) return true;
+    const t = leadTier(lead);
+    return tier === "UNSCORED" ? t === null : t === tier;
+  });
+
+  return {
+    filters: {
+      tier: args.tier ?? "any",
+      stage: stage ? stageLabel(stage) : "any",
+    },
+    ...listMeta(Math.min(matching.length, LEADS_MAX), matching.length, LEADS_MAX),
+    openPipelineValue: matching.reduce((s, l) => s + (l.estValue ?? 0), 0),
+    leads: matching.slice(0, LEADS_MAX).map((lead) => {
+      const tierNow = leadTier(lead);
+      return {
+        id: lead.id,
+        clinicName: lead.clinicName,
+        contactName: lead.contactName,
+        location: lead.location,
+        stage: stageLabel(lead.stage),
+        estValue: lead.estValue,
+        icpTier: tierLabel(tierNow),
+        icpScore:
+          lead.icpScoredAt === null
+            ? null
+            : `${scoreIcp(lead).total} of ${ICP_MAX_SCORE}`,
+        icpAction: tierNow ? ICP_TIER_ACTIONS[tierNow] : null,
+        nextFollowUp: iso(lead.nextFollowUp),
+        leadSource: lead.leadSource,
+        enriched: lead.enrichedAt !== null,
+        connectionRequestSent: lead.connectionRequestSentAt !== null,
+        updatedAt: iso(lead.updatedAt),
+      };
+    }),
+  };
+}
+
+// ─── 2. One lead ───────────────────────────────────────────────────────────
+
+export async function getLeadDetail(args: { id: string }): Promise<unknown> {
+  const lead = await prisma.lead.findUnique({
+    where: { id: args.id },
+    include: {
+      notes: { orderBy: { createdAt: "desc" }, take: LEAD_NOTES_MAX },
+      calls: { orderBy: { scheduledAt: "desc" }, take: CALLS_MAX },
+      client: { select: { id: true, clinicName: true, status: true } },
+      candidate: { select: { id: true, batchLabel: true, source: true } },
+    },
+  });
+  if (!lead) {
+    return {
+      found: false,
+      message:
+        "No lead with that id. Call getPipelineLeads to find the right one — ids are not guessable.",
+    };
+  }
+
+  const score = scoreIcp(lead);
+  const tier = leadTier(lead);
+
+  return {
+    found: true,
+    id: lead.id,
+    clinicName: lead.clinicName,
+    archived: lead.archived,
+    stage: stageLabel(lead.stage),
+    estValue: lead.estValue,
+    nextFollowUp: iso(lead.nextFollowUp),
+    createdAt: iso(lead.createdAt),
+    contact: {
+      contactName: lead.contactName,
+      email: lead.email,
+      phone: lead.phone,
+      location: lead.location,
+      timeZone: lead.timeZone,
+      websiteUrl: lead.websiteUrl,
+      linkedinUrl: lead.linkedinUrl,
+      companyLinkedinUrl: lead.companyLinkedinUrl,
+      facebookUrl: lead.facebookUrl,
+      leadSource: lead.leadSource,
+      connectionRequestSentAt: iso(lead.connectionRequestSentAt),
+    },
+    icp: {
+      scored: lead.icpScoredAt !== null,
+      scoredAt: iso(lead.icpScoredAt),
+      tier: tierLabel(tier),
+      action: tier ? ICP_TIER_ACTIONS[tier] : null,
+      total: lead.icpScoredAt === null ? null : score.total,
+      maxScore: ICP_MAX_SCORE,
+      disqualified: score.disqualified,
+      // Every disqualifier, not only the triggered ones: "nothing disqualifies
+      // this lead" is an answer, and it needs the full list to be one.
+      disqualifiers: ICP_DISQUALIFIERS.map((d) => ({
+        label: d.label,
+        triggered: lead[d.key],
+      })),
+      categories: ICP_CATEGORIES.map((c) => ({
+        letter: c.letter,
+        title: c.title,
+        score: lead[c.key],
+        max: c.max,
+        // Which band that score is, in the framework's own words, so the model
+        // quotes the scorecard rather than paraphrasing a number.
+        band:
+          c.options.find((o) => o.points === lead[c.key])?.label ??
+          "Not scored",
+      })),
+      // Inverted on purpose — a gap is a point, because a gap is what this
+      // agency is hired to fill.
+      gaps: ICP_GAPS.map((g) => ({ label: g.label, present: lead[g.key] })),
+      notes: lead.icpNotes,
+    },
+    enrichment: {
+      enrichedAt: iso(lead.enrichedAt),
+      reviewsCheckedAt: iso(lead.reviewsCheckedAt),
+      staffCountRaw: lead.staffCountRaw,
+      // Written by this app from the evidence, so it is ours rather than
+      // third-party text — it sits outside the fence.
+      outreachHook: lead.outreachHook,
+      [UNTRUSTED_CONTENT_KEY]: scraped(lead),
+    },
+    calls: lead.calls.map((c) => ({
+      type: CALL_TYPE_LABELS[c.type as keyof typeof CALL_TYPE_LABELS] ?? c.type,
+      status:
+        CALL_STATUS_LABELS[c.status as keyof typeof CALL_STATUS_LABELS] ??
+        c.status,
+      scheduledAt: iso(c.scheduledAt),
+      overdue: isCallOverdue(c),
+      notes: c.notes,
+    })),
+    notes: lead.notes.map((n) => ({
+      createdAt: iso(n.createdAt),
+      body: n.body,
+    })),
+    convertedToClient: lead.client
+      ? {
+          id: lead.client.id,
+          clinicName: lead.client.clinicName,
+          status:
+            CLIENT_STATUS_LABELS[lead.client.status as ClientStatus] ??
+            lead.client.status,
+        }
+      : null,
+    cameFromDiscovery: lead.candidate
+      ? { batchLabel: lead.candidate.batchLabel, source: lead.candidate.source }
+      : null,
+  };
+}
+
+// ─── 3. The discovery queue ────────────────────────────────────────────────
+
+export async function getDiscoveryQueueStatus(): Promise<unknown> {
+  const [grouped, recent, settings] = await Promise.all([
+    prisma.discoveryCandidate.groupBy({ by: ["status"], _count: true }),
+    prisma.discoveryCandidate.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: DISCOVERY_RECENT_MAX,
+    }),
+    loadPipelineSettings(),
+  ]);
+
+  const counts = Object.fromEntries(
+    DISCOVERY_STATUSES.map((status) => [
+      DISCOVERY_STATUS_LABELS[status],
+      grouped.find((g) => g.status === status)?._count ?? 0,
+    ]),
+  );
+
+  return {
+    promotionThreshold: `A candidate needs ${settings.promotionThreshold} of ${ICP_MAX_SCORE} to be promoted into the pipeline. Anything below that is rejected.`,
+    countsByStatus: counts,
+    statusMeanings: Object.fromEntries(
+      DISCOVERY_STATUSES.map((s) => [
+        DISCOVERY_STATUS_LABELS[s],
+        DISCOVERY_STATUS_MEANINGS[s],
+      ]),
+    ),
+    unprocessed: grouped
+      .filter((g) =>
+        (["PENDING", "ENRICHING", "SCORED", "FAILED"] as string[]).includes(
+          g.status,
+        ),
+      )
+      .reduce((s, g) => s + g._count, 0),
+    recentCandidates: recent.map((c) => {
+      const breakdown = parseBreakdown(c.icpBreakdown);
+      return {
+        id: c.id,
+        clinicName: c.clinicName,
+        location: c.location,
+        status:
+          DISCOVERY_STATUS_LABELS[c.status as DiscoveryStatus] ?? c.status,
+        batchLabel: c.batchLabel,
+        source: c.source,
+        icpTotal: c.icpTotal,
+        icpTier: c.icpTier,
+        disqualifiedReason: c.disqualifiedReason,
+        failureReason: c.failureReason,
+        // The model's own summary from the scoring run, where there was one.
+        // It is this app's text about the candidate, not scraped copy.
+        scoringSummary: breakdown?.summary || null,
+        flaggedForSecondLook: c.secondLookFlagged,
+        secondLookReason: c.secondLookReason,
+        processedAt: iso(c.processedAt),
+        [UNTRUSTED_CONTENT_KEY]: scraped(c),
+      };
+    }),
+  };
+}
+
+// ─── 4. Client health ──────────────────────────────────────────────────────
+
+export async function getClientHealthSummary(): Promise<unknown> {
+  const clients = await prisma.client.findMany({
+    orderBy: { clinicName: "asc" },
+    include: {
+      reports: { orderBy: { weekStart: "desc" }, take: HEALTH_WINDOW_WEEKS },
+    },
+  });
+
+  const scored = clients.filter((c) => isHealthScored(c.status));
+
+  return {
+    healthWindowWeeks: HEALTH_WINDOW_WEEKS,
+    howHealthWorks:
+      "Health is computed from the last few weekly reports, not typed in. Show rate against target is the core metric; cost per lead never drives the status on its own. Too little reported volume comes back as Ramping rather than as good or bad news.",
+    countsByStatus: Object.fromEntries(
+      (Object.keys(CLIENT_STATUS_LABELS) as ClientStatus[]).map((s) => [
+        CLIENT_STATUS_LABELS[s],
+        clients.filter((c) => c.status === s).length,
+      ]),
+    ),
+    ...listMeta(
+      Math.min(scored.length, CLIENTS_MAX),
+      scored.length,
+      CLIENTS_MAX,
+    ),
+    activeClients: scored.slice(0, CLIENTS_MAX).map((client) => {
+      const health = computeHealth(client, client.reports);
+      return {
+        id: client.id,
+        clinicName: client.clinicName,
+        packageName: client.packageName,
+        monthlyFee: client.monthlyFee,
+        activeSince: day(client.activeSince),
+        health: HEALTH_LABELS[health.status],
+        reason: health.reason,
+        whatItAsksOfYou: HEALTH_ACTIONS[health.status],
+        trend: health.trend,
+        manuallyFlagged: health.overridden,
+        bookedConsultsInWindow: health.booked,
+        weeksJudged: health.weeks.length,
+      };
+    }),
+    // Onboarding, paused and churned clients carry no health status by design.
+    // Naming them stops the model reporting an active book of three when there
+    // are seven clients on the shelf.
+    otherClients: clients
+      .filter((c) => !isHealthScored(c.status))
+      .slice(0, CLIENTS_MAX)
+      .map((c) => ({
+        id: c.id,
+        clinicName: c.clinicName,
+        status: CLIENT_STATUS_LABELS[c.status as ClientStatus] ?? c.status,
+        onboardingStep: isOnboarding(c.onboardingStep)
+          ? `${c.onboardingStep} of ${ONBOARDING_TOTAL_STEPS} — ${stepMeta(c.onboardingStep).title}`
+          : null,
+      })),
+  };
+}
+
+// ─── 5. One client ─────────────────────────────────────────────────────────
+
+export async function getClientDetail(args: { id: string }): Promise<unknown> {
+  const client = await prisma.client.findUnique({
+    where: { id: args.id },
+    include: {
+      checklist: { orderBy: { sortOrder: "asc" } },
+      reports: { orderBy: { weekStart: "desc" }, take: REPORT_WEEKS_MAX },
+      invoices: { orderBy: { issuedOn: "desc" } },
+      calls: { orderBy: { scheduledAt: "desc" }, take: CALLS_MAX },
+      lead: { select: { id: true, clinicName: true } },
+    },
+  });
+  if (!client) {
+    return {
+      found: false,
+      message:
+        "No client with that id. Call getClientHealthSummary to find the right one — ids are not guessable.",
+    };
+  }
+
+  const health = isHealthScored(client.status)
+    ? computeHealth(client, client.reports)
+    : null;
+  const done = client.checklist.filter((i) => i.status === "DONE");
+  const blockingOutstanding = client.checklist.filter(
+    (i) => i.blocking && i.status !== "DONE",
+  );
+  const totals = invoiceTotals(client.invoices);
+
+  return {
+    found: true,
+    id: client.id,
+    clinicName: client.clinicName,
+    status: CLIENT_STATUS_LABELS[client.status as ClientStatus] ?? client.status,
+    contact: {
+      contactName: client.contactName,
+      email: client.email,
+      phone: client.phone,
+      timeZone: client.timeZone,
+    },
+    commercials: {
+      packageName: client.packageName,
+      monthlyFee: client.monthlyFee,
+      contractStart: day(client.contractStart),
+      activeSince: day(client.activeSince),
+      contractStatus:
+        CONTRACT_STATUS_LABELS[
+          client.contractStatus as keyof typeof CONTRACT_STATUS_LABELS
+        ] ?? client.contractStatus,
+      invoicesBilled: totals.billed,
+      invoicesCollected: totals.collected,
+      invoicesOutstanding: totals.outstanding,
+      unpaidInvoices: client.invoices
+        .filter((i) => i.status !== "PAID")
+        .map((i) => ({
+          issuedOn: day(i.issuedOn),
+          dueDate: day(i.dueDate),
+          amount: i.amount,
+          status:
+            INVOICE_STATUS_LABELS[
+              i.status as keyof typeof INVOICE_STATUS_LABELS
+            ] ?? i.status,
+          memo: i.memo,
+        })),
+    },
+    onboarding: {
+      inProgress: isOnboarding(client.onboardingStep),
+      step: isOnboarding(client.onboardingStep)
+        ? `${client.onboardingStep} of ${ONBOARDING_TOTAL_STEPS} — ${stepMeta(client.onboardingStep).title}`
+        : "Not running",
+      kickoffAt: iso(client.kickoffAt),
+      phiApproach: client.phiApproach,
+    },
+    delivery: {
+      checklistDone: done.length,
+      checklistTotal: client.checklist.length,
+      // Blocking items are the ones that gate going live, so they are called
+      // out rather than left to be spotted in the list below.
+      blockingOutstanding: blockingOutstanding.map((i) => i.title),
+      checklist: client.checklist.map((i) => ({
+        title: i.title,
+        status: i.status,
+        blocking: i.blocking,
+        completedAt: day(i.completedAt),
+        notes: i.notes,
+      })),
+    },
+    health: health
+      ? {
+          status: HEALTH_LABELS[health.status],
+          reason: health.reason,
+          whatItAsksOfYou: HEALTH_ACTIONS[health.status],
+          trend: health.trend,
+          manuallyFlagged: health.overridden,
+        }
+      : {
+          status: "Not scored",
+          reason:
+            "Only active clients carry a health status — onboarding, paused and churned ones do not.",
+        },
+    recentReports: client.reports.map((r) => weekRow(r)),
+    calls: client.calls.map((c) => ({
+      type: CALL_TYPE_LABELS[c.type as keyof typeof CALL_TYPE_LABELS] ?? c.type,
+      status:
+        CALL_STATUS_LABELS[c.status as keyof typeof CALL_STATUS_LABELS] ??
+        c.status,
+      scheduledAt: iso(c.scheduledAt),
+      overdue: isCallOverdue(c),
+      notes: c.notes,
+    })),
+    notes: client.notes,
+    cameFromLead: client.lead ? { id: client.lead.id } : null,
+  };
+}
+
+// One week of reporting, with the three metrics computed and flagged the same
+// way the reporting page flags them.
+function weekRow(r: {
+  weekStart: Date;
+  spend: number;
+  leads: number;
+  booked: number;
+  shows: number;
+  revenue: number;
+  notes?: string | null;
+}) {
+  const m = computeMetrics(r);
+  return {
+    weekStart: day(r.weekStart),
+    spend: r.spend,
+    leads: r.leads,
+    booked: r.booked,
+    shows: r.shows,
+    revenue: r.revenue,
+    cpl: round(m.cpl),
+    cplFlag: m.cplFlag,
+    leadToBooked: round(m.leadToBooked),
+    leadToBookedFlag: m.leadToBookedFlag,
+    showRate: round(m.showRate),
+    showRateFlag: m.showRateFlag,
+    ...(r.notes === undefined ? {} : { notes: r.notes }),
+  };
+}
+
+// ─── 6. Reporting trends ───────────────────────────────────────────────────
+
+export async function getReportingTrends(args: {
+  clientId?: string;
+}): Promise<unknown> {
+  const flagKey =
+    "green = inside the target band, yellow = just outside it, red = outside, na = nothing to compute it from.";
+
+  if (args.clientId) {
+    const client = await prisma.client.findUnique({
+      where: { id: args.clientId },
+      select: { id: true, clinicName: true },
+    });
+    if (!client) {
+      return {
+        found: false,
+        message:
+          "No client with that id. Call getClientHealthSummary to find the right one, or omit clientId for the whole book.",
+      };
+    }
+    const reports = await prisma.weeklyReport.findMany({
+      where: { clientId: client.id },
+      orderBy: { weekStart: "desc" },
+      take: REPORT_WEEKS_MAX,
+    });
+    return {
+      found: true,
+      scope: `${client.clinicName} only`,
+      clientId: client.id,
+      flagKey,
+      weeksReturned: reports.length,
+      // Oldest first: a trend reads forwards.
+      weeks: [...reports].reverse().map((r) => weekRow(r)),
+    };
+  }
+
+  // No client named: every client's weeks, totalled per week. Ratios are
+  // recomputed from the totals rather than averaged from each client's own —
+  // an average of percentages weights a client with four leads the same as one
+  // with forty.
+  const reports = await prisma.weeklyReport.findMany({
+    orderBy: { weekStart: "desc" },
+    include: { client: { select: { clinicName: true } } },
+    // Enough rows to cover the window across a book of clients.
+    take: REPORT_WEEKS_MAX * CLIENTS_MAX,
+  });
+
+  const byWeek = new Map<
+    string,
+    { weekStart: Date; spend: number; leads: number; booked: number; shows: number; revenue: number; clients: Set<string> }
+  >();
+  for (const r of reports) {
+    const key = r.weekStart.toISOString();
+    const row =
+      byWeek.get(key) ??
+      {
+        weekStart: r.weekStart,
+        spend: 0,
+        leads: 0,
+        booked: 0,
+        shows: 0,
+        revenue: 0,
+        clients: new Set<string>(),
+      };
+    row.spend += r.spend;
+    row.leads += r.leads;
+    row.booked += r.booked;
+    row.shows += r.shows;
+    row.revenue += r.revenue;
+    row.clients.add(r.client.clinicName);
+    byWeek.set(key, row);
+  }
+
+  const weeks = Array.from(byWeek.values())
+    .sort((a, b) => b.weekStart.getTime() - a.weekStart.getTime())
+    .slice(0, REPORT_WEEKS_MAX)
+    .reverse();
+
+  return {
+    found: true,
+    scope: "All clients, totalled per week",
+    flagKey,
+    note: "These are book-wide totals. For one clinic's numbers, call this again with that client's id.",
+    weeksReturned: weeks.length,
+    weeks: weeks.map((w) => ({
+      ...weekRow(w),
+      clientsReporting: w.clients.size,
+    })),
+  };
+}
+
+// ─── 7. What is due ────────────────────────────────────────────────────────
+
+export async function getFollowUpsDue(): Promise<unknown> {
+  const now = new Date();
+  const horizon = new Date(now.getTime() + UPCOMING_DAYS * DAY_MS);
+
+  const [leads, calls] = await Promise.all([
+    prisma.lead.findMany({
+      where: {
+        archived: false,
+        nextFollowUp: { not: null, lte: horizon },
+      },
+      orderBy: { nextFollowUp: "asc" },
+      take: FOLLOW_UPS_MAX,
+    }),
+    // No lower bound: a call still marked Scheduled after its time has passed
+    // is overdue, not gone. Archived leads have been closed out, so theirs
+    // stop counting.
+    prisma.call.findMany({
+      where: {
+        status: "SCHEDULED",
+        scheduledAt: { lte: horizon },
+        OR: [{ leadId: null }, { lead: { archived: false } }],
+      },
+      orderBy: { scheduledAt: "asc" },
+      take: FOLLOW_UPS_MAX,
+      include: {
+        lead: { select: { id: true, clinicName: true } },
+        client: { select: { id: true, clinicName: true } },
+      },
+    }),
+  ]);
+
+  const followUps = leads.map((l) => ({
+    leadId: l.id,
+    clinicName: l.clinicName,
+    contactName: l.contactName,
+    stage: stageLabel(l.stage),
+    dueAt: iso(l.nextFollowUp),
+    overdue: l.nextFollowUp !== null && l.nextFollowUp < now,
+    estValue: l.estValue,
+  }));
+
+  const callRows = calls.map((c) => ({
+    type: CALL_TYPE_LABELS[c.type as keyof typeof CALL_TYPE_LABELS] ?? c.type,
+    with: c.lead?.clinicName ?? c.client?.clinicName ?? "Unattached",
+    leadId: c.lead?.id ?? null,
+    clientId: c.client?.id ?? null,
+    scheduledAt: iso(c.scheduledAt),
+    overdue: isCallOverdue(c, now),
+    notes: c.notes,
+  }));
+
+  return {
+    now: iso(now),
+    windowDays: UPCOMING_DAYS,
+    overdueCount:
+      followUps.filter((f) => f.overdue).length +
+      callRows.filter((c) => c.overdue).length,
+    leadFollowUps: followUps,
+    calls: callRows,
+    reminder:
+      "You cannot mark any of these done, reschedule them or send anything. Point the operator at the lead or client record, where they do it themselves.",
+  };
+}
+
+// ─── 8. Recent activity ────────────────────────────────────────────────────
+
+export async function getRecentActivity(): Promise<unknown> {
+  const entries = await prisma.activityLog.findMany({
+    orderBy: { createdAt: "desc" },
+    take: ACTIVITY_MAX,
+    include: {
+      client: { select: { id: true, clinicName: true } },
+      lead: { select: { id: true, clinicName: true } },
+    },
+  });
+
+  return {
+    now: iso(new Date()),
+    note: "The milestone log. It records six kinds of event — a lead converted, a report generated, a contract signed, an invoice paid, a health status changing, onboarding completing — and nothing else. Routine edits are deliberately not logged, so an absence here does not mean nothing happened.",
+    entriesReturned: entries.length,
+    entries: entries.map((a) => ({
+      kind: a.kind,
+      summary: a.summary,
+      at: iso(a.createdAt),
+      clientId: a.clientId,
+      leadId: a.leadId,
+      about: a.client?.clinicName ?? a.lead?.clinicName ?? null,
+    })),
+  };
+}
+
+// ─── The dispatcher ────────────────────────────────────────────────────────
+//
+// The allow-list, and the only place a tool name becomes a call. A name that
+// is not a key of this object runs nothing — there is no dynamic lookup, no
+// string concatenation into a query, and no path by which a model can reach a
+// function that is not one of these eight.
+
+const LOOKUPS = {
+  getPipelineLeads,
+  getLeadDetail,
+  getDiscoveryQueueStatus,
+  getClientHealthSummary,
+  getClientDetail,
+  getReportingTrends,
+  getFollowUpsDue,
+  getRecentActivity,
+} as const;
+
+export type CopilotToolName = keyof typeof LOOKUPS;
+
+export type CopilotToolOutcome =
+  | { ok: true; data: unknown }
+  // The model's mistake — an unknown name, arguments that are not JSON, a
+  // required id missing. Recoverable: this text goes back as the tool result
+  // so the model can correct itself, rather than ending the conversation.
+  | { ok: false; message: string };
+
+export async function runCopilotTool(
+  name: string,
+  argumentsJson: string,
+): Promise<CopilotToolOutcome> {
+  if (!Object.prototype.hasOwnProperty.call(LOOKUPS, name)) {
+    return {
+      ok: false,
+      message: `There is no lookup called "${name}". The lookups that exist are: ${Object.keys(LOOKUPS).join(", ")}. Use one of those, or tell the operator this is not something you can see.`,
+    };
+  }
+
+  // An empty string is what an argument-less call arrives as; anything that is
+  // not an object is a model that has written something else entirely.
+  let args: Record<string, unknown> = {};
+  if (argumentsJson.trim() !== "") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(argumentsJson);
+    } catch {
+      return {
+        ok: false,
+        message: `The arguments for ${name} were not valid JSON, so nothing was run. Call it again with a JSON object.`,
+      };
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return {
+        ok: false,
+        message: `The arguments for ${name} were not a JSON object, so nothing was run.`,
+      };
+    }
+    args = parsed as Record<string, unknown>;
+  }
+
+  const id = typeof args.id === "string" ? args.id : undefined;
+  const clientId = typeof args.clientId === "string" ? args.clientId : undefined;
+
+  switch (name as CopilotToolName) {
+    case "getPipelineLeads":
+      return {
+        ok: true,
+        data: await getPipelineLeads({
+          tier: typeof args.tier === "string" ? args.tier : undefined,
+          stage: typeof args.stage === "string" ? args.stage : undefined,
+        }),
+      };
+    case "getLeadDetail":
+      if (!id) {
+        return {
+          ok: false,
+          message:
+            "getLeadDetail needs the lead's id. Call getPipelineLeads first and read the id off the lead you want.",
+        };
+      }
+      return { ok: true, data: await getLeadDetail({ id }) };
+    case "getDiscoveryQueueStatus":
+      return { ok: true, data: await getDiscoveryQueueStatus() };
+    case "getClientHealthSummary":
+      return { ok: true, data: await getClientHealthSummary() };
+    case "getClientDetail":
+      if (!id) {
+        return {
+          ok: false,
+          message:
+            "getClientDetail needs the client's id. Call getClientHealthSummary first and read the id off the client you want.",
+        };
+      }
+      return { ok: true, data: await getClientDetail({ id }) };
+    case "getReportingTrends":
+      return { ok: true, data: await getReportingTrends({ clientId }) };
+    case "getFollowUpsDue":
+      return { ok: true, data: await getFollowUpsDue() };
+    case "getRecentActivity":
+      return { ok: true, data: await getRecentActivity() };
+  }
+}
