@@ -271,7 +271,7 @@ export default async function DashboardPage() {
             records, and this one is four clocks in other people's daylight.
             Text goes to white and its supporting tiers to white at reduced
             opacity — .text-muted is a grey mixed for paper. */}
-        <section className="hero-navy p-5">
+        <section className="hero-navy flex flex-col p-5">
           {/* Layer 1 of 3. The map is the bottom of the stack and the only
               thing in the section that is absolutely positioned — it spans the
               whole field, is cut by the container's radius, and fades on every
@@ -286,8 +286,14 @@ export default async function DashboardPage() {
               height this panel is handed by the card beside it becomes open
               space between the header and the tiles — and that space is where
               the country shows. Without it the tiles sit straight under the
-              header and cover the one part of the picture worth seeing. */}
-          <div className="relative">
+              header and the spare room piles up under them instead, over the
+              one part of the picture worth seeing.
+
+              The section is the flex parent and this is flex-1, rather than
+              this being h-full: a percentage height has to resolve against a
+              parent that has one, and a grid item stretched to its row does
+              not reliably hand its children that. Flex sizing does not care. */}
+          <div className="relative flex flex-1 flex-col">
             <div className="flex items-center justify-between gap-3">
               <h2 className="display flex items-center gap-3 text-xl font-semibold text-white">
                 <span
@@ -308,7 +314,7 @@ export default async function DashboardPage() {
               </h2>
               <span className="text-xs text-white/60">Mon–Fri · 9–5 local</span>
             </div>
-            <div className="mt-3">
+            <div className="mt-auto pt-4">
               <BusinessHoursPanel />
             </div>
           </div>
