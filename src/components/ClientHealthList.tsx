@@ -4,17 +4,18 @@
 // Only live clients appear. A client still being onboarded has delivery
 // progress, not health, and the clients table shows that instead.
 //
-// With no live clients the card is its empty state — the glyph, what the card
-// will track, and the one thing there is to do about it. It used to preview the
-// nearest lead in the pipeline instead, which put a row about a lead inside a
-// card about clients; the pipeline has two cards of its own on this page and
-// does not need a third.
+// With no live clients the card is its empty state: the glyph and what the card
+// will track, and nothing to press. Adding a client is what the primary button
+// in the page header does, two rows above this one, so a second invitation here
+// bought a taller card and no new capability. It used to preview the nearest
+// lead in the pipeline instead, which put a row about a lead inside a card
+// about clients; the pipeline has two cards of its own on this page and does
+// not need a third.
 
 import Link from "next/link";
 import { ClientHealth, HEALTH_ACTIONS } from "@/lib/health";
 import { HealthBadge, TrendArrow } from "@/components/Badge";
 import EmptyMark from "@/components/EmptyMark";
-import Icon from "@/components/Icons";
 import Sparkline from "@/components/Sparkline";
 
 const SPARK_TONE: Record<string, "green" | "amber" | "red" | "neutral"> = {
@@ -34,25 +35,15 @@ export interface HealthRow {
 export default function ClientHealthList({ rows }: { rows: HealthRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="px-2 py-8 text-center">
+      <div className="px-2 py-3 text-center">
         <EmptyMark icon="clients" tone="teal" />
-        <p className="mt-4 text-sm font-medium">
+        <p className="mt-2.5 text-sm font-medium">
           Your next client will show up here
         </p>
         <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
           Track performance, campaign results and growth across all your clinic
           partners.
         </p>
-        {/* The app's own secondary button rather than a text link: this is the
-            one thing there is to do on an empty card, and it should look like
-            something to press. .btn unchanged — its colours, its height and its
-            border are the ones every other page uses — with the corner taken
-            round on this instance only, because a pill is what an empty card's
-            single invitation should look like. */}
-        <Link href="/clients/new" className="btn mt-4 !rounded-full">
-          <Icon name="plus" className="h-4 w-4" />
-          New client
-        </Link>
       </div>
     );
   }

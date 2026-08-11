@@ -18,7 +18,6 @@ import Greeting from "@/components/Greeting";
 import Icon from "@/components/Icons";
 import KpiCard, { Kpi, KpiTone } from "@/components/KpiCard";
 import PipelineDonut from "@/components/PipelineDonut";
-import PipelineStats, { PipelineStat } from "@/components/PipelineStats";
 import TodaysFocus from "@/components/TodaysFocus";
 import UsNightMap from "@/components/UsNightMap";
 
@@ -174,34 +173,6 @@ export default async function DashboardPage() {
       .reduce((s, l) => s + (l.estValue ?? 0), 0),
   }));
 
-  const atStage = (stage: LeadStage) =>
-    openLeads.filter((l) => l.stage === stage).length;
-
-  // Averaged over the leads that carry an estimate, not over all of them. A
-  // lead nobody has valued yet is an unknown, and counting it as a zero would
-  // report an average that falls every time somebody adds a lead — which is
-  // the opposite of what the number is for. Where none carry one there is
-  // nothing to average and the tile says so with a dash.
-  const valued = openLeads.filter((l) => l.estValue != null);
-  const avgDeal =
-    valued.length > 0
-      ? valued.reduce((s, l) => s + (l.estValue ?? 0), 0) / valued.length
-      : null;
-
-  const pipelineStats: PipelineStat[] = [
-    { key: "newLeads", value: String(atStage("NEW")) },
-    { key: "discovery", value: String(atStage("DISCOVERY")) },
-    { key: "proposals", value: String(atStage("PROPOSAL")) },
-    { key: "negotiating", value: String(atStage("NEGOTIATING")) },
-    {
-      key: "avgDeal",
-      value: avgDeal === null ? "—" : fmtMoney(avgDeal),
-      title:
-        valued.length > 0
-          ? `Averaged over the ${valued.length} open lead${valued.length === 1 ? "" : "s"} that carries an estimate`
-          : "No open lead carries an estimated value yet",
-    },
-  ];
 
   return (
     <div>
@@ -219,7 +190,7 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-6 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-6 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
           <KpiCard key={kpi.label} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
@@ -238,8 +209,8 @@ export default async function DashboardPage() {
 
           The flag comes off the data attribute TodaysFocus sets from the state
           behind its own "View all" toggle. */}
-      <div className="mt-6 grid items-stretch gap-6 has-[[data-focus-expanded]]:items-start lg:grid-cols-2">
-        <section className="card self-stretch p-6">
+      <div className="mt-5 grid items-stretch gap-6 has-[[data-focus-expanded]]:items-start lg:grid-cols-2">
+        <section className="card self-stretch p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
             {/* Nothing wrong is stated quietly: a muted pill whose only colour
@@ -291,7 +262,7 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          <h3 className="mb-1 mt-6 text-sm font-semibold">Today&rsquo;s focus</h3>
+          <h3 className="mb-2 mt-5 text-sm font-semibold">Today&rsquo;s focus</h3>
           <TodaysFocus visible={visible} hidden={hidden} />
         </section>
 
@@ -300,7 +271,7 @@ export default async function DashboardPage() {
             records, and this one is four clocks in other people's daylight.
             Text goes to white and its supporting tiers to white at reduced
             opacity — .text-muted is a grey mixed for paper. */}
-        <section className="hero-navy p-6">
+        <section className="hero-navy flex flex-col p-5">
           {/* Layer 1 of 3. The map is the bottom of the stack and the only
               thing in the section that is absolutely positioned — it spans the
               whole field, is cut by the container's radius, and fades on every
@@ -315,8 +286,14 @@ export default async function DashboardPage() {
               height this panel is handed by the card beside it becomes open
               space between the header and the tiles — and that space is where
               the country shows. Without it the tiles sit straight under the
-              header and cover the one part of the picture worth seeing. */}
-          <div className="relative flex h-full min-h-[300px] flex-col">
+              header and the spare room piles up under them instead, over the
+              one part of the picture worth seeing.
+
+              The section is the flex parent and this is flex-1, rather than
+              this being h-full: a percentage height has to resolve against a
+              parent that has one, and a grid item stretched to its row does
+              not reliably hand its children that. Flex sizing does not care. */}
+          <div className="relative flex flex-1 flex-col">
             <div className="flex items-center justify-between gap-3">
               <h2 className="display flex items-center gap-3 text-xl font-semibold text-white">
                 <span
@@ -337,7 +314,7 @@ export default async function DashboardPage() {
               </h2>
               <span className="text-xs text-white/60">Mon–Fri · 9–5 local</span>
             </div>
-            <div className="mt-auto pt-8">
+            <div className="mt-auto pt-4">
               <BusinessHoursPanel />
             </div>
           </div>
@@ -354,7 +331,7 @@ export default async function DashboardPage() {
           The stretch reaches the bordered card directly because each section
           carries .card itself and is the grid item — no wrapper in between to
           stretch instead and leave the visible card floating short inside it. */}
-      <div className="mt-6 grid items-stretch gap-6 lg:grid-cols-3">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3">
         <section className="card p-6">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Recent activity</h2>
@@ -397,7 +374,6 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <PipelineDonut slices={slices} total={pipelineValue} />
-          <PipelineStats stats={pipelineStats} />
         </section>
       </div>
     </div>

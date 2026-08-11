@@ -56,10 +56,15 @@ export function BusinessHoursChip() {
   );
 }
 
-// Four glass tiles across, rather than four rows down. The zones are peers —
-// nobody reads this list top to bottom looking for one of them, they scan it
-// for which are lit — and a row of tiles says "four places, at once" where a
+// Four glass tiles across, not four rows down. The zones are peers — nobody
+// reads this list top to bottom looking for one of them, they scan it for
+// which are lit — and a row of tiles says "four places, at once" where a
 // stacked list said "a ranking".
+//
+// Sized to the card rather than the other way round. The tiles were what made
+// this panel too tall the first time, so the padding, the time and the gaps
+// are all a notch down from where they started, and the tile carries no
+// stretched-out column: it is label, time, zone, badge, tight.
 //
 // Two columns below the sm breakpoint: at four across, a tile is narrower than
 // the time inside it.
@@ -67,7 +72,7 @@ export default function BusinessHoursPanel() {
   const now = useNow();
 
   return (
-    <ul className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {US_TIME_ZONES.map((zone) => {
         const hours = now ? businessHours(now, zone.id) : null;
         const state: OpenState = hours?.state ?? "closed";
@@ -77,7 +82,7 @@ export default function BusinessHoursPanel() {
           // line across the row rather than stepping with the text above them.
           <li
             key={zone.id}
-            className="zone-tile flex h-full flex-col rounded-[16px] p-3 backdrop-blur-md"
+            className="zone-tile flex h-full flex-col rounded-[14px] p-2.5 backdrop-blur-md"
           >
             <span className="flex items-center gap-1.5">
               <span
@@ -86,26 +91,26 @@ export default function BusinessHoursPanel() {
                 }`}
                 aria-hidden
               />
-              <span className="min-w-0 truncate text-xs font-medium text-white/75">
+              <span className="min-w-0 truncate text-[11px] font-medium text-white/75">
                 {zone.label}
               </span>
             </span>
-            {/* nowrap at 17px: four tiles across a half-width card leaves about
-                120px of room, and "11:10 AM" at a larger size spent it by
+            {/* nowrap at 16px: four tiles across a half-width card leaves about
+                120px of room, and the time at a larger size spent it by
                 breaking over two lines. */}
-            <span className="num mt-2 block whitespace-nowrap text-[17px] font-semibold leading-none tracking-tight text-white">
-              {now ? fmtTimeInZone(now, zone.id) : "—:—"}
+            <span className="num mt-1.5 block whitespace-nowrap text-[16px] font-semibold leading-none tracking-tight text-white">
+              {now ? fmtTimeInZone(now, zone.id) : "\u2014:\u2014"}
             </span>
-            <span className="mt-1 block text-[11px] text-white/60">
-              {now ? zoneAbbr(now, zone.id) : " "}
+            <span className="mt-1 block text-[10px] leading-none text-white/60">
+              {now ? zoneAbbr(now, zone.id) : " "}
             </span>
-            <span className="mt-auto block pt-2.5">
+            <span className="mt-auto block pt-2">
               <span
-                className={`inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-medium ${
+                className={`inline-flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-medium ${
                   now ? BADGE[state] : "bg-white/10 text-white/70"
                 }`}
               >
-                {hours ? hours.label : "—"}
+                {hours ? hours.label : "\u2014"}
               </span>
             </span>
           </li>

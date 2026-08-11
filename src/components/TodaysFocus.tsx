@@ -39,7 +39,7 @@ function Row({ item, mounted }: { item: FocusItem; mounted: boolean }) {
     <li>
       <Link
         href={item.href}
-        className="glass-panel glass-panel-hover flex items-center gap-3 px-3 py-2.5 transition-all"
+        className="glass-panel glass-panel-hover flex items-center gap-3 px-3 py-2 transition-all"
       >
         <span
           className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border bg-white/70 ${tone.box}`}
@@ -73,7 +73,7 @@ export default function TodaysFocus({
 
   if (visible.length === 0 && hidden.length === 0) {
     return (
-      <p className="glass-panel px-3 py-5 text-sm text-muted">
+      <p className="glass-panel px-3 py-4 text-sm text-muted">
         Nothing scheduled, overdue or blocking today.
       </p>
     );
@@ -86,7 +86,7 @@ export default function TodaysFocus({
     <div data-focus-expanded={expanded || undefined}>
       {/* Rows are separate tiles now rather than a divided list, so they get
           space between them instead of a rule. */}
-      <ul className="space-y-2">
+      <ul className="space-y-1.5">
         {visible.map((item) => (
           <Row key={item.id} item={item} mounted={mounted} />
         ))}

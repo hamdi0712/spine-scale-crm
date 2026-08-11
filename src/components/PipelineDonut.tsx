@@ -31,13 +31,13 @@ export default function PipelineDonut({
   const drawn = total > 0 ? slices : slices.map((s) => ({ ...s, value: 1 }));
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-5">
       {/* The chart is flat and the ring is one closed circle. What sits behind
           it is light rather than a container: a wash that fades out before the
           disc's own edge, so there is nothing with a rim to be read as a second
           circle around the first. It is a sibling of the chart, not its parent,
           and the total in the middle stays crisp above both. */}
-      <div className="relative h-[142px] w-[142px] shrink-0">
+      <div className="relative h-[132px] w-[132px] shrink-0">
         <div className="donut-glass" aria-hidden />
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
