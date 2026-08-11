@@ -62,7 +62,7 @@ export default function EmptyMark({
         } as React.CSSProperties
       }
     >
-      <Glyph size={27} stroke={1.75} aria-hidden />
+      <Glyph size={20} stroke={1.75} aria-hidden />
     </div>
   );
 }

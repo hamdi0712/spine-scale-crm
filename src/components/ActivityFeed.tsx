@@ -51,9 +51,9 @@ export default function ActivityFeed({
     // page. The short one names the shape of what lands here and leaves the
     // enumeration to the page the "View all" link goes to.
     return illustrateEmpty ? (
-      <div className="px-2 py-8 text-center">
+      <div className="px-2 py-3 text-center">
         <EmptyMark icon="activity" tone="blue" />
-        <p className="mt-4 text-sm font-medium">No milestones logged yet</p>
+        <p className="mt-2.5 text-sm font-medium">No milestones logged yet</p>
         <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
           Conversions, reports, contracts and invoices land here as they happen.
         </p>
