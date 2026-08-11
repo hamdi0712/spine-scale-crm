@@ -56,47 +56,62 @@ export function BusinessHoursChip() {
   );
 }
 
-// Four rows, not four tiles. The tiles were taller than the strip needs to be
-// and pushed this card — and Today's focus beside it, which matches its height
-// — well past what the dashboard has room for. A row is a dot, a zone, its
-// time and its badge on one line, which is all this has ever needed to say.
+// Four glass tiles across, not four rows down. The zones are peers — nobody
+// reads this list top to bottom looking for one of them, they scan it for
+// which are lit — and a row of tiles says "four places, at once" where a
+// stacked list said "a ranking".
 //
-// The row itself is the original layout; only the materials changed for the
-// dark ground it now sits on.
+// Sized to the card rather than the other way round. The tiles were what made
+// this panel too tall the first time, so the padding, the time and the gaps
+// are all a notch down from where they started, and the tile carries no
+// stretched-out column: it is label, time, zone, badge, tight.
+//
+// Two columns below the sm breakpoint: at four across, a tile is narrower than
+// the time inside it.
 export default function BusinessHoursPanel() {
   const now = useNow();
 
   return (
-    <ul>
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {US_TIME_ZONES.map((zone) => {
         const hours = now ? businessHours(now, zone.id) : null;
         const state: OpenState = hours?.state ?? "closed";
         return (
+          // h-full with the badge pushed down by mt-auto: the four tiles are
+          // the same height whatever their contents, so the badges sit on one
+          // line across the row rather than stepping with the text above them.
           <li
             key={zone.id}
-            className="flex items-center gap-3 border-b border-white/10 py-2.5 last:border-b-0"
+            className="zone-tile flex h-full flex-col rounded-[14px] p-2.5 backdrop-blur-md"
           >
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${
-                now ? DOT[state] : "bg-white/25"
-              }`}
-              aria-hidden
-            />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">
-              {zone.label}
-              <span className="ml-1.5 text-xs font-normal text-white/60">
-                {now ? `(${zoneAbbr(now, zone.id)})` : ""}
+            <span className="flex items-center gap-1.5">
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  now ? DOT[state] : "bg-white/25"
+                }`}
+                aria-hidden
+              />
+              <span className="min-w-0 truncate text-[11px] font-medium text-white/75">
+                {zone.label}
               </span>
             </span>
-            <span className="num shrink-0 text-sm font-medium text-white">
+            {/* nowrap at 16px: four tiles across a half-width card leaves about
+                120px of room, and the time at a larger size spent it by
+                breaking over two lines. */}
+            <span className="num mt-1.5 block whitespace-nowrap text-[16px] font-semibold leading-none tracking-tight text-white">
               {now ? fmtTimeInZone(now, zone.id) : "\u2014:\u2014"}
             </span>
-            <span
-              className={`inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-medium ${
-                now ? BADGE[state] : "bg-white/10 text-white/70"
-              }`}
-            >
-              {hours ? hours.label : "\u2014"}
+            <span className="mt-1 block text-[10px] leading-none text-white/60">
+              {now ? zoneAbbr(now, zone.id) : " "}
+            </span>
+            <span className="mt-auto block pt-2">
+              <span
+                className={`inline-flex h-[20px] shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[11px] font-medium ${
+                  now ? BADGE[state] : "bg-white/10 text-white/70"
+                }`}
+              >
+                {hours ? hours.label : "\u2014"}
+              </span>
             </span>
           </li>
         );

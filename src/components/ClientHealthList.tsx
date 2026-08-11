@@ -4,11 +4,13 @@
 // Only live clients appear. A client still being onboarded has delivery
 // progress, not health, and the clients table shows that instead.
 //
-// With no live clients the card is its empty state — the glyph, what the card
-// will track, and the one thing there is to do about it. It used to preview the
-// nearest lead in the pipeline instead, which put a row about a lead inside a
-// card about clients; the pipeline has two cards of its own on this page and
-// does not need a third.
+// With no live clients the card is its empty state: the glyph and what the card
+// will track, and nothing to press. Adding a client is what the primary button
+// in the page header does, two rows above this one, so a second invitation here
+// bought a taller card and no new capability. It used to preview the nearest
+// lead in the pipeline instead, which put a row about a lead inside a card
+// about clients; the pipeline has two cards of its own on this page and does
+// not need a third.
 
 import Link from "next/link";
 import { ClientHealth, HEALTH_ACTIONS } from "@/lib/health";
@@ -42,16 +44,6 @@ export default function ClientHealthList({ rows }: { rows: HealthRow[] }) {
           Track performance, campaign results and growth across all your clinic
           partners.
         </p>
-        {/* Back to a text link. A 42px button is a lot of card to spend on an
-            invitation that is repeated by the primary button in the page header
-            two rows above, and this row of three has to fit on one screen with
-            everything else. */}
-        <Link
-          href="/clients/new"
-          className="mt-3 inline-block text-xs font-medium text-accent hover:underline"
-        >
-          + New client
-        </Link>
       </div>
     );
   }
