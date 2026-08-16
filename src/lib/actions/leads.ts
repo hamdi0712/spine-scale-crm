@@ -54,6 +54,10 @@ function leadFields(formData: FormData) {
     // run skip an actor rather than run it against nothing.
     websiteUrl: str(formData, "websiteUrl"),
     facebookUrl: str(formData, "facebookUrl"),
+    // Not an enrichment input like the four above — it is the audit somebody
+    // recorded by hand, and the one thing step 4 of the outreach sequence
+    // cannot be written without.
+    loomUrl: str(formData, "loomUrl"),
     location: str(formData, "location"),
     // Blank is a real answer here — a lead whose zone nobody knows — so
     // anything outside the four zones stores as null rather than defaulting.

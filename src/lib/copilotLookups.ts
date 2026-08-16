@@ -26,6 +26,10 @@
 
 import { prisma } from "@/lib/prisma";
 import {
+  OUTREACH_STEP_LABELS,
+  OutreachStep,
+} from "@/lib/outreachSequence";
+import {
   UNTRUSTED_CONTENT_KEY,
   UNTRUSTED_CONTENT_WARNING,
 } from "@/lib/copilot";
@@ -85,6 +89,10 @@ import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 const LEADS_MAX = 60;
 const LEAD_NOTES_MAX = 15;
 const CALLS_MAX = 15;
+// Five steps, three variants on one of them, and regenerating leaves the older
+// attempts in place — so the cap is generous enough for a whole sequence with
+// a couple of rewrites in it, and no more.
+const OUTREACH_MESSAGES_MAX = 20;
 const DISCOVERY_RECENT_MAX = 12;
 const CLIENTS_MAX = 60;
 const REPORT_WEEKS_MAX = 12;
@@ -234,6 +242,7 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
       calls: { orderBy: { scheduledAt: "desc" }, take: CALLS_MAX },
       client: { select: { id: true, clinicName: true, status: true } },
       candidate: { select: { id: true, batchLabel: true, source: true } },
+      outreach: { orderBy: { createdAt: "desc" }, take: OUTREACH_MESSAGES_MAX },
     },
   });
   if (!lead) {
@@ -268,7 +277,21 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
       facebookUrl: lead.facebookUrl,
       leadSource: lead.leadSource,
       connectionRequestSentAt: iso(lead.connectionRequestSentAt),
+      connectionAcceptedAt: iso(lead.connectionAcceptedAt),
+      repliedAt: iso(lead.repliedAt),
+      loomUrl: lead.loomUrl,
     },
+    // The outreach sequence, so "where has this one got to" and "what did we
+    // already say to them" are answerable. Written by this app from its own
+    // evidence, so it is ours rather than third-party text — it sits outside
+    // the untrusted fence, exactly as the old outreachHook did.
+    outreach: lead.outreach.map((m) => ({
+      step: OUTREACH_STEP_LABELS[m.step as OutreachStep] ?? m.step,
+      variant: m.variant,
+      sentAt: iso(m.sentAt),
+      draftedAt: iso(m.createdAt),
+      content: m.content,
+    })),
     icp: {
       scored: lead.icpScoredAt !== null,
       scoredAt: iso(lead.icpScoredAt),
@@ -303,9 +326,6 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
       enrichedAt: iso(lead.enrichedAt),
       reviewsCheckedAt: iso(lead.reviewsCheckedAt),
       staffCountRaw: lead.staffCountRaw,
-      // Written by this app from the evidence, so it is ours rather than
-      // third-party text — it sits outside the fence.
-      outreachHook: lead.outreachHook,
       [UNTRUSTED_CONTENT_KEY]: scraped(lead),
     },
     calls: lead.calls.map((c) => ({
