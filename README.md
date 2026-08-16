@@ -4,9 +4,10 @@ Single-user internal tool for running the Spine Scale agency: automated lead
 discovery, sales pipeline, signed clients with delivery checklists, weekly KPI
 reporting, and a reference library. Runs locally against a SQLite file. It can
 talk to two external services and only when pointed at them: Apify, for the
-import and the enrichment run, and DeepSeek, for the scoring. Leave
-`APIFY_API_TOKEN` and `DEEPSEEK_API_KEY` unset and nothing in the app calls out
-anywhere.
+import and the enrichment run, and DeepSeek, for the scoring. Both credentials
+are set under **Settings → API Keys** in the app, or in `.env` as
+`APIFY_API_TOKEN` and `DEEPSEEK_API_KEY`; leave both unset and nothing in the
+app calls out anywhere.
 
 The funnel is Discovery → Pipeline → Clients. Everything scraped lands in
 Discovery, gets enriched and scored against the ICP framework there, and only
@@ -21,6 +22,9 @@ cp .env.example .env   # then edit APP_PASSWORD in .env
                        # DEEPSEEK_API_KEY is optional — only the discovery
                        #   queue's scoring and the lead scorecard's assist
                        #   need it
+                       # Both keys can also be set in the app, under
+                       #   Settings → API Keys, which stores them in the
+                       #   database and takes effect without a restart
 npm install
 npm run dev
 ```
@@ -300,9 +304,14 @@ again.
   anyway** — the same button, with the same confirmation on it, that was
   already there.
 
-  `APIFY_API_TOKEN` lives in `.env` beside `APP_PASSWORD` and is read only in
-  `src/lib/apify.ts`, which is server-side and sends it as a bearer header —
-  never in a URL, never in a payload the browser sees. A missing token, a
+  The Apify token is set under **Settings → API Keys**, which stores it in the
+  `AppSecrets` row, and falls back to `APIFY_API_TOKEN` in `.env` when nothing
+  is stored. Either way it is read only in `src/lib/apify.ts` — once per run, so
+  a key changed in Settings applies to the next call without a restart — which
+  is server-side and sends it as a bearer header, never in a URL, never in a
+  payload the browser sees. Once saved, it is never rendered back to the browser
+  in full: the Settings page is served its last four characters and nothing
+  more. A missing token, a
   rejected one, an unknown actor, an input Apify won't accept, spent credits,
   and a run that overruns its two minutes each come back as their own sentence
   saying what to do about it. Leave the token unset and only the CSV import
@@ -423,8 +432,10 @@ again.
   as null and leaves that category exactly as it was, because the prompt asks
   for null rather than a guess.
 
-  `DEEPSEEK_API_KEY` lives in `.env` beside the other two and is read only in
-  `src/lib/deepseek.ts`, which is server-side and sends it as a bearer header. A
+  The DeepSeek key is set the same way the Apify token is — **Settings → API
+  Keys** first, `DEEPSEEK_API_KEY` in `.env` as the fallback — and is read only
+  in `src/lib/deepseek.ts`, once per call, which is server-side and sends it as
+  a bearer header. It is never rendered back to the browser in full either. A
   missing key, a rejected one, a key without access to the model, spent credit,
   a rate limit, a request that times out, an answer that arrives cut off, and
   an answer that isn't in a shape that reads as scores each come back as their

@@ -47,12 +47,19 @@
     @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-accent px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
   }
   /* The AI button. Every control that spends a model call wears this and
-     nothing else does, so a violet pill with a sparkle on it always means the
-     same thing. Layout is the primary button's to the pixel — same height,
-     radius, padding, gap and label size — because this is a colour treatment,
-     not a second shape. Use it through <AiButton>, which carries the icon. */
+     nothing else does, so a gradient-rimmed capsule with a sparkle on it always
+     means the same thing. Height, padding, gap and label size stay the primary
+     button's; the radius is a full capsule and the fill is the page's own white,
+     with the colour carried by a gradient rim and gradient lettering. Use it
+     through <AiButton>, which carries the icon. */
   .btn-ai {
-    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-ai-deep px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-ai/40;
+    @apply inline-flex h-[42px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border-2 border-transparent px-[18px] text-sm font-semibold text-ai-deep focus:outline-none focus-visible:ring-2 focus-visible:ring-ai/40;
+  }
+  /* The label, drawn in the rim's own gradient. A span rather than the button
+     itself because background-clip: text would take the sparkle with it, and
+     the sparkle is teal — the one part of the mark that is a flat colour. */
+  .btn-ai-label {
+    @apply bg-clip-text text-transparent;
   }
   .btn-danger {
     @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-bad/30 bg-transparent px-[18px] text-sm font-medium text-bad hover:bg-bad-soft/60 focus:outline-none;
@@ -210,60 +217,71 @@
   transform: translateY(1px);
 }
 
-/* The AI button is built the same way as the primary one — gradient fill,
-   glossy top edge, bottom bevel, a tight contact shadow to seat the edge and a
-   wide diffuse one for the elevation — recoloured from brand blue to violet:
-   lighter violet at the top, deep indigo at the bottom.
+/* The AI button, drawn the way the reference is: a white capsule with a two-
+   pixel rim that runs teal → blue → violet → magenta left to right, the label
+   lettered in that same ramp, and a teal sparkle at the head of it.
 
-   What it adds is the glow. Two undirected halos, a tight one and a wide
-   fainter one, both in the ai violet rather than the gradient's indigo, so the
-   pill reads as lit from within rather than merely raised off the page. They
-   sit outside the directional shadows in the list so the elevation still reads
-   underneath the bloom.
+   The rim is one element and one background. Two layers are painted into the
+   same box — a flat white clipped to the padding box, the gradient clipped to
+   the border box — so the gradient only shows where the transparent border is.
+   That is what lets a capsule have a gradient border at all; a border-image
+   cannot do it and keep the radius, and a wrapper element would mean every
+   call site changed shape.
 
-   The halos are at roughly half the strength they were first drawn at — both
-   radii and both alphas pulled down together. At the original intensity the
-   bloom carried far enough to wash the controls next to it, which made an
-   assist button the loudest thing on a page whatever else was on it. The fill,
-   the sparkle and the whole elevation stack are untouched: this is the glow
-   turned down, not the treatment softened. */
+   --ai-ramp is declared once here and read by the rim, the label and the
+   sparkle, so the three can never drift apart.
+
+   What it keeps from the violet pill it replaces is the bloom, at half again
+   less: a soft contact shadow and one wide violet halo. A white pill needs the
+   halo more than the gradient one did — it is what stops the button reading as
+   a plain secondary — but it stays quiet enough not to wash whatever sits
+   beside it. */
 .btn-ai {
-  background-image: linear-gradient(to bottom, #a78bfa, #4b32c3);
+  --ai-ramp: linear-gradient(
+    100deg,
+    #3fd1c8 0%,
+    #126dfb 34%,
+    #7c3aed 68%,
+    #d946a6 100%
+  );
+  background-image: linear-gradient(#ffffff, #ffffff), var(--ai-ramp);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.14),
-    0 1px 2px rgba(49, 30, 122, 0.35),
-    0 6px 16px rgba(75, 50, 195, 0.35),
-    0 0 12px rgba(124, 58, 237, 0.26),
-    0 0 26px rgba(124, 58, 237, 0.14);
+    0 1px 2px rgba(49, 30, 122, 0.12),
+    0 6px 16px rgba(75, 50, 195, 0.14),
+    0 0 20px rgba(124, 58, 237, 0.1);
   transition:
-    background-image 0.15s ease,
     box-shadow 0.15s ease,
     transform 0.15s ease;
 }
+/* The lettering, clipped out of the rim's own gradient. */
+.btn-ai-label {
+  background-image: var(--ai-ramp);
+}
+/* The sparkle is the one flat colour in the mark — the teal the ramp starts
+   on, held steady so the glyph reads at 16px where a gradient across it would
+   just look muddy. */
+.btn-ai .btn-ai-spark {
+  color: #3fd1c8;
+}
 .btn-ai:hover:not(:disabled) {
-  background-image: linear-gradient(to bottom, #b8a0fc, #5941d6);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.14),
-    0 1px 2px rgba(49, 30, 122, 0.35),
-    0 8px 20px rgba(75, 50, 195, 0.4),
-    0 0 15px rgba(124, 58, 237, 0.32),
-    0 0 32px rgba(124, 58, 237, 0.18);
+    0 1px 2px rgba(49, 30, 122, 0.14),
+    0 8px 20px rgba(75, 50, 195, 0.18),
+    0 0 26px rgba(124, 58, 237, 0.16);
 }
 .btn-ai:active:not(:disabled) {
-  background-image: linear-gradient(to bottom, #8b5cf6, #3f2aa8);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 2px 6px rgba(49, 30, 122, 0.3),
-    0 0 10px rgba(124, 58, 237, 0.2);
+    0 1px 2px rgba(49, 30, 122, 0.14),
+    0 0 10px rgba(124, 58, 237, 0.12);
   transform: translateY(1px);
 }
 /* A disabled assist is not waiting to be pressed, and a glow that survives
-   being greyed out would say it is. The fill stays so the button is still
+   being greyed out would say it is. The rim stays so the button is still
    recognisably the AI one; the lift and the bloom go. */
 .btn-ai:disabled {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: none;
 }
 
 /* The AI panel's glow — the button's ambient halo, scaled for something the

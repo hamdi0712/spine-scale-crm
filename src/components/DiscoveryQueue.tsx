@@ -295,10 +295,10 @@ function QueueDialog({
                 the same steps the lead page runs, from whatever URLs the
                 candidate carries, and only the ones switched on in{" "}
                 <Link
-                  href="/pipeline/settings"
+                  href="/settings/pipeline"
                   className="text-accent hover:underline"
                 >
-                  Pipeline Settings
+                  Pipeline settings
                 </Link>
                 . A missing Facebook URL is searched for before the ads step,
                 and a missing website before the crawler once nothing else has

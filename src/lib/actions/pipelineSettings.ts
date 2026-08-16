@@ -45,7 +45,7 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
 
   // The queue dialog quotes an estimate built from these, the lead panel plans
   // its run from them, and the discovery list is where both are pressed.
-  revalidatePath("/pipeline/settings");
+  revalidatePath("/settings/pipeline");
   revalidatePath("/discovery");
   revalidatePath("/pipeline");
 }

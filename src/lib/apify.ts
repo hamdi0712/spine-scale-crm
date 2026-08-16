@@ -1,7 +1,8 @@
 // Apify — the live half of the discovery import, and every enrichment run.
 //
-// Server-only: the token lives in APIFY_API_TOKEN and is read here, sent as a
-// bearer header, and never returned to the browser in any form. Nothing in
+// Server-only: the token is read here on every run — from the AppSecrets row if
+// one is set, from APIFY_API_TOKEN if not (src/lib/appSecretsStore.ts) — sent
+// as a bearer header, and never returned to the browser in any form. Nothing in
 // this file may be imported from a client component; the wizard talks to it
 // through the server action in src/lib/actions/apify.ts, which hands back
 // mapped rows and plain error text and nothing else.
@@ -17,6 +18,7 @@ import {
   NESTED_FIELD_SEPARATOR,
 } from "@/lib/discoveryImport";
 import { ApifySourceKind, normalizeApifyId } from "@/lib/apifyId";
+import { getApifyApiToken } from "@/lib/appSecretsStore";
 
 // Re-exported so every existing caller still imports these from here. Their
 // definitions moved to src/lib/apifyId.ts, which is pure — the settings form
@@ -71,12 +73,15 @@ export async function runApifySync({
   maxItems?: number;
   maxTotalChargeUsd?: number;
 }): Promise<ApifyFetchResult> {
-  const token = process.env.APIFY_API_TOKEN;
+  // Database first, .env second — see src/lib/appSecretsStore.ts. Read per run
+  // rather than once at import, so a token changed on the Settings page applies
+  // to the very next actor call without a restart.
+  const token = await getApifyApiToken();
   if (!token) {
     return {
       ok: false,
       error:
-        "APIFY_API_TOKEN is not set. Add it to the .env file and restart the server.",
+        "No Apify API token is set. Add one under Settings → API Keys, or set APIFY_API_TOKEN in the .env file.",
     };
   }
 
@@ -232,7 +237,7 @@ async function errorMessage(
   const suffix = detail ? ` Apify said: ${detail}` : "";
 
   if (response.status === 401 || type.includes("token")) {
-    return `Apify rejected the API token. Check APIFY_API_TOKEN in the .env file — it may be mistyped, revoked, or from another account.${suffix}`;
+    return `Apify rejected the API token. Check it under Settings → API Keys — it may be mistyped, revoked, or from another account.${suffix}`;
   }
   if (
     response.status === 402 ||

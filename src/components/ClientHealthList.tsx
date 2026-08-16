@@ -37,7 +37,9 @@ export default function ClientHealthList({ rows }: { rows: HealthRow[] }) {
     return (
       <div className="px-2 py-3 text-center">
         <EmptyMark icon="clients" tone="teal" />
-        <p className="mt-2.5 text-sm font-medium">
+        {/* The copy sits a clear line below the disc rather than tucked under
+            its halo — at 2.5 the heading read as part of the mark. */}
+        <p className="mt-5 text-sm font-medium">
           Your next client will show up here
         </p>
         <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">

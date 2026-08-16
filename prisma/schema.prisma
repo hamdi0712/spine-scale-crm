@@ -662,3 +662,30 @@ model PipelineSettings {
 
   updatedAt DateTime @updatedAt
 }
+
+// The credentials the app calls out with — one row, same singleton shape as
+// PipelineSettings above.
+//
+// Both keys were .env-only until this table existed, which meant changing one
+// was a file edit and a server restart. They live here so the Settings page can
+// change them and the very next request picks the new one up. The .env vars are
+// still read: an install that never opens the page behaves exactly as it did,
+// and a row with a null column falls back to the environment rather than to
+// nothing (see src/lib/appSecretsStore.ts).
+//
+// Stored as written. This is a single-user internal app whose database file
+// sits beside the .env it replaces, so encrypting a column here would move the
+// key to unlock it into that same .env and buy nothing. What the app does
+// promise is that neither value is ever sent to the browser in full — the
+// Settings page is served the last four characters and nothing more, and no
+// action returns a key.
+model AppSecrets {
+  id String @id
+
+  // Null means "not set here" and defers to the environment variable of the
+  // same name. Saving an empty value clears the column back to that.
+  deepseekApiKey String?
+  apifyApiToken  String?
+
+  updatedAt DateTime @updatedAt
+}
