@@ -53,7 +53,9 @@ export default function ActivityFeed({
     return illustrateEmpty ? (
       <div className="px-2 py-3 text-center">
         <EmptyMark icon="activity" tone="blue" />
-        <p className="mt-2.5 text-sm font-medium">No milestones logged yet</p>
+        {/* Same gap as Client health's: a clear line under the disc, so the
+            heading reads as copy rather than as a label on the mark. */}
+        <p className="mt-5 text-sm font-medium">No milestones logged yet</p>
         <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
           Conversions, reports, contracts and invoices land here as they happen.
         </p>

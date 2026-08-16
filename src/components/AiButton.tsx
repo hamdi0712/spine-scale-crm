@@ -30,8 +30,19 @@ export default function AiButton({
       {/* 1.75 stroke, as everywhere Tabler meets the in-house set. Marked
           aria-hidden: the label says what the button does, and "sparkles"
           read out before it would only get in the way. */}
-      <IconSparkles size={16} stroke={1.75} aria-hidden />
-      {children}
+      <IconSparkles
+        size={16}
+        stroke={1.75}
+        aria-hidden
+        className="btn-ai-spark shrink-0"
+      />
+      {/* Wrapped so the label can be clipped out of the rim's gradient while
+          the sparkle beside it stays teal. Rendered only when there is a
+          label: the collapsed sidebar and the copilot's send button are icon
+          only, and an empty gradient span would still take the gap. */}
+      {children != null && children !== false && (
+        <span className="btn-ai-label">{children}</span>
+      )}
     </button>
   );
 }

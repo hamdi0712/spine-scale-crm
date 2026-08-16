@@ -30,24 +30,30 @@ const NAV = [
   // everything scraped lands in Discovery and only what scores gets through.
   { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
   { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
-  // Under Pipeline because it decides that pipeline's entrance: which
-  // enrichment steps Discovery spends money on, and the score a candidate has
-  // to clear to arrive here at all.
-  { href: "/pipeline/settings", label: "Pipeline Settings", Glyph: IconSettings },
   { href: "/clients", label: "Clients", Glyph: IconUsers },
   { href: "/reporting", label: "Reporting", Glyph: IconChartBar },
   { href: "/ad-hub", label: "Ad Hub", Glyph: IconBulb },
   { href: "/library", label: "Library", Glyph: IconBook },
 ];
 
+// Settings is not in NAV. It is the one thing in the sidebar that is not a
+// place in the funnel — it changes how the app runs rather than showing what is
+// in it — and it is drawn below the divider at the foot rather than in the list.
+// Everything under /settings lights it, including the pipeline settings that
+// used to be a nav item of their own.
+const SETTINGS = {
+  href: "/settings",
+  label: "Settings",
+  Glyph: IconSettings,
+} as const;
+
 // Which nav item the current path belongs to: the longest href that is a
 // prefix of it, and exactly one of them.
 //
-// A plain startsWith would light two items at once now that one nav item sits
-// inside another's path — /pipeline/settings starts with /pipeline as well as
-// with itself. Longest match settles it, and settles it the same way for any
-// nested item added later. Dashboard is the exception it always was: "/" is a
-// prefix of everything, so it only matches itself.
+// A plain startsWith would light two items at once if one nav item ever sat
+// inside another's path. Longest match settles it, and settles it the same way
+// for any nested item added later. Dashboard is the exception it always was:
+// "/" is a prefix of everything, so it only matches itself.
 function activeHref(pathname: string): string | null {
   let best: string | null = null;
   for (const item of NAV) {
@@ -79,6 +85,8 @@ export default function Sidebar({
   onOpenCopilot: () => void;
 }) {
   const pathname = usePathname();
+  const settingsActive =
+    pathname === SETTINGS.href || pathname.startsWith(`${SETTINGS.href}/`);
   return (
     <aside
       className={`fixed inset-y-0 left-0 flex flex-col border-r border-line/70 bg-panel ${
@@ -155,9 +163,32 @@ export default function Sidebar({
           {!collapsed && "AI Copilot"}
         </AiButton>
       </div>
+      {/* Settings, alone at the foot behind a rule. It is a real nav item —
+          same 42px row, same active treatment — held apart from the group above
+          because it is not a stage of the work, and kept directly over Sign out
+          because the two together are the account-and-app block at the bottom
+          of the sidebar rather than part of the funnel. */}
+      <div
+        className={`border-t border-line/60 pb-1 pt-3 ${collapsed ? "px-2" : "px-3"}`}
+      >
+        <Link
+          href={SETTINGS.href}
+          title={collapsed ? SETTINGS.label : undefined}
+          className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${NAV_MOTION} ${
+            collapsed ? "justify-center px-0" : "px-3"
+          } ${
+            settingsActive
+              ? "nav-active"
+              : "text-muted hover:bg-wash hover:text-ink"
+          }`}
+        >
+          <SETTINGS.Glyph size={20} stroke={1.75} className="shrink-0" />
+          {!collapsed && SETTINGS.label}
+        </Link>
+      </div>
       <form
         action={logout}
-        className={`border-t border-line/60 py-3 ${collapsed ? "px-2" : "px-3"}`}
+        className={`pb-3 ${collapsed ? "px-2" : "px-3"}`}
       >
         <button
           type="submit"

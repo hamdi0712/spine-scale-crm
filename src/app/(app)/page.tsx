@@ -33,7 +33,7 @@ const HEALTH_ROWS = 2;
 // One hue per KPI card, in the order the row runs: people, revenue, pipeline,
 // attention. Positional rather than keyed off the label, because the labels
 // are composed below and the row's order is what the reader actually sees.
-const KPI_TONES: KpiTone[] = ["purple", "emerald", "blue", "amber"];
+const KPI_TONES: KpiTone[] = ["blue", "teal", "purple", "pink"];
 
 export default async function DashboardPage() {
   const now = new Date();

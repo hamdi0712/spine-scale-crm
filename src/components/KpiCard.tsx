@@ -28,23 +28,23 @@ export type KpiGlyph = keyof typeof GLYPHS;
 // One colour per card, given rather than derived — these four are the palette
 // for this row and they are named here in full.
 //
-// They sit outside the pipeline ramp on purpose: that ramp is one sequence from
-// blue to teal, and four steps of a sequence can only be so far apart, which is
-// what kept clients and pipeline value reading as the same blue. Four hues from
-// four parts of the wheel do not have that problem, and each card gets an
-// identity a reader can name.
+// Blue, teal, purple, pink: a cool run across the wheel rather than four
+// unrelated hues, so the row reads as one set while each card still keeps an
+// identity a reader can name. It is the same family the AI treatment's gradient
+// is drawn from, which is what keeps the dashboard and the assists looking like
+// one app.
 //
-// The purple is the same #7C3AED the AI treatment uses elsewhere in the app.
-// That is worth knowing rather than worrying about: nothing on this page is
-// model-generated, so the two never appear together, and the AI meaning is
-// carried by the sparkle and the gradient rather than by the hue alone.
-export type KpiTone = "purple" | "emerald" | "blue" | "amber";
+// The purple is the same #7C3AED the AI treatment uses elsewhere. That is worth
+// knowing rather than worrying about: nothing on this page is model-generated,
+// so the two never appear together, and the AI meaning is carried by the
+// sparkle and the gradient rather than by the hue alone.
+export type KpiTone = "blue" | "teal" | "purple" | "pink";
 
 const KPI_TONES: Record<KpiTone, string> = {
-  purple: "#7C3AED", // people, and the brand
-  emerald: "#10B981", // revenue
-  blue: "#3B82F6", // pipeline
-  amber: "#F59E0B", // attention
+  blue: "#3B82F6", // people
+  teal: "#14B8A6", // revenue
+  purple: "#7C3AED", // pipeline
+  pink: "#EC4899", // attention
 };
 
 // Hex → rgba, so a colour from the shared palette can be used at the alphas the

@@ -1,8 +1,9 @@
 // DeepSeek — every model call in the app, behind two functions.
 //
-// Server-only, on the same terms as src/lib/apify.ts: the key lives in
-// DEEPSEEK_API_KEY, is read here, sent as a bearer header, and never returned
-// to the browser in any form. Nothing in this file may be imported from a
+// Server-only, on the same terms as src/lib/apify.ts: the key is read here on
+// every call — from the AppSecrets row if one is set, from DEEPSEEK_API_KEY if
+// not — sent as a bearer header, and never returned to the browser in any form
+// (see src/lib/appSecretsStore.ts). Nothing in this file may be imported from a
 // client component — its callers are server actions (the lead scorecard's
 // assist in src/lib/actions/icpAssist.ts, the discovery queue in
 // src/lib/actions/discovery.ts, the copilot in src/lib/actions/copilot.ts),
@@ -31,6 +32,8 @@
 // timeout, an answer cut off mid-object, a tool call whose arguments are not
 // even a string — comes back as { ok: false } with a sentence saying what to
 // do about it. Neither function throws.
+
+import { getDeepseekApiKey } from "@/lib/appSecretsStore";
 
 // Small, cheap, and fixed. Both the assist's cost and the shape of its answers
 // are calibrated to this model, so it is stated once here rather than being a
@@ -269,12 +272,16 @@ async function postChat(
   body: Record<string, unknown>,
   timeoutMs = TIMEOUT_MS,
 ): Promise<PostResult> {
-  const key = process.env.DEEPSEEK_API_KEY?.trim();
+  // Database first, .env second — see src/lib/appSecretsStore.ts. Read per
+  // request rather than once at import: a key changed on the Settings page has
+  // to be in force on the next call, and a module-level constant would hold the
+  // old one until a restart, which is the thing the table removed.
+  const key = await getDeepseekApiKey();
   if (!key) {
     return {
       ok: false,
       error:
-        "DEEPSEEK_API_KEY is not set. Add it to the .env file and restart the server.",
+        "No DeepSeek API key is set. Add one under Settings → API Keys, or set DEEPSEEK_API_KEY in the .env file.",
     };
   }
 
@@ -369,7 +376,7 @@ async function errorMessage(response: Response): Promise<string> {
     : "";
 
   if (response.status === 401) {
-    return `DeepSeek rejected the API key. Check DEEPSEEK_API_KEY in the .env file — it may be mistyped, revoked, or from another account.${suffix}`;
+    return `DeepSeek rejected the API key. Check it under Settings → API Keys — it may be mistyped, revoked, or from another account.${suffix}`;
   }
   // Where OpenAI signalled an empty account with a 429 carrying
   // insufficient_quota, DeepSeek gives it a status of its own. Same sentence,
