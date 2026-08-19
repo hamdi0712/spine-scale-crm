@@ -10,11 +10,11 @@ import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
 import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
 import {
   CONNECTIONS_WINDOW_DAYS,
-  DISCOVERY_REACHED_STAGES,
   REPLY_RATE_WINDOW_DAYS,
   connectionsSent,
   connectionsSubtitle,
   daysAgo,
+  discoveryBooked,
   discoverySubtitle,
   qualifiedLeads,
   qualifiedSubtitle,
@@ -66,8 +66,7 @@ export default async function DashboardPage() {
     focusClients,
     activity,
     outreachLeads,
-    discoveryLeads,
-    discoveryCallsThisMonth,
+    discoveryCalls,
   ] = await Promise.all([
     prisma.client.findMany({
       where: { status: "ACTIVE" },
@@ -109,31 +108,17 @@ export default async function DashboardPage() {
       },
       select: { connectionRequestSentAt: true, repliedAt: true },
     }),
-    // Everything at or past Discovery Call Booked. Won leads are archived on
-    // conversion, so they are matched on stage alone — a signed client still
-    // went through a discovery call, and a number that drops when a lead
-    // closes would be measuring the wrong thing.
-    prisma.lead.findMany({
-      where: {
-        OR: [
-          {
-            archived: false,
-            stage: { in: DISCOVERY_REACHED_STAGES.filter((s) => s !== "WON") },
-          },
-          { stage: "WON" },
-        ],
-      },
-      select: { stage: true },
-    }),
-    // The one timeframe the data actually supports for that card — no stage
-    // change is timestamped anywhere, but a logged call carries its date.
-    // Cancelled calls are not bookings that stand.
-    prisma.call.count({
+    // The discovery calls on this month's calendar. Counted off the call log
+    // rather than off a lead's stage: a stage cannot be un-set when a call is
+    // cancelled or deleted, and a booking that no longer exists should not go
+    // on being reported. Cancelled calls are not bookings that stand.
+    prisma.call.findMany({
       where: {
         type: "DISCOVERY",
         status: { not: "CANCELLED" },
         scheduledAt: { gte: monthStart, lt: nextMonthStart },
       },
+      select: { status: true },
     }),
   ]);
 
@@ -148,11 +133,7 @@ export default async function DashboardPage() {
   const qualified = qualifiedLeads(openLeads);
   const connections = connectionsSent(outreachLeads, now);
   const replies = replyRate(outreachLeads, now);
-  const discovery = {
-    total: discoveryLeads.length,
-    atStage: discoveryLeads.filter((l) => l.stage === "DISCOVERY").length,
-    scheduledThisMonth: discoveryCallsThisMonth,
-  };
+  const discovery = discoveryBooked(discoveryCalls);
 
   const kpis: Kpi[] = [
     {

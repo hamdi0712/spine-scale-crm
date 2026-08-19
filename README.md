@@ -72,10 +72,14 @@ again.
   restraint governs the numbers above them. Reply rate shows an em dash rather
   than 0% when nobody has been approached in the window, because a zero off no
   attempts reads as "nobody replies to you" — a claim the data has not made.
-  "Booked this month" on the fourth card counts discovery calls in the call log,
-  which carry a date, rather than being read off a stage, because no stage change
-  is timestamped anywhere. And the up arrow on a delta line shows for a rise and
-  nothing else: a fall wearing an up arrow would be a lie told in an icon.
+  The fourth card counts discovery calls in the call log, which carry a date and
+  can be cancelled or deleted, rather than leads sitting at or past the Discovery
+  Call Booked stage. It was the latter to begin with and that number could not
+  come back down: nothing moves a lead's stage when a call is called off, so an
+  un-booked call left the lead parked on the stage and the card reporting a
+  booking that no longer existed. And the up arrow on a delta line shows for a
+  rise and nothing else: a fall wearing an up arrow would be a lie told in an
+  icon.
 
   **Now** carries **Today's focus**: one merged list of everything that wants
   doing today, drawn from four places and ordered by urgency — calls scheduled
