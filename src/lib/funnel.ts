@@ -18,7 +18,6 @@
 // The KPI card component is untouched: this changes what the four cards say,
 // not what they look like.
 
-import { LeadStage } from "@/lib/constants";
 import { IcpAnswers, leadTier } from "@/lib/icp";
 
 // ─── Windows ───────────────────────────────────────────────────────────────
@@ -163,33 +162,47 @@ export function replyRateSubtitle(r: ReplyRate): string {
 
 // ─── Card 4 — Discovery calls booked ───────────────────────────────────────
 
-// Everything at or past the Discovery Call Booked stage. A lead at Proposal got
-// there through a call, so counting only the leads sitting on that stage today
-// would report a number that goes down when things go well.
-export const DISCOVERY_REACHED_STAGES: LeadStage[] = [
-  "DISCOVERY",
-  "PROPOSAL",
-  "NEGOTIATING",
-  "WON",
-];
-
+// Counted off the call log, not off the lead's stage.
+//
+// It was stage-based to begin with — every lead at or past Discovery Call
+// Booked — and that number could not come back down. Nothing moves a lead's
+// stage when a call is cancelled or deleted, so a call that was booked and then
+// un-booked left the lead parked on the stage and the card reporting a booking
+// that no longer existed. A test call is the obvious way to hit that; a
+// prospect who cancels is the way it would have happened for real.
+//
+// A call row is the honest source: it is the booking itself, it carries the
+// date the booking is for, and deleting it takes the number with it. What the
+// card counts is what is on the calendar for this month, which is also what its
+// subtitle has always claimed.
+//
+// A cancelled call is not a booking that stands, so it is left out. A no-show is
+// — the slot was booked and held, and it not going well is a different fact.
 export interface DiscoveryBooked {
+  // Booked for a date in the current month, cancellations excluded.
   total: number;
-  // Sitting on the stage right now, as opposed to past it.
-  atStage: number;
-  // Discovery calls in the call log with a date this month. This is the only
-  // honest timeframe available: no stage change is timestamped anywhere, so
-  // "booked this month" cannot be read off a stage — but a call somebody
-  // logged carries the date they booked it for.
-  scheduledThisMonth: number;
+  // Still to happen.
+  upcoming: number;
+  // Marked completed.
+  held: number;
+}
+
+export function discoveryBooked(
+  calls: { status: string }[],
+): DiscoveryBooked {
+  return {
+    total: calls.length,
+    upcoming: calls.filter((c) => c.status === "SCHEDULED").length,
+    held: calls.filter((c) => c.status === "COMPLETED").length,
+  };
 }
 
 export function discoverySubtitle(d: DiscoveryBooked): string {
-  if (d.scheduledThisMonth > 0) {
-    return `${d.scheduledThisMonth} on the calendar this month`;
+  if (d.total === 0) return "None booked this month";
+  if (d.upcoming > 0 && d.held > 0) {
+    return `${d.upcoming} upcoming, ${d.held} held`;
   }
-  if (d.total === 0) return "None booked yet";
-  if (d.atStage === d.total) return "waiting on the call";
-  if (d.atStage === 0) return "all progressed past the call";
-  return `${d.atStage} upcoming, ${d.total - d.atStage} past it`;
+  if (d.upcoming > 0) return "On the calendar this month";
+  if (d.held > 0) return "Held this month";
+  return "Booked this month";
 }
