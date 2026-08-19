@@ -87,13 +87,17 @@ export const FIRST_MESSAGE_VARIANTS = ["A", "B", "C"] as const;
 
 export type FirstMessageVariant = (typeof FIRST_MESSAGE_VARIANTS)[number];
 
-// What each variant is trying to be, stated for the prompt and shown on the
-// panel above each column so a choice between three is a choice between three
-// known things rather than three paragraphs to read.
+// What each variant is trying to be, stated for the prompt and shown beside
+// each option's label so a choice between three is a choice between three known
+// things rather than three paragraphs to read.
+//
+// Kept to three or four words each: this sits on one line beside "Option A" and
+// the character count, in a column the width of the lead page's main body, and
+// a blurb that wraps puts the count on a line of its own.
 export const VARIANT_BLURBS: Record<FirstMessageVariant, string> = {
-  A: "Something specific on their site or booking flow",
-  B: "Something specific about the ads they are running",
-  C: "Warm and general, for when neither of the above is really there",
+  A: "Site or booking",
+  B: "Their ad activity",
+  C: "Warm and general",
 };
 
 // ─── Lengths ───────────────────────────────────────────────────────────────
@@ -471,9 +475,9 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     "TASK",
     "They accepted the connection request. Write the first real message — three alternative versions of it, so the person sending can pick the one that fits.",
     "",
-    `  A) An observation about something specific on their site or their booking flow, ending in a question about it. ${VARIANT_BLURBS.A}.`,
-    `  B) An observation about the ads they are running, ending in a question about it. ${VARIANT_BLURBS.B}.`,
-    `  C) The warm general one, for when neither of the above is really there in the evidence. Still ends in a question. ${VARIANT_BLURBS.C}.`,
+    `  A) ${VARIANT_BLURBS.A}. An observation about something specific on their site or their booking flow, ending in a question about it.`,
+    `  B) ${VARIANT_BLURBS.B}. An observation about their ad activity, ending in a question about it.`,
+    `  C) ${VARIANT_BLURBS.C}. No specific hook needed — warm, short, and still ending in a question.`,
     "",
     "RULES, all three:",
     `  - Open by addressing them as "${name}" and by that name only. Never the full name, never "Dr. <surname>", unless the evidence itself shows that is genuinely how they are addressed.`,
@@ -484,13 +488,17 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     "  - No square brackets: they read as a mail merge that failed.",
     "  - Written in the first person, understated, the way one person writes to another.",
     "",
-    "A and B need something true and specific in the evidence. If the evidence has nothing to support one of them, return null for that one rather than writing something that would fit any clinic — C is the fallback and is expected to be there whatever the evidence says.",
+    "WRITE ALL THREE. Three is what the person sending gets to choose between, and two is a choice with a hole in it — never return null, and never return fewer than three.",
+    "",
+    "Where an angle is thin in the evidence, that is what changes, not the count. If there is no ad activity to remark on, B opens on the nearest true thing the evidence does support and stays short and light rather than leaning on a detail. What you must never do is invent the missing detail: an angle you cannot evidence becomes a warmer, more general message, not a confident claim about something you did not read.",
+    "",
+    "The three must be genuinely different to choose between — a different observation, a different question, or a different length. Three versions of one sentence is the same as having one.",
     "",
     "REPLY FORMAT",
-    "A single JSON object, exactly these keys:",
+    "A single JSON object, exactly these keys, all three of them strings:",
     "{",
-    '  "a": "<version A>" | null,',
-    '  "b": "<version B>" | null,',
+    '  "a": "<version A>",',
+    '  "b": "<version B>",',
     '  "c": "<version C>"',
     "}",
   ].join("\n");
@@ -523,10 +531,16 @@ export function readHook(raw: unknown): string | null {
   return hook;
 }
 
-// One of the three first-message variants, held to what the prompt asked for.
-// Returns null where the model declined to write one, and also where it wrote
-// one that breaks a rule — a message that does not end in a question is not the
-// message this step is, and offering it anyway would quietly drop the rule.
+// One of the three first-message variants.
+//
+// What it rejects is what cannot be used: nothing there, a wall of text, an
+// unfilled [placeholder]. What it does NOT reject is a message that breaks the
+// ends-in-a-question rule — that used to return null here, which meant one
+// stray full stop silently cost the person a whole option and left them
+// choosing between two. The rule still matters, so it is checked and shown
+// against the message (endsInQuestion below) rather than enforced by deletion:
+// this is a draft in an editable box, and a note saying "this one does not end
+// in a question" is worth more than the option disappearing.
 export function readFirstMessage(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
 
@@ -540,9 +554,13 @@ export function readFirstMessage(raw: unknown): string | null {
   if (message.length < MESSAGE_MIN_CHARS) return null;
   if (message.length > FIRST_MESSAGE_MAX_CHARS) return null;
   if (/[[\]]/.test(message)) return null;
-  // The one rule of this step, checked rather than trusted.
-  if (!message.trimEnd().endsWith("?")) return null;
   return message;
+}
+
+// The one rule of this step, checked rather than trusted — and reported rather
+// than enforced. The panel puts a line under any option that fails it.
+export function endsInQuestion(message: string): boolean {
+  return message.trimEnd().endsWith("?");
 }
 
 export type ConnectionReply = { hook: string | null; evidence: string | null };
