@@ -3,12 +3,17 @@
 // Used by the dashboard and nowhere else. The card's job is to make the number
 // the first thing read and everything else supporting: a tinted glyph to say
 // which number it is, and a delta line to say which way it moved.
+//
+// The four numbers changed — they are funnel activity now rather than clients
+// and revenue (src/lib/funnel.ts) — and this file did not, beyond the glyphs
+// naming what each card is about. The layout, the tinted disc, the type scale
+// and the tone order are the same ones that were built.
 
 import {
-  IconClockHour3,
-  IconCurrencyDollar,
-  IconTrendingUp,
-  IconUsers,
+  IconCalendarCheck,
+  IconMessage2,
+  IconTargetArrow,
+  IconUserPlus,
 } from "@tabler/icons-react";
 import Icon from "@/components/Icons";
 
@@ -17,10 +22,10 @@ import Icon from "@/components/Icons";
 // for small inline marks; these four are the page's headline glyphs and they
 // belong to the same family as the navigation beside them.
 const GLYPHS = {
-  clients: IconUsers,
-  dollar: IconCurrencyDollar,
-  trend: IconTrendingUp,
-  clock: IconClockHour3,
+  qualified: IconTargetArrow,
+  connections: IconUserPlus,
+  replies: IconMessage2,
+  calls: IconCalendarCheck,
 } as const;
 
 export type KpiGlyph = keyof typeof GLYPHS;
@@ -41,10 +46,10 @@ export type KpiGlyph = keyof typeof GLYPHS;
 export type KpiTone = "blue" | "teal" | "purple" | "pink";
 
 const KPI_TONES: Record<KpiTone, string> = {
-  blue: "#3B82F6", // people
-  teal: "#14B8A6", // revenue
-  purple: "#7C3AED", // pipeline
-  pink: "#EC4899", // attention
+  blue: "#3B82F6", // qualified leads
+  teal: "#14B8A6", // connections sent
+  purple: "#7C3AED", // reply rate
+  pink: "#EC4899", // discovery calls
 };
 
 // Hex → rgba, so a colour from the shared palette can be used at the alphas the
