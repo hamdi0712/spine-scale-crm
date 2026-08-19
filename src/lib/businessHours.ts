@@ -12,6 +12,25 @@ export const BUSINESS_CLOSE_HOUR = 17;
 // How far ahead an upcoming open is worth flagging, in hours.
 const OPENING_SOON_HOURS = 3;
 
+// Minutes as the badge says them: whole hours while there is more than an hour
+// to go, and a live minute countdown inside the last one.
+//
+// The countdown is not decoration. "Opening within the hour" was the old
+// wording for that last stretch, and it had two things wrong with it: it was
+// the longest string any badge could hold — long enough to overflow a tile a
+// quarter of the dashboard wide — and it said the same thing for fifty-nine
+// minutes running. "Opening in 12m" is shorter than the tile, and it moves.
+//
+// Exactly an hour reads as "1h" rather than "60m", which is where the two
+// halves meet without either repeating the other.
+function untilLabel(minutes: number): string {
+  if (minutes >= 60) {
+    const hours = Math.round(minutes / 60);
+    return `${hours}h`;
+  }
+  return `${minutes}m`;
+}
+
 export type OpenState = "open" | "opening-soon" | "closed";
 
 export interface BusinessHours {
@@ -45,9 +64,12 @@ export function businessHours(date: Date, timeZone: string): BusinessHours {
 
   if (isWeekday && hour >= BUSINESS_OPEN_HOUR && hour < BUSINESS_CLOSE_HOUR) {
     const minutesLeft = (BUSINESS_CLOSE_HOUR - hour) * 60 - minute;
+    // The same countdown on the way out as on the way in — the last hour of a
+    // working day is worth knowing the size of, and "Closing in 1h" said that
+    // it was an hour for the whole of it.
     return {
       state: "open",
-      label: minutesLeft <= 60 ? "Closing in 1h" : "Open",
+      label: minutesLeft <= 60 ? `Closing in ${untilLabel(minutesLeft)}` : "Open",
     };
   }
 
@@ -55,11 +77,10 @@ export function businessHours(date: Date, timeZone: string): BusinessHours {
   // it is short enough to be worth waiting for.
   if (isWeekday && hour < BUSINESS_OPEN_HOUR) {
     const minutesUntil = (BUSINESS_OPEN_HOUR - hour) * 60 - minute;
-    const hoursUntil = Math.ceil(minutesUntil / 60);
-    if (hoursUntil <= OPENING_SOON_HOURS) {
+    if (minutesUntil <= OPENING_SOON_HOURS * 60) {
       return {
         state: "opening-soon",
-        label: hoursUntil <= 1 ? "Opening within the hour" : `Opening in ${hoursUntil}h`,
+        label: `Opening in ${untilLabel(minutesUntil)}`,
       };
     }
   }
