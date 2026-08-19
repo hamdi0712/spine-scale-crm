@@ -8,7 +8,20 @@ import {
 } from "@/lib/constants";
 import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
 import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
-import { fmtMoney } from "@/lib/format";
+import {
+  CONNECTIONS_WINDOW_DAYS,
+  DISCOVERY_REACHED_STAGES,
+  REPLY_RATE_WINDOW_DAYS,
+  connectionsSent,
+  connectionsSubtitle,
+  daysAgo,
+  discoverySubtitle,
+  qualifiedLeads,
+  qualifiedSubtitle,
+  replyRate,
+  replyRateSubtitle,
+  replyRateValue,
+} from "@/lib/funnel";
 import ActivityFeed from "@/components/ActivityFeed";
 import BusinessHoursPanel, {
   BusinessHoursChip,
@@ -30,17 +43,21 @@ export const dynamic = "force-dynamic";
 const ACTIVITY_ROWS = 3;
 const HEALTH_ROWS = 2;
 
-// One hue per KPI card, in the order the row runs: people, revenue, pipeline,
-// attention. Positional rather than keyed off the label, because the labels
-// are composed below and the row's order is what the reader actually sees.
+// One hue per KPI card, in the order the row runs: qualified leads,
+// connections, replies, calls. Positional rather than keyed off the label,
+// because the labels are composed below and the row's order is what the reader
+// actually sees. The order itself is unchanged from when the row counted
+// clients and revenue — same four hues, same sequence.
 const KPI_TONES: KpiTone[] = ["blue", "teal", "purple", "pink"];
 
 export default async function DashboardPage() {
   const now = new Date();
-  const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const dayEnd = new Date(now);
   dayEnd.setHours(23, 59, 59, 999);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Exclusive upper bound for "this month", which rolls the year over on its
+  // own when the month is December.
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
   const [
     activeClients,
@@ -48,6 +65,9 @@ export default async function DashboardPage() {
     focusCalls,
     focusClients,
     activity,
+    outreachLeads,
+    discoveryLeads,
+    discoveryCallsThisMonth,
   ] = await Promise.all([
     prisma.client.findMany({
       where: { status: "ACTIVE" },
@@ -79,61 +99,94 @@ export default async function DashboardPage() {
       orderBy: { createdAt: "desc" },
       take: ACTIVITY_ROWS,
     }),
+    // Outreach activity, for the connections and reply-rate cards. Archived
+    // leads are included: a request that went out three weeks ago went out
+    // whatever happened to the lead since, and leaving them out would make a
+    // week look quieter than it was. Bounded by the longer of the two windows.
+    prisma.lead.findMany({
+      where: {
+        connectionRequestSentAt: { gte: daysAgo(now, REPLY_RATE_WINDOW_DAYS) },
+      },
+      select: { connectionRequestSentAt: true, repliedAt: true },
+    }),
+    // Everything at or past Discovery Call Booked. Won leads are archived on
+    // conversion, so they are matched on stage alone — a signed client still
+    // went through a discovery call, and a number that drops when a lead
+    // closes would be measuring the wrong thing.
+    prisma.lead.findMany({
+      where: {
+        OR: [
+          {
+            archived: false,
+            stage: { in: DISCOVERY_REACHED_STAGES.filter((s) => s !== "WON") },
+          },
+          { stage: "WON" },
+        ],
+      },
+      select: { stage: true },
+    }),
+    // The one timeframe the data actually supports for that card — no stage
+    // change is timestamped anywhere, but a logged call carries its date.
+    // Cancelled calls are not bookings that stand.
+    prisma.call.count({
+      where: {
+        type: "DISCOVERY",
+        status: { not: "CANCELLED" },
+        scheduledAt: { gte: monthStart, lt: nextMonthStart },
+      },
+    }),
   ]);
 
   // ─── Headline numbers ────────────────────────────────────────────────────
+  //
+  // Funnel activity rather than clients and revenue — see src/lib/funnel.ts for
+  // why. The donut below still reads pipeline value; it is a chart of what is
+  // in the pipeline, which is a different question from what got done today.
 
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
-  const mrr = activeClients.reduce((s, c) => s + (c.monthlyFee ?? 0), 0);
-  const followUps7d = openLeads.filter(
-    (l) => l.nextFollowUp !== null && l.nextFollowUp <= in7Days,
-  );
-  const dueToday = followUps7d.filter(
-    (l) => l.nextFollowUp !== null && l.nextFollowUp <= dayEnd,
-  ).length;
 
-  // Month-on-month is only claimed where the data actually supports it: we
-  // know when each client went active, so "added this month" is real. There is
-  // no stored history of what MRR was in June, so no percentage is shown.
-  const newThisMonth = activeClients.filter(
-    (c) => c.activeSince !== null && c.activeSince >= monthStart,
-  );
-  const mrrAdded = newThisMonth.reduce((s, c) => s + (c.monthlyFee ?? 0), 0);
+  const qualified = qualifiedLeads(openLeads);
+  const connections = connectionsSent(outreachLeads, now);
+  const replies = replyRate(outreachLeads, now);
+  const discovery = {
+    total: discoveryLeads.length,
+    atStage: discoveryLeads.filter((l) => l.stage === "DISCOVERY").length,
+    scheduledThisMonth: discoveryCallsThisMonth,
+  };
 
   const kpis: Kpi[] = [
     {
-      label: "Active clients",
-      value: String(activeClients.length),
-      icon: "clients",
-      delta:
-        newThisMonth.length > 0
-          ? `${newThisMonth.length} added this month`
-          : "No change this month",
-      tone: newThisMonth.length > 0 ? "up" : "flat",
+      label: "Qualified leads",
+      value: String(qualified.total),
+      icon: "qualified",
+      delta: qualifiedSubtitle(qualified),
+      // Green only where there is something to act on. A row of encouraging
+      // green on four zeroes is the thing this whole row was rewritten to stop.
+      tone: qualified.untouched > 0 ? "up" : "flat",
     },
     {
-      label: "MRR (active)",
-      value: fmtMoney(mrr),
-      icon: "dollar",
-      delta:
-        mrrAdded > 0
-          ? `${fmtMoney(mrrAdded)} added this month`
-          : "Recurring monthly fees",
-      tone: mrrAdded > 0 ? "up" : "flat",
+      label: `Connections sent (${CONNECTIONS_WINDOW_DAYS}d)`,
+      value: String(connections.thisWeek),
+      icon: "connections",
+      delta: connectionsSubtitle(connections),
+      // The delta line's only decoration is an up arrow, so it shows for a
+      // rise and for nothing else — a fall wearing an up arrow would be a lie
+      // told in an icon.
+      tone: connections.thisWeek > connections.lastWeek ? "up" : "flat",
     },
     {
-      label: "Pipeline value",
-      value: fmtMoney(pipelineValue),
-      icon: "trend",
-      delta: `${openLeads.length} open lead${openLeads.length === 1 ? "" : "s"}`,
-      tone: "flat",
+      label: `Reply rate (${REPLY_RATE_WINDOW_DAYS}d)`,
+      value: replyRateValue(replies),
+      icon: "replies",
+      delta: replyRateSubtitle(replies),
+      tone: replies.replied > 0 ? "up" : "flat",
     },
     {
-      label: "Follow-ups due (7d)",
-      value: String(followUps7d.length),
-      icon: "clock",
-      delta: dueToday > 0 ? `${dueToday} due today` : "None due today",
-      tone: dueToday > 0 ? "alert" : "flat",
+      label: "Discovery calls booked",
+      value: String(discovery.total),
+      icon: "calls",
+      delta: discoverySubtitle(discovery),
+      tone: discovery.total > 0 ? "up" : "flat",
     },
   ];
 

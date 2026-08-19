@@ -55,17 +55,27 @@ again.
 
 ## Sections
 
-- **Dashboard** — four KPI cards (active clients, MRR, open pipeline value,
-  follow-ups due in 7 days), then two panels side by side and three cards
-  below.
+- **Dashboard** — four KPI cards (qualified leads, connections sent in 7 days,
+  reply rate over 30 days, discovery calls booked), then two panels side by side
+  and three cards below.
 
-  The curve along the bottom of each KPI card is ornament, not data. There is
-  no stored history of what MRR or pipeline value was last month, so there is
-  nothing to plot; it is the same path on all four cards for that reason, since
-  four different-looking curves would read as four different trends. The same
-  restraint governs the numbers above them — "added this month" is shown
-  because the date each client went active is recorded, and no month-on-month
-  percentage is shown because nothing in the database supports one.
+  The four numbers are funnel activity rather than clients and revenue, and that
+  is deliberate: active clients, MRR and pipeline value are all zero before the
+  first clinic signs, and a row of four zeroes makes the page look broken on
+  exactly the days it should be encouraging. These four move the day the work is
+  done. The maths lives in `src/lib/funnel.ts`; the card component is untouched.
+
+  The curve along the bottom of each KPI card is ornament, not data. There is no
+  stored history of what any of these was last month, so there is nothing to
+  plot; it is the same path on all four cards for that reason, since four
+  different-looking curves would read as four different trends. The same
+  restraint governs the numbers above them. Reply rate shows an em dash rather
+  than 0% when nobody has been approached in the window, because a zero off no
+  attempts reads as "nobody replies to you" — a claim the data has not made.
+  "Booked this month" on the fourth card counts discovery calls in the call log,
+  which carry a date, rather than being read off a stage, because no stage change
+  is timestamped anywhere. And the up arrow on a delta line shows for a rise and
+  nothing else: a fall wearing an up arrow would be a lie told in an icon.
 
   **Now** carries **Today's focus**: one merged list of everything that wants
   doing today, drawn from four places and ordered by urgency — calls scheduled
@@ -108,10 +118,11 @@ again.
   the primary `#126DFB` to a tint of the secondary teal `#3FD1C8` — stepped by
   lightness so neighbouring segments stay apart, with every segment named and
   valued in the legend. The ramp lives in `src/lib/dashboardPalette.ts`. The
-  four KPI cards along the top take four named hues of their own — purple,
-  emerald, blue and amber — rather than four steps of that ramp, because four
-  steps of one blue-to-teal sequence can only be so far apart and two of the
-  cards kept reading as the same blue.
+  four KPI cards along the top take four named hues of their own — blue, teal,
+  purple and pink — rather than four steps of that ramp, because four steps of
+  one blue-to-teal sequence can only be so far apart and two of the cards kept
+  reading as the same blue. The four they use are a cool run across the wheel,
+  the same family the AI treatment's gradient is drawn from.
 
 - **Calendar** — a month grid over dates that already live on other records:
   every call (scheduled or held, on leads and clients alike), every lead's next
