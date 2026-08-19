@@ -22,10 +22,15 @@
 //   observation the connection request already made. That is the whole reason
 //   the drafts are a table rather than five columns.
 //
-//   First names only. Every template addresses somebody by their first name,
-//   because that is how these are actually written, and a message opening "Hi
-//   Dr. Sarah Whitfield" reads as a mail merge — which is the impression the
-//   entire feature exists to avoid.
+//   First names, with a Dr. in front where one is owed. Every template
+//   addresses somebody by their first name, because that is how these are
+//   actually written, and a message opening "Hi Dr. Sarah Whitfield" reads as a
+//   mail merge. But this pipeline is full of chiropractors, and "Hi Mike" to
+//   somebody whose own clinic calls them Dr. Mike is its own kind of wrong — so
+//   the title is worked out from the data (salutation() below) and the answer is
+//   "Dr. Mike": the honorific with the first name, which is the register these
+//   practices actually use. It is decided once for the whole sequence, because
+//   code fills three of the five steps and only a model writes the other two.
 //
 // Pure. Nothing here touches the network or the database: the prompts and the
 // readers live here, and src/lib/actions/outreachSequence.ts makes the calls.
@@ -117,7 +122,7 @@ const MESSAGE_MIN_CHARS = 40;
 // One note, or three short ones. Comfortably over what either answer needs.
 export const SEQUENCE_MAX_TOKENS = 900;
 
-// ─── Names ─────────────────────────────────────────────────────────────────
+// ─── Names, and whether to call somebody Dr. ───────────────────────────────
 
 // What is left where a lead has no contact name — the same placeholder the hook
 // panel used, kept as a bracketed blank rather than guessed at or smoothed
@@ -129,6 +134,63 @@ export const CONTACT_NAME_PLACEHOLDER = "[First Name]";
 // happens to be written. "Dr. Sarah Whitfield, DC" is Sarah.
 const TITLES = /^(dr|dr\.|doctor|mr|mr\.|mrs|mrs\.|ms|ms\.|miss|prof|prof\.|professor)$/i;
 
+// The doctor titles specifically, as opposed to the plain courtesy ones. A
+// contact recorded as "Mr. Alvarez" is being told apart from "Dr. Alvarez"
+// here, not lumped in with them.
+const DOCTOR_TITLES = /^(dr|dr\.|doctor)$/i;
+
+// The letters after the comma that mean this person is addressed as Dr. in
+// their own field. DC is a chiropractor, DPT a physical therapist, DO and MD
+// physicians, DACNB and DACBSP the chiropractic board diplomates — all of them
+// people whose own clinic's website will say "Dr." in front of their name.
+//
+// Deliberately not a general credentials list: LMT, CMT, RN, ATC and the like
+// are real qualifications whose holders are not called Dr., and putting them in
+// here would be the exact mistake this feature exists to avoid, in the other
+// direction.
+const DOCTOR_CREDENTIALS =
+  /^(dc|dpt|pt,?\s*dpt|md|do|dacnb|dacbsp|dabci|dc,?\s*ccsp|ccsp|phd)$/i;
+
+// A name for a regex, with everything the regex would read as syntax escaped.
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Where the "Dr." came from, said in the words the panel shows under the
+// sequence — somebody about to paste "Hi Dr. Mike" into LinkedIn is entitled to
+// know what made this app decide that.
+export type HonorificSource =
+  | "the contact name on this lead"
+  | "the letters after their name"
+  | "how their own website refers to them"
+  | null;
+
+export interface Salutation {
+  // What goes after "Hi" — "Dr. Mike", "Mike", or the placeholder.
+  address: string;
+  // The bare first name, without the title.
+  first: string;
+  honorific: "Dr." | null;
+  source: HonorificSource;
+}
+
+// Cleaned name parts: the bit before the comma, split on spaces, titles kept
+// so the caller can look at them.
+function nameParts(contactName: string | null): string[] {
+  return (contactName ?? "")
+    .split(",")[0]
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter((part) => part !== "");
+}
+
+// Anything after the first comma — "Dr. Sarah Whitfield, DC" gives ["DC"].
+function credentials(contactName: string | null): string[] {
+  const [, ...rest] = (contactName ?? "").split(",");
+  return rest.map((c) => c.replace(/\s+/g, " ").trim()).filter((c) => c !== "");
+}
+
 // The first name, and only ever the first name.
 //
 // This is the one substitution every template makes and the one most likely to
@@ -138,14 +200,9 @@ const TITLES = /^(dr|dr\.|doctor|mr|mr\.|mrs|mrs\.|ms|ms\.|miss|prof|prof\.|prof
 // back as the placeholder: a blank somebody fills in beats a greeting addressed
 // to "Whitfield Spine Center".
 export function firstName(contactName: string | null): string {
-  const cleaned = (contactName ?? "")
-    // Post-nominals — ", DC", ", DPT" — are not part of anybody's name.
-    .split(",")[0]
-    .replace(/\s+/g, " ")
-    .trim();
-  if (cleaned === "") return CONTACT_NAME_PLACEHOLDER;
+  const parts = nameParts(contactName);
+  if (parts.length === 0) return CONTACT_NAME_PLACEHOLDER;
 
-  const parts = cleaned.split(" ").filter((p) => p !== "");
   const first = parts.find((part) => !TITLES.test(part));
   if (first === undefined) return CONTACT_NAME_PLACEHOLDER;
 
@@ -155,6 +212,101 @@ export function firstName(contactName: string | null): string {
   if (parts.length === 1 && first.length < 2) return CONTACT_NAME_PLACEHOLDER;
 
   return first;
+}
+
+// The surname, where the record has one. Used only to look this person up in
+// their own website copy, never to address them — "Hi Dr. Whitfield" is not the
+// register any of these messages are written in.
+function lastName(contactName: string | null): string | null {
+  const named = nameParts(contactName).filter((part) => !TITLES.test(part));
+  return named.length >= 2 ? named[named.length - 1] : null;
+}
+
+// Whether this clinic's own crawled copy calls this person Dr.
+//
+// The one signal that has to be handled carefully. A chiropractic clinic's
+// website says "Dr." constantly — about the founder, the associates, the person
+// who left last year — so a bare search for the word would put a doctorate on
+// every receptionist in the pipeline. It is only a match when "Dr." sits
+// directly in front of *this contact's* name.
+//
+// The surname is the anchor where there is one, because a first-name match on
+// its own is exactly how the office manager called Sarah ends up wearing Dr.
+// Sarah the owner's title. With no surname on the record, a first-name match is
+// all there is, and it is taken — a clinic page that says "Dr. Mike" about the
+// only Mike it mentions is usually right.
+function websiteCallsThemDoctor(
+  contactName: string | null,
+  websiteNotes: string | null,
+): boolean {
+  const notes = (websiteNotes ?? "").trim();
+  if (notes === "") return false;
+
+  const first = firstName(contactName);
+  const last = lastName(contactName);
+  const anchor = last ?? (first === CONTACT_NAME_PLACEHOLDER ? null : first);
+  if (anchor === null) return false;
+
+  // "Dr Mike", "Dr. Mike", "Drs. Mike" — and, where both names are known,
+  // "Dr. Mike Alvarez" as well as "Dr. Alvarez".
+  const pattern = new RegExp(
+    `\\bdrs?\\.?\\s+(?:${escapeRegex(first)}\\s+)?${escapeRegex(anchor)}\\b`,
+    "i",
+  );
+  return pattern.test(notes);
+}
+
+// How to address this person, decided once and used by every step.
+//
+// Three signals, strongest first, and all three are read off stored data rather
+// than asked of a model: the title somebody typed into the contact field, the
+// letters after their name, and their own website's copy. A plain courtesy title
+// ("Mr. Alvarez") settles it the other way and stops the website check running,
+// because a record that says Mr. is a record somebody filled in on purpose.
+//
+// It is deliberately one decision rather than one per step. The model writes
+// steps 1 and 2 and code fills 3 to 5, and a sequence that opened "Hi Dr. Mike"
+// and followed up with "Hey Mike" would read as two people writing.
+export function salutation(
+  contactName: string | null,
+  websiteNotes: string | null,
+): Salutation {
+  const first = firstName(contactName);
+  const parts = nameParts(contactName);
+  const titled = parts.filter((part) => TITLES.test(part));
+
+  const doctorTitle = titled.some((part) => DOCTOR_TITLES.test(part));
+  const courtesyTitle = titled.length > 0 && !doctorTitle;
+  const doctorCredential = credentials(contactName).some((c) =>
+    DOCTOR_CREDENTIALS.test(c),
+  );
+
+  const source: HonorificSource = doctorTitle
+    ? "the contact name on this lead"
+    : doctorCredential
+      ? "the letters after their name"
+      : !courtesyTitle && websiteCallsThemDoctor(contactName, websiteNotes)
+        ? "how their own website refers to them"
+        : null;
+
+  const honorific = source === null ? null : ("Dr." as const);
+  return {
+    address: honorific === null ? first : `${honorific} ${first}`,
+    first,
+    honorific,
+    source,
+  };
+}
+
+// One line for the panel, so the decision is visible before anything is pasted
+// into LinkedIn rather than discovered in the message.
+export function salutationNote(s: Salutation): string {
+  if (s.first === CONTACT_NAME_PLACEHOLDER) {
+    return "No contact name on this lead — every message leaves a blank to fill in.";
+  }
+  return s.honorific === null
+    ? `Addressed as “${s.address}”. Nothing in the data says they are a doctor.`
+    : `Addressed as “${s.address}” — read off ${s.source}.`;
 }
 
 // ─── What a step is written from ───────────────────────────────────────────
@@ -179,6 +331,12 @@ export interface SequenceContext {
   priorMessages: OutreachDraft[];
 }
 
+// The salutation for a whole context, so the templates and both prompts read it
+// from one place rather than each deciding for itself.
+export function contextSalutation(ctx: SequenceContext): Salutation {
+  return salutation(ctx.contactName, ctx.evidence.websiteNotes);
+}
+
 // ─── The templates ─────────────────────────────────────────────────────────
 
 // The three steps a model is never asked to write. Each is the wording exactly
@@ -191,7 +349,7 @@ export function fillTemplate(
   step: OutreachStep,
   ctx: SequenceContext,
 ): string | null {
-  const name = firstName(ctx.contactName);
+  const name = contextSalutation(ctx).address;
   const clinic = ctx.evidence.clinicName.trim();
 
   switch (step) {
@@ -238,15 +396,17 @@ export function fillTemplate(
 // The hook sits mid-sentence and the full stop after it belongs to the
 // template, which is why readHook strips a trailing one.
 export function connectionNote({
-  contactName,
+  address,
   clinicName,
   hook,
 }: {
-  contactName: string | null;
+  // Already decided by salutation() — "Dr. Mike" or "Mike". The template does
+  // not work it out for itself, so every step greets the person the same way.
+  address: string;
   clinicName: string;
   hook: string;
 }): string {
-  return `Hi ${firstName(contactName)} — came across ${clinicName.trim()} while looking into non-surgical spine/disc practices. ${hook}. Would love to connect.`;
+  return `Hi ${address} — came across ${clinicName.trim()} while looking into non-surgical spine/disc practices. ${hook}. Would love to connect.`;
 }
 
 // ─── Gating ────────────────────────────────────────────────────────────────
@@ -411,6 +571,7 @@ function conversationBlock(prior: OutreachDraft[]): string {
 }
 
 function connectionPrompt(ctx: SequenceContext): string {
+  const { address } = contextSalutation(ctx);
   return [
     `CLINIC: ${ctx.evidence.clinicName}`,
     "",
@@ -426,7 +587,8 @@ function connectionPrompt(ctx: SequenceContext): string {
     "Find the single most specific true detail about this clinic in the evidence above — the kind of thing somebody who spent two minutes actually looking at them would notice — and write it as one short clause.",
     "",
     "It is dropped into the middle of this sentence, which is already written and which you do not repeat back:",
-    '  "Hi [First Name] — came across [Clinic] while looking into non-surgical spine/disc practices. <your clause>. Would love to connect."',
+    `  "Hi ${address} — came across ${ctx.evidence.clinicName.trim()} while looking into non-surgical spine/disc practices. <your clause>. Would love to connect."`,
+    "The greeting is already decided and already correct, title included where there is one. You are writing the clause and nothing else.",
     "",
     "What counts as specific enough:",
     "  - a named treatment program or protocol the clinic offers",
@@ -459,10 +621,10 @@ function connectionPrompt(ctx: SequenceContext): string {
 }
 
 function firstMessagePrompt(ctx: SequenceContext): string {
-  const name = firstName(ctx.contactName);
+  const { address, honorific } = contextSalutation(ctx);
   return [
     `CLINIC: ${ctx.evidence.clinicName}`,
-    `THEIR FIRST NAME: ${name}`,
+    `ADDRESS THEM AS: ${address}`,
     "",
     "EVIDENCE",
     "Gathered by an automated enrichment run. This is everything you have.",
@@ -480,7 +642,17 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     `  C) ${VARIANT_BLURBS.C}. No specific hook needed — warm, short, and still ending in a question.`,
     "",
     "RULES, all three:",
-    `  - Open by addressing them as "${name}" and by that name only. Never the full name, never "Dr. <surname>", unless the evidence itself shows that is genuinely how they are addressed.`,
+    // The honorific is settled before the prompt is built (salutation() above),
+    // off the contact field, the letters after their name, and their own site.
+    // The model is told the answer rather than asked for it, because the other
+    // three steps are filled in code and cannot ask — and a sequence that
+    // opened "Hi Dr. Mike" and followed up with "Hey Mike" would read as two
+    // people writing.
+    `  - Open by addressing them as "${address}" and exactly that. ${
+      honorific === null
+        ? "No title: nothing in the evidence says this person is a doctor, and awarding them one is worse than leaving it off."
+        : "Keep the Dr. — this person is a doctor and their own clinic addresses them that way. Do not extend it to the surname; \"Dr. Mike\" is the register, \"Dr. Alvarez\" is not."
+    } Never the full name.`,
     "  - End in a question. A message that ends in an offer is the wrong message — the offer is the next step, and it is written after they answer.",
     "  - No pitch, no service description, no price, no call booking, no link.",
     "  - Do not repeat an observation already made in the conversation above. If the connection request already used the best detail, A and B find a different one or lean on what is actually there.",
