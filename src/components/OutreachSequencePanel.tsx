@@ -74,6 +74,7 @@ export default function OutreachSequencePanel({
   actions,
   acceptedLabel,
   repliedLabel,
+  salutationNote,
 }: {
   messages: OutreachMessageView[];
   state: SequenceState;
@@ -82,6 +83,11 @@ export default function OutreachSequencePanel({
   // hydration render the same string — these stamps are often seconds old.
   acceptedLabel: string | null;
   repliedLabel: string | null;
+  // How every message in the sequence greets this person, and what decided it.
+  // Worth stating up here: "Hi Dr. Mike" is the kind of thing you want to have
+  // agreed with before it is pasted into a stranger's inbox, not to discover in
+  // the message. Editing the box still overrides it either way.
+  salutationNote: string;
 }) {
   const [notes, setNotes] = useState<Partial<Record<OutreachStep, StepNote>>>(
     {},
@@ -108,6 +114,9 @@ export default function OutreachSequencePanel({
           mark={actions.markReplied}
           clear={actions.clearReplied}
         />
+        <p className="w-full text-xs leading-relaxed text-muted">
+          {salutationNote}
+        </p>
       </div>
 
       <ol className="mt-4">

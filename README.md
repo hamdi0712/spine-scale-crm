@@ -497,6 +497,25 @@ again.
   already drafted for that lead, so a later step does not re-make an
   observation an earlier one already made.
 
+  Every message opens on a first name, with a **Dr.** in front of it where one
+  is owed — "Hi Dr. Mike", not "Hi Mike" and not "Hi Dr. Alvarez", because that
+  is the register these practices actually use. Whether the title is owed is
+  read off the data in three places, strongest first: a title typed into the
+  contact field, the letters after their name (DC, DPT, MD, DO and the
+  chiropractic diplomates — not LMT or RN, whose holders are not called Dr.),
+  and finally the clinic's own crawled copy, but only where "Dr." sits directly
+  in front of *this contact's* name. That last check is why the office manager
+  called Sarah does not inherit Dr. Sarah the owner's title from a page that
+  mentions both. An explicit "Mr." or "Ms." on the record settles it the other
+  way and stops the website check running.
+
+  The decision is made once for the whole sequence rather than per step, since
+  code fills three of the five steps and only a model writes the other two — and
+  a sequence that opened "Hi Dr. Mike" and followed up with "Hey Mike" would read
+  as two people writing. The panel states which greeting it settled on and what
+  decided it, above the timeline, so it can be disagreed with before anything is
+  pasted rather than after.
+
   Nothing here sends anything. Every message is text in a box to read, edit,
   copy and paste in by hand, and *Mark sent* is a note that a person did —
   the same arrangement as every other outreach step in the app.

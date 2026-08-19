@@ -33,6 +33,7 @@ import { enrichPlan } from "@/lib/leadEnrich";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { hasAssistEvidence } from "@/lib/icpAssist";
 import { sequenceState, toMessageViews } from "@/lib/outreachSequenceRead";
+import { salutation, salutationNote } from "@/lib/outreachSequence";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDateTime, toDateInput } from "@/lib/format";
@@ -521,6 +522,9 @@ export default async function LeadDetailPage({
               repliedLabel={
                 lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
               }
+              salutationNote={salutationNote(
+                salutation(lead.contactName, lead.websiteNotes),
+              )}
             />
           </div>
 

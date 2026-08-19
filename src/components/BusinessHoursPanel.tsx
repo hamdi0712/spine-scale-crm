@@ -26,12 +26,17 @@ const BADGE: Record<OpenState, string> = {
   closed: "bg-white/10 text-white/70",
 };
 
-// Ticks slowly — the badges change on the hour, not the second.
+// Ticks every fifteen seconds. Not the second — nothing here is measured
+// finer than a minute — but not the half-minute it used to be either: the
+// badge counts down in whole minutes inside the last hour before a zone opens,
+// and a thirty-second tick left it up to half a minute behind its own clock,
+// which is visible when the minute it is counting to is the one on the tile
+// above it.
 function useNow(): Date | null {
   const [now, setNow] = useState<Date | null>(null);
   useEffect(() => {
     setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 30_000);
+    const id = setInterval(() => setNow(new Date()), 15_000);
     return () => clearInterval(id);
   }, []);
   return now;

@@ -31,6 +31,7 @@ import {
   SequenceContext,
   buildStepPrompt,
   connectionNote,
+  contextSalutation,
   fillTemplate,
   isOutreachStep,
   parseConnectionReply,
@@ -167,7 +168,7 @@ export async function generateOutreachStep(
         step,
         variant: null,
         content: connectionNote({
-          contactName: lead.contactName,
+          address: contextSalutation(ctx).address,
           clinicName: lead.clinicName,
           hook: parsed.hook,
         }),
