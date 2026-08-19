@@ -459,6 +459,32 @@ again.
   approached without forty pages being opened to find out. Nothing sends a
   request — this is a note that a person did, kept where it stops the same
   clinic being approached twice.
+
+  The **outreach sequence** on the lead page is the same idea carried through
+  the whole conversation: five messages, in the order they happen — the
+  connection request, the first message once it is accepted, the audit offer
+  once they reply, the note the Loom goes out with, and one follow-up when it
+  has gone quiet. Each step is locked until the thing that has to happen has,
+  and a locked step says what would unlock it rather than being merely greyed
+  out: *accepted* and *replied* are marks somebody makes, step 4 waits for a
+  Loom URL on the lead, and step 5 comes due on the lead's own follow-up date
+  rather than on a timer of its own.
+
+  Two of the five cost a model call. The connection request and the first
+  message are written from the enrichment evidence — the same website notes,
+  ads signal and review count the scorecard is scored from — and both are held
+  to the rule the old outreach hook had: a run that finds nothing specific
+  enough writes nothing, and says so, rather than producing an opener that
+  would read as a mail merge. The first message comes back as three variants to
+  choose between, and marking one sent unmarks the others. The remaining three
+  steps are fixed templates with a first name, a clinic and a link in them, so
+  they are filled in code and cost nothing. Every prompt is given the messages
+  already drafted for that lead, so a later step does not re-make an
+  observation an earlier one already made.
+
+  Nothing here sends anything. Every message is text in a box to read, edit,
+  copy and paste in by hand, and *Mark sent* is a note that a person did —
+  the same arrangement as every other outreach step in the app.
 - **Clients** — signed clinics with package/fee/contract details, GHL and Meta
   Ads reference links, an invoice log, and a per-client delivery checklist
   (seeded with the standard Disc Relief Pipeline OS items, fully editable per

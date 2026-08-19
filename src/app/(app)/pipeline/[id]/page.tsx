@@ -11,7 +11,16 @@ import {
   updateLead,
 } from "@/lib/actions/leads";
 import { applyEnrichSelection, runLeadEnrichment } from "@/lib/actions/enrich";
-import { generateOutreachHook } from "@/lib/actions/outreachHook";
+import {
+  clearConnectionAccepted,
+  clearMessageSent,
+  clearReplied,
+  generateOutreachStep,
+  markConnectionAccepted,
+  markMessageSent,
+  markReplied,
+  saveMessageContent,
+} from "@/lib/actions/outreachSequence";
 import { suggestIcpScores } from "@/lib/actions/icpAssist";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
@@ -23,6 +32,7 @@ import {
 import { enrichPlan } from "@/lib/leadEnrich";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { hasAssistEvidence } from "@/lib/icpAssist";
+import { sequenceState, toMessageViews } from "@/lib/outreachSequenceRead";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDateTime, toDateInput } from "@/lib/format";
@@ -30,7 +40,7 @@ import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
-import OutreachHookPanel from "@/components/OutreachHookPanel";
+import OutreachSequencePanel from "@/components/OutreachSequencePanel";
 import IcpScorecard from "@/components/IcpScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 
@@ -47,6 +57,9 @@ export default async function LeadDetailPage({
       notes: { orderBy: { createdAt: "desc" } },
       calls: { orderBy: { scheduledAt: "asc" } },
       client: true,
+      // Every draft, not just the newest per step: the panel groups them, and
+      // regenerating leaves the older ones in place rather than replacing them.
+      outreach: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!lead) notFound();
@@ -62,7 +75,19 @@ export default async function LeadDetailPage({
   const runEnrichment = runLeadEnrichment.bind(null, lead.id);
   const applySelection = applyEnrichSelection.bind(null, lead.id);
   const suggestScores = suggestIcpScores.bind(null, lead.id);
-  const writeHook = generateOutreachHook.bind(null, lead.id);
+  // One bound id for the whole sequence — every action below is scoped to the
+  // record whose page this is, and the only id the browser ever names is a
+  // message's, which each action matches against this lead's own rows.
+  const sequence = {
+    generate: generateOutreachStep.bind(null, lead.id),
+    markSent: markMessageSent.bind(null, lead.id),
+    clearSent: clearMessageSent.bind(null, lead.id),
+    saveContent: saveMessageContent.bind(null, lead.id),
+    markAccepted: markConnectionAccepted.bind(null, lead.id),
+    clearAccepted: clearConnectionAccepted.bind(null, lead.id),
+    markReplied: markReplied.bind(null, lead.id),
+    clearReplied: clearReplied.bind(null, lead.id),
+  };
   const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
 
   // What an enrichment run would do with this lead as it stands, worked out
@@ -363,11 +388,6 @@ export default async function LeadDetailPage({
               lead.companyLinkedinUrl ||
               lead.websiteUrl ||
               lead.facebookUrl ||
-              // The hook needs no URL of its own — it is written from the
-              // enrichment evidence — so an enriched lead opens this row for
-              // it even with nothing to link to.
-              hasAssistEvidence(lead) ||
-              lead.outreachHook ||
               // A mark outlives the URL it was made against: a profile link
               // deleted later shouldn't take the record of the outreach with it.
               lead.connectionRequestSentAt) && (
@@ -439,25 +459,70 @@ export default async function LeadDetailPage({
                     clear={clearConnectionSent}
                   />
                 )}
-                {/* The other thing in this row that prepares rather than
-                    opens. It drafts the first line of the request the button
-                    above records the sending of — and, like that one, sends
-                    nothing itself. */}
-                <OutreachHookPanel
-                  generate={writeHook}
-                  clinicName={lead.clinicName}
-                  contactName={lead.contactName}
-                  storedHook={lead.outreachHook}
-                  enriched={hasAssistEvidence(lead)}
-                />
               </div>
             )}
+
+            {/* The Loom, which is step 4's one unfillable blank. It sits in the
+                details form because it is a fact about the lead somebody types
+                and saves, exactly like the four URLs above it — the panel below
+                only reads it. */}
+            <div className="border-t border-line/60 pt-5">
+              <label className="field-label" htmlFor="loomUrl">
+                Loom URL — the audit recorded for this clinic
+              </label>
+              <input
+                id="loomUrl"
+                name="loomUrl"
+                type="url"
+                inputMode="url"
+                defaultValue={lead.loomUrl ?? ""}
+                placeholder="https://www.loom.com/share/…"
+                spellCheck={false}
+                autoComplete="off"
+                className="field"
+              />
+              <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                Save the lead to store it. The delivery message in the sequence
+                below unlocks once there is one, and the link is dropped into it
+                as written.
+              </p>
+            </div>
             <div className="flex justify-end border-t border-line/60 pt-5">
               <button type="submit" className="btn-primary">
                 Save changes
               </button>
             </div>
           </form>
+
+          {/* The five messages, in the order they happen. Its own section
+              rather than a control in the outreach row above: it is a sequence
+              with states in it, not a button, and it is the length of a card.
+
+              Outside the details form on purpose — every control in it acts on
+              its own the moment it is pressed, and nesting that in a form whose
+              own Save is somewhere above would make "did that save?" a fair
+              question about both. */}
+          <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
+            <h2 className="display text-xl font-semibold">Outreach sequence</h2>
+            <p className="text-xs text-muted">
+              Drafts to copy — nothing here is sent
+            </p>
+          </div>
+          <div className="card p-6">
+            <OutreachSequencePanel
+              messages={toMessageViews(lead.outreach)}
+              state={sequenceState(lead)}
+              actions={sequence}
+              acceptedLabel={
+                lead.connectionAcceptedAt
+                  ? `Accepted ${fmtRelative(lead.connectionAcceptedAt)}`
+                  : null
+              }
+              repliedLabel={
+                lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
+              }
+            />
+          </div>
 
           {/* Written only by “Enrich this lead”, and shown apart from the form
               above because it is not the same kind of fact: these are readings

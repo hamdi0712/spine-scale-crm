@@ -214,16 +214,38 @@ model Lead {
   // the other, and a count that didn't get re-read shouldn't look like it did.
   reviewsCheckedAt DateTime?
 
-  // One true, specific line about this clinic, written from the enrichment
-  // evidence above for the top of a connection request
-  // (src/lib/outreachHook.ts). Stored so it survives a page load and can be
-  // read back later; regenerating replaces it.
+  // DEPRECATED — read by nothing, written by nothing.
   //
-  // It is a draft and nothing more. Nothing in this app sends it, and there is
-  // no "sent" flag beside it — the request is still made by hand on LinkedIn,
-  // and connectionRequestSentAt above is where that is recorded.
+  // This held the one true line about the clinic that opened a connection
+  // request, back when the connection request was the only message this app
+  // helped write. That message is step 1 of the sequence now, and it lives in
+  // OutreachMessage below with the other four, as a whole note rather than as
+  // the clause in the middle of one.
+  //
+  // The column stays because the migration that introduced the table copied
+  // every line in it forward into a CONNECTION row and dropping it afterwards
+  // would leave the only copy of a year's drafts in a table one migration old.
+  // Nothing reads it; it is here to be deleted a release from now.
   outreachHook String?
 
+  // The two answers a connection request can get, marked by hand on the lead
+  // page in the same way connectionRequestSentAt above is marked. They are the
+  // gates on the sequence: nothing writes a first message until a request was
+  // accepted, and nothing offers the audit until they replied.
+  //
+  // Nullable and independent of each other. A request that was accepted and
+  // never replied to is the normal state of half the pipeline, and the pair
+  // records exactly that rather than a status somebody has to keep in order.
+  connectionAcceptedAt DateTime?
+  repliedAt            DateTime?
+
+  // The Loom this lead's audit was recorded to, pasted in by hand once it
+  // exists. It is what unlocks step 4 and the only thing that step's message
+  // cannot be written without — a delivery note with no link in it is not a
+  // delivery note.
+  loomUrl String?
+
+  outreach  OutreachMessage[]
   notes     LeadNote[]
   calls     Call[]
   activity  ActivityLog[]
@@ -259,6 +281,57 @@ model Lead {
 
   icpScoredAt DateTime? // null = never scored; drives whether a tier badge shows
   icpNotes    String?
+}
+
+// One drafted message in a lead's outreach sequence.
+//
+// Five steps, in the order they happen: the connection request, the first
+// message once it is accepted, the audit offer once they reply, the delivery
+// note once the Loom exists, and the follow-up when the trail goes cold. The
+// step strings are constrained by OUTREACH_STEPS in src/lib/outreachSequence.ts
+// the same way every other status field in this schema is constrained by
+// src/lib/constants.ts — SQLite has no enums, so the constant is the enum.
+//
+// It is a drafts table and nothing more. Nothing in this app sends a message,
+// and no row here means anything was sent: sentAt is a mark somebody makes
+// after pasting the text into LinkedIn themselves, exactly like
+// Lead.connectionRequestSentAt, and clearing it is a misclick being undone
+// rather than an event.
+//
+// Rows accumulate rather than replace. Regenerating a step writes a new row and
+// leaves the old one, because the previous draft is the record of what may
+// already have been pasted somewhere, and because every generation is billed —
+// throwing one away to save a row is the wrong trade. What the panel shows is
+// the newest row per step, and what the prompt for a later step is given is
+// every earlier one, so the sequence can avoid repeating an observation it has
+// already made.
+model OutreachMessage {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  // CONNECTION | FIRST_MESSAGE | AUDIT_OFFER | LOOM_DELIVERY | FOLLOW_UP
+  step String
+
+  // "A" | "B" | "C", and only on FIRST_MESSAGE, which is generated as three
+  // alternatives for a person to choose between. Null on every other step,
+  // where there is one message and nothing to tell apart.
+  variant String?
+
+  // The message as it stands, whole — greeting, body and sign-off — rather than
+  // the fragment the old outreachHook column held. It is what gets copied, so
+  // it is what is stored.
+  content String
+
+  // When somebody marked this as the one they sent. Null on a draft, and null
+  // on the two variants that were not chosen.
+  sentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  // Every read is "this lead's messages, newest first", and the step is what
+  // they are then grouped by.
+  @@index([leadId, step, createdAt])
 }
 
 // Append-only activity log — notes are never edited or deleted.
