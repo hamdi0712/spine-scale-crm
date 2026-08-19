@@ -31,6 +31,7 @@ import {
   SequenceState,
   VARIANT_BLURBS,
   FirstMessageVariant,
+  endsInQuestion,
   stepLock,
   stepUsesModel,
 } from "@/lib/outreachSequence";
@@ -57,7 +58,15 @@ export interface SequenceActions {
 type StepNote =
   | { kind: "error"; message: string }
   | { kind: "none"; basedOn: string[] }
-  | { kind: "evidence"; evidence: string | null; basedOn: string[] };
+  | {
+      kind: "evidence";
+      evidence: string | null;
+      basedOn: string[];
+      // How many messages the run actually wrote. Only interesting on the first
+      // message, where three were asked for and anything less is worth saying
+      // out loud rather than leaving somebody to count the boxes.
+      written: number;
+    };
 
 export default function OutreachSequencePanel({
   messages,
@@ -160,6 +169,7 @@ function StepRow({
               kind: "evidence",
               evidence: result.evidence ?? null,
               basedOn: result.basedOn,
+              written: result.written,
             },
       );
     } catch {
@@ -254,14 +264,14 @@ function StepRow({
 
             {note && <Note note={note} step={step} />}
 
+            {/* One column, always. The three first-message options were a
+                three-column grid until the column each one got was narrow
+                enough to break its label over four lines and show four words
+                of the message — a choice between three things you cannot read
+                is not a choice. Stacked, each option is full width, and the
+                labels above them are what makes the list scannable. */}
             {messages.length > 0 && (
-              <div
-                className={
-                  step === "FIRST_MESSAGE" && messages.length > 1
-                    ? "mt-3 grid gap-3 lg:grid-cols-3"
-                    : "mt-3"
-                }
-              >
+              <div className="mt-3 space-y-3">
                 {messages.map((message) => (
                   <MessageCard
                     key={message.id}
@@ -312,12 +322,19 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
       </div>
     );
   }
-  if (!note.evidence && note.basedOn.length === 0) return null;
+  const short = step === "FIRST_MESSAGE" && note.written < 3;
+  if (!note.evidence && note.basedOn.length === 0 && !short) return null;
   return (
     <div className="mt-2.5 text-xs leading-relaxed text-muted">
       {note.evidence && <p>Read off: “{note.evidence}”</p>}
       {note.basedOn.length > 0 && (
         <p>Written from {note.basedOn.join(", ").toLowerCase()}.</p>
+      )}
+      {short && (
+        <p className="text-warn">
+          {note.written === 1 ? "One option" : `${note.written} options`} came
+          back rather than three. Regenerating usually gets the full set.
+        </p>
       )}
     </div>
   );
@@ -345,6 +362,12 @@ function MessageCard({
   const sent = message.sentAt !== null;
   const isConnection = message.step === "CONNECTION";
   const overLength = isConnection && text.length > CONNECTION_MAX_CHARS;
+  // Only the first message is held to it, and only once there is something to
+  // hold — an empty box is not a message that failed the rule.
+  const needsQuestion =
+    message.step === "FIRST_MESSAGE" &&
+    text.trim() !== "" &&
+    !endsInQuestion(text);
 
   async function copy() {
     try {
@@ -367,19 +390,23 @@ function MessageCard({
         sent ? "border-ok/30 bg-ok-soft/30" : "border-line bg-wash/50"
       }`}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-xs font-medium">
-          {message.variant
-            ? `Option ${message.variant}`
-            : OUTREACH_STEP_LABELS[message.step]}
-          {message.variant && (
-            <span className="ml-1.5 font-normal text-muted">
-              {VARIANT_BLURBS[message.variant as FirstMessageVariant] ?? ""}
-            </span>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="min-w-0 text-xs font-medium">
+          {message.variant ? (
+            <>
+              <span className="inline-flex h-[18px] items-center rounded-[6px] bg-accent/10 px-1.5 text-accent">
+                Option {message.variant}
+              </span>
+              <span className="ml-2 font-normal text-muted">
+                {VARIANT_BLURBS[message.variant as FirstMessageVariant] ?? ""}
+              </span>
+            </>
+          ) : (
+            OUTREACH_STEP_LABELS[message.step]
           )}
         </p>
         <p
-          className={`num text-xs ${overLength ? "text-bad" : "text-muted"}`}
+          className={`num shrink-0 text-xs ${overLength ? "text-bad" : "text-muted"}`}
           title={
             isConnection
               ? `LinkedIn caps a connection note at ${CONNECTION_MAX_CHARS} characters`
@@ -460,10 +487,17 @@ function MessageCard({
         )}
       </div>
 
-      {(text.includes(CONTACT_NAME_PLACEHOLDER) || copyFailed || edited) && (
+      {(text.includes(CONTACT_NAME_PLACEHOLDER) ||
+        copyFailed ||
+        edited ||
+        needsQuestion) && (
         <p className="mt-2 text-xs leading-relaxed text-muted">
           {text.includes(CONTACT_NAME_PLACEHOLDER) &&
             `Fill in ${CONTACT_NAME_PLACEHOLDER} — this lead has no contact name on it. `}
+          {/* Reported rather than enforced: this used to be a rule that threw
+              the whole option away, which cost a choice of three its third. */}
+          {needsQuestion &&
+            "This one does not end in a question — an opener that lands on a full stop gives them nothing to answer. "}
           {copyFailed &&
             "This browser would not let the page write to the clipboard; select the text and copy it by hand. "}
           {edited && "Edited — Save edit keeps it, a reload loses it."}
