@@ -46,9 +46,9 @@ interface Bubble {
 // lookups can answer, so the first thing anybody tries works.
 const SUGGESTIONS = [
   "What needs my attention today?",
+  "How is today's checklist going?",
   "Which clients are at risk, and why?",
-  "Summarise my A-tier leads.",
-  "How is the discovery queue doing?",
+  "How is my outreach doing this week?",
 ];
 
 // The lookups, named the way a person would say them. The reply's receipt
@@ -63,6 +63,17 @@ const TOOL_LABELS: Record<string, string> = {
   getReportingTrends: "Reporting",
   getFollowUpsDue: "Follow-ups",
   getRecentActivity: "Activity log",
+  getTasks: "Tasks",
+  getDailyChecklistStatus: "Daily checklist",
+  getOutreachFunnel: "Funnel",
+  getDiscoveryCandidates: "Discovery",
+  getDiscoveryCandidateDetail: "Candidate record",
+  getCalls: "Call log",
+  getAdHubResearch: "Ad Hub research",
+  getAdHubConcepts: "Ad Hub concepts",
+  getCreativeDetail: "Creative",
+  getLibraryEntries: "Library",
+  getPipelineSettings: "Pipeline settings",
 };
 
 export default function CopilotPanel({
@@ -186,8 +197,9 @@ export default function CopilotPanel({
             </span>
             <p className="mt-3 text-sm font-medium">Ask about anything in here</p>
             <p className="mx-auto mt-1 max-w-[280px] text-xs leading-relaxed text-muted">
-              It looks up your pipeline, clients, discovery queue and reporting
-              to answer. It can read all of it and change none of it.
+              It looks up your pipeline, clients, discovery, tasks, daily
+              checklist, calls, reporting, Ad Hub and library to answer. It can
+              read all of it and change none of it.
             </p>
             <div className="mt-5 space-y-2">
               {SUGGESTIONS.map((s) => (
