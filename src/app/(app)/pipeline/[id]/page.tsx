@@ -468,6 +468,25 @@ export default async function LeadDetailPage({
                 and saves, exactly like the four URLs above it — the panel below
                 only reads it. */}
             <div className="border-t border-line/60 pt-5">
+              <label className="field-label" htmlFor="replyText">
+                What they wrote back
+              </label>
+              <textarea
+                id="replyText"
+                name="replyText"
+                rows={3}
+                defaultValue={lead.replyText ?? ""}
+                placeholder="Paste their reply here, as they wrote it."
+                className="field"
+              />
+              <p className="mb-5 mt-1.5 text-xs leading-relaxed text-muted">
+                The audit offer in the sequence below is written from this. Its
+                job is to answer what they actually said, so pasting the reply in
+                is what stops it opening with a generic “appreciate that
+                context”. Marking a reply without keeping the text still works;
+                that step then acknowledges the reply and attributes nothing.
+              </p>
+
               <label className="field-label" htmlFor="loomUrl">
                 Loom URL — the audit recorded for this clinic
               </label>
