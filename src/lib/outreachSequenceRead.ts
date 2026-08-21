@@ -37,6 +37,10 @@ export type OutreachStepResult =
       basedOn: string[];
       // Where the model cited the detail it read, on the steps that read one.
       evidence?: string | null;
+      // First message only: the variants the evidence could not support. Named
+      // rather than merely counted, because "no advertising evidence, so no
+      // option B" is an answer, and "two options" on its own is a puzzle.
+      skipped?: readonly string[];
     }
   | { ok: false; error: string };
 
@@ -99,6 +103,9 @@ export interface OutreachMessageView {
   step: OutreachStep;
   variant: string | null;
   content: string;
+  // The reviewer's note. Rendered under the message and never inside it, so it
+  // cannot be copied into LinkedIn along with the draft.
+  internalNote: string | null;
   sentAt: Date | null;
   createdAt: Date;
 }
@@ -112,6 +119,7 @@ export function toMessageViews(
     step: string;
     variant: string | null;
     content: string;
+    internalNote: string | null;
     sentAt: Date | null;
     createdAt: Date;
   }[],

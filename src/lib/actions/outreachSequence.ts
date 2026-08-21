@@ -33,7 +33,9 @@ import {
   connectionNote,
   contextSalutation,
   fillTemplate,
+  formatInternalNote,
   isOutreachStep,
+  parseAuditOfferReply,
   parseConnectionReply,
   parseFirstMessageReply,
   stepLock,
@@ -60,6 +62,7 @@ async function loadContext(leadId: string) {
       loomUrl: true,
       connectionAcceptedAt: true,
       repliedAt: true,
+      replyText: true,
       nextFollowUp: true,
       enrichedAt: true,
       outreach: {
@@ -87,7 +90,8 @@ export async function generateOutreachStep(
   // The panel already refuses to show a button for a locked step; this is the
   // same rule on the server, because a hidden button is a courtesy and not a
   // guarantee. The reason it gives is the one the timeline shows.
-  const lock = stepLock(step, sequenceState(lead));
+  const state = sequenceState(lead);
+  const lock = stepLock(step, state);
   if (!lock.unlocked) {
     return { ok: false, error: lock.reason };
   }
@@ -101,6 +105,7 @@ export async function generateOutreachStep(
     },
     contactName: lead.contactName,
     loomUrl: lead.loomUrl,
+    replyText: lead.replyText,
     priorMessages: lead.outreach.map(toDraft),
   };
 
@@ -111,7 +116,7 @@ export async function generateOutreachStep(
   // anyway would spend a call to get back the words we already have, with a
   // chance of getting them slightly wrong.
   if (!stepUsesModel(step)) {
-    const content = fillTemplate(step, ctx);
+    const content = fillTemplate(step, ctx, state);
     if (content === null) {
       return {
         ok: false,
@@ -159,7 +164,7 @@ export async function generateOutreachStep(
     }
     // A run that found nothing specific enough is a real answer, not an error,
     // and it stores nothing rather than a generic opener somebody might send.
-    if (parsed.hook === null) {
+    if (parsed.observation === null) {
       return { ok: true, step, written: 0, fromTemplate: false, basedOn };
     }
     await prisma.outreachMessage.create({
@@ -170,8 +175,9 @@ export async function generateOutreachStep(
         content: connectionNote({
           address: contextSalutation(ctx).address,
           clinicName: lead.clinicName,
-          hook: parsed.hook,
+          observation: parsed.observation,
         }),
+        internalNote: formatInternalNote(parsed.note),
       },
     });
     revalidatePath(`/pipeline/${leadId}`);
@@ -181,7 +187,36 @@ export async function generateOutreachStep(
       written: 1,
       fromTemplate: false,
       basedOn,
-      evidence: parsed.evidence,
+      evidence: parsed.note.evidence,
+    };
+  }
+
+  if (step === "AUDIT_OFFER") {
+    const parsed = parseAuditOfferReply(reply.content);
+    if (!parsed || parsed.message === null) {
+      return {
+        ok: false,
+        error:
+          "DeepSeek answered, but not in a shape that reads as an audit offer. Nothing has been saved — try again.",
+      };
+    }
+    await prisma.outreachMessage.create({
+      data: {
+        leadId,
+        step,
+        variant: null,
+        content: parsed.message,
+        internalNote: formatInternalNote(parsed.note),
+      },
+    });
+    revalidatePath(`/pipeline/${leadId}`);
+    return {
+      ok: true,
+      step,
+      written: 1,
+      fromTemplate: false,
+      basedOn,
+      evidence: parsed.note.evidence,
     };
   }
 
@@ -198,18 +233,20 @@ export async function generateOutreachStep(
   // support comes back null and is simply not written — two options that are
   // both true beat three where one is filler.
   const written = FIRST_MESSAGE_VARIANTS.filter(
-    (variant) => parsed[variant] !== null,
+    (variant) => parsed.variants[variant] !== null,
   );
   if (written.length === 0) {
     return { ok: true, step, written: 0, fromTemplate: false, basedOn };
   }
 
+  const note = formatInternalNote(parsed.note);
   await prisma.outreachMessage.createMany({
     data: written.map((variant) => ({
       leadId,
       step,
       variant,
-      content: parsed[variant] as string,
+      content: parsed.variants[variant] as string,
+      internalNote: note,
     })),
   });
   revalidatePath(`/pipeline/${leadId}`);
@@ -219,6 +256,13 @@ export async function generateOutreachStep(
     written: written.length,
     fromTemplate: false,
     basedOn,
+    // Which of A and B the evidence could not support, so the panel can say why
+    // there are two options rather than three instead of leaving somebody to
+    // wonder whether something failed.
+    skipped: FIRST_MESSAGE_VARIANTS.filter(
+      (variant) => parsed.variants[variant] === null,
+    ),
+    evidence: parsed.note.evidence,
   };
 }
 

@@ -58,6 +58,10 @@ function leadFields(formData: FormData) {
     // recorded by hand, and the one thing step 4 of the outreach sequence
     // cannot be written without.
     loomUrl: str(formData, "loomUrl"),
+    // What the prospect actually wrote back. The audit offer is generated from
+    // it, so an empty one is a real state: that step then acknowledges the
+    // reply without attributing anything to them.
+    replyText: str(formData, "replyText"),
     location: str(formData, "location"),
     // Blank is a real answer here — a lead whose zone nobody knows — so
     // anything outside the four zones stores as null rather than defaulting.
