@@ -1,8 +1,9 @@
 // Today's focus — one list of everything that wants doing today, drawn from
-// four places that used to be four separate panels.
+// five places, four of which used to be four separate panels.
 //
 // The order is the point. Calls come first because they happen at a time and
-// the time is not negotiable; then follow-ups that have already slipped; then
+// the time is not negotiable; then follow-ups and board tasks that have
+// already slipped, interleaved by the date they came due; then
 // clients whose health has just turned, because that is a conversation you
 // should start rather than wait to be asked about; then the onboarding work.
 // The one exception runs the other way: an onboarding item that is holding up
@@ -21,6 +22,11 @@ import { HEALTH_LABELS, HealthStatus } from "@/lib/health";
 // Priority tiers, low number first.
 const TIER_CALL = 1;
 const TIER_BLOCKING_URGENT = 2; // an onboarding item holding up a call or launch
+// Tasks share this tier with follow-ups rather than getting one of their own.
+// Both are "something you said you would do by a date, and the date is here" —
+// splitting them would put every task below every follow-up (or the reverse)
+// regardless of which one has been waiting longer, and the due date is the
+// honest sort key across both.
 const TIER_FOLLOW_UP = 3;
 const TIER_HEALTH = 4;
 const TIER_BLOCKING = 5;
@@ -36,7 +42,7 @@ export const FOCUS_VISIBLE_LIMIT = 1;
 // A health change stops being news after this long.
 const HEALTH_NEWS_DAYS = 7;
 
-export type FocusKind = "CALL" | "FOLLOW_UP" | "HEALTH" | "ONBOARDING";
+export type FocusKind = "CALL" | "FOLLOW_UP" | "TASK" | "HEALTH" | "ONBOARDING";
 
 export type FocusTone = "blue" | "amber" | "red" | "neutral";
 
@@ -76,6 +82,19 @@ export interface FocusLead {
   nextFollowUp: Date | null;
 }
 
+// Open tasks only — a DONE task is history. The board is what stamps
+// completedAt; this list never sees one.
+export interface FocusTask {
+  id: string;
+  title: string;
+  status: string;
+  dueDate: Date | null;
+  leadId: string | null;
+  clientId: string | null;
+  lead: { clinicName: string } | null;
+  client: { clinicName: string } | null;
+}
+
 export interface FocusChecklistItem {
   id: string;
   title: string;
@@ -108,6 +127,21 @@ function startOfDay(now: Date): Date {
   return d;
 }
 
+// The UTC-day equivalents of the two above, for the date-only columns —
+// Task.dueDate is midnight UTC on the day it is due, and comparing that
+// against a local midnight would shift it a day either way.
+function utcEndOfDay(now: Date): Date {
+  return new Date(
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
+  );
+}
+
+function utcStartOfDay(now: Date): Date {
+  return new Date(
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()),
+  );
+}
+
 function daysBetween(a: Date, b: Date): number {
   return Math.abs(a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000);
 }
@@ -118,11 +152,13 @@ export function buildFocus({
   now,
   calls,
   leads,
+  tasks = [],
   clients,
 }: {
   now: Date;
   calls: FocusCall[];
   leads: FocusLead[];
+  tasks?: FocusTask[];
   clients: FocusClient[];
 }): FocusItem[] {
   const items: FocusItem[] = [];
@@ -184,8 +220,41 @@ export function buildFocus({
     });
   }
 
+  // 3 — tasks off the Activities board that are due today or have already
+  // slipped. They interleave with the follow-ups above by due date rather than
+  // sitting below them: a task that has been overdue a week outranks a
+  // follow-up that came due this morning, and the shared tier is what says so.
+  //
+  // Due dates are stored as dates rather than instants and read in UTC
+  // everywhere else in the app, so "today or earlier" is measured against the
+  // end of today read the same way — otherwise a task due today would look
+  // overdue west of Greenwich and invisible east of it.
+  for (const task of tasks) {
+    if (task.status === "DONE" || !task.dueDate) continue;
+    if (task.dueDate > utcEndOfDay(now)) continue;
+    const overdue = task.dueDate < utcStartOfDay(now);
+    const owner = task.lead ?? task.client;
+    items.push({
+      id: `task-${task.id}`,
+      kind: "TASK",
+      icon: "checklist",
+      label: owner ? `${owner.clinicName} — ${task.title}` : task.title,
+      href: task.leadId
+        ? `/pipeline/${task.leadId}`
+        : task.clientId
+          ? `/clients/${task.clientId}`
+          : "/activities",
+      note: overdue ? "Overdue" : "Due today",
+      at: null,
+      tone: overdue ? "red" : "amber",
+      priority: TIER_FOLLOW_UP,
+      sortAt: task.dueDate.getTime(),
+      pinned: true,
+    });
+  }
+
   for (const client of clients) {
-    // 3 — a client that has just crossed into a status that asks something of
+    // 4 — a client that has just crossed into a status that asks something of
     // you. Healthy and Ramping ask nothing, so they never appear here.
     const health = client.healthStatus as HealthStatus | null;
     if (
@@ -210,7 +279,7 @@ export function buildFocus({
       });
     }
 
-    // 4 — onboarding work. Only for clients still being onboarded; once a
+    // 5 — onboarding work. Only for clients still being onboarded; once a
     // client is live the checklist is delivery admin, not a daily priority.
     if (client.status !== "ONBOARDING") continue;
 
@@ -270,7 +339,7 @@ export function summariseFocus(items: FocusItem[]): FocusSummary {
   if (items.length === 0) {
     return {
       headline: "Nothing due today",
-      detail: "No calls, overdue follow-ups or blocking onboarding items.",
+      detail: "No calls, tasks, overdue follow-ups or blocking onboarding items.",
       tone: "neutral",
       cta: null,
       overdue: 0,
@@ -298,6 +367,8 @@ export function summariseFocus(items: FocusItem[]): FocusSummary {
   const cta =
     top.kind === "FOLLOW_UP"
       ? { label: "View pipeline", href: "/pipeline" }
+      : top.kind === "TASK"
+        ? { label: "View activities", href: "/activities" }
       : top.kind === "HEALTH"
         ? { label: "View reporting", href: "/reporting" }
         : { label: "Open record", href: top.href };

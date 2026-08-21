@@ -7,6 +7,7 @@ import {
   IconBulb,
   IconCalendarEvent,
   IconChartBar,
+  IconChecklist,
   IconGitBranch,
   IconLayoutDashboard,
   IconRadar2,
@@ -26,6 +27,10 @@ const NAV = [
   // Sits with the dashboard: both read across every record rather than owning
   // one, and the pair is where a day starts.
   { href: "/calendar", label: "Calendar", Glyph: IconCalendarEvent },
+  // With the dashboard and the calendar rather than with the funnel: a task is
+  // work you owe today, not a stage a clinic is at, and the board is read from
+  // the same standing start those two are.
+  { href: "/activities", label: "Activities", Glyph: IconChecklist },
   // Immediately before Pipeline, because that is where it sits in the funnel:
   // everything scraped lands in Discovery and only what scores gets through.
   { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
