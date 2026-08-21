@@ -239,6 +239,15 @@ model Lead {
   connectionAcceptedAt DateTime?
   repliedAt            DateTime?
 
+  // What they actually wrote back, pasted in when the reply is marked.
+  //
+  // The audit offer is written from this. Its whole job is to answer what the
+  // prospect said, and a message that opens "appreciate that context" with no
+  // idea what the context was is the version of it that gets ignored. Optional:
+  // marking a reply without keeping the text still works, and that step then
+  // acknowledges the reply without attributing anything to them.
+  replyText String?
+
   // The Loom this lead's audit was recorded to, pasted in by hand once it
   // exists. It is what unlocks step 4 and the only thing that step's message
   // cannot be written without — a delivery note with no link in it is not a
@@ -322,6 +331,15 @@ model OutreachMessage {
   // the fragment the old outreachHook column held. It is what gets copied, so
   // it is what is stored.
   content String
+
+  // The reviewer's note: what this message was built on, what was hedged, and
+  // what had to have happened before this step could be sent.
+  //
+  // Deliberately its own column rather than a paragraph on the end of content.
+  // The note exists to be read before sending and to be impossible to paste by
+  // accident, and text that lives inside the message is text that gets copied
+  // with it.
+  internalNote String?
 
   // When somebody marked this as the one they sent. Null on a draft, and null
   // on the two variants that were not chosen.
