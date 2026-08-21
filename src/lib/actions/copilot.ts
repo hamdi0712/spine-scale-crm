@@ -32,12 +32,13 @@ import {
   COPILOT_MAX_CALLS_PER_ROUND,
   COPILOT_MAX_TOOL_ROUNDS,
   COPILOT_QUESTION_MAX_CHARS,
-  COPILOT_SYSTEM_PROMPT,
   COPILOT_TOOLS,
   CopilotResult,
+  buildCopilotSystemPrompt,
   sanitiseHistory,
 } from "@/lib/copilot";
 import { runCopilotTool } from "@/lib/copilotLookups";
+import { readBusinessContextBody } from "@/lib/businessContextStore";
 import { DeepSeekChatMessage, deepSeekChat } from "@/lib/deepseek";
 
 export async function askCopilot(
@@ -49,8 +50,14 @@ export async function askCopilot(
     return { ok: false, error: "Ask a question and the copilot will answer it." };
   }
 
+  // The operator's standing context, read live so a rule typed in Settings
+  // applies to the next question rather than the next restart. An empty page
+  // composes to exactly the prompt this action sent before the page existed,
+  // and it costs no tool call either way — this is instruction, not a lookup.
+  const businessContext = await readBusinessContextBody();
+
   const messages: DeepSeekChatMessage[] = [
-    { role: "system", content: COPILOT_SYSTEM_PROMPT },
+    { role: "system", content: buildCopilotSystemPrompt(businessContext) },
     ...sanitiseHistory(history).map((turn) => ({
       role: turn.role,
       content: turn.content,

@@ -14,7 +14,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconGitBranch, IconKey } from "@tabler/icons-react";
+import { IconBuildingStore, IconGitBranch, IconKey } from "@tabler/icons-react";
 
 export const SETTINGS_SECTIONS = [
   {
@@ -26,6 +26,14 @@ export const SETTINGS_SECTIONS = [
     href: "/settings/pipeline",
     label: "Pipeline",
     Glyph: IconGitBranch,
+  },
+  // Last of the three because it is the newest and the least often opened —
+  // keys and the enrichment chain are changed while something is being set up,
+  // and this is written once and then left alone for months.
+  {
+    href: "/settings/business-context",
+    label: "Business context",
+    Glyph: IconBuildingStore,
   },
 ] as const;
 

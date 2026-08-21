@@ -1,13 +1,19 @@
-// The eight things the copilot can look up, and the only way it reaches the
+// Everything the copilot can look up, and the only way it reaches the
 // database.
 //
 // Read this file as the copilot's permissions, because that is what it is.
 // The model is never handed Prisma, a query, a table name or a filter it
-// composes itself — it is handed the eight functions below by name, each of
-// which runs a query written here, in full, by hand. There is no
-// prisma.*.create, .update, .upsert or .delete anywhere in this file and there
-// must never be one: the read-only guarantee the copilot is sold on is this
-// file having no way to write, not a promise the model is asked to keep.
+// composes itself — it is handed the functions below by name, each of which
+// runs a query written here, in full, by hand. There is no prisma.*.create,
+// .update, .upsert or .delete anywhere in this file and there must never be
+// one: the read-only guarantee the copilot is sold on is this file having no
+// way to write, not a promise the model is asked to keep.
+//
+// That rule has one place it is easy to break by accident, so it is worth
+// naming: the daily checklist seeds a day's rows the first time that day is
+// opened (ensureDay in src/lib/dailyChecklistStore.ts). The lookup here does
+// not use it. It reads whatever rows exist and fills the gaps for display, so
+// asking the copilot about a day never writes that day into being.
 //
 // What each function returns is composed for a reader rather than dumped: the
 // same labels and computed values the pages show (health status and its
@@ -38,9 +44,14 @@ import {
   ClientStatus,
   LEAD_STAGES,
   LEAD_STAGE_LABELS,
+  LIBRARY_CATEGORIES,
+  LIBRARY_CATEGORY_LABELS,
   LeadStage,
+  LibraryCategory,
+  OPEN_STAGES,
 } from "@/lib/constants";
 import {
+  DISCOVERY_SOURCE_LABELS,
   DISCOVERY_STATUSES,
   DISCOVERY_STATUS_LABELS,
   DISCOVERY_STATUS_MEANINGS,
@@ -76,7 +87,57 @@ import {
   isOnboarding,
   stepMeta,
 } from "@/lib/onboarding";
+import {
+  PIPELINE_STEP_BLURBS,
+  PIPELINE_STEP_KEYS,
+  PIPELINE_STEP_LABELS,
+  costPerCandidate,
+  fmtEstimate,
+} from "@/lib/pipelineSettings";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
+import {
+  AWARENESS_LEVEL_LABELS,
+  AwarenessLevel,
+  CONCEPT_STATUSES,
+  CONCEPT_STATUS_LABELS,
+  CREATIVE_STATUSES,
+  CREATIVE_STATUS_LABELS,
+  CREATIVE_TYPE_LABELS,
+  ConceptStatus,
+  CreativeStatus,
+  CreativeType,
+  RESEARCH_NOTE_TYPE_LABELS,
+  ResearchNoteType,
+  sophisticationMeta,
+} from "@/lib/adhub";
+import {
+  DAILY_CHECKLIST_CATEGORIES,
+  DAILY_CHECKLIST_CATEGORY_LABELS,
+  DAILY_CHECKLIST_ITEMS,
+  checkedCount,
+  dayKey,
+  itemsInCategory,
+  parseDayKey,
+  readDay,
+  toChecklistDay,
+} from "@/lib/dailyChecklist";
+import { readDayRows } from "@/lib/dailyChecklistStore";
+import { loadDailyNumbers } from "@/lib/dailyNumbers";
+import {
+  CONNECTIONS_WINDOW_DAYS,
+  REPLY_RATE_WINDOW_DAYS,
+  connectionsSent,
+  daysAgo,
+  discoveryBooked,
+  qualifiedLeads,
+  replyRate,
+} from "@/lib/funnel";
+import {
+  TASK_STATUSES,
+  TASK_STATUS_LABELS,
+  TaskStatus,
+  isTaskStatus,
+} from "@/lib/tasks";
 
 // ─── Ceilings ──────────────────────────────────────────────────────────────
 //
@@ -98,6 +159,21 @@ const CLIENTS_MAX = 60;
 const REPORT_WEEKS_MAX = 12;
 const FOLLOW_UPS_MAX = 30;
 const ACTIVITY_MAX = 25;
+const TASKS_MAX = 50;
+const CANDIDATES_MAX = 60;
+const CALL_LOG_MAX = 40;
+const PERSONAS_MAX = 20;
+const DESIRES_MAX = 30;
+const RESEARCH_NOTES_MAX = 20;
+const CONCEPTS_MAX = 30;
+const CREATIVES_PER_CONCEPT_MAX = 8;
+const PERFORMANCE_LOGS_MAX = 12;
+const LIBRARY_MAX = 40;
+
+// Long-form bodies — a library template, a research note, a persona's answers.
+// Enough to read what it says and act on it; short of pasting whole documents
+// into a conversation that then carries them for every later question.
+const BODY_MAX_CHARS = 1200;
 
 // How far ahead "coming up" reaches, matching the dashboard's own window.
 const UPCOMING_DAYS = 7;
@@ -149,6 +225,16 @@ function scraped(record: {
 
 function stageLabel(stage: string): string {
   return LEAD_STAGE_LABELS[stage as LeadStage] ?? stage;
+}
+
+// A long body, cut with a marker rather than silently. Text this app's own
+// users wrote — a template, a research note — so it is not fenced the way
+// scraped copy is; it is only held to a length.
+function body(text: string | null | undefined): string | null {
+  if (!text) return null;
+  return text.length > BODY_MAX_CHARS
+    ? `${text.slice(0, BODY_MAX_CHARS)}… [truncated]`
+    : text;
 }
 
 function tierLabel(tier: IcpTier | null): string {
@@ -720,7 +806,7 @@ export async function getFollowUpsDue(): Promise<unknown> {
   const now = new Date();
   const horizon = new Date(now.getTime() + UPCOMING_DAYS * DAY_MS);
 
-  const [leads, calls] = await Promise.all([
+  const [leads, calls, invoices] = await Promise.all([
     prisma.lead.findMany({
       where: {
         archived: false,
@@ -745,6 +831,19 @@ export async function getFollowUpsDue(): Promise<unknown> {
         client: { select: { id: true, clinicName: true } },
       },
     }),
+    // Money owed is dated work too — it is the calendar's third kind of event
+    // beside calls and follow-ups, so it is answered by the same lookup. Only
+    // unpaid ones, and only those with a due date: an invoice nobody put a date
+    // on is not due at a time.
+    prisma.invoice.findMany({
+      where: {
+        status: { not: "PAID" },
+        dueDate: { not: null, lte: horizon },
+      },
+      orderBy: { dueDate: "asc" },
+      take: FOLLOW_UPS_MAX,
+      include: { client: { select: { id: true, clinicName: true } } },
+    }),
   ]);
 
   const followUps = leads.map((l) => ({
@@ -767,16 +866,30 @@ export async function getFollowUpsDue(): Promise<unknown> {
     notes: c.notes,
   }));
 
+  const invoiceRows = invoices.map((i) => ({
+    clientId: i.client.id,
+    clinicName: i.client.clinicName,
+    amount: i.amount,
+    issuedOn: day(i.issuedOn),
+    dueDate: day(i.dueDate),
+    overdue: i.dueDate !== null && i.dueDate < now,
+    memo: i.memo,
+  }));
+
   return {
     now: iso(now),
     windowDays: UPCOMING_DAYS,
     overdueCount:
       followUps.filter((f) => f.overdue).length +
-      callRows.filter((c) => c.overdue).length,
+      callRows.filter((c) => c.overdue).length +
+      invoiceRows.filter((i) => i.overdue).length,
     leadFollowUps: followUps,
     calls: callRows,
+    invoicesDue: invoiceRows,
+    alsoCheck:
+      "This is dated work only. The task board is getTasks and the day's routine is getDailyChecklistStatus; neither is included here.",
     reminder:
-      "You cannot mark any of these done, reschedule them or send anything. Point the operator at the lead or client record, where they do it themselves.",
+      "You cannot mark any of these done, reschedule them or send anything. Point the operator at the lead, client or invoice record, where they do it themselves.",
   };
 }
 
@@ -807,12 +920,716 @@ export async function getRecentActivity(): Promise<unknown> {
   };
 }
 
+// ─── 9. The task board ─────────────────────────────────────────────────────
+
+export async function getTasks(args: {
+  status?: string;
+  dueBefore?: string;
+}): Promise<unknown> {
+  const status = isTaskStatus(args.status) ? (args.status as TaskStatus) : null;
+
+  // A day rather than an instant, read in UTC, matching the column and every
+  // other date-only field in this schema. Junk is ignored rather than argued
+  // with — the filter simply does not apply, and the result says so.
+  const dueBefore =
+    typeof args.dueBefore === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(args.dueBefore)
+      ? new Date(`${args.dueBefore}T00:00:00.000Z`)
+      : null;
+  const dueBeforeValid = dueBefore !== null && !Number.isNaN(dueBefore.getTime());
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      ...(status ? { status } : {}),
+      // A dated filter excludes undated tasks by definition: "due before
+      // Friday" cannot include something that is not due at all.
+      ...(dueBeforeValid ? { dueDate: { not: null, lt: dueBefore } } : {}),
+    },
+    include: {
+      lead: { select: { id: true, clinicName: true } },
+      client: { select: { id: true, clinicName: true } },
+    },
+  });
+
+  // Sorted here rather than in the query: SQLite sorts nulls first on an
+  // ascending column, which would open the list with every undated task. Due
+  // ones first, soonest first, and the undated ones after them.
+  const now = new Date();
+  const sorted = [...tasks].sort((a, b) => {
+    if (a.dueDate && b.dueDate) return a.dueDate.getTime() - b.dueDate.getTime();
+    if (a.dueDate) return -1;
+    if (b.dueDate) return 1;
+    return b.createdAt.getTime() - a.createdAt.getTime();
+  });
+
+  return {
+    now: iso(now),
+    filters: {
+      status: status ? TASK_STATUS_LABELS[status] : "any",
+      dueBefore: dueBeforeValid ? args.dueBefore : "any",
+      ...(args.dueBefore && !dueBeforeValid
+        ? {
+            ignored: `"${args.dueBefore}" is not a date in YYYY-MM-DD form, so no date filter was applied.`,
+          }
+        : {}),
+    },
+    // Counts across the whole board, unfiltered, so a filtered answer can still
+    // say what it is a slice of.
+    countsByStatus: Object.fromEntries(
+      await Promise.all(
+        TASK_STATUSES.map(async (s) => [
+          TASK_STATUS_LABELS[s],
+          await prisma.task.count({ where: { status: s } }),
+        ]),
+      ),
+    ),
+    ...listMeta(Math.min(sorted.length, TASKS_MAX), sorted.length, TASKS_MAX),
+    tasks: sorted.slice(0, TASKS_MAX).map((t) => ({
+      id: t.id,
+      title: t.title,
+      description: body(t.description),
+      status: TASK_STATUS_LABELS[t.status as TaskStatus] ?? t.status,
+      dueDate: day(t.dueDate),
+      // Only open work can be overdue. A task finished late is finished.
+      overdue:
+        t.status !== "DONE" && t.dueDate !== null && t.dueDate < now,
+      about: t.lead?.clinicName ?? t.client?.clinicName ?? null,
+      leadId: t.leadId,
+      clientId: t.clientId,
+      createdAt: iso(t.createdAt),
+      completedAt: iso(t.completedAt),
+    })),
+  };
+}
+
+// ─── 10. One day of the routine ────────────────────────────────────────────
+
+export async function getDailyChecklistStatus(args: {
+  date?: string;
+}): Promise<unknown> {
+  const now = new Date();
+  const requested =
+    typeof args.date === "string" ? args.date : undefined;
+  const dayDate = parseDayKey(requested, now);
+  const key = dayKey(dayDate);
+  const isToday = key === dayKey(toChecklistDay(now));
+
+  // readDayRows, never ensureDay: seeding is a write, and a question about a
+  // day must not bring that day into existence. Blanks are filled for display
+  // by readDay, which is what the page does for past days too.
+  const [rows, numbers] = await Promise.all([
+    readDayRows(dayDate),
+    loadDailyNumbers(dayDate),
+  ]);
+  const checked = readDay(rows);
+  const done = checkedCount(checked);
+
+  return {
+    date: key,
+    isToday,
+    ...(requested && requested !== key
+      ? {
+          note: `"${requested}" is not a date in YYYY-MM-DD form, so ${key} was read instead.`,
+        }
+      : {}),
+    howItWorks:
+      "The routine is fixed in code, not data: the same items every day, ticked by hand. A day nobody opened has nothing ticked, which is not the same as the work not being done — say so if it matters to the answer.",
+    ticked: done,
+    total: DAILY_CHECKLIST_ITEMS.length,
+    untickedItems: DAILY_CHECKLIST_ITEMS.filter((i) => !checked.get(i.key)).map(
+      (i) => i.label,
+    ),
+    categories: DAILY_CHECKLIST_CATEGORIES.map((category) => ({
+      category: DAILY_CHECKLIST_CATEGORY_LABELS[category],
+      items: itemsInCategory(category).map((i) => ({
+        label: i.label,
+        checked: checked.get(i.key) ?? false,
+      })),
+    })),
+    // The other half of the panel: what actually landed, counted off the
+    // records rather than ticked. The two can disagree, and that disagreement
+    // is usually the interesting thing on the page.
+    liveNumbers: numbers.map((n) => ({
+      label: n.label,
+      value: n.value,
+      countedFrom: n.source,
+    })),
+  };
+}
+
+// ─── 11. The outreach funnel ───────────────────────────────────────────────
+
+export async function getOutreachFunnel(): Promise<unknown> {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const [openLeads, outreachLeads, discoveryCalls] = await Promise.all([
+    prisma.lead.findMany({
+      where: { archived: false, stage: { in: [...OPEN_STAGES] } },
+    }),
+    // Archived leads included on purpose: a request that went out three weeks
+    // ago went out whatever happened to the lead since, and leaving them out
+    // would make a week look quieter than it was.
+    prisma.lead.findMany({
+      where: {
+        connectionRequestSentAt: { gte: daysAgo(now, REPLY_RATE_WINDOW_DAYS) },
+      },
+      select: { connectionRequestSentAt: true, repliedAt: true },
+    }),
+    // Counted off the call log rather than off a lead's stage, for the reason
+    // the dashboard counts them that way: a cancelled or deleted booking should
+    // stop being reported, and a stage cannot be un-set.
+    prisma.call.findMany({
+      where: {
+        type: "DISCOVERY",
+        status: { not: "CANCELLED" },
+        scheduledAt: { gte: monthStart, lt: nextMonthStart },
+      },
+      select: { status: true },
+    }),
+  ]);
+
+  const qualified = qualifiedLeads(openLeads);
+  const connections = connectionsSent(outreachLeads, now);
+  const replies = replyRate(outreachLeads, now);
+  const discovery = discoveryBooked(discoveryCalls);
+
+  return {
+    now: iso(now),
+    note: "These are the four numbers on the dashboard, computed the same way. They describe the shape of the funnel, not any one record.",
+    qualifiedLeads: {
+      total: qualified.total,
+      notApproachedYet: qualified.untouched,
+      approachedAndInPlay: qualified.contacted,
+      meaning:
+        "Open leads scored A or B. C-tier and unscored leads are deliberately not counted.",
+    },
+    connectionRequests: {
+      windowDays: CONNECTIONS_WINDOW_DAYS,
+      thisWeek: connections.thisWeek,
+      lastWeek: connections.lastWeek,
+      meaning: "Leads marked as having had a connection request sent.",
+    },
+    replyRate: {
+      windowDays: REPLY_RATE_WINDOW_DAYS,
+      contacted: replies.contacted,
+      replied: replies.replied,
+      // Null rather than 0 when nobody was approached: a 0% off no attempts
+      // reads as "nobody replies to you", which the data has not claimed.
+      percent: replies.percent,
+      meaning: `Of the leads approached in the last ${REPLY_RATE_WINDOW_DAYS} days, how many wrote back.`,
+    },
+    discoveryCallsThisMonth: {
+      total: discovery.total,
+      upcoming: discovery.upcoming,
+      held: discovery.held,
+      meaning:
+        "Discovery calls on this month's calendar. Cancelled calls are excluded; no-shows are counted, because the slot was booked.",
+    },
+  };
+}
+
+// ─── 12. Discovery candidates ──────────────────────────────────────────────
+
+export async function getDiscoveryCandidates(args: {
+  status?: string;
+  tier?: string;
+}): Promise<unknown> {
+  const status =
+    args.status && (DISCOVERY_STATUSES as readonly string[]).includes(args.status)
+      ? (args.status as DiscoveryStatus)
+      : null;
+  const tier =
+    args.tier === "UNSCORED"
+      ? "UNSCORED"
+      : args.tier && (ICP_TIER_ORDER as string[]).includes(args.tier)
+        ? args.tier
+        : null;
+
+  // Tier is stored on a candidate rather than computed from a scorecard — the
+  // breakdown is the transcript of one run, not a live score — so unlike the
+  // pipeline's tier filter this one is a query.
+  const where = {
+    ...(status ? { status } : {}),
+    ...(tier === "UNSCORED" ? { icpTier: null } : tier ? { icpTier: tier } : {}),
+  };
+
+  const [total, candidates] = await Promise.all([
+    prisma.discoveryCandidate.count({ where }),
+    prisma.discoveryCandidate.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      take: CANDIDATES_MAX,
+    }),
+  ]);
+
+  return {
+    filters: {
+      status: status ? DISCOVERY_STATUS_LABELS[status] : "any",
+      tier: args.tier ?? "any",
+    },
+    ...listMeta(candidates.length, total, CANDIDATES_MAX),
+    candidates: candidates.map((c) => ({
+      id: c.id,
+      clinicName: c.clinicName,
+      location: c.location,
+      status: DISCOVERY_STATUS_LABELS[c.status as DiscoveryStatus] ?? c.status,
+      icpTotal: c.icpTotal,
+      icpTier: c.icpTier,
+      disqualified: c.disqualified,
+      disqualifiedReason: c.disqualifiedReason,
+      failureReason: c.failureReason,
+      flaggedForSecondLook: c.secondLookFlagged,
+      batchLabel: c.batchLabel,
+      source: c.source,
+      promotedLeadId: c.promotedLeadId,
+      processedAt: iso(c.processedAt),
+      createdAt: iso(c.createdAt),
+    })),
+  };
+}
+
+// ─── 13. One discovery candidate ───────────────────────────────────────────
+
+export async function getDiscoveryCandidateDetail(args: {
+  id: string;
+}): Promise<unknown> {
+  const candidate = await prisma.discoveryCandidate.findUnique({
+    where: { id: args.id },
+    include: { promotedLead: { select: { id: true, clinicName: true, stage: true } } },
+  });
+  if (!candidate) {
+    return {
+      found: false,
+      message:
+        "No discovery candidate with that id. Call getDiscoveryCandidates to find the right one — ids are not guessable.",
+    };
+  }
+
+  const breakdown = parseBreakdown(candidate.icpBreakdown);
+
+  return {
+    found: true,
+    id: candidate.id,
+    clinicName: candidate.clinicName,
+    status:
+      DISCOVERY_STATUS_LABELS[candidate.status as DiscoveryStatus] ??
+      candidate.status,
+    statusMeaning:
+      DISCOVERY_STATUS_MEANINGS[candidate.status as DiscoveryStatus] ?? null,
+    contact: {
+      contactName: candidate.contactName,
+      email: candidate.email,
+      phone: candidate.phone,
+      location: candidate.location,
+      timeZone: candidate.timeZone,
+      websiteUrl: candidate.websiteUrl,
+      linkedinUrl: candidate.linkedinUrl,
+      companyLinkedinUrl: candidate.companyLinkedinUrl,
+      facebookUrl: candidate.facebookUrl,
+      source: candidate.source,
+      batchLabel: candidate.batchLabel,
+      staffCountRaw: candidate.staffCountRaw,
+      estValue: candidate.estValue,
+    },
+    outcome: {
+      icpTotal: candidate.icpTotal,
+      icpTier: candidate.icpTier,
+      maxScore: ICP_MAX_SCORE,
+      disqualified: candidate.disqualified,
+      disqualifiedReason: candidate.disqualifiedReason,
+      failureReason: candidate.failureReason,
+      processedAt: iso(candidate.processedAt),
+    },
+    // The transcript of the run that scored it, exactly as it was stored. It is
+    // deliberately not recomputed: re-tuning the framework must not rewrite the
+    // reason a clinic was rejected last month.
+    scoring: breakdown
+      ? {
+          scoredAt: breakdown.scoredAt,
+          total: breakdown.total,
+          tier: breakdown.tier,
+          summary: breakdown.summary || null,
+          evidenceItHad: breakdown.evidence,
+          runNotes: breakdown.notes,
+          disqualifiers: breakdown.disqualifiers.map((d) => ({
+            label: d.label,
+            triggered: d.triggered,
+            reason: d.reason,
+          })),
+          categories: breakdown.categories.map((c) => ({
+            label: c.label,
+            points: c.points,
+            max: c.max,
+            reason: c.reason,
+            // Computed here, answered by a model, or left unanswered — worth
+            // carrying, because "DeepSeek read the website and said this" and
+            // "arithmetic on a headcount" are different kinds of claim.
+            source: DISCOVERY_SOURCE_LABELS[c.source] ?? c.source,
+          })),
+          gaps: breakdown.gaps.map((g) => ({
+            label: g.label,
+            points: g.points,
+            max: g.max,
+            reason: g.reason,
+            source: DISCOVERY_SOURCE_LABELS[g.source] ?? g.source,
+          })),
+        }
+      : null,
+    secondLook: candidate.secondLookFlagged
+      ? {
+          flagged: true,
+          reason: candidate.secondLookReason,
+          source: candidate.secondLookSource,
+          at: iso(candidate.secondLookAt),
+        }
+      : { flagged: false },
+    enrichment: {
+      enrichedAt: iso(candidate.enrichedAt),
+      [UNTRUSTED_CONTENT_KEY]: scraped(candidate),
+    },
+    promotedTo: candidate.promotedLead
+      ? {
+          leadId: candidate.promotedLead.id,
+          clinicName: candidate.promotedLead.clinicName,
+          stage: stageLabel(candidate.promotedLead.stage),
+        }
+      : null,
+  };
+}
+
+// ─── 14. The call log ──────────────────────────────────────────────────────
+
+export async function getCalls(args: {
+  status?: string;
+  type?: string;
+}): Promise<unknown> {
+  const status =
+    args.status && args.status in CALL_STATUS_LABELS ? args.status : null;
+  const type = args.type && args.type in CALL_TYPE_LABELS ? args.type : null;
+  const where = {
+    ...(status ? { status } : {}),
+    ...(type ? { type } : {}),
+  };
+
+  const [total, calls] = await Promise.all([
+    prisma.call.count({ where }),
+    prisma.call.findMany({
+      where,
+      orderBy: { scheduledAt: "desc" },
+      take: CALL_LOG_MAX,
+      include: {
+        lead: { select: { id: true, clinicName: true } },
+        client: { select: { id: true, clinicName: true } },
+      },
+    }),
+  ]);
+
+  const now = new Date();
+  return {
+    now: iso(now),
+    filters: {
+      status: status
+        ? CALL_STATUS_LABELS[status as keyof typeof CALL_STATUS_LABELS]
+        : "any",
+      type: type ? CALL_TYPE_LABELS[type as keyof typeof CALL_TYPE_LABELS] : "any",
+    },
+    ...listMeta(calls.length, total, CALL_LOG_MAX),
+    calls: calls.map((c) => ({
+      type: CALL_TYPE_LABELS[c.type as keyof typeof CALL_TYPE_LABELS] ?? c.type,
+      status:
+        CALL_STATUS_LABELS[c.status as keyof typeof CALL_STATUS_LABELS] ??
+        c.status,
+      with: c.lead?.clinicName ?? c.client?.clinicName ?? "Unattached",
+      leadId: c.lead?.id ?? null,
+      clientId: c.client?.id ?? null,
+      scheduledAt: iso(c.scheduledAt),
+      overdue: isCallOverdue(c, now),
+      notes: body(c.notes),
+    })),
+  };
+}
+
+// ─── 15. Ad Hub research ───────────────────────────────────────────────────
+
+export async function getAdHubResearch(): Promise<unknown> {
+  const [personas, desires, notes] = await Promise.all([
+    prisma.persona.findMany({
+      orderBy: { createdAt: "desc" },
+      take: PERSONAS_MAX,
+      include: { _count: { select: { concepts: true } } },
+    }),
+    prisma.desire.findMany({
+      orderBy: { createdAt: "desc" },
+      take: DESIRES_MAX,
+      include: {
+        benefits: true,
+        _count: { select: { concepts: true } },
+      },
+    }),
+    prisma.researchNote.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: RESEARCH_NOTES_MAX,
+    }),
+  ]);
+
+  return {
+    note: "The research layer of Ad Hub — who the advertising is aimed at and what it is built on. Concepts and creatives are getAdHubConcepts.",
+    personas: personas.map((p) => ({
+      id: p.id,
+      name: p.name,
+      demographics: body(p.demographics),
+      wantsToBeSeenAs: body(p.wantsToBeSeenAs),
+      believesAboutSelf: body(p.believesAboutSelf),
+      wantsToAchieve: body(p.wantsToAchieve),
+      triedAndFailed: body(p.triedAndFailed),
+      reasonForFailure: body(p.reasonForFailure),
+      conceptsUsingThisPersona: p._count.concepts,
+    })),
+    desires: desires.map((d) => ({
+      id: d.id,
+      statement: d.statement,
+      notes: body(d.notes),
+      conceptsOnThisDesire: d._count.concepts,
+      benefits: d.benefits.map((b) => ({
+        productName: b.productName,
+        feature: b.feature,
+        benefit: b.benefit,
+      })),
+    })),
+    researchNotes: notes.map((n) => ({
+      type: RESEARCH_NOTE_TYPE_LABELS[n.type as ResearchNoteType] ?? n.type,
+      title: n.title,
+      body: body(n.body),
+      updatedAt: iso(n.updatedAt),
+    })),
+  };
+}
+
+// ─── 16. Ad Hub concepts ───────────────────────────────────────────────────
+
+export async function getAdHubConcepts(args: {
+  status?: string;
+  creativeStatus?: string;
+}): Promise<unknown> {
+  const status =
+    args.status && (CONCEPT_STATUSES as readonly string[]).includes(args.status)
+      ? (args.status as ConceptStatus)
+      : null;
+  const creativeStatus =
+    args.creativeStatus &&
+    (CREATIVE_STATUSES as readonly string[]).includes(args.creativeStatus)
+      ? (args.creativeStatus as CreativeStatus)
+      : null;
+
+  const where = {
+    ...(status ? { status } : {}),
+    ...(creativeStatus ? { creatives: { some: { status: creativeStatus } } } : {}),
+  };
+
+  const [total, concepts] = await Promise.all([
+    prisma.concept.count({ where }),
+    prisma.concept.findMany({
+      where,
+      orderBy: [{ batchNumber: "desc" }, { createdAt: "desc" }],
+      take: CONCEPTS_MAX,
+      include: {
+        persona: { select: { id: true, name: true } },
+        desire: { select: { id: true, statement: true } },
+        benefit: { select: { feature: true, benefit: true } },
+        creatives: {
+          where: creativeStatus ? { status: creativeStatus } : {},
+          orderBy: { creativeNumber: "asc" },
+          take: CREATIVES_PER_CONCEPT_MAX,
+        },
+      },
+    }),
+  ]);
+
+  return {
+    filters: {
+      status: status ? CONCEPT_STATUS_LABELS[status] : "any",
+      creativeStatus: creativeStatus
+        ? CREATIVE_STATUS_LABELS[creativeStatus]
+        : "any",
+    },
+    ...listMeta(concepts.length, total, CONCEPTS_MAX),
+    concepts: concepts.map((c) => ({
+      id: c.id,
+      name: c.name,
+      batchNumber: c.batchNumber,
+      status: CONCEPT_STATUS_LABELS[c.status as ConceptStatus] ?? c.status,
+      persona: c.persona.name,
+      desire: c.desire.statement,
+      benefit: `${c.benefit.feature} — ${c.benefit.benefit}`,
+      awarenessLevel:
+        AWARENESS_LEVEL_LABELS[c.awarenessLevel as AwarenessLevel] ??
+        c.awarenessLevel,
+      // The stage's own name, not just its number: "Stage 3" says nothing
+      // without the market it describes.
+      sophistication: sophisticationMeta(c.sophisticationStage).label,
+      notes: body(c.notes),
+      creativesListed: c.creatives.length,
+      creatives: c.creatives.map((cr) => ({
+        id: cr.id,
+        creativeNumber: cr.creativeNumber,
+        type: CREATIVE_TYPE_LABELS[cr.creativeType as CreativeType] ?? cr.creativeType,
+        status:
+          CREATIVE_STATUS_LABELS[cr.status as CreativeStatus] ?? cr.status,
+        conceptHeadline: cr.conceptHeadline,
+        adHeadline: cr.adHeadline,
+        isVariationOf: cr.parentCreativeId,
+      })),
+    })),
+  };
+}
+
+// ─── 17. One creative ──────────────────────────────────────────────────────
+
+export async function getCreativeDetail(args: { id: string }): Promise<unknown> {
+  const creative = await prisma.creative.findUnique({
+    where: { id: args.id },
+    include: {
+      concept: {
+        include: {
+          persona: { select: { name: true } },
+          desire: { select: { statement: true } },
+        },
+      },
+      compliance: { orderBy: { sortOrder: "asc" } },
+      performance: { orderBy: { loggedOn: "desc" }, take: PERFORMANCE_LOGS_MAX },
+      parent: { select: { id: true, creativeNumber: true } },
+      variations: { select: { id: true, creativeNumber: true, status: true } },
+    },
+  });
+  if (!creative) {
+    return {
+      found: false,
+      message:
+        "No creative with that id. Call getAdHubConcepts to find the right one — ids are not guessable.",
+    };
+  }
+
+  const outstanding = creative.compliance.filter((i) => !i.checked);
+
+  return {
+    found: true,
+    id: creative.id,
+    creativeNumber: creative.creativeNumber,
+    type:
+      CREATIVE_TYPE_LABELS[creative.creativeType as CreativeType] ??
+      creative.creativeType,
+    status:
+      CREATIVE_STATUS_LABELS[creative.status as CreativeStatus] ??
+      creative.status,
+    concept: {
+      id: creative.conceptId,
+      name: creative.concept.name,
+      status:
+        CONCEPT_STATUS_LABELS[creative.concept.status as ConceptStatus] ??
+        creative.concept.status,
+      persona: creative.concept.persona.name,
+      desire: creative.concept.desire.statement,
+    },
+    copy: {
+      conceptHeadline: creative.conceptHeadline,
+      adHeadline: creative.adHeadline,
+      adCopy: body(creative.adCopy),
+      cta: creative.cta,
+    },
+    compliance: {
+      checked: creative.compliance.length - outstanding.length,
+      total: creative.compliance.length,
+      // Every item, not only the failures: "this passes on all five" is an
+      // answer, and it needs the whole list to be one.
+      items: creative.compliance.map((i) => ({
+        item: i.item,
+        checked: i.checked,
+        checkedAt: iso(i.checkedAt),
+      })),
+      blocksGoingReady: outstanding.length > 0,
+    },
+    performance: creative.performance.map((p) => ({
+      loggedOn: day(p.loggedOn),
+      spend: p.spend,
+      impressions: p.impressions,
+      ctrPercent: p.ctr,
+      cpl: p.cpl,
+      conversions: p.conversions,
+      notes: body(p.notes),
+    })),
+    lineage: {
+      isVariationOf: creative.parent
+        ? { id: creative.parent.id, creativeNumber: creative.parent.creativeNumber }
+        : null,
+      variations: creative.variations.map((v) => ({
+        id: v.id,
+        creativeNumber: v.creativeNumber,
+        status: CREATIVE_STATUS_LABELS[v.status as CreativeStatus] ?? v.status,
+      })),
+    },
+  };
+}
+
+// ─── 18. The library ───────────────────────────────────────────────────────
+
+export async function getLibraryEntries(args: {
+  category?: string;
+}): Promise<unknown> {
+  const category =
+    args.category && (LIBRARY_CATEGORIES as readonly string[]).includes(args.category)
+      ? (args.category as LibraryCategory)
+      : null;
+  const where = category ? { category } : {};
+
+  const [total, entries] = await Promise.all([
+    prisma.libraryEntry.count({ where }),
+    prisma.libraryEntry.findMany({
+      where,
+      orderBy: [{ category: "asc" }, { title: "asc" }],
+      take: LIBRARY_MAX,
+    }),
+  ]);
+
+  return {
+    filters: { category: category ? LIBRARY_CATEGORY_LABELS[category] : "any" },
+    ...listMeta(entries.length, total, LIBRARY_MAX),
+    entries: entries.map((e) => ({
+      category:
+        LIBRARY_CATEGORY_LABELS[e.category as LibraryCategory] ?? e.category,
+      title: e.title,
+      body: body(e.body),
+      updatedAt: iso(e.updatedAt),
+    })),
+  };
+}
+
+// ─── 19. The enrichment chain's configuration ──────────────────────────────
+
+export async function getPipelineSettings(): Promise<unknown> {
+  const settings = await loadPipelineSettings();
+
+  return {
+    note: "How the enrichment chain is configured right now. A step that is switched off simply does not run, which is the usual reason a lead has no website notes or no ads signal.",
+    promotionThreshold: settings.promotionThreshold,
+    promotionRule: `A discovery candidate needs ${settings.promotionThreshold} of ${ICP_MAX_SCORE} to be promoted into the pipeline; below that it is rejected.`,
+    estimatedCostPerCandidate: fmtEstimate(costPerCandidate(settings)),
+    steps: PIPELINE_STEP_KEYS.map((key) => ({
+      step: PIPELINE_STEP_LABELS[key],
+      enabled: settings.steps[key].enabled,
+      actorId: settings.steps[key].actorId,
+      whatItDoes: PIPELINE_STEP_BLURBS[key],
+    })),
+  };
+}
+
 // ─── The dispatcher ────────────────────────────────────────────────────────
 //
 // The allow-list, and the only place a tool name becomes a call. A name that
 // is not a key of this object runs nothing — there is no dynamic lookup, no
 // string concatenation into a query, and no path by which a model can reach a
-// function that is not one of these eight.
+// function that is not one of these.
 
 const LOOKUPS = {
   getPipelineLeads,
@@ -823,6 +1640,17 @@ const LOOKUPS = {
   getReportingTrends,
   getFollowUpsDue,
   getRecentActivity,
+  getTasks,
+  getDailyChecklistStatus,
+  getOutreachFunnel,
+  getDiscoveryCandidates,
+  getDiscoveryCandidateDetail,
+  getCalls,
+  getAdHubResearch,
+  getAdHubConcepts,
+  getCreativeDetail,
+  getLibraryEntries,
+  getPipelineSettings,
 } as const;
 
 export type CopilotToolName = keyof typeof LOOKUPS;
@@ -907,5 +1735,76 @@ export async function runCopilotTool(
       return { ok: true, data: await getFollowUpsDue() };
     case "getRecentActivity":
       return { ok: true, data: await getRecentActivity() };
+    case "getTasks":
+      return {
+        ok: true,
+        data: await getTasks({
+          status: str(args.status),
+          dueBefore: str(args.dueBefore),
+        }),
+      };
+    case "getDailyChecklistStatus":
+      return {
+        ok: true,
+        data: await getDailyChecklistStatus({ date: str(args.date) }),
+      };
+    case "getOutreachFunnel":
+      return { ok: true, data: await getOutreachFunnel() };
+    case "getDiscoveryCandidates":
+      return {
+        ok: true,
+        data: await getDiscoveryCandidates({
+          status: str(args.status),
+          tier: str(args.tier),
+        }),
+      };
+    case "getDiscoveryCandidateDetail":
+      if (!id) {
+        return {
+          ok: false,
+          message:
+            "getDiscoveryCandidateDetail needs the candidate's id. Call getDiscoveryCandidates first and read the id off the one you want.",
+        };
+      }
+      return { ok: true, data: await getDiscoveryCandidateDetail({ id }) };
+    case "getCalls":
+      return {
+        ok: true,
+        data: await getCalls({ status: str(args.status), type: str(args.type) }),
+      };
+    case "getAdHubResearch":
+      return { ok: true, data: await getAdHubResearch() };
+    case "getAdHubConcepts":
+      return {
+        ok: true,
+        data: await getAdHubConcepts({
+          status: str(args.status),
+          creativeStatus: str(args.creativeStatus),
+        }),
+      };
+    case "getCreativeDetail":
+      if (!id) {
+        return {
+          ok: false,
+          message:
+            "getCreativeDetail needs the creative's id. Call getAdHubConcepts first and read the id off the creative you want.",
+        };
+      }
+      return { ok: true, data: await getCreativeDetail({ id }) };
+    case "getLibraryEntries":
+      return {
+        ok: true,
+        data: await getLibraryEntries({ category: str(args.category) }),
+      };
+    case "getPipelineSettings":
+      return { ok: true, data: await getPipelineSettings() };
   }
+}
+
+// One argument, if it is a string at all. Every filter below is optional and
+// every lookup ignores a value it does not recognise, so a model that invents
+// a status narrows nothing rather than failing — and the result says which
+// filters were actually applied.
+function str(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }

@@ -838,3 +838,32 @@ model DailyChecklistEntry {
   @@unique([date, item])
   @@index([date])
 }
+
+// The standing description of this business, written by the operator and given
+// to the AI Copilot at the head of every conversation.
+//
+// One row, fixed id "singleton", the same shape PipelineSettings and AppSecrets
+// use — there is one business, so there is one of these. A fresh install has no
+// row, which reads as "nothing written yet" and means the copilot's prompt is
+// exactly what it was before this table existed.
+//
+// It is prose, not fields, and deliberately: what a model needs to know about
+// an agency — how it makes money, who it is for, how it talks, what it will
+// never say — is not a set of columns anybody could design in advance. The
+// Settings page opens it on a template of section headings, and what somebody
+// types under them is stored as they typed it.
+//
+// This is the one piece of text in the app that reaches a model as an
+// instruction rather than as data. It is trusted because the operator wrote it,
+// which is exactly what a clinic's scraped website is not — see
+// UNTRUSTED_CONTENT_KEY in src/lib/copilot.ts for the other half of that
+// distinction.
+model BusinessContext {
+  id String @id
+
+  // Empty is the resting state, not a missing value: a body with nothing in it
+  // is skipped when the prompt is built rather than sent as a blank heading.
+  body String @default("")
+
+  updatedAt DateTime @updatedAt
+}
