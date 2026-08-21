@@ -801,3 +801,40 @@ model Task {
   // The board reads by status, and Today's focus reads open tasks by due date.
   @@index([status, dueDate])
 }
+
+// One tick on one day of the fixed daily routine.
+//
+// The routine itself is not in this table. Its items live in
+// src/lib/dailyChecklist.ts as a constant, the same way the ad compliance gate
+// keeps its five items in code — they are the shape of a working day rather
+// than data somebody maintains, and a routine you can edit is a routine you
+// stop following. This table records only which of them were ticked, and when.
+//
+// A row per item per day, written on first view of that day and never before:
+// there is no job that rolls the checklist over at midnight, because there does
+// not need to be one. Asking for a date that has no rows creates them unticked,
+// which is exactly what "resets each morning" means and is also what makes
+// every past day still readable — yesterday's ticks are yesterday's rows, and
+// nothing overwrites them.
+//
+// date is a day, not an instant: midnight UTC on the day in question, read back
+// in UTC, so the checklist does not change day underneath somebody halfway
+// through their evening.
+model DailyChecklistEntry {
+  id      String   @id @default(cuid())
+  date    DateTime
+  // One of DAILY_CHECKLIST_ITEMS in src/lib/dailyChecklist.ts. Stored as the
+  // item's stable key rather than its wording, so the label can be reworded
+  // without orphaning a year of history.
+  item    String
+  checked Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One row per item per day is the whole invariant, and the database is what
+  // holds it: two tabs opening today's checklist at once both seed it, and the
+  // second write is a no-op rather than a duplicate.
+  @@unique([date, item])
+  @@index([date])
+}
