@@ -66,6 +66,8 @@ type StepNote =
       // message, where three were asked for and anything less is worth saying
       // out loud rather than leaving somebody to count the boxes.
       written: number;
+      // Which first-message variants the evidence could not support.
+      skipped: readonly string[];
     };
 
 export default function OutreachSequencePanel({
@@ -179,6 +181,7 @@ function StepRow({
               evidence: result.evidence ?? null,
               basedOn: result.basedOn,
               written: result.written,
+              skipped: result.skipped ?? [],
             },
       );
     } catch {
@@ -341,8 +344,20 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
       )}
       {short && (
         <p className="text-warn">
-          {note.written === 1 ? "One option" : `${note.written} options`} came
-          back rather than three. Regenerating usually gets the full set.
+          {note.written === 1 ? "One option" : `${note.written} options`} rather
+          than three
+          {note.skipped.length > 0 && (
+            <>
+              {" "}
+              — nothing in the evidence supports{" "}
+              {note.skipped
+                .map((v) => `option ${v}`)
+                .join(" or ")}
+              , so {note.skipped.length === 1 ? "it was" : "they were"} left out
+              rather than invented
+            </>
+          )}
+          .
         </p>
       )}
     </div>
@@ -495,6 +510,17 @@ function MessageCard({
           </button>
         )}
       </div>
+
+      {message.internalNote && (
+        <div className="mt-2.5 rounded-[8px] border border-line/70 bg-surface/60 px-3 py-2">
+          <p className="text-[11px] font-medium tracking-[0.02em] text-muted">
+            Internal note — not part of the message
+          </p>
+          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted">
+            {message.internalNote}
+          </p>
+        </div>
+      )}
 
       {(text.includes(CONTACT_NAME_PLACEHOLDER) ||
         copyFailed ||

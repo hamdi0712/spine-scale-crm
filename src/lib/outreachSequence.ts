@@ -70,20 +70,30 @@ export const OUTREACH_STEP_LABELS: Record<OutreachStep, string> = {
 // What each step is for, in one line, shown under its title on the timeline.
 export const OUTREACH_STEP_BLURBS: Record<OutreachStep, string> = {
   CONNECTION:
-    "One true specific detail about the clinic, and nothing that reads as a pitch.",
+    "One verified detail about the clinic. No pitch, no question, nothing about an audit.",
   FIRST_MESSAGE:
-    "Three openers to choose between, each ending in a question rather than an offer.",
+    "Up to three openers to choose between, each ending in a question rather than an offer.",
   AUDIT_OFFER:
-    "The offer to record something specific for them, once they have replied.",
-  LOOM_DELIVERY: "The note the video goes out with.",
-  FOLLOW_UP: "One gentle nudge when it has gone quiet, and no more than one.",
+    "Written from what they actually wrote back, and asking permission to record.",
+  LOOM_DELIVERY: "The note the video goes out with, and the link exactly as stored.",
+  FOLLOW_UP:
+    "One nudge, and only one. Which version depends on whether the video has gone out.",
 };
 
 // Which steps a model writes, and which are filled in from the template here.
-// The dividing line is whether the step has a blank only the evidence can fill:
-// steps 1 and 2 do, steps 3 to 5 are fixed prose with substitutions.
+//
+// The dividing line is whether the step has a blank only evidence can fill.
+// Steps 1 and 2 read the research; step 3 reads what the prospect wrote back,
+// which is a better source than the research and the reason that step moved
+// over here. Steps 4 and 5 are fixed prose whose only variables are a link and
+// which of two follow-ups applies, so asking a model would spend a call to be
+// handed back the words we already have.
 export function stepUsesModel(step: OutreachStep): boolean {
-  return step === "CONNECTION" || step === "FIRST_MESSAGE";
+  return (
+    step === "CONNECTION" ||
+    step === "FIRST_MESSAGE" ||
+    step === "AUDIT_OFFER"
+  );
 }
 
 // The first message is generated as three alternatives for a person to choose
@@ -119,8 +129,13 @@ export const FIRST_MESSAGE_MAX_CHARS = 600;
 // Below this, nothing was written. "Hi Sarah — thoughts?" is thirty characters.
 const MESSAGE_MIN_CHARS = 40;
 
-// One note, or three short ones. Comfortably over what either answer needs.
-export const SEQUENCE_MAX_TOKENS = 900;
+// An audit offer is four sentences. The ceiling is there to stop a paragraph of
+// enthusiasm arriving where a calm offer was asked for.
+export const AUDIT_OFFER_MAX_CHARS = 700;
+
+// One message, three short ones, or one with a note attached. Comfortably over
+// what any of the three answers needs.
+export const SEQUENCE_MAX_TOKENS = 1100;
 
 // ─── Names, and whether to call somebody Dr. ───────────────────────────────
 
@@ -329,6 +344,11 @@ export interface SequenceContext {
   // Newest last, the order they were written in. Later steps are shown these so
   // they can avoid repeating an observation already made.
   priorMessages: OutreachDraft[];
+  // What the prospect actually wrote back, where it was captured when the reply
+  // was marked. The audit offer is written from this: its job is to answer what
+  // they said, and "appreciate that context" with no idea what the context was
+  // is the version of this message that gets ignored.
+  replyText: string | null;
 }
 
 // The salutation for a whole context, so the templates and both prompts read it
@@ -337,10 +357,52 @@ export function contextSalutation(ctx: SequenceContext): Salutation {
   return salutation(ctx.contactName, ctx.evidence.websiteNotes);
 }
 
+// ─── The house style ───────────────────────────────────────────────────────
+
+// The em dash is banned from every message this app writes.
+//
+// Not a stylistic preference: it is the single most reliable tell that a
+// message came out of a language model rather than off somebody's keyboard, and
+// these are messages whose entire premise is that a person looked at this
+// clinic. The app's own interface uses em dashes freely — that is prose for the
+// person using it, not for the prospect.
+//
+// Applied to the templates by writing them without one, and to the model's
+// output by rewriting rather than rejecting: a good sentence with the wrong
+// punctuation in it should not cost a generation. A dash doing a comma's job
+// becomes a comma; one doing a full stop's job becomes a full stop. Spaced
+// dashes are read as parenthetical and become commas.
+export function stripEmDashes(text: string): string {
+  return text
+    // " — " and " – " as a parenthetical or a pause.
+    .replace(/\s+[—–]\s+/g, ", ")
+    // Between numbers it is a range, not a pause: "9—5" is opening hours and
+    // becomes "9-5". Turning that one into a comma is how you get "the 9, 5
+    // window" into a message written to a clinic owner.
+    .replace(/(\d)\s*[—–]\s*(\d)/g, "$1-$2")
+    // Anything else unspaced is doing a pause's job.
+    .replace(/[—–]/g, ", ")
+    // The rewrite can leave doubled punctuation behind.
+    .replace(/,\s*,/g, ",")
+    .replace(/([,.!?;:])\s*,/g, "$1")
+    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export function hasEmDash(text: string): boolean {
+  return /[—–]/.test(text);
+}
+
 // ─── The templates ─────────────────────────────────────────────────────────
 
-// The three steps a model is never asked to write. Each is the wording exactly
-// as it was given, with the name, the clinic and the link filled in.
+// The steps a model is never asked to write, in the wording they were given.
+//
+// Step 3 is no longer among them. Its whole job is to answer what the prospect
+// actually said, so it needs the reply in front of it and it needs a model —
+// see auditOfferPrompt below. What is left here is the Loom delivery, whose one
+// variable is a link, and the follow-up, whose two versions differ only by
+// whether the video has gone out yet.
 //
 // A template with a blank it cannot fill returns null rather than a note with a
 // hole in it — which in practice means the Loom delivery without a URL, and
@@ -348,65 +410,81 @@ export function contextSalutation(ctx: SequenceContext): Salutation {
 export function fillTemplate(
   step: OutreachStep,
   ctx: SequenceContext,
+  state?: SequenceState,
 ): string | null {
   const name = contextSalutation(ctx).address;
   const clinic = ctx.evidence.clinicName.trim();
 
   switch (step) {
-    case "AUDIT_OFFER":
-      return [
-        "Appreciate that context. I actually put together a quick breakdown of",
-        `what's usually happening in setups like yours — happy to record a`,
-        `specific one for ${clinic} if useful. Takes me a few minutes, no`,
-        "obligation.",
-      ]
-        .join(" ")
-        .replace(/\s+/g, " ");
-
     case "LOOM_DELIVERY": {
       const loom = (ctx.loomUrl ?? "").trim();
       if (loom === "") return null;
+      // The link is dropped in exactly as stored. Nothing here reformats,
+      // shortens or "tidies" a URL: a delivery message carrying a link that is
+      // one character different from the one that was recorded is a message
+      // that delivers nothing.
       return [
-        `Here it is: ${loom}. About 5 minutes — walks through what I saw and`,
-        "where clinics like yours usually lose booked consults. If it's useful,",
-        "happy to talk through options. If not, no worries either way.",
+        `Here it is: ${loom}. It's about five minutes and walks through what I`,
+        `saw in ${clinic}'s current booking and follow-up flow, including the`,
+        "areas that may be creating avoidable drop-off between inquiry, booking,",
+        "and attendance. If it's useful, happy to talk through it. If not, no",
+        "worries either way.",
       ]
         .join(" ")
         .replace(/\s+/g, " ");
     }
 
-    case "FOLLOW_UP":
-      return [
-        `Hey ${name} — no pressure at all, just floating this back up in case it`,
-        "got buried. Happy to send the video whenever's useful, or if now's not",
-        "the right time, all good.",
-      ]
-        .join(" ")
-        .replace(/\s+/g, " ");
+    // Two follow-ups, and which one is right depends on what already went out.
+    // Offering to send a video that was sent last week is the mistake this
+    // branch exists to prevent, and it is the kind that reads as nobody having
+    // looked at the thread.
+    case "FOLLOW_UP": {
+      const loomSent = state?.sentSteps.includes("LOOM_DELIVERY") ?? false;
+      return loomSent
+        ? [
+            `Hey ${name}, no pressure at all. Just floating the video back up in`,
+            "case it got buried. Happy to talk through anything that stood out,",
+            "or leave it with you if now isn't the right time.",
+          ]
+            .join(" ")
+            .replace(/\s+/g, " ")
+        : [
+            `Hey ${name}, no pressure at all. Just floating this back up in case`,
+            "it got buried. Happy to put together the short breakdown whenever",
+            "it's useful. If now isn't the right time, all good.",
+          ]
+            .join(" ")
+            .replace(/\s+/g, " ");
+    }
 
-    // The two the model writes. There is no template fill for these: their
-    // whole content is the specific detail, and a fallback for them would be
-    // the generic opener this feature exists not to send.
+    // The three the model writes. There is no template fill for these: what
+    // makes each one worth sending is the specific thing it says, and a
+    // fallback would be the generic message this feature exists not to send.
     default:
       return null;
   }
 }
 
-// The connection request, assembled around the one clause the model supplies.
-// The hook sits mid-sentence and the full stop after it belongs to the
-// template, which is why readHook strips a trailing one.
+// The connection request, assembled around the one observation the model
+// supplies.
+//
+// A comma after the name, not a dash. The observation is a whole sentence of
+// its own rather than a clause dropped mid-sentence, which is what lets it
+// carry "I noticed" and a characterization without the seams showing.
 export function connectionNote({
   address,
   clinicName,
-  hook,
+  observation,
 }: {
   // Already decided by salutation() — "Dr. Mike" or "Mike". The template does
   // not work it out for itself, so every step greets the person the same way.
   address: string;
   clinicName: string;
-  hook: string;
+  observation: string;
 }): string {
-  return `Hi ${address} — came across ${clinicName.trim()} while looking into non-surgical spine/disc practices. ${hook}. Would love to connect.`;
+  return stripEmDashes(
+    `Hi ${address}, I came across ${clinicName.trim()} while researching non-surgical spine and disc practices. ${observation}. Would be great to connect.`,
+  );
 }
 
 // ─── Gating ────────────────────────────────────────────────────────────────
@@ -510,27 +588,65 @@ export function stepLock(
 
 // ─── The prompts ───────────────────────────────────────────────────────────
 
+// The proof standard. Every message this app writes is held to it, and most of
+// it is about what NOT to say.
+//
+// The reason it is this long is that the failure it guards against is not a
+// model writing badly — it is a model writing *plausibly*. "Most clinics your
+// size struggle to convert leads" is fluent, confident, on-topic and completely
+// unevidenced, and it is exactly the sentence that gets a message deleted by
+// somebody who knows their own numbers and knows you do not.
 const SYSTEM_PROMPT = [
-  "You write outreach messages for a marketing agency that works with chiropractic and non-surgical spine clinics. The messages are sent by hand on LinkedIn by one person, and they read like it.",
-  "You write from the evidence you are given and nothing else. You have no knowledge of this clinic beyond the evidence block, and you never state a fact it does not state — no invented program names, no guessed locations, no flattery dressed up as an observation.",
-  "You would rather return null than write something that could be sent to any clinic. A generic message is worse than none: it reads as a mail merge to the person receiving it, which is the one thing a hand-written message exists to avoid.",
-  "You never pitch. These messages open a conversation; nothing you write asks for a call, names a price, or describes a service.",
+  "You write outreach messages for a marketing agency that works with chiropractic and non-surgical spine, disc pain, and decompression clinics. The prospect is an owner, doctor, or practice manager at a small practice. Each message is sent by hand on LinkedIn by one person, and it reads like it.",
+
+  // The proof standard.
+  "You write from the evidence you are given and nothing else. The website, the Google Business Profile, advertisements, reviews and public profiles are evidence. Anything else is not. You never state a fact the evidence does not state.",
+  "You never fabricate testimonials, results, client numbers, pricing, reviews, ad performance, operational weaknesses, patient outcomes, or comparisons. Not as illustration, not as a placeholder, not as a reasonable guess.",
+  "You never claim something is absent merely because you did not find it. Where you describe a possible absence you say so carefully: \"I didn't see a visible...\", \"I may be missing it, but...\", \"It wasn't obvious from the public-facing flow...\".",
+  "You never use unsupported comparisons. \"Most clinics like yours\", \"few practices do this\", \"clinics your size usually struggle with this\" are all forbidden, however true they might be, because nothing in your evidence establishes them.",
+
+  // Whose business it is.
+  "You never tell a clinic owner what their own positioning means. You never infer how they handle referrals, how they operate internally, how they serve patients, how they perform financially, or how they convert leads, unless the evidence states it or they told you themselves. You leave room for them to explain their own business.",
+
+  // Personalization that reads as attention rather than as a merge field.
+  "One relevant fact beats a list of facts. Research is not a performance. Where a genuine observation exists, you may pair it with restrained characterization: unique, notable, interesting, a strong signal, unusual, clearly established. Only where it naturally fits. You never invent praise and never force a characterization onto a fact that does not carry one.",
+  "If the research is weak, you write the warm generic message rather than inventing a personalized hook.",
+
+  // Register.
+  "Register: warm, slightly formal, polished, considered. Complete sentences, not clipped fragments. Keep \"I\" where it is natural: \"I came across\", \"I noticed\". No exaggeration, no enthusiasm, no generic praise like \"I love what you're doing\".",
+  "You never use an em dash or an en dash. Not once, anywhere, in any message. Use a comma, a full stop, or a new sentence.",
+  "A comma after the person's name, never a dash. Use the clinic's full name as given; never shorten it, abbreviate it, or invent a nickname for it.",
+  "One call to action per message, and never two.",
+  "You never write the words \"not trying to pitch anything\" or any variant. A message that is not a pitch demonstrates that by its content.",
+
   // The lowercase "json" is load-bearing, not a typo — DeepSeek refuses a
   // json_object request unless the word appears in a prompt. See the note in
   // src/lib/deepseek.ts.
-  "You reply with a single JSON object in exactly the shape requested, and nothing else — your reply is parsed as json, so any prose around it breaks it.",
+  "You reply with a single JSON object in exactly the shape requested, and nothing else. Your reply is parsed as json, so any prose around it breaks it.",
 ].join(" ");
 
 export function buildStepPrompt(
   step: OutreachStep,
   ctx: SequenceContext,
 ): { system: string; user: string } {
-  return {
-    system: SYSTEM_PROMPT,
-    user:
-      step === "CONNECTION" ? connectionPrompt(ctx) : firstMessagePrompt(ctx),
-  };
+  const user =
+    step === "CONNECTION"
+      ? connectionPrompt(ctx)
+      : step === "FIRST_MESSAGE"
+        ? firstMessagePrompt(ctx)
+        : auditOfferPrompt(ctx);
+  return { system: SYSTEM_PROMPT, user };
 }
+
+// What every prompt asks for alongside the message itself: the note a human
+// reads before sending. It is never part of the message, and the panel keeps
+// the two apart on screen as well as in the database.
+const INTERNAL_NOTE_SPEC = [
+  "Alongside the message, return an internal note for the person about to send it. It is for review only and is never seen by the prospect. Three short lines:",
+  "  evidence: the specific evidence this message was built on, quoted or named.",
+  "  uncertainty: any absence-of-evidence or hedging language you used, and what you were careful not to claim. Say \"none\" if there was none.",
+  "  stage: the prospect stage that had to be true before this step could be sent.",
+].join("\n");
 
 // The evidence, with its absences named — the same arrangement the scoring
 // assist uses, and for the same reason: a missing field stated is a field the
@@ -539,12 +655,12 @@ function evidenceBlock(evidence: IcpAssistEvidence): string {
   const notes = (evidence.websiteNotes ?? "").trim();
   const ads = (evidence.metaAdsSignal ?? "").trim();
   return [
-    "Website notes — text crawled from the clinic's own site:",
+    "Website notes, crawled from the clinic's own site:",
     notes === ""
-      ? "(not gathered — no website notes on this lead)"
+      ? "(not gathered. No website notes on this lead. You have not seen their site, so you cannot say what is or is not on it.)"
       : `"""\n${truncate(notes, ASSIST_NOTES_MAX_CHARS)}\n"""`,
     "",
-    `Meta ads signal: ${ads === "" ? "(not gathered)" : ads}`,
+    `Advertising signal: ${ads === "" ? "(not gathered. This does NOT mean they are not advertising. It means nobody looked.)" : ads}`,
     `Google review count: ${
       evidence.reviewCount === null ? "(not gathered)" : evidence.reviewCount
     }`,
@@ -559,21 +675,24 @@ function conversationBlock(prior: OutreachDraft[]): string {
     return "Nothing has been written to this person yet. This is the first thing they will read.";
   }
   return [
-    "Already written to this person, oldest first. Some may not have been sent yet — what matters is that you do not repeat an observation that has already been made, and that anything you write sounds like the same person who wrote these:",
+    "Already written to this person, oldest first. Do not repeat an observation that has already been made unless continuity genuinely requires it, and write as the same person who wrote these:",
     "",
     ...prior.map((message) => {
       const label = OUTREACH_STEP_LABELS[message.step];
       const variant = message.variant ? ` (option ${message.variant})` : "";
       const sent = message.sentAt ? "sent" : "drafted, not yet sent";
-      return `— ${label}${variant}, ${sent}:\n  "${message.content}"`;
+      return `- ${label}${variant}, ${sent}:\n  "${message.content}"`;
     }),
   ].join("\n");
 }
 
+// ─── Step 1 ────────────────────────────────────────────────────────────────
+
 function connectionPrompt(ctx: SequenceContext): string {
   const { address } = contextSalutation(ctx);
+  const clinic = ctx.evidence.clinicName.trim();
   return [
-    `CLINIC: ${ctx.evidence.clinicName}`,
+    `CLINIC: ${clinic}`,
     "",
     "EVIDENCE",
     "Gathered by an automated enrichment run. This is everything you have.",
@@ -584,46 +703,52 @@ function connectionPrompt(ctx: SequenceContext): string {
     conversationBlock(ctx.priorMessages),
     "",
     "TASK",
-    "Find the single most specific true detail about this clinic in the evidence above — the kind of thing somebody who spent two minutes actually looking at them would notice — and write it as one short clause.",
+    "This is a LinkedIn connection request with a note. It has one job: earn the connection. Nothing else.",
     "",
-    "It is dropped into the middle of this sentence, which is already written and which you do not repeat back:",
-    `  "Hi ${address} — came across ${ctx.evidence.clinicName.trim()} while looking into non-surgical spine/disc practices. <your clause>. Would love to connect."`,
-    "The greeting is already decided and already correct, title included where there is one. You are writing the clause and nothing else.",
+    "The note is already written except for one sentence, which is yours:",
     "",
-    "What counts as specific enough:",
-    "  - a named treatment program or protocol the clinic offers",
-    "  - a combination of services that is worth remarking on together",
-    "  - an observation about the review count, where the number supports it",
-    "  - something concrete about the ads they are running or how long for",
+    `  "Hi ${address}, I came across ${clinic} while researching non-surgical spine and disc practices. <YOUR SENTENCE>. Would be great to connect."`,
     "",
-    "What does not count, and must return null instead:",
-    '  - anything true of every clinic ("great website", "clearly patient-focused")',
-    "  - praise with no fact in it",
-    "  - a detail you are inferring rather than reading",
-    "  - restating the clinic's name or town back at them",
+    "Write the observation sentence. One specific, verified detail from the evidence, as a complete sentence in the first person, usually opening \"I noticed\" or \"I saw\".",
     "",
-    "REGISTER",
-    "Match these two exactly — an observation, in the first person, understated, no pitch and no compliment:",
-    "  \"Saw you're running the decompression program alongside PT\"",
-    '  "Noticed the strong review count on your booking experience"',
+    "Where the fact genuinely carries it, pair it with restrained characterization, for example \"which is a unique combination\" or \"which is a strong signal\". Only where it fits. A plain statement of the fact is the correct answer whenever it does not.",
     "",
-    "Under 180 characters. No trailing full stop — the template supplies it. No square brackets. Do not name the clinic, do not greet anybody, and do not add a call to action; the sentence around your clause already does all three.",
+    "This is the register to match:",
+    "  \"I noticed your team includes both medical doctors and an orthopedic surgeon, which is a unique combination\"",
+    "  \"I saw you offer both spinal decompression and laser therapy under one roof\"",
+    "",
+    "HARD RULES for this step:",
+    "  - Do not pitch. Do not mention an audit, a video, a Loom, an offer, lead generation, marketing, or any service.",
+    "  - Do not ask a question. Nothing here should require effort to answer.",
+    "  - Use exactly one observation.",
+    "  - Do not explain what the observation means for their business. State it and stop.",
+    "  - Do NOT use an absence as the observation. \"I didn't see a booking form\" is a Step 2 sentence, not a connection request. If the only thing you have is an absence, return null.",
+    "  - The whole note including the fixed parts should come in under about 300 characters, so your sentence has roughly 150 to work with.",
+    "  - No square brackets. No em dashes.",
+    "",
+    INTERNAL_NOTE_SPEC,
     "",
     "REPLY FORMAT",
     "A single JSON object, exactly these keys:",
     "{",
-    '  "hook": "<the clause>" | null,',
-    '  "evidence": "<the phrase in the evidence you read it off, quoted>" | null',
+    '  "observation": "<the sentence>" | null,',
+    '  "evidence": "<what in the evidence you read it off, quoted>" | null,',
+    '  "uncertainty": "<hedging used, or none>",',
+    '  "stage": "<the stage required before this step>"',
     "}",
     "",
-    "Return null for hook whenever the evidence will not support something concrete. That is a correct and expected answer, not a failure.",
+    "Return null for observation whenever the evidence will not support something specific and verified. That is a correct and expected answer, not a failure.",
   ].join("\n");
 }
 
+// ─── Step 2 ────────────────────────────────────────────────────────────────
+
 function firstMessagePrompt(ctx: SequenceContext): string {
   const { address, honorific } = contextSalutation(ctx);
+  const clinic = ctx.evidence.clinicName.trim();
+  const ads = (ctx.evidence.metaAdsSignal ?? "").trim();
   return [
-    `CLINIC: ${ctx.evidence.clinicName}`,
+    `CLINIC: ${clinic}`,
     `ADDRESS THEM AS: ${address}`,
     "",
     "EVIDENCE",
@@ -635,43 +760,100 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     conversationBlock(ctx.priorMessages),
     "",
     "TASK",
-    "They accepted the connection request. Write the first real message — three alternative versions of it, so the person sending can pick the one that fits.",
+    "They accepted the connection request. This message has one job: earn a genuine reply. It does not close, and it does not offer the audit.",
     "",
-    `  A) ${VARIANT_BLURBS.A}. An observation about something specific on their site or their booking flow, ending in a question about it.`,
-    `  B) ${VARIANT_BLURBS.B}. An observation about their ad activity, ending in a question about it.`,
-    `  C) ${VARIANT_BLURBS.C}. No specific hook needed — warm, short, and still ending in a question.`,
+    "Write up to three versions, so the person sending can choose. Each follows its own shape:",
     "",
-    "RULES, all three:",
-    // The honorific is settled before the prompt is built (salutation() above),
-    // off the contact field, the letters after their name, and their own site.
-    // The model is told the answer rather than asked for it, because the other
-    // three steps are filled in code and cannot ask — and a sequence that
-    // opened "Hi Dr. Mike" and followed up with "Hey Mike" would read as two
-    // people writing.
-    `  - Open by addressing them as "${address}" and exactly that. ${
-      honorific === null
-        ? "No title: nothing in the evidence says this person is a doctor, and awarding them one is worse than leaving it off."
-        : "Keep the Dr. — this person is a doctor and their own clinic addresses them that way. Do not extend it to the surname; \"Dr. Mike\" is the register, \"Dr. Alvarez\" is not."
-    } Never the full name.`,
-    "  - End in a question. A message that ends in an offer is the wrong message — the offer is the next step, and it is written after they answer.",
-    "  - No pitch, no service description, no price, no call booking, no link.",
-    "  - Do not repeat an observation already made in the conversation above. If the connection request already used the best detail, A and B find a different one or lean on what is actually there.",
-    `  - Under ${FIRST_MESSAGE_MAX_CHARS} characters each. Two or three sentences.`,
-    "  - No square brackets: they read as a mail merge that failed.",
-    "  - Written in the first person, understated, the way one person writes to another.",
+    "VARIANT A, website or booking-flow observation. Use when the public-facing site or booking flow shows something specific and relevant.",
+    `  "Thanks for connecting, ${address}. One thing I noticed on ${clinic}'s site is <specific observation>. <If you are describing something you did not see, hedge it here: "I didn't see a visible...", "I may be missing it, but...">. Curious how you're currently handling that on the back end. Worth a quick chat, or am I off base?"`,
+    "  Never state that a confirmation, reminder, follow-up or booking element does not exist just because it was not visible in the crawl.",
     "",
-    "WRITE ALL THREE. Three is what the person sending gets to choose between, and two is a choice with a hole in it — never return null, and never return fewer than three.",
+    "VARIANT B, advertising observation. Use ONLY when current or recent advertising is directly evidenced above.",
+    `  "Thanks for connecting, ${address}. I noticed ${clinic} is running <Google/Meta> ads for <the verified service or offer shown>. Curious what you're seeing after someone clicks. Is the main focus currently lead volume, booking, or getting people to show?"`,
+    "  Do not assume the ads are profitable, underperforming, or producing any particular number of leads. Do not assume there is a problem. Name only the service or offer actually shown in the evidence.",
+    ads === ""
+      ? "  THERE IS NO ADVERTISING EVIDENCE FOR THIS CLINIC. Return null for B. Writing it would mean inventing an ad."
+      : `  The advertising evidence you have is exactly this and nothing more: "${ads}"`,
     "",
-    "Where an angle is thin in the evidence, that is what changes, not the count. If there is no ad activity to remark on, B opens on the nearest true thing the evidence does support and stays short and light rather than leaning on a detail. What you must never do is invent the missing detail: an angle you cannot evidence becomes a warmer, more general message, not a confident claim about something you did not read.",
+    "VARIANT C, warm generic fallback. Always write this one. It carries no personalization at all, on purpose, and it is what gets sent when the research is thin.",
+    `  "Thanks for connecting, ${address}. I work with non-surgical spine and disc clinics on the booking and follow-up side, the things that happen after a lead comes in. I'm curious what your current booking flow looks like day to day."`,
+    "  Do not add fabricated personalization to C. Do not add a second call to action.",
     "",
-    "The three must be genuinely different to choose between — a different observation, a different question, or a different length. Three versions of one sentence is the same as having one.",
+    "HARD RULES for all three:",
+    "  - One question only, and no audit offer, no video, no Loom, no pricing.",
+    "  - Do not explain to them what your observation supposedly means for their clinic.",
+    honorific === null
+      ? "  - No title in the greeting: nothing in the evidence says this person is a doctor."
+      : "  - Keep the Dr. in the greeting exactly as given. Do not move it to their surname.",
+    `  - Under ${FIRST_MESSAGE_MAX_CHARS} characters each. No square brackets. No em dashes.`,
+    "",
+    "Return null for A or B where the evidence does not support that variant. A forced variant is a fabricated one, and this is the step where fabrication is most likely: do not describe a booking flow you did not see, and do not describe an ad you were not shown. C is never null.",
+    "",
+    INTERNAL_NOTE_SPEC,
     "",
     "REPLY FORMAT",
-    "A single JSON object, exactly these keys, all three of them strings:",
+    "A single JSON object, exactly these keys:",
     "{",
-    '  "a": "<version A>",',
-    '  "b": "<version B>",',
-    '  "c": "<version C>"',
+    '  "a": "<version A>" | null,',
+    '  "b": "<version B>" | null,',
+    '  "c": "<version C>",',
+    '  "evidence": "<the evidence A and B were built on, quoted>" | null,',
+    '  "uncertainty": "<hedging used, or none>",',
+    '  "stage": "<the stage required before this step>"',
+    "}",
+  ].join("\n");
+}
+
+// ─── Step 3 ────────────────────────────────────────────────────────────────
+
+// The audit offer, and the one step whose personalization comes from the
+// prospect rather than from the research. What they wrote back is now the best
+// evidence about this clinic that exists anywhere in the record, and a message
+// that ignores it to recite the website again is a message that was not
+// listening.
+function auditOfferPrompt(ctx: SequenceContext): string {
+  const { address } = contextSalutation(ctx);
+  const clinic = ctx.evidence.clinicName.trim();
+  const reply = (ctx.replyText ?? "").trim();
+  return [
+    `CLINIC: ${clinic}`,
+    `ADDRESS THEM AS: ${address}`,
+    "",
+    "WHAT THEY WROTE BACK",
+    reply === ""
+      ? "(not captured. A reply was marked as received, but its text was not saved. Acknowledge that they replied. Do NOT invent anything they might have said, and do not paraphrase a reply you cannot see.)"
+      : `"""\n${truncate(reply, 2000)}\n"""`,
+    "",
+    "CONVERSATION SO FAR",
+    conversationBlock(ctx.priorMessages),
+    "",
+    "TASK",
+    "They replied. This message offers to record a short audit, and asks permission to make it. It is not a pitch and it promises no result.",
+    "",
+    "This is the shape:",
+    `  "Appreciate that context. Based on what you shared, I can put together a quick numbers-based breakdown for ${clinic} around the booking and follow-up flow. Happy to record it if useful. No obligation either way."`,
+    "",
+    reply === ""
+      ? "Because their reply was not captured, stay close to that wording. Acknowledge the reply in general terms and do not attribute any specific statement to them."
+      : "Adapt the opening so it answers what they actually said. Quote or paraphrase a specific detail from their reply where it reads naturally. Generic acknowledgement of a reply you can see is a wasted sentence.",
+    "",
+    "HARD RULES for this step:",
+    "  - Do not say \"setups like yours\" unless they themselves described their setup.",
+    "  - Do not claim the audit will find lost revenue, increase bookings, or produce any specific result.",
+    "  - Do not imply that comparable clinics have achieved results. You have no verified proof of any.",
+    "  - Ask permission to record it. One call to action, and no second one.",
+    "  - Calm and specific. No enthusiasm, no urgency.",
+    "  - No square brackets. No em dashes.",
+    "",
+    INTERNAL_NOTE_SPEC,
+    "",
+    "REPLY FORMAT",
+    "A single JSON object, exactly these keys:",
+    "{",
+    '  "message": "<the message>",',
+    '  "evidence": "<what you built it on, quoting their reply where you used it>" | null,',
+    '  "uncertainty": "<hedging used, or none>",',
+    '  "stage": "<the stage required before this step>"',
     "}",
   ].join("\n");
 }
@@ -682,83 +864,138 @@ function truncate(text: string, max: number): string {
 
 // ─── Reading the reply ─────────────────────────────────────────────────────
 
-// The clause that opens a connection request. Every rule here is one the prompt
-// already asked for, applied again because a prompt is a request and this is the
-// gate.
-export function readHook(raw: unknown): string | null {
+// The observation sentence that goes into a connection request. Every rule here
+// is one the prompt already asked for, applied again because a prompt is a
+// request and this is the gate.
+export function readObservation(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
 
   // This goes into one line of a note, so whitespace collapses.
-  let hook = raw.replace(/\s+/g, " ").trim();
-  // Surrounding quotes are the commonest way a model returns a "clause".
-  hook = hook.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
-  // The template supplies the full stop, because the line sits mid-sentence.
-  hook = hook.replace(/[.!]+$/, "").trim();
+  let text = stripEmDashes(raw.replace(/\s+/g, " ").trim());
+  // Surrounding quotes are the commonest way a model returns a sentence.
+  text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+  // The template supplies the full stop after the observation.
+  text = text.replace(/[.!]+$/, "").trim();
 
-  if (hook.length < 15 || hook.length > 180) return null;
+  if (text.length < 15 || text.length > 200) return null;
   // Square brackets mean an unfilled placeholder, which reads as a mail merge
   // that failed — the precise impression this feature exists to avoid.
-  if (/[[\]]/.test(hook)) return null;
-  if (!/[a-z]/i.test(hook)) return null;
-  return hook;
+  if (/[[\]]/.test(text)) return null;
+  if (!/[a-z]/i.test(text)) return null;
+  // An absence belongs in step 2, where it can be hedged properly. In a
+  // connection request it is both a downer and a claim the crawl cannot make.
+  if (/\b(didn't see|did not see|couldn't find|could not find|no visible|doesn't (?:seem|appear)|does not (?:seem|appear)|missing)\b/i.test(text)) {
+    return null;
+  }
+  return text;
 }
 
-// One of the three first-message variants.
+// One message, held to what can actually be used.
 //
-// What it rejects is what cannot be used: nothing there, a wall of text, an
-// unfilled [placeholder]. What it does NOT reject is a message that breaks the
-// ends-in-a-question rule — that used to return null here, which meant one
-// stray full stop silently cost the person a whole option and left them
-// choosing between two. The rule still matters, so it is checked and shown
-// against the message (endsInQuestion below) rather than enforced by deletion:
-// this is a draft in an editable box, and a note saying "this one does not end
-// in a question" is worth more than the option disappearing.
-export function readFirstMessage(raw: unknown): string | null {
+// What it rejects is what cannot be sent: nothing there, a wall of text, an
+// unfilled [placeholder]. What it does NOT reject is a message that breaks a
+// style rule — an em dash is rewritten rather than refused, and a first message
+// that does not end in a question is reported rather than deleted. That used to
+// return null, which meant one stray full stop silently cost the person a whole
+// option and left them choosing between two.
+export function readMessage(raw: unknown, maxChars: number): string | null {
   if (typeof raw !== "string") return null;
 
-  // Paragraph breaks survive — these are messages, not clauses — but trailing
-  // and repeated blank lines go.
-  const message = raw
-    .replace(/\r\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  const message = stripEmDashes(
+    raw.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(),
+  );
 
   if (message.length < MESSAGE_MIN_CHARS) return null;
-  if (message.length > FIRST_MESSAGE_MAX_CHARS) return null;
+  if (message.length > maxChars) return null;
   if (/[[\]]/.test(message)) return null;
   return message;
 }
 
-// The one rule of this step, checked rather than trusted — and reported rather
-// than enforced. The panel puts a line under any option that fails it.
+// The one rule of the first message, checked rather than trusted — and reported
+// rather than enforced. The panel puts a line under any option that fails it.
 export function endsInQuestion(message: string): boolean {
   return message.trimEnd().endsWith("?");
 }
 
-export type ConnectionReply = { hook: string | null; evidence: string | null };
+// ─── The internal note ─────────────────────────────────────────────────────
+
+// The three lines a human reads before sending: what the message was built on,
+// what was hedged, and what had to have happened first.
+//
+// Stored beside the message and never inside it. That separation is the whole
+// point of the note: it exists to be read by the person sending and to be
+// impossible to paste by accident, which is why it is its own column and its
+// own box on screen rather than a paragraph appended to the draft.
+export interface InternalNote {
+  evidence: string | null;
+  uncertainty: string | null;
+  stage: string | null;
+}
+
+export function readInternalNote(body: Record<string, unknown>): InternalNote {
+  return {
+    evidence: readText(body.evidence, 400),
+    uncertainty: readText(body.uncertainty, 300),
+    stage: readText(body.stage, 160),
+  };
+}
+
+// Flattened for storage, in the order a reviewer reads them. Null when the
+// model returned nothing worth keeping, so an empty note is stored as no note
+// rather than as three empty headings.
+export function formatInternalNote(note: InternalNote): string | null {
+  const lines = [
+    note.evidence === null ? null : `Evidence: ${note.evidence}`,
+    note.uncertainty === null ? null : `Uncertainty: ${note.uncertainty}`,
+    note.stage === null ? null : `Stage required: ${note.stage}`,
+  ].filter((line): line is string => line !== null);
+  return lines.length === 0 ? null : lines.join("\n");
+}
+
+// ─── Parsing each step's answer ────────────────────────────────────────────
+
+export type ConnectionReply = {
+  observation: string | null;
+  note: InternalNote;
+};
 
 export function parseConnectionReply(raw: string): ConnectionReply | null {
   const body = readObject(raw);
   if (!body) return null;
-  const hook = readHook(body.hook);
   return {
-    hook,
-    // A citation with no line to cite is noise, so it travels only with one.
-    evidence: hook === null ? null : readText(body.evidence, 300),
+    observation: readObservation(body.observation),
+    note: readInternalNote(body),
   };
 }
 
-export type FirstMessageReply = Record<FirstMessageVariant, string | null>;
+export type FirstMessageReply = {
+  variants: Record<FirstMessageVariant, string | null>;
+  note: InternalNote;
+};
 
 // Null for every variant is a real answer and reads as "nothing specific enough
-// to say", the same way a null hook does. The caller decides what to do with it.
+// to say". The caller decides what to do with it.
 export function parseFirstMessageReply(raw: string): FirstMessageReply | null {
   const body = readObject(raw);
   if (!body) return null;
   return {
-    A: readFirstMessage(body.a),
-    B: readFirstMessage(body.b),
-    C: readFirstMessage(body.c),
+    variants: {
+      A: readMessage(body.a, FIRST_MESSAGE_MAX_CHARS),
+      B: readMessage(body.b, FIRST_MESSAGE_MAX_CHARS),
+      C: readMessage(body.c, FIRST_MESSAGE_MAX_CHARS),
+    },
+    note: readInternalNote(body),
+  };
+}
+
+export type AuditOfferReply = { message: string | null; note: InternalNote };
+
+export function parseAuditOfferReply(raw: string): AuditOfferReply | null {
+  const body = readObject(raw);
+  if (!body) return null;
+  return {
+    message: readMessage(body.message, AUDIT_OFFER_MAX_CHARS),
+    note: readInternalNote(body),
   };
 }
 
@@ -778,6 +1015,6 @@ function readObject(raw: string): Record<string, unknown> | null {
 function readText(raw: unknown, max: number): string | null {
   if (typeof raw !== "string") return null;
   const trimmed = raw.replace(/\s+/g, " ").trim();
-  if (trimmed === "") return null;
+  if (trimmed === "" || /^none$/i.test(trimmed)) return null;
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }

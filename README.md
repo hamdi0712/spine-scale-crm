@@ -485,17 +485,55 @@ again.
   Loom URL on the lead, and step 5 comes due on the lead's own follow-up date
   rather than on a timer of its own.
 
-  Two of the five cost a model call. The connection request and the first
+  Three of the five cost a model call. The connection request and the first
   message are written from the enrichment evidence — the same website notes,
-  ads signal and review count the scorecard is scored from — and both are held
-  to the rule the old outreach hook had: a run that finds nothing specific
-  enough writes nothing, and says so, rather than producing an opener that
-  would read as a mail merge. The first message comes back as three variants to
-  choose between, and marking one sent unmarks the others. The remaining three
-  steps are fixed templates with a first name, a clinic and a link in them, so
-  they are filled in code and cost nothing. Every prompt is given the messages
-  already drafted for that lead, so a later step does not re-make an
-  observation an earlier one already made.
+  ads signal and review count the scorecard is scored from. The audit offer is
+  written from something better: what the prospect actually wrote back, pasted
+  into the lead record when the reply is marked. Its job is to answer what they
+  said, and a generic "appreciate that context" against an unread reply is the
+  version of that message that gets ignored. The remaining two steps are fixed
+  templates whose only variables are the Loom link and which of two follow-ups
+  applies, so they are filled in code and cost nothing.
+
+  Every prompt is given the messages already drafted for that lead, so a later
+  step does not re-make an observation an earlier one already made.
+
+  What the prompts spend most of their length on is what not to say. No
+  fabricated testimonials, results, client numbers, pricing, reviews, ad
+  performance or patient outcomes. No unsupported comparisons: "most clinics
+  like yours" and "clinics your size usually struggle with this" are fluent,
+  confident and unevidenced, and they are what gets a message deleted by
+  somebody who knows their own numbers and knows you do not. No claiming
+  something is absent because the crawl did not find it, which is why an
+  absence is always hedged ("I didn't see a visible...", "I may be missing it,
+  but...") and why an absence is refused outright in the connection request,
+  where there is no room to hedge it. And nothing that tells a clinic owner what
+  their own positioning means or how they run their practice.
+
+  Where a genuine observation exists it may carry restrained characterization —
+  unique, notable, a strong signal — but only where the fact itself supports
+  one. Where the research is thin, the warm generic message is the correct
+  answer rather than an invented hook.
+
+  No message contains an em dash. It is the most reliable tell that a message
+  came out of a model rather than off somebody's keyboard, and these are
+  messages whose whole premise is that a person looked. The templates are
+  written without one and the model's output is rewritten rather than rejected,
+  so a good sentence is not lost to its punctuation. (The app's own interface
+  uses them freely; that is prose for the person using it, not for the
+  prospect.)
+
+  The first message comes back as up to three variants to choose between, and
+  marking one sent unmarks the others. A variant the evidence cannot support is
+  left out rather than invented — a clinic with no advertising evidence gets no
+  advertising opener — and the panel says which one was skipped and why, so two
+  options rather than three is an answer instead of a puzzle.
+
+  Every generated step also returns an internal note: the evidence it was built
+  on, the hedging it used, and the stage that had to be reached first. It is
+  stored in its own column and rendered in its own box under the draft, never
+  inside it, because a note that lives in the message is a note that gets pasted
+  into LinkedIn along with it.
 
   Every message opens on a first name, with a **Dr.** in front of it where one
   is owed — "Hi Dr. Mike", not "Hi Mike" and not "Hi Dr. Alvarez", because that
