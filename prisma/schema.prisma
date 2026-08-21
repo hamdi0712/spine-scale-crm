@@ -249,6 +249,7 @@ model Lead {
   notes     LeadNote[]
   calls     Call[]
   activity  ActivityLog[]
+  tasks     Task[]
   client    Client?
   // The discovery candidate this lead was promoted from, where it came that
   // way. Leads added by hand have none, which is the whole difference the
@@ -384,6 +385,7 @@ model Client {
   reports       WeeklyReport[]
   calls         Call[]
   activity      ActivityLog[]
+  tasks         Task[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -761,4 +763,78 @@ model AppSecrets {
   apifyApiToken  String?
 
   updatedAt DateTime @updatedAt
+}
+
+// A piece of work that is not a call, a follow-up or an onboarding step — the
+// board on the Activities page, and the fourth source Today's focus reads.
+//
+// A task is deliberately free-standing. Everything else the focus list draws
+// on hangs off a record and only exists because that record is in a certain
+// state; this is the one thing you can write down because it needs doing and
+// nothing in the CRM would otherwise know about it. The two optional links are
+// what let it be about a lead or a client without being owned by one — they
+// are a chip on the card and a way into the record, not a parent.
+//
+// completedAt is stamped by the board rather than typed: it is set when a card
+// lands in Done and cleared when it is dragged back out, so "done" and "when"
+// can never disagree. status stays the field everything else reads — the
+// timestamp is the record of when it happened, not the state.
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  // TODO | IN_PROGRESS | DONE — constrained to TASK_STATUSES in src/lib/tasks.ts,
+  // the same way every other status field in this schema is.
+  status      String    @default("TODO")
+  // A day rather than an instant: a task is due on a date, not at 3:15pm. Read
+  // in UTC like every other date-only column here (see fmtDate).
+  dueDate     DateTime?
+
+  leadId   String?
+  lead     Lead?   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  // The board reads by status, and Today's focus reads open tasks by due date.
+  @@index([status, dueDate])
+}
+
+// One tick on one day of the fixed daily routine.
+//
+// The routine itself is not in this table. Its items live in
+// src/lib/dailyChecklist.ts as a constant, the same way the ad compliance gate
+// keeps its five items in code — they are the shape of a working day rather
+// than data somebody maintains, and a routine you can edit is a routine you
+// stop following. This table records only which of them were ticked, and when.
+//
+// A row per item per day, written on first view of that day and never before:
+// there is no job that rolls the checklist over at midnight, because there does
+// not need to be one. Asking for a date that has no rows creates them unticked,
+// which is exactly what "resets each morning" means and is also what makes
+// every past day still readable — yesterday's ticks are yesterday's rows, and
+// nothing overwrites them.
+//
+// date is a day, not an instant: midnight UTC on the day in question, read back
+// in UTC, so the checklist does not change day underneath somebody halfway
+// through their evening.
+model DailyChecklistEntry {
+  id      String   @id @default(cuid())
+  date    DateTime
+  // One of DAILY_CHECKLIST_ITEMS in src/lib/dailyChecklist.ts. Stored as the
+  // item's stable key rather than its wording, so the label can be reworded
+  // without orphaning a year of history.
+  item    String
+  checked Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One row per item per day is the whole invariant, and the database is what
+  // holds it: two tabs opening today's checklist at once both seed it, and the
+  // second write is a no-op rather than a duplicate.
+  @@unique([date, item])
+  @@index([date])
 }

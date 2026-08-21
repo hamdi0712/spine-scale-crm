@@ -8,6 +8,7 @@ import {
 } from "@/lib/constants";
 import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
 import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
+import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import {
   CONNECTIONS_WINDOW_DAYS,
   REPLY_RATE_WINDOW_DAYS,
@@ -54,6 +55,12 @@ export default async function DashboardPage() {
   const now = new Date();
   const dayEnd = new Date(now);
   dayEnd.setHours(23, 59, 59, 999);
+  // Task due dates are date-only columns stored at midnight UTC, so the
+  // "today or earlier" bound for them is the end of today read in UTC — the
+  // same reading buildFocus and fmtDate give them.
+  const utcDayEnd = new Date(
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999),
+  );
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   // Exclusive upper bound for "this month", which rolls the year over on its
   // own when the month is December.
@@ -64,6 +71,7 @@ export default async function DashboardPage() {
     openLeads,
     focusCalls,
     focusClients,
+    focusTasks,
     activity,
     outreachLeads,
     discoveryCalls,
@@ -93,6 +101,20 @@ export default async function DashboardPage() {
     prisma.client.findMany({
       where: { status: { not: "CHURNED" } },
       include: { checklist: { orderBy: { sortOrder: "asc" } } },
+    }),
+    // Open tasks off the Activities board that are due today or have already
+    // slipped. Completed ones are excluded here rather than filtered later —
+    // a finished task is never a thing to do today.
+    prisma.task.findMany({
+      where: {
+        status: { in: OPEN_TASK_STATUSES },
+        dueDate: { not: null, lte: utcDayEnd },
+      },
+      orderBy: { dueDate: "asc" },
+      include: {
+        lead: { select: { clinicName: true } },
+        client: { select: { clinicName: true } },
+      },
     }),
     prisma.activityLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -173,7 +195,13 @@ export default async function DashboardPage() {
 
   // ─── Today's focus ───────────────────────────────────────────────────────
 
-  const focus = buildFocus({ now, calls: focusCalls, leads: openLeads, clients: focusClients });
+  const focus = buildFocus({
+    now,
+    calls: focusCalls,
+    leads: openLeads,
+    tasks: focusTasks,
+    clients: focusClients,
+  });
   const { visible, hidden } = splitFocus(focus);
   const summary = summariseFocus(focus);
 
