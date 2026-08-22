@@ -33,7 +33,6 @@ import {
   FirstMessageVariant,
   endsInQuestion,
   stepLock,
-  stepUsesModel,
 } from "@/lib/outreachSequence";
 import {
   OutreachMessageView,
@@ -222,9 +221,6 @@ function StepRow({
           >
             {OUTREACH_STEP_LABELS[step]}
           </p>
-          {!stepUsesModel(step) && !locked && (
-            <p className="text-xs text-muted">Filled from the template</p>
-          )}
         </div>
         <p className="mt-0.5 text-xs leading-relaxed text-muted">
           {OUTREACH_STEP_BLURBS[step]}
@@ -243,35 +239,20 @@ function StepRow({
         ) : (
           <>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {stepUsesModel(step) ? (
-                <AiButton
-                  onClick={() => void run()}
-                  disabled={running}
-                  title="Writes from this lead's enrichment evidence and whatever has already been drafted. Nothing is sent."
-                  className="h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {running
-                    ? "Writing…"
-                    : messages.length > 0
-                      ? "Regenerate"
-                      : step === "FIRST_MESSAGE"
-                        ? "Generate three openers"
-                        : "Generate"}
-                </AiButton>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void run()}
-                  disabled={running}
-                  className="btn h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {running
-                    ? "Filling…"
-                    : messages.length > 0
-                      ? "Rebuild from template"
-                      : "Fill from template"}
-                </button>
-              )}
+              <AiButton
+                onClick={() => void run()}
+                disabled={running}
+                title="Writes from this lead's enrichment evidence and whatever has already been drafted. Nothing is sent."
+                className="h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {running
+                  ? "Writing…"
+                  : messages.length > 0
+                    ? "Regenerate"
+                    : step === "FIRST_MESSAGE"
+                      ? "Generate the openers"
+                      : "Generate"}
+              </AiButton>
             </div>
 
             {note && <Note note={note} step={step} />}
@@ -326,7 +307,12 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
             <> — {note.basedOn.join(", ").toLowerCase()} — </>
           )}
           carries nothing concrete enough to build{" "}
-          {step === "FIRST_MESSAGE" ? "an opener" : "a message"} on, so nothing
+          {step === "FIRST_MESSAGE"
+            ? "an opener"
+            : step === "FOLLOW_UP"
+              ? "a second, different observation"
+              : "a message"}{" "}
+          on, so nothing
           was written rather than something that would read as a template.
           Crawling more of the site, or a look at it by hand, is what would
           change that.

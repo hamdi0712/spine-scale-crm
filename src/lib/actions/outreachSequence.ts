@@ -16,9 +16,12 @@
 // on the mark-sent path, and it is only ever matched against rows belonging to
 // that same lead.
 //
-// Two steps cost a model call and three do not — see stepUsesModel in
-// src/lib/outreachSequence.ts. The three that don't are filled from their
-// template here, stored the same way, and are indistinguishable downstream.
+// Every step costs a model call now. That is not because every step is written
+// by a model: steps 4 and 5 are still fixed prose, and their sentences are
+// assembled here by loomDeliveryNote and followUpNote. What the call buys is
+// the one part of each that had to be read off the evidence — what the
+// walkthrough covers, and a pain angle the earlier messages did not use — and
+// neither of those is a blank a template can fill.
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -32,14 +35,16 @@ import {
   buildStepPrompt,
   connectionNote,
   contextSalutation,
-  fillTemplate,
+  followUpNote,
   formatInternalNote,
   isOutreachStep,
+  loomDeliveryNote,
   parseAuditOfferReply,
   parseConnectionReply,
   parseFirstMessageReply,
+  parseFollowUpReply,
+  parseLoomDeliveryReply,
   stepLock,
-  stepUsesModel,
 } from "@/lib/outreachSequence";
 import {
   OutreachStepResult,
@@ -109,30 +114,6 @@ export async function generateOutreachStep(
     priorMessages: lead.outreach.map(toDraft),
   };
 
-  // ─── The three steps nobody pays for ─────────────────────────────────────
-  //
-  // Fixed prose with a name, a clinic and a link in it. There is no blank only
-  // the evidence can fill, so there is nothing to ask a model — and asking
-  // anyway would spend a call to get back the words we already have, with a
-  // chance of getting them slightly wrong.
-  if (!stepUsesModel(step)) {
-    const content = fillTemplate(step, ctx, state);
-    if (content === null) {
-      return {
-        ok: false,
-        error:
-          "This step's template needs the Loom link, and there isn't one on this lead yet.",
-      };
-    }
-    await prisma.outreachMessage.create({
-      data: { leadId, step, variant: null, content },
-    });
-    revalidatePath(`/pipeline/${leadId}`);
-    return { ok: true, step, written: 1, fromTemplate: true, basedOn: [] };
-  }
-
-  // ─── The two that do ─────────────────────────────────────────────────────
-
   if (!hasAssistEvidence(lead)) {
     return {
       ok: false,
@@ -177,6 +158,86 @@ export async function generateOutreachStep(
           clinicName: lead.clinicName,
           observation: parsed.observation,
         }),
+        internalNote: formatInternalNote(parsed.note),
+      },
+    });
+    revalidatePath(`/pipeline/${leadId}`);
+    return {
+      ok: true,
+      step,
+      written: 1,
+      fromTemplate: false,
+      basedOn,
+      evidence: parsed.note.evidence,
+    };
+  }
+
+  if (step === "LOOM_DELIVERY") {
+    const parsed = parseLoomDeliveryReply(reply.content);
+    const content =
+      parsed === null || parsed.covers === null
+        ? null
+        : loomDeliveryNote({
+            loomUrl: lead.loomUrl ?? "",
+            covers: parsed.covers,
+          });
+    if (parsed === null || content === null) {
+      return {
+        ok: false,
+        error:
+          "DeepSeek answered, but not with two or three things the walkthrough covers. Nothing has been saved — try again.",
+      };
+    }
+    await prisma.outreachMessage.create({
+      data: {
+        leadId,
+        step,
+        variant: null,
+        content,
+        internalNote: formatInternalNote(parsed.note),
+      },
+    });
+    revalidatePath(`/pipeline/${leadId}`);
+    return {
+      ok: true,
+      step,
+      written: 1,
+      fromTemplate: false,
+      basedOn,
+      evidence: parsed.note.evidence,
+    };
+  }
+
+  // A follow-up with nothing new to say is not written at all. That is the
+  // same answer the connection request gives when the evidence is thin, and
+  // for the same reason: the message this step exists to avoid is the one
+  // that says "just checking in".
+  if (step === "FOLLOW_UP") {
+    const parsed = parseFollowUpReply(reply.content);
+    if (!parsed) {
+      return {
+        ok: false,
+        error:
+          "DeepSeek answered, but not in a shape that reads as a follow-up. Nothing has been saved — try again.",
+      };
+    }
+    const content =
+      parsed.observation === null
+        ? null
+        : followUpNote({
+            address: contextSalutation(ctx).address,
+            clinicName: lead.clinicName,
+            observation: parsed.observation,
+          });
+    if (content === null) {
+      return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+    }
+    await prisma.outreachMessage.create({
+      data: {
+        leadId,
+        step,
+        variant: null,
+        content,
         internalNote: formatInternalNote(parsed.note),
       },
     });
