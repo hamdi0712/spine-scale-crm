@@ -18,6 +18,7 @@ import { useFormStatus } from "react-dom";
 import { normalizeApifyId } from "@/lib/apifyId";
 import {
   DEFAULT_ACTOR_IDS,
+  DEFAULT_CLINIC_DISCOVERY_ACTOR_ID,
   DEFAULT_PIPELINE_SETTINGS,
   DEFAULT_PROMOTION_THRESHOLD,
   MAX_PROMOTION_THRESHOLD,
@@ -52,6 +53,10 @@ export default function PipelineSettingsForm({
       steps: { ...prev.steps, [key]: { ...prev.steps[key], ...patch } },
     }));
   }
+
+  const clinicActorTyped = draft.clinicDiscovery.actorId.trim();
+  const clinicActorMalformed =
+    clinicActorTyped !== "" && normalizeApifyId(clinicActorTyped) === null;
 
   const enabledCount = PIPELINE_STEP_KEYS.filter(
     (k) => draft.steps[k].enabled,
@@ -147,6 +152,75 @@ export default function PipelineSettingsForm({
             affects candidates processed from now on; nothing already scored is
             re-judged.
           </p>
+        </div>
+      </section>
+
+      {/* ─── The second discovery pathway ───────────────────────────────── */}
+      <section>
+        <h2 className="display mb-1 text-xl font-semibold">
+          Clinic-First Discovery
+        </h2>
+        <p className="mb-4 text-sm text-muted">
+          The second way into Discovery: search for clinics directly, and find
+          the decision-maker afterwards
+        </p>
+        <div className="card p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Clinic-first search</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                Runs one actor per search term from Discovery → Clinic-first
+                search. What it finds becomes ordinary Pending candidates and
+                goes through the chain above. It is off until it is switched on,
+                because searching spends credit.
+              </p>
+            </div>
+            <Toggle
+              name="clinicDiscoveryEnabled"
+              checked={draft.clinicDiscovery.enabled}
+              onChange={(enabled) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  clinicDiscovery: { ...prev.clinicDiscovery, enabled },
+                }))
+              }
+              label={`Clinic-First Discovery — ${draft.clinicDiscovery.enabled ? "on" : "off"}`}
+            />
+          </div>
+
+          <div className="mt-4">
+            <label className="field-label" htmlFor="clinicDiscoveryActorId">
+              Apify actor
+            </label>
+            <input
+              id="clinicDiscoveryActorId"
+              name="clinicDiscoveryActorId"
+              value={draft.clinicDiscovery.actorId}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  clinicDiscovery: {
+                    ...prev.clinicDiscovery,
+                    actorId: e.target.value,
+                  },
+                }))
+              }
+              spellCheck={false}
+              autoComplete="off"
+              placeholder={DEFAULT_CLINIC_DISCOVERY_ACTOR_ID}
+              aria-invalid={clinicActorMalformed || undefined}
+              className={`field font-mono text-xs ${
+                clinicActorMalformed
+                  ? "border-bad focus:border-bad focus:ring-bad/15"
+                  : ""
+              }`}
+            />
+            <p className="mt-1.5 text-xs leading-relaxed text-muted">
+              {clinicActorMalformed
+                ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
+                : `Any actor returning one object per clinic works: its fields are matched by name — clinic, website, address, phone — rather than mapped by hand. Blank runs ${DEFAULT_CLINIC_DISCOVERY_ACTOR_ID}.`}
+            </p>
+          </div>
         </div>
       </section>
 

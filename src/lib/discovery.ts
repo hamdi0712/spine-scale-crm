@@ -42,6 +42,7 @@ export const DISCOVERY_STATUSES = [
   "PENDING",
   "ENRICHING",
   "SCORED",
+  "QUALIFIED_NO_CONTACT",
   "PROMOTED",
   "REJECTED",
   "FAILED",
@@ -53,6 +54,7 @@ export const DISCOVERY_STATUS_LABELS: Record<DiscoveryStatus, string> = {
   PENDING: "Pending",
   ENRICHING: "Enriching",
   SCORED: "Scored",
+  QUALIFIED_NO_CONTACT: "Qualified — Decision Maker Missing",
   PROMOTED: "Promoted",
   REJECTED: "Rejected",
   FAILED: "Failed",
@@ -65,6 +67,8 @@ export const DISCOVERY_STATUS_MEANINGS: Record<DiscoveryStatus, string> = {
   PENDING: "Imported, never processed — the next queue run will pick it up",
   ENRICHING: "A run had this one when it stopped — the next run starts it over",
   SCORED: "Scored, but neither promoted nor rejected — the next run finishes it",
+  QUALIFIED_NO_CONTACT:
+    "Scored at or above the bar, but nobody is named to talk to — add a decision maker and promote it by hand",
   PROMOTED: "Became a lead in the pipeline — by scoring 5+, or by override",
   REJECTED: "Disqualified, or scored C-tier — kept with its reasoning",
   FAILED:
@@ -87,6 +91,13 @@ export function isDiscoveryStatus(v: unknown): v is DiscoveryStatus {
 // work — and a candidate is processed from the top each time rather than
 // resumed, since half a run's evidence is exactly what this flow refuses to
 // score on.
+// Qualified — Decision Maker Missing is deliberately not here. It is a settled
+// outcome, not unfinished work: the chain ran, the evidence was gathered and
+// the card was scored, and what is missing is a person — which no amount of
+// re-running the same five actors will supply. Leaving it in would spend a
+// full round of actor runs on every such candidate every time the queue is
+// pressed. The way back in is the "Re-run enrichment" button on the candidate,
+// which puts it back to Pending on purpose.
 export const DISCOVERY_QUEUE_STATUSES: DiscoveryStatus[] = [
   "PENDING",
   "FAILED",

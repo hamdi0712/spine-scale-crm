@@ -6,6 +6,7 @@ import {
   processDiscoveryCandidate,
 } from "@/lib/actions/discovery";
 import { DISCOVERY_QUEUE_STATUSES } from "@/lib/discovery";
+import { readDiscoverySourceKind } from "@/lib/clinicDiscovery";
 import { IcpTier } from "@/lib/icp";
 import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -87,8 +88,10 @@ export default async function DiscoveryPage({
     id: c.id,
     clinicName: c.clinicName,
     contactName: c.contactName,
+    discoverySource: readDiscoverySourceKind(c.discoverySource),
     source: c.source,
     location: c.location,
+    websiteUrl: c.websiteUrl,
     email: c.email,
     batchLabel: c.batchLabel,
     status: c.status,
@@ -128,6 +131,12 @@ export default async function DiscoveryPage({
           <Link href="/discovery/import/apify" className="btn">
             Import from Apify
           </Link>
+          {/* The second pathway. It sits with the other ways in rather than
+              replacing any of them — the LinkedIn person search is still the
+              first way, and this one starts from the clinic. */}
+          <Link href="/discovery/import/clinic" className="btn">
+            Clinic-first search
+          </Link>
           {/* The single-record way in, beside the two bulk ones — a name
               instead of a file, and the same Pending candidate at the end. */}
           <AddClinicByName add={addDiscoveryCandidateByName} />
@@ -156,7 +165,8 @@ export default async function DiscoveryPage({
           <p className="text-sm font-medium">Nothing in Discovery yet</p>
           <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
             Imports land here rather than in the pipeline. Bring in a CSV export,
-            run an Apify actor, or add a single clinic by name — then press
+            run an Apify actor, search for clinics directly, or add a single
+            clinic by name — then press
             Process queue, and each candidate is enriched, scored against the ICP
             framework, and either promoted to a lead or rejected with its
             reasoning kept.
@@ -166,6 +176,9 @@ export default async function DiscoveryPage({
               Import CSV
             </Link>
             <AddClinicByName add={addDiscoveryCandidateByName} />
+            <Link href="/discovery/import/clinic" className="btn">
+              Clinic-first search
+            </Link>
             <Link href="/discovery/import/apify" className="btn-primary">
               Import from Apify
             </Link>

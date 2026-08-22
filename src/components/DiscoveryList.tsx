@@ -37,6 +37,12 @@ import {
   batchOptions,
 } from "@/lib/discoveryBatch";
 import { SOURCE_ALL, sourceKey, sourceOptions } from "@/lib/discoverySource";
+import {
+  DISCOVERY_SOURCES,
+  DISCOVERY_SOURCE_KIND_LABELS,
+  DISCOVERY_SOURCE_KIND_MEANINGS,
+  DiscoverySourceKind,
+} from "@/lib/clinicDiscovery";
 import { deleteDiscoveryCandidates } from "@/lib/actions/discovery";
 import {
   ICP_MAX_SCORE,
@@ -58,8 +64,13 @@ export interface DiscoveryRow {
   id: string;
   clinicName: string;
   contactName: string | null;
+  // Which pathway found it — the person-first LinkedIn search, or the
+  // clinic-first one. Distinct from `source`, which is free text and can name
+  // both after a merge.
+  discoverySource: DiscoverySourceKind;
   source: string | null;
   location: string | null;
+  websiteUrl: string | null;
   email: string | null;
   // The run this one arrived on. Null for anything imported before batches
   // existed, which the filter offers as a group of its own.
@@ -87,6 +98,11 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [batchFilter, setBatchFilter] = useState<string>(BATCH_ALL);
   const [sourceFilter, setSourceFilter] = useState<string>(SOURCE_ALL);
+  // Which pathway, as its own filter beside the free-text source one: "show me
+  // the clinic-first ones" is the question this feature exists to make askable.
+  const [pathwayFilter, setPathwayFilter] = useState<DiscoverySourceKind | "ALL">(
+    "ALL",
+  );
   // One tier at a time, and pressing the one already on clears it — three
   // buttons that could each be half-on would be a set of checkboxes wearing a
   // segmented control's clothes.
@@ -121,8 +137,11 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
       if (sourceFilter !== SOURCE_ALL && sourceKey(r.source) !== sourceFilter) {
         return false;
       }
+      if (pathwayFilter !== "ALL" && r.discoverySource !== pathwayFilter) {
+        return false;
+      }
       if (!q) return true;
-      return [r.clinicName, r.contactName, r.source, r.location, r.email, r.batchLabel]
+      return [r.clinicName, r.contactName, r.source, r.location, r.email, r.batchLabel, r.websiteUrl]
         .filter(Boolean)
         .some((s) => (s as string).toLowerCase().includes(q));
     });
@@ -159,6 +178,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
     tierFilter,
     batchFilter,
     sourceFilter,
+    pathwayFilter,
     sortKey,
     sortDir,
   ]);
@@ -260,6 +280,25 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
           {DISCOVERY_STATUSES.map((s) => (
             <option key={s} value={s}>
               {DISCOVERY_STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
+        {/* Which pathway found these. Always offered, unlike the two
+            derived dropdowns beside it: it is a fixed pair rather than a list
+            read off the rows, and "no clinic-first candidates yet" is itself
+            worth being able to see. */}
+        <select
+          value={pathwayFilter}
+          onChange={(e) =>
+            setPathwayFilter(e.target.value as DiscoverySourceKind | "ALL")
+          }
+          aria-label="Filter by discovery pathway"
+          className="field w-auto pr-9"
+        >
+          <option value="ALL">Both pathways</option>
+          {DISCOVERY_SOURCES.map((kind) => (
+            <option key={kind} value={kind}>
+              {DISCOVERY_SOURCE_KIND_LABELS[kind]}
             </option>
           ))}
         </select>
@@ -450,7 +489,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
                   />
                 </th>
                 <SortTh k="clinicName">Clinic</SortTh>
-                <th className="th">Contact</th>
+                <th className="th">Decision maker</th>
                 <th className="th">Source</th>
                 <SortTh k="status">Status</SortTh>
                 <SortTh k="icpTier">ICP tier</SortTh>
@@ -484,12 +523,27 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
                       {row.clinicName}
                     </Link>
                   </td>
-                  <td className="td text-muted">{row.contactName ?? "—"}</td>
+                  {/* Never a blank cell where a person would be. A clinic-first
+                      candidate with nobody named says so in words, because an
+                      empty cell reads as a name nobody filled in rather than a
+                      person nobody has found. */}
+                  <td className="td text-muted">
+                    {row.contactName ?? (
+                      <span className="text-muted/70">Not found</span>
+                    )}
+                  </td>
                   {/* The batch is not a column of its own here — a tenth one
                       squeezed every other column into three lines. It is on
                       the card, in the filter above, and on the candidate. */}
                   <td className="td text-muted">
-                    {row.source ?? "—"}
+                    <span
+                      title={DISCOVERY_SOURCE_KIND_MEANINGS[row.discoverySource]}
+                    >
+                      {DISCOVERY_SOURCE_KIND_LABELS[row.discoverySource]}
+                    </span>
+                    <span className="block max-w-[150px] truncate text-xs text-muted/80">
+                      {row.source ?? "—"}
+                    </span>
                     {row.batchLabel && (
                       <span
                         className="block max-w-[150px] truncate text-xs text-muted/80"
@@ -593,7 +647,11 @@ function CandidateCard({
             {row.clinicName}
           </Link>
           <p className="mt-0.5 truncate text-xs text-muted">
-            {row.contactName ?? "No contact named"}
+            {row.contactName ?? (
+              <span className="text-muted/70">
+                Decision maker not found yet
+              </span>
+            )}
           </p>
         </div>
         <IcpScoreBadge
@@ -604,8 +662,14 @@ function CandidateCard({
       </div>
 
       <div className="mt-3.5 space-y-1.5">
-        <CardMeta icon="building" value={row.source} />
+        <CardMeta
+          icon="building"
+          value={`${DISCOVERY_SOURCE_KIND_LABELS[row.discoverySource]}${
+            row.source ? ` · ${row.source}` : ""
+          }`}
+        />
         <CardMeta icon="mapPin" value={row.location} />
+        <CardMeta icon="link" value={row.websiteUrl} />
         <CardMeta icon="mail" value={row.email} />
         <CardMeta icon="tag" value={row.batchLabel} />
       </div>

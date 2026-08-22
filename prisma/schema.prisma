@@ -49,6 +49,7 @@ model DiscoveryCandidate {
   location           String?
   timeZone           String? // IANA id, read off the location by the import
   source             String? // "LinkedIn" unless the import mapped its own
+  contactTitle       String? // the decision-maker's role, where one is known
   staffCountRaw      Int? // headcount exactly as the source reported it
   estValue           Float? // carried through to the lead if this one promotes
 
@@ -64,6 +65,25 @@ model DiscoveryCandidate {
   // Null on every candidate imported before batches existed, which the filter
   // reads as its own group rather than pretending they share one.
   batchLabel String?
+
+  // ─── Which pathway found this one ────────────────────────────────────────
+  //
+  // PERSON_FIRST — the original route: a LinkedIn person search (or a CSV of
+  // one) found a practitioner, and the clinic came with them. CLINIC_FIRST —
+  // the clinic was found on its own merits and the decision-maker may still be
+  // unknown. Constrained to DISCOVERY_SOURCES in src/lib/clinicDiscovery.ts.
+  //
+  // It defaults to PERSON_FIRST, which is what every row written before this
+  // column existed actually was. `source` is untouched and still carries the
+  // free text — "LinkedIn", "Clinic-First Search", or whatever a sheet said —
+  // because that is the provenance a person reads and it can hold more than
+  // one after a merge; this column is the one the app branches on.
+  discoverySource String @default("PERSON_FIRST")
+
+  // How a clinic-first candidate was found: the Apify actor that ran, and the
+  // search term it ran for. Null on anything that arrived another way.
+  sourceActor String?
+  sourceQuery String?
 
   // Enrichment — written by the four-actor run (src/lib/enrichRun.ts), the
   // same run and the same readers the lead page uses. Every one of these is a
@@ -81,6 +101,8 @@ model DiscoveryCandidate {
   //   ENRICHING — a run has it right now (or had it when the tab was closed)
   //   SCORED    — scored, not yet promoted or rejected
   //   PROMOTED  — became the Lead at promotedLeadId
+  //   QUALIFIED_NO_CONTACT
+  //             — scored at or above the bar, but nobody is named to talk to
   //   REJECTED  — disqualified, or scored C-tier
   //   FAILED    — an actor failed outright, or two or more scored categories
   //                had no evidence to attempt them on; nothing was scored
@@ -746,6 +768,14 @@ model PipelineSettings {
 
   googleReviewsEnabled Boolean @default(true)
   googleReviewsActorId String  @default("compass~crawler-google-places")
+
+  // Clinic-First Discovery — the second way into Discovery, off by default
+  // because it costs actor runs and there is no sensible default actor: the
+  // one that fits is whichever place-search actor this account has. Same
+  // toggle-plus-actor-ID shape as the five steps above, and read through the
+  // same validation (src/lib/pipelineSettings.ts).
+  clinicDiscoveryEnabled Boolean @default(false)
+  clinicDiscoveryActorId String  @default("compass~crawler-google-places")
 
   // The score a candidate must reach to be promoted rather than rejected,
   // out of ICP_MAX_SCORE. It is the promotion bar and not a tier band: the
