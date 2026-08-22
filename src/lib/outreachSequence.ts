@@ -72,32 +72,18 @@ export const OUTREACH_STEP_BLURBS: Record<OutreachStep, string> = {
   CONNECTION:
     "One verified detail about the clinic. No pitch, no question, nothing about an audit.",
   FIRST_MESSAGE:
-    "Up to three openers to choose between, each ending in a question rather than an offer.",
+    "One verified pain observation, and a soft yes or no close. Never a description of the service.",
   AUDIT_OFFER:
-    "Written from what they actually wrote back, and asking permission to record.",
+    "Two or three things worth flagging, written from what they actually wrote back, offering the walkthrough.",
   LOOM_DELIVERY: "The note the video goes out with, and the link exactly as stored.",
   FOLLOW_UP:
-    "One nudge, and only one. Which version depends on whether the video has gone out.",
+    "One nudge, and only one, and on a different angle than the one already used.",
 };
 
-// Which steps a model writes, and which are filled in from the template here.
-//
-// The dividing line is whether the step has a blank only evidence can fill.
-// Steps 1 and 2 read the research; step 3 reads what the prospect wrote back,
-// which is a better source than the research and the reason that step moved
-// over here. Steps 4 and 5 are fixed prose whose only variables are a link and
-// which of two follow-ups applies, so asking a model would spend a call to be
-// handed back the words we already have.
-export function stepUsesModel(step: OutreachStep): boolean {
-  return (
-    step === "CONNECTION" ||
-    step === "FIRST_MESSAGE" ||
-    step === "AUDIT_OFFER"
-  );
-}
-
-// The first message is generated as three alternatives for a person to choose
-// between; every other step is one message.
+// The first message is generated as up to three alternatives for a person to
+// choose between; every other step is one message. Each variant is a different
+// pain, not a different tone, so a variant the evidence does not support is
+// skipped rather than softened into a generic opener.
 export const FIRST_MESSAGE_VARIANTS = ["A", "B", "C"] as const;
 
 export type FirstMessageVariant = (typeof FIRST_MESSAGE_VARIANTS)[number];
@@ -110,9 +96,9 @@ export type FirstMessageVariant = (typeof FIRST_MESSAGE_VARIANTS)[number];
 // the character count, in a column the width of the lead page's main body, and
 // a blurb that wraps puts the count on a line of its own.
 export const VARIANT_BLURBS: Record<FirstMessageVariant, string> = {
-  A: "Site or booking",
-  B: "Their ad activity",
-  C: "Warm and general",
+  A: "Funnel capture",
+  B: "Idle program spend",
+  C: "No-show follow-up",
 };
 
 // ─── Lengths ───────────────────────────────────────────────────────────────
@@ -396,73 +382,58 @@ export function hasEmDash(text: string): boolean {
 
 // ─── The templates ─────────────────────────────────────────────────────────
 
-// The steps a model is never asked to write, in the wording they were given.
+// The fixed wording of steps 4 and 5, assembled around the parts only the
+// evidence can supply.
 //
-// Step 3 is no longer among them. Its whole job is to answer what the prospect
-// actually said, so it needs the reply in front of it and it needs a model —
-// see auditOfferPrompt below. What is left here is the Loom delivery, whose one
-// variable is a link, and the follow-up, whose two versions differ only by
-// whether the video has gone out yet.
-//
-// A template with a blank it cannot fill returns null rather than a note with a
-// hole in it — which in practice means the Loom delivery without a URL, and
-// that step is gated on having one anyway.
-export function fillTemplate(
-  step: OutreachStep,
-  ctx: SequenceContext,
-  state?: SequenceState,
-): string | null {
-  const name = contextSalutation(ctx).address;
-  const clinic = ctx.evidence.clinicName.trim();
+// Neither of these is a whole message a model writes. The sentences were
+// written by the person who sends them and they do not change; what changes is
+// the link, the three things the walkthrough covers, and the one new
+// observation the follow-up leads with. So the model is asked for those pieces
+// and these functions build the message around them, the same arrangement the
+// connection request has always used.
 
-  switch (step) {
-    case "LOOM_DELIVERY": {
-      const loom = (ctx.loomUrl ?? "").trim();
-      if (loom === "") return null;
-      // The link is dropped in exactly as stored. Nothing here reformats,
-      // shortens or "tidies" a URL: a delivery message carrying a link that is
-      // one character different from the one that was recorded is a message
-      // that delivers nothing.
-      return [
-        `Here it is: ${loom}. It's about five minutes and walks through what I`,
-        `saw in ${clinic}'s current booking and follow-up flow, including the`,
-        "areas that may be creating avoidable drop-off between inquiry, booking,",
-        "and attendance. If it's useful, happy to talk through it. If not, no",
-        "worries either way.",
-      ]
-        .join(" ")
-        .replace(/\s+/g, " ");
-    }
+// The Loom note. The link is dropped in exactly as stored: nothing here
+// reformats, shortens or "tidies" a URL, because a delivery message carrying a
+// link one character different from the one that was recorded delivers nothing.
+export function loomDeliveryNote({
+  loomUrl,
+  covers,
+}: {
+  loomUrl: string;
+  // The two or three things the walkthrough covers, each a short noun phrase
+  // and each already said in the audit offer. Nothing new is introduced here.
+  covers: string[];
+}): string | null {
+  const loom = loomUrl.trim();
+  const items = covers.map((c) => c.trim()).filter((c) => c !== "");
+  if (loom === "" || items.length < 2) return null;
+  const list =
+    items.length === 2
+      ? `${items[0]} and ${items[1]}`
+      : `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+  return stripEmDashes(
+    `Here's the walkthrough: ${loom}. Covers ${list}. No pressure either way, but happy to talk through any of it if useful.`,
+  );
+}
 
-    // Two follow-ups, and which one is right depends on what already went out.
-    // Offering to send a video that was sent last week is the mistake this
-    // branch exists to prevent, and it is the kind that reads as nobody having
-    // looked at the thread.
-    case "FOLLOW_UP": {
-      const loomSent = state?.sentSteps.includes("LOOM_DELIVERY") ?? false;
-      return loomSent
-        ? [
-            `Hey ${name}, no pressure at all. Just floating the video back up in`,
-            "case it got buried. Happy to talk through anything that stood out,",
-            "or leave it with you if now isn't the right time.",
-          ]
-            .join(" ")
-            .replace(/\s+/g, " ")
-        : [
-            `Hey ${name}, no pressure at all. Just floating this back up in case`,
-            "it got buried. Happy to put together the short breakdown whenever",
-            "it's useful. If now isn't the right time, all good.",
-          ]
-            .join(" ")
-            .replace(/\s+/g, " ");
-    }
-
-    // The three the model writes. There is no template fill for these: what
-    // makes each one worth sending is the specific thing it says, and a
-    // fallback would be the generic message this feature exists not to send.
-    default:
-      return null;
-  }
+// The one follow-up. Its whole reason to exist is the observation in the middle
+// of it, which has to be a pain angle none of the earlier messages used. A
+// "just checking in" bump is the version of this message that gets somebody
+// muted, so there is no wording here that works without a new observation.
+export function followUpNote({
+  address,
+  clinicName,
+  observation,
+}: {
+  address: string;
+  clinicName: string;
+  observation: string;
+}): string | null {
+  const angle = observation.trim().replace(/[.]+$/, "");
+  if (angle === "") return null;
+  return stripEmDashes(
+    `${address}, one more thing I noticed on ${clinicName.trim()}'s side: ${angle}. No worries if now's not the time, happy to send what I found either way.`,
+  );
 }
 
 // The connection request, assembled around the one observation the model
@@ -534,13 +505,17 @@ export function stepLock(
               "Unlocks once the connection request is accepted. Mark that above when it happens on LinkedIn.",
           };
 
+    // A reply, and a genuine one. The mark is all this app can see, so the
+    // rest of that condition is said in the reason and asked of the person
+    // pressing the button: an offer written on the back of "no thanks" is
+    // worse than no offer.
     case "AUDIT_OFFER":
       return state.repliedAt
         ? { unlocked: true }
         : {
             unlocked: false,
             reason:
-              "Unlocks once they reply. Mark that above — the offer answers something they said, so it is not worth writing before there is something to answer.",
+              "Unlocks once they reply. Mark that above — the offer answers something they said, so it is not worth writing before there is something to answer. A reply that says no is not one to write this from.",
           };
 
     case "LOOM_DELIVERY":
@@ -552,20 +527,34 @@ export function stepLock(
               "Unlocks once there is a Loom link on this lead. Record the audit, then paste the link into the field above.",
           };
 
-    // The one gate that is not a single mark: the offer or the video has to
-    // have gone out, and the follow-up date has to have come round. That date
-    // is the lead's own next follow-up field — the one the pipeline already
-    // sorts on — rather than a second timer of this panel's invention, so
-    // moving the date moves this with it.
+    // The one gate that is not a single mark, and the only step that can be
+    // locked by having already happened. It follows up on silence after the
+    // first message or the audit offer, so one of those has to have gone out;
+    // the follow-up date has to have come round; and there has to be no
+    // follow-up sent already, because the sequence ends after one. That date is
+    // the lead's own next follow-up field, the one the pipeline already sorts
+    // on, rather than a second timer of this panel's invention, so moving the
+    // date moves this with it.
+    //
+    // Silence is not something this app can see, and neither is an explicit no.
+    // Both are said in the reasons below and left to the person sending, who
+    // read the thread.
     case "FOLLOW_UP": {
-      const offered =
-        state.sentSteps.includes("AUDIT_OFFER") ||
-        state.sentSteps.includes("LOOM_DELIVERY");
-      if (!offered) {
+      if (state.sentSteps.includes("FOLLOW_UP")) {
         return {
           unlocked: false,
           reason:
-            "Unlocks once the audit offer or the Loom has been marked sent — there is nothing to follow up on before then.",
+            "One follow-up, and only one. That has been sent, so this sequence is finished. Anything after it is a conversation somebody starts by hand.",
+        };
+      }
+      const opened =
+        state.sentSteps.includes("FIRST_MESSAGE") ||
+        state.sentSteps.includes("AUDIT_OFFER");
+      if (!opened) {
+        return {
+          unlocked: false,
+          reason:
+            "Unlocks once the first message or the audit offer has been marked sent — there is nothing to follow up on before then.",
         };
       }
       if (state.nextFollowUp === null) {
@@ -617,6 +606,10 @@ const SYSTEM_PROMPT = [
   "You never use an em dash or an en dash. Not once, anywhere, in any message. Use a comma, a full stop, or a new sentence.",
   "A comma after the person's name, never a dash. Use the clinic's full name as given; never shorten it, abbreviate it, or invent a nickname for it.",
   "One call to action per message, and never two.",
+
+  // The tell this whole sequence is written around.
+  "You never open a message by describing your own service. \"I work with clinics like yours\", \"I work with non-surgical spine clinics on...\", \"I help practices with...\" and every variant of them are forbidden as an opener and forbidden anywhere at all in the connection request and the first message. That phrase is the most recognizable agency-spam opening there is, and a prospect has read it a hundred times. Every opener leads with a specific, verified observation about their clinic instead, never with a description of what you do.",
+  "A line about your own work is appropriate in exactly one place: the audit offer, after they have replied. Nowhere earlier.",
   "You never write the words \"not trying to pitch anything\" or any variant. A message that is not a pitch demonstrates that by its content.",
 
   // The lowercase "json" is load-bearing, not a typo — DeepSeek refuses a
@@ -634,7 +627,11 @@ export function buildStepPrompt(
       ? connectionPrompt(ctx)
       : step === "FIRST_MESSAGE"
         ? firstMessagePrompt(ctx)
-        : auditOfferPrompt(ctx);
+        : step === "AUDIT_OFFER"
+          ? auditOfferPrompt(ctx)
+          : step === "LOOM_DELIVERY"
+            ? loomDeliveryPrompt(ctx)
+            : followUpPrompt(ctx);
   return { system: SYSTEM_PROMPT, user };
 }
 
@@ -743,6 +740,15 @@ function connectionPrompt(ctx: SequenceContext): string {
 
 // ─── Step 2 ────────────────────────────────────────────────────────────────
 
+// The message that goes out once they accept, and the step this sequence was
+// rewritten around.
+//
+// Three variants, and each one is a different pain rather than a different
+// tone. There is no warm generic fallback any more: the fallback used to open
+// by describing the service, which is the single most recognizable agency-spam
+// line there is, and a variant the evidence cannot support is now skipped
+// instead. Two true openers beat three where one is a form letter, and no
+// openers at all is a correct answer for a lead nobody has looked at properly.
 function firstMessagePrompt(ctx: SequenceContext): string {
   const { address, honorific } = contextSalutation(ctx);
   const clinic = ctx.evidence.clinicName.trim();
@@ -760,34 +766,38 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     conversationBlock(ctx.priorMessages),
     "",
     "TASK",
-    "They accepted the connection request. This message has one job: earn a genuine reply. It does not close, and it does not offer the audit.",
+    "They accepted the connection request. This message has one job: earn a genuine reply. It does not close, it does not offer the audit, and it never describes what you do.",
     "",
-    "Write up to three versions, so the person sending can choose. Each follows its own shape:",
+    "Write up to three versions, so the person sending can choose. Each is a different pain, and each is only written where this clinic's evidence actually supports it. Do not force one the evidence does not support.",
     "",
-    "VARIANT A, website or booking-flow observation. Use when the public-facing site or booking flow shows something specific and relevant.",
-    `  "Thanks for connecting, ${address}. One thing I noticed on ${clinic}'s site is <specific observation>. <If you are describing something you did not see, hedge it here: "I didn't see a visible...", "I may be missing it, but...">. Curious how you're currently handling that on the back end. Worth a quick chat, or am I off base?"`,
-    "  Never state that a confirmation, reminder, follow-up or booking element does not exist just because it was not visible in the crawl.",
-    "",
-    "VARIANT B, advertising observation. Use ONLY when current or recent advertising is directly evidenced above.",
-    `  "Thanks for connecting, ${address}. I noticed ${clinic} is running <Google/Meta> ads for <the verified service or offer shown>. Curious what you're seeing after someone clicks. Is the main focus currently lead volume, booking, or getting people to show?"`,
-    "  Do not assume the ads are profitable, underperforming, or producing any particular number of leads. Do not assume there is a problem. Name only the service or offer actually shown in the evidence.",
+    "VARIANT A, funnel capture. Use ONLY where advertising or paid traffic is evidenced AND the landing or booking flow shows a specific weakness you can name.",
+    `  "Thanks for connecting, ${address}. Noticed ${clinic} is running <ads or traffic> to the <verified> page, but the booking step looks form-only, no calendar. That's usually where a chunk of paid leads never make it to a consult. Is that something you're already on top of, or worth me sending what I'd flag?"`,
+    "  Name only the advertising and the booking weakness the evidence actually shows. If the evidence does not show what the booking step looks like, this variant is null.",
     ads === ""
-      ? "  THERE IS NO ADVERTISING EVIDENCE FOR THIS CLINIC. Return null for B. Writing it would mean inventing an ad."
+      ? "  THERE IS NO ADVERTISING EVIDENCE FOR THIS CLINIC. Return null for A. Writing it would mean inventing an ad."
       : `  The advertising evidence you have is exactly this and nothing more: "${ads}"`,
     "",
-    "VARIANT C, warm generic fallback. Always write this one. It carries no personalization at all, on purpose, and it is what gets sent when the research is thin.",
-    `  "Thanks for connecting, ${address}. I work with non-surgical spine and disc clinics on the booking and follow-up side, the things that happen after a lead comes in. I'm curious what your current booking flow looks like day to day."`,
-    "  Do not add fabricated personalization to C. Do not add a second call to action.",
+    "VARIANT B, idle equipment or program spend. Use ONLY where the evidence shows a real investment (a decompression table, a laser, a named program, a dedicated service page) AND a specific gap in what happens after the lead arrives.",
+    `  "Thanks for connecting, ${address}. Noticed ${clinic} has the program built out, but <the specific verified gap>. At $2-6k a case, that gap usually costs more than the ad spend itself. Already on your radar, or worth sending what I'd change first?"`,
+    "  The $2-6k figure is this clinic's own published or widely known case range for this kind of care, and it is the one number allowed in this message. Do not add any other number, and do not claim what this clinic in particular earns or loses.",
+    "",
+    "VARIANT C, no-show and missed-call follow-up. Use ONLY where the evidence points at a front-desk-dependent flow (a phone number as the main call to action, a contact form, hours, a request-a-call step) and no automated reminder or follow-up is visible.",
+    `  "Thanks for connecting, ${address}. Noticed ${clinic}'s booking flow doesn't look like it has an automated no-show or missed-call follow-up, most clinics your size lose 1-2 cases a month right there. Already handled on your end, or worth me sending what I found?"`,
+    "  This is the one place the \"most clinics your size\" phrasing is allowed, because it is the template's own wording. Do not extend it, do not put a revenue figure on it, and do not say this clinic is losing anything.",
+    "  Never state that a reminder, confirmation or follow-up does not exist. Say what the public-facing flow does not appear to show.",
     "",
     "HARD RULES for all three:",
-    "  - One question only, and no audit offer, no video, no Loom, no pricing.",
-    "  - Do not explain to them what your observation supposedly means for their clinic.",
+    "  - Never describe your own service. Not as the opener, not anywhere in the message. \"I work with clinics like yours\", \"I work with non-surgical spine clinics on...\" and every variant are forbidden here.",
+    "  - Every version opens with the observation about their clinic.",
+    "  - End on a soft yes or no closer, in the shape the template shows: \"already on top of it, or worth sending what I'd flag\". Never an open-ended question like \"what does your booking flow look like?\".",
+    "  - No calendar link, no pitch, no pricing, no \"would love to hop on a call\". One observation, one soft binary close.",
+    "  - Do not explain to them what your observation supposedly means for their clinic beyond the one line the template already carries.",
     honorific === null
       ? "  - No title in the greeting: nothing in the evidence says this person is a doctor."
       : "  - Keep the Dr. in the greeting exactly as given. Do not move it to their surname.",
     `  - Under ${FIRST_MESSAGE_MAX_CHARS} characters each. No square brackets. No em dashes.`,
     "",
-    "Return null for A or B where the evidence does not support that variant. A forced variant is a fabricated one, and this is the step where fabrication is most likely: do not describe a booking flow you did not see, and do not describe an ad you were not shown. C is never null.",
+    "Return null for any variant this clinic's evidence does not support, and say which in the internal note and why. A forced variant is a fabricated one, and this is the step where fabrication is most likely: do not describe a booking flow you did not see, do not describe an ad you were not shown, and do not describe equipment the evidence does not mention. All three null is a correct answer.",
     "",
     INTERNAL_NOTE_SPEC,
     "",
@@ -796,8 +806,9 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     "{",
     '  "a": "<version A>" | null,',
     '  "b": "<version B>" | null,',
-    '  "c": "<version C>",',
-    '  "evidence": "<the evidence A and B were built on, quoted>" | null,',
+    '  "c": "<version C>" | null,',
+    '  "skipped": "<which variants you returned null for and what evidence each would have needed>" | null,',
+    '  "evidence": "<the evidence each written variant was built on, quoted>" | null,',
     '  "uncertainty": "<hedging used, or none>",',
     '  "stage": "<the stage required before this step>"',
     "}",
@@ -811,37 +822,52 @@ function firstMessagePrompt(ctx: SequenceContext): string {
 // evidence about this clinic that exists anywhere in the record, and a message
 // that ignores it to recite the website again is a message that was not
 // listening.
+//
+// It is also the only step allowed to say anything about the sender's own work,
+// and it says it as a pre-emption rather than a credential: most agencies
+// pitching a clinic lead with more ads, and naming that before they do is what
+// gets a hearing from somebody a previous agency already burned. That line only
+// earns its place next to genuinely verified observations. Next to invented
+// ones it is just a better-dressed pitch.
 function auditOfferPrompt(ctx: SequenceContext): string {
-  const { address } = contextSalutation(ctx);
+  const { address, first } = contextSalutation(ctx);
   const clinic = ctx.evidence.clinicName.trim();
   const reply = (ctx.replyText ?? "").trim();
   return [
     `CLINIC: ${clinic}`,
     `ADDRESS THEM AS: ${address}`,
     "",
+    "EVIDENCE",
+    "Gathered by an automated enrichment run. This is everything you have about the clinic itself.",
+    "",
+    evidenceBlock(ctx.evidence),
+    "",
     "WHAT THEY WROTE BACK",
     reply === ""
-      ? "(not captured. A reply was marked as received, but its text was not saved. Acknowledge that they replied. Do NOT invent anything they might have said, and do not paraphrase a reply you cannot see.)"
+      ? "(not captured. A reply was marked as received, but its text was not saved. Do NOT invent anything they might have said, and do not paraphrase a reply you cannot see. Build the flagged points from the clinic evidence above instead.)"
       : `"""\n${truncate(reply, 2000)}\n"""`,
     "",
     "CONVERSATION SO FAR",
     conversationBlock(ctx.priorMessages),
     "",
     "TASK",
-    "They replied. This message offers to record a short audit, and asks permission to make it. It is not a pitch and it promises no result.",
+    "They replied with genuine interest. This message names what you would flag and offers to record a short walkthrough. It is not a pitch and it promises no result.",
     "",
-    "This is the shape:",
-    `  "Appreciate that context. Based on what you shared, I can put together a quick numbers-based breakdown for ${clinic} around the booking and follow-up flow. Happy to record it if useful. No obligation either way."`,
+    "This is the shape, and the wording after the flagged points does not change:",
+    `  "${address}, here's what I'd flag specifically: <2 or 3 concrete verified observations>. Most agencies pitching clinics like yours lead with more ads; the actual leak is usually what happens after the lead comes in. I put together a short walkthrough (5-8 min) showing exactly where I think you're losing cases and what I'd fix first, want me to send it over?"`,
+    "",
+    "The flagged points are the whole message. Two or three of them, each concrete and each read off the evidence above or off what they wrote back. Their reply is the better source wherever it says something.",
     "",
     reply === ""
-      ? "Because their reply was not captured, stay close to that wording. Acknowledge the reply in general terms and do not attribute any specific statement to them."
-      : "Adapt the opening so it answers what they actually said. Quote or paraphrase a specific detail from their reply where it reads naturally. Generic acknowledgement of a reply you can see is a wasted sentence.",
+      ? "Because their reply was not captured, do not attribute any statement to them. Flag only what the clinic evidence supports."
+      : "Answer what they actually said. Where their reply names a problem, that is the first thing you flag.",
     "",
     "HARD RULES for this step:",
+    "  - Keep the \"most agencies pitching clinics like yours lead with more ads\" line exactly as it is. It is there to get ahead of somebody who has been burned by an agency before, and it only works next to real observations. If you cannot flag two genuinely verified things, return null for the message rather than pairing that line with invented ones.",
     "  - Do not say \"setups like yours\" unless they themselves described their setup.",
-    "  - Do not claim the audit will find lost revenue, increase bookings, or produce any specific result.",
+    "  - Do not claim the walkthrough will find lost revenue, increase bookings, or produce any specific result.",
     "  - Do not imply that comparable clinics have achieved results. You have no verified proof of any.",
-    "  - Ask permission to record it. One call to action, and no second one.",
+    "  - One call to action, the offer to send it, and no second one.",
     "  - Calm and specific. No enthusiasm, no urgency.",
     "  - No square brackets. No em dashes.",
     "",
@@ -850,11 +876,111 @@ function auditOfferPrompt(ctx: SequenceContext): string {
     "REPLY FORMAT",
     "A single JSON object, exactly these keys:",
     "{",
-    '  "message": "<the message>",',
-    '  "evidence": "<what you built it on, quoting their reply where you used it>" | null,',
+    '  "message": "<the message>" | null,',
+    '  "evidence": "<what each flagged point was read off, quoting their reply where you used it>" | null,',
     '  "uncertainty": "<hedging used, or none>",',
     '  "stage": "<the stage required before this step>"',
     "}",
+    "",
+    `The message addresses them as ${first === CONTACT_NAME_PLACEHOLDER ? "the placeholder above" : address} and nothing else.`,
+  ].join("\n");
+}
+
+// ─── Step 4 ────────────────────────────────────────────────────────────────
+
+// The note the Loom goes out with. The sentences are fixed and assembled by
+// loomDeliveryNote above; the only thing asked for here is what the walkthrough
+// covers, and the only correct source for that is the audit offer that was
+// already sent. A covered point that was not flagged in step 3 is either a new
+// claim or a different video.
+function loomDeliveryPrompt(ctx: SequenceContext): string {
+  const clinic = ctx.evidence.clinicName.trim();
+  return [
+    `CLINIC: ${clinic}`,
+    "",
+    "EVIDENCE",
+    evidenceBlock(ctx.evidence),
+    "",
+    "CONVERSATION SO FAR",
+    conversationBlock(ctx.priorMessages),
+    "",
+    "TASK",
+    "The walkthrough has been recorded and is going out. The note around it is already written, and the link is added by the app, not by you. You are asked for one thing: what the walkthrough covers.",
+    "",
+    "The note reads:",
+    '  "Here\'s the walkthrough: <link>. Covers <your items>. No pressure either way, but happy to talk through any of it if useful."',
+    "",
+    "Return two or three items. Each is a short noun phrase, three to eight words, and each is one of the things already flagged in the audit offer above.",
+    "  Good: \"the form-only booking step\", \"missed-call follow-up\", \"what happens after an inquiry comes in\"",
+    "",
+    "HARD RULES for this step:",
+    "  - No new claims. Every item was already said in a message that has gone out. If the audit offer flagged only two things, return two.",
+    "  - No result, no promise, no number, no second call to action.",
+    "  - No square brackets. No em dashes.",
+    "",
+    INTERNAL_NOTE_SPEC,
+    "",
+    "REPLY FORMAT",
+    "A single JSON object, exactly these keys:",
+    "{",
+    '  "covers": ["<item>", "<item>", "<item>"],',
+    '  "evidence": "<where in the messages already sent each item was flagged>" | null,',
+    '  "uncertainty": "<hedging used, or none>",',
+    '  "stage": "<the stage required before this step>"',
+    "}",
+  ].join("\n");
+}
+
+// ─── Step 5 ────────────────────────────────────────────────────────────────
+
+// The single follow-up, and the step most likely to be written badly, because
+// the easy version of it is "just checking in" and that version costs nothing
+// to write and nothing to ignore. The one thing that makes a follow-up worth
+// sending is that it says something the earlier messages did not, so the only
+// blank in this template is a pain angle that has not been used yet, and there
+// is no wording available for a message that cannot fill it.
+function followUpPrompt(ctx: SequenceContext): string {
+  const { address } = contextSalutation(ctx);
+  const clinic = ctx.evidence.clinicName.trim();
+  return [
+    `CLINIC: ${clinic}`,
+    `ADDRESS THEM AS: ${address}`,
+    "",
+    "EVIDENCE",
+    "Gathered by an automated enrichment run. This is everything you have.",
+    "",
+    evidenceBlock(ctx.evidence),
+    "",
+    "CONVERSATION SO FAR",
+    conversationBlock(ctx.priorMessages),
+    "",
+    "TASK",
+    "The last message got silence, and this is the only follow-up that will be sent. The sentences around it are fixed:",
+    "",
+    `  "${address}, one more thing I noticed on ${clinic}'s side: <YOUR OBSERVATION>. No worries if now's not the time, happy to send what I found either way."`,
+    "",
+    "Write the observation. One verified pain angle, as a clause that reads on from the colon, and it must be a genuinely different angle from whatever the earlier messages led with. Read them above and pick something else.",
+    "",
+    "HARD RULES for this step:",
+    "  - Never a bump. \"Just checking in\", \"floating this back up\", \"in case it got buried\" and every variant of them are forbidden. If the only thing you have to say is that you wrote before, return null.",
+    "  - A different pain from the one already used. Repeating the earlier observation in new words is the same failure as a bump.",
+    "  - Verified, like every other observation in this sequence. An absence is hedged: \"didn't look like\", \"wasn't obvious from the outside\".",
+    "  - Never describe your own service.",
+    "  - No pitch, no link, no calendar, no second call to action.",
+    "  - No square brackets. No em dashes.",
+    "",
+    INTERNAL_NOTE_SPEC,
+    "",
+    "REPLY FORMAT",
+    "A single JSON object, exactly these keys:",
+    "{",
+    '  "observation": "<the clause>" | null,',
+    '  "evidence": "<what in the evidence you read it off, quoted>" | null,',
+    '  "uncertainty": "<hedging used, or none>",',
+    '  "stage": "<the stage required before this step>"',
+    "}",
+    "",
+    "Return null whenever the evidence will not support a second, different, verified observation. A follow-up that says nothing new is worse than no follow-up, and null is the correct answer, not a failure.",
   ].join("\n");
 }
 
@@ -888,6 +1014,53 @@ export function readObservation(raw: unknown): string | null {
     return null;
   }
   return text;
+}
+
+// The clause the follow-up is built around.
+//
+// Nearly the connection request's reader, with one rule reversed and one added.
+// An absence is allowed here, because by step 5 there is room to hedge it and a
+// hedged absence is often the only new angle left. A bump is not allowed, and
+// this is the gate on it rather than the prompt: "just checking in" is the
+// sentence a tired model reaches for, and it is the one thing this step exists
+// not to send.
+export function readFollowUpObservation(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+
+  let text = stripEmDashes(raw.replace(/\s+/g, " ").trim());
+  text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+  text = text.replace(/[.!]+$/, "").trim();
+
+  if (text.length < 15 || text.length > 220) return null;
+  if (/[[\]]/.test(text)) return null;
+  if (!/[a-z]/i.test(text)) return null;
+  // The bump, in the shapes it actually arrives in.
+  if (
+    /\b(just checking in|checking back in|circling back|following up on|floating (?:this|it) back|in case (?:this|it) got buried|bumping this|touching base|wanted to follow up)\b/i.test(
+      text,
+    )
+  ) {
+    return null;
+  }
+  return text;
+}
+
+// The two or three things the Loom note says it covers. Short noun phrases, and
+// held to being short: a "covered point" that arrives as a sentence is a claim
+// being smuggled into a message whose job is to hand over a link.
+export function readCovers(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  const items = raw
+    .filter((item): item is string => typeof item === "string")
+    .map((item) =>
+      stripEmDashes(item.replace(/\s+/g, " ").trim())
+        .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+        .replace(/[.]+$/, "")
+        .trim(),
+    )
+    .filter((item) => item.length >= 4 && item.length <= 90 && !/[[\]]/.test(item))
+    .slice(0, 3);
+  return items.length >= 2 ? items : null;
 }
 
 // One message, held to what can actually be used.
@@ -995,6 +1168,25 @@ export function parseAuditOfferReply(raw: string): AuditOfferReply | null {
   if (!body) return null;
   return {
     message: readMessage(body.message, AUDIT_OFFER_MAX_CHARS),
+    note: readInternalNote(body),
+  };
+}
+
+export type LoomDeliveryReply = { covers: string[] | null; note: InternalNote };
+
+export function parseLoomDeliveryReply(raw: string): LoomDeliveryReply | null {
+  const body = readObject(raw);
+  if (!body) return null;
+  return { covers: readCovers(body.covers), note: readInternalNote(body) };
+}
+
+export type FollowUpReply = { observation: string | null; note: InternalNote };
+
+export function parseFollowUpReply(raw: string): FollowUpReply | null {
+  const body = readObject(raw);
+  if (!body) return null;
+  return {
+    observation: readFollowUpObservation(body.observation),
     note: readInternalNote(body),
   };
 }

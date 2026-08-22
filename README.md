@@ -483,17 +483,31 @@ again.
   and a locked step says what would unlock it rather than being merely greyed
   out: *accepted* and *replied* are marks somebody makes, step 4 waits for a
   Loom URL on the lead, and step 5 comes due on the lead's own follow-up date
-  rather than on a timer of its own.
+  rather than on a timer of its own, once the first message or the audit offer
+  has gone out and gone quiet.
 
-  Three of the five cost a model call. The connection request and the first
-  message are written from the enrichment evidence — the same website notes,
-  ads signal and review count the scorecard is scored from. The audit offer is
-  written from something better: what the prospect actually wrote back, pasted
-  into the lead record when the reply is marked. Its job is to answer what they
-  said, and a generic "appreciate that context" against an unread reply is the
-  version of that message that gets ignored. The remaining two steps are fixed
-  templates whose only variables are the Loom link and which of two follow-ups
-  applies, so they are filled in code and cost nothing.
+  All five cost a model call, and none of them is written freehand. The
+  connection request and the first message are built from the enrichment
+  evidence — the same website notes, ads signal and review count the scorecard
+  is scored from. The audit offer is built from something better: what the
+  prospect actually wrote back, pasted into the lead record when the reply is
+  marked. Its job is to answer what they said, and a generic "appreciate that
+  context" against an unread reply is the version of that message that gets
+  ignored. Steps 4 and 5 are still fixed prose, assembled in code around the one
+  piece of each that only the evidence can supply: what the walkthrough actually
+  covers, and a pain angle the earlier messages have not already used.
+
+  One rule runs through every step from the connection request onwards: a
+  message never opens by describing the service. "I work with clinics like
+  yours" is the most recognizable agency-spam line there is, and a prospect has
+  read it a hundred times. Every opener leads with a specific verified
+  observation about their clinic instead. The one place a line about the
+  sender's own work belongs is the audit offer, after they have replied, and
+  there it is a pre-emption rather than a credential: most agencies pitching a
+  clinic lead with more ads, and saying so first is what gets a hearing from
+  somebody a previous agency already burned. It is only ever paired with
+  genuinely verified observations, because next to invented ones it is just a
+  better-dressed pitch.
 
   Every prompt is given the messages already drafted for that lead, so a later
   step does not re-make an observation an earlier one already made.
@@ -512,8 +526,8 @@ again.
 
   Where a genuine observation exists it may carry restrained characterization —
   unique, notable, a strong signal — but only where the fact itself supports
-  one. Where the research is thin, the warm generic message is the correct
-  answer rather than an invented hook.
+  one. Where the research is thin, nothing written is the correct answer rather
+  than an invented hook.
 
   No message contains an em dash. It is the most reliable tell that a message
   came out of a model rather than off somebody's keyboard, and these are
@@ -524,10 +538,22 @@ again.
   prospect.)
 
   The first message comes back as up to three variants to choose between, and
-  marking one sent unmarks the others. A variant the evidence cannot support is
-  left out rather than invented — a clinic with no advertising evidence gets no
-  advertising opener — and the panel says which one was skipped and why, so two
-  options rather than three is an answer instead of a puzzle.
+  marking one sent unmarks the others. Each is a different pain rather than a
+  different tone: paid traffic landing on a booking step that cannot capture it,
+  a built-out program with a gap in what happens after the lead arrives, and a
+  front-desk-dependent flow with no visible no-show or missed-call follow-up.
+  There is no warm generic fallback any more, because the fallback opened by
+  describing the service. A variant the evidence cannot support is left out
+  rather than invented — a clinic with no advertising evidence gets no funnel
+  opener — and the panel says which one was skipped and why, so two options
+  rather than three is an answer instead of a puzzle.
+
+  The follow-up is one message and only one. It has to lead with an observation
+  none of the earlier messages used, so "just checking in" is refused by the
+  reader rather than merely discouraged in the prompt, and a follow-up with
+  nothing new to say is not written at all. After it has been marked sent the
+  step locks for good: anything past that is a conversation somebody starts by
+  hand.
 
   Every generated step also returns an internal note: the evidence it was built
   on, the hedging it used, and the stage that had to be reached first. It is
