@@ -137,6 +137,8 @@ const DISCOVERY_TONES: Record<DiscoveryStatus, Tone> = {
   PENDING: "blue",
   ENRICHING: "teal",
   SCORED: "indigo",
+  // Amber, not green: it cleared the bar, and it is waiting on somebody.
+  QUALIFIED_NO_CONTACT: "amber",
   PROMOTED: "green",
   REJECTED: "neutral",
   FAILED: "red",

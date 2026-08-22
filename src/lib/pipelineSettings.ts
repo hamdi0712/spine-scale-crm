@@ -99,6 +99,11 @@ export interface PipelineStepSetting {
 export interface PipelineSettings {
   steps: Record<PipelineStepKey, PipelineStepSetting>;
   promotionThreshold: number;
+  // The second discovery pathway (src/lib/clinicDiscovery.ts). Same shape as a
+  // step — on/off, and the actor behind it — but it is not one: it runs before
+  // the chain rather than inside it, costs nothing per candidate, and is off
+  // until somebody names an actor for it.
+  clinicDiscovery: PipelineStepSetting;
 }
 
 // The score a candidate has to reach to be promoted rather than rejected. The
@@ -113,6 +118,19 @@ export const DEFAULT_PROMOTION_THRESHOLD = 5;
 export const MIN_PROMOTION_THRESHOLD = 0;
 export const MAX_PROMOTION_THRESHOLD = ICP_MAX_SCORE;
 
+// What Clinic-First Discovery runs unless the settings page says otherwise.
+// The Maps crawler is the sensible starting point — it is already in this
+// app's chain, it searches on a phrase and a place, and it returns a name, an
+// address, a website and a phone number, which is most of a clinic-first
+// candidate. It is a default and not a requirement: any actor that returns one
+// object per clinic is normalised the same way.
+export const DEFAULT_CLINIC_DISCOVERY_ACTOR_ID = "compass~crawler-google-places";
+
+// Off, deliberately. The pathway spends actor runs the moment it is used, and
+// an install that never opens the settings page should behave exactly as it
+// did before this existed.
+export const DEFAULT_CLINIC_DISCOVERY_ENABLED = false;
+
 export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   steps: Object.fromEntries(
     PIPELINE_STEP_KEYS.map((key) => [
@@ -121,6 +139,10 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
     ]),
   ) as Record<PipelineStepKey, PipelineStepSetting>,
   promotionThreshold: DEFAULT_PROMOTION_THRESHOLD,
+  clinicDiscovery: {
+    enabled: DEFAULT_CLINIC_DISCOVERY_ENABLED,
+    actorId: DEFAULT_CLINIC_DISCOVERY_ACTOR_ID,
+  },
 };
 
 // ─── Reading a row ─────────────────────────────────────────────────────────
@@ -151,6 +173,13 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
   return {
     steps,
     promotionThreshold: readPromotionThreshold(record.promotionThreshold),
+    clinicDiscovery: {
+      // The opposite default to a step: absent means off, because a row
+      // written before this column existed is an install that has never been
+      // asked whether it wants this pathway.
+      enabled: record.clinicDiscoveryEnabled === true,
+      actorId: readClinicDiscoveryActorId(record.clinicDiscoveryActorId),
+    },
   };
 }
 
@@ -160,6 +189,14 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
 export function readActorId(raw: unknown, key: PipelineStepKey): string {
   if (typeof raw !== "string") return DEFAULT_ACTOR_IDS[key];
   return normalizeApifyId(raw) ?? DEFAULT_ACTOR_IDS[key];
+}
+
+// The clinic-first actor as it will be used, or the built-in default —
+// normalised on the way through exactly as a step's is, so a malformed ID
+// stored in a settings row can never become a malformed path segment.
+export function readClinicDiscoveryActorId(raw: unknown): string {
+  if (typeof raw !== "string") return DEFAULT_CLINIC_DISCOVERY_ACTOR_ID;
+  return normalizeApifyId(raw) ?? DEFAULT_CLINIC_DISCOVERY_ACTOR_ID;
 }
 
 // The bar, held to the scale. A number outside it, or no number at all, is the
@@ -190,6 +227,8 @@ export function pipelineSettingsRow(
     row[`${key}Enabled`] = settings.steps[key].enabled;
     row[`${key}ActorId`] = settings.steps[key].actorId;
   }
+  row.clinicDiscoveryEnabled = settings.clinicDiscovery.enabled;
+  row.clinicDiscoveryActorId = settings.clinicDiscovery.actorId;
   return row;
 }
 
@@ -206,6 +245,8 @@ export function isPipelineStepKey(v: unknown): v is PipelineStepKey {
 export function isDefaultPipelineSettings(settings: PipelineSettings): boolean {
   return (
     settings.promotionThreshold === DEFAULT_PROMOTION_THRESHOLD &&
+    settings.clinicDiscovery.enabled === DEFAULT_CLINIC_DISCOVERY_ENABLED &&
+    settings.clinicDiscovery.actorId === DEFAULT_CLINIC_DISCOVERY_ACTOR_ID &&
     PIPELINE_STEP_KEYS.every(
       (key) =>
         settings.steps[key].enabled &&

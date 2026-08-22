@@ -138,6 +138,9 @@ const PATHS: Record<string, React.ReactNode> = {
   arrowUp: <path d="M12 19V6M6.5 11.5L12 6l5.5 5.5" />,
   arrowDown: <path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" />,
   arrowRight: <path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5" />,
+  link: (
+    <path d="M10 13.5a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1.5 1.5M14 10.5a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1.5-1.5" />
+  ),
 };
 
 export default function Icon({

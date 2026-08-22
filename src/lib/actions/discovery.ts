@@ -92,6 +92,7 @@ import {
   readClinicName,
   readLocation,
 } from "@/lib/discoveryAddByName";
+import { readDiscoverySourceKind } from "@/lib/clinicDiscovery";
 import { firstClinicWebsite, websiteSearchQuery } from "@/lib/googleSearch";
 import { runGoogleSearch } from "@/lib/googleSearchRun";
 import { isUsTimeZone, zoneFromLocation } from "@/lib/timezones";
@@ -321,6 +322,7 @@ export async function updateDiscoveryCandidate(id: string, formData: FormData) {
     data: {
       clinicName: str(formData, "clinicName") ?? "Untitled clinic",
       contactName: str(formData, "contactName"),
+      contactTitle: str(formData, "contactTitle"),
       phone: str(formData, "phone"),
       email: str(formData, "email"),
       source: str(formData, "source"),
@@ -406,6 +408,11 @@ export async function processDiscoveryCandidate(
       id: true,
       clinicName: true,
       batchLabel: true,
+      // Both read for the verdict at the end: a clinic-first candidate that
+      // cleared the bar with nobody named at it waits for a decision maker
+      // rather than becoming a lead. See the verdict section below.
+      contactName: true,
+      discoverySource: true,
       companyLinkedinUrl: true,
       facebookUrl: true,
       websiteUrl: true,
@@ -729,6 +736,46 @@ export async function processDiscoveryCandidate(
     };
   }
 
+  // ─── Qualified, but nobody to talk to ────────────────────────────────────
+  //
+  // The clinic-first pathway finds clinics before it finds people, so a
+  // candidate can clear the bar with no decision-maker on it at all. A lead in
+  // the pipeline assumes a contact — the outreach sequence is written to a
+  // person — so promoting one of these would put a lead in front of somebody
+  // with nobody to send it to, and the fix for that is not a blank name.
+  //
+  // It stops here instead, in a state that says exactly what it is: scored,
+  // qualified, waiting on a person. Nothing is rejected and nothing is lost —
+  // adding a decision maker on the candidate and pressing Promote takes it the
+  // rest of the way, and the follow-up work that finds one automatically has a
+  // queue of these to work from.
+  //
+  // Only the clinic-first pathway is held to this. A person-first candidate
+  // with no contact name is the case this app has always promoted, and
+  // changing that would re-decide clinics nobody asked about.
+  const noContact =
+    readDiscoverySourceKind(candidate.discoverySource) === "CLINIC_FIRST" &&
+    (candidate.contactName ?? "").trim() === "";
+  if (noContact) {
+    const headline = `Qualified at ${breakdown.total}/${ICP_MAX_SCORE} (${breakdown.tier}-tier), but no decision maker is known — add one to promote it.`;
+    await prisma.discoveryCandidate.update({
+      where: { id },
+      data: { status: "QUALIFIED_NO_CONTACT", processedAt: now },
+    });
+    steps.push({ label: "Verdict", status: "warned", detail: headline });
+    revalidatePath("/discovery");
+    return {
+      id,
+      clinicName: candidate.clinicName,
+      status: "QUALIFIED_NO_CONTACT",
+      headline,
+      total: breakdown.total,
+      tier: breakdown.tier,
+      promotedLeadId: null,
+      steps,
+    };
+  }
+
   const leadId = await promoteToLead(id, breakdown, now);
   const headline = `Promoted — ${breakdown.tier}-tier, ${breakdown.total}/${ICP_MAX_SCORE}`;
   steps.push({ label: "Verdict", status: "ok", detail: headline });
@@ -902,6 +949,45 @@ async function writeCandidateEnrichment(
     data: { ...update, enrichedAt: new Date() },
     select,
   });
+}
+
+// ─── Back into the queue ───────────────────────────────────────────────────
+
+// Puts a settled candidate back to Pending so the next queue run picks it up
+// from the top.
+//
+// It exists for the one status that is settled but not finished: Qualified —
+// Decision Maker Missing, which is deliberately not a queue status (see
+// DISCOVERY_QUEUE_STATUSES) because re-running five actors changes nothing
+// about a clinic whose only gap is a person. When something *has* changed —
+// a website typed in, a company page found — this is how that candidate is
+// scored again.
+//
+// It clears the verdict along with the status, because a stored total is the
+// transcript of a run and a candidate waiting to be re-run has no current one.
+// A promoted candidate is left alone: its lead is a real record by now.
+export async function requeueDiscoveryCandidate(id: string) {
+  const candidate = await prisma.discoveryCandidate.findUnique({
+    where: { id },
+    select: { promotedLeadId: true },
+  });
+  if (!candidate || candidate.promotedLeadId) return;
+
+  await prisma.discoveryCandidate.update({
+    where: { id },
+    data: {
+      status: "PENDING",
+      icpTotal: null,
+      icpTier: null,
+      icpBreakdown: null,
+      disqualified: false,
+      disqualifiedReason: null,
+      failureReason: null,
+      processedAt: null,
+    },
+  });
+  revalidatePath("/discovery");
+  revalidatePath(`/discovery/${id}`);
 }
 
 // ─── Bulk actions from the discovery table ─────────────────────────────────

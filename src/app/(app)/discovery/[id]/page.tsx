@@ -4,8 +4,14 @@ import { prisma } from "@/lib/prisma";
 import {
   deleteDiscoveryCandidate,
   promoteDiscoveryCandidate,
+  requeueDiscoveryCandidate,
   updateDiscoveryCandidate,
 } from "@/lib/actions/discovery";
+import {
+  DISCOVERY_SOURCE_KIND_LABELS,
+  DISCOVERY_SOURCE_KIND_MEANINGS,
+  readDiscoverySourceKind,
+} from "@/lib/clinicDiscovery";
 import {
   DISCOVERY_STATUS_MEANINGS,
   DiscoveryStatus,
@@ -45,6 +51,8 @@ export default async function DiscoveryCandidatePage({
   const update = updateDiscoveryCandidate.bind(null, candidate.id);
   const promote = promoteDiscoveryCandidate.bind(null, candidate.id);
   const remove = deleteDiscoveryCandidate.bind(null, candidate.id);
+  const requeue = requeueDiscoveryCandidate.bind(null, candidate.id);
+  const pathway = readDiscoverySourceKind(candidate.discoverySource);
 
   const breakdown = parseBreakdown(candidate.icpBreakdown);
   const enriched =
@@ -75,6 +83,10 @@ export default async function DiscoveryCandidatePage({
             )}
           </div>
           <p className="mt-2 text-xs leading-relaxed text-muted">
+            <span title={DISCOVERY_SOURCE_KIND_MEANINGS[pathway]}>
+              {DISCOVERY_SOURCE_KIND_LABELS[pathway]}
+            </span>
+            {" · "}
             {DISCOVERY_STATUS_MEANINGS[candidate.status as DiscoveryStatus] ??
               candidate.status}
             {candidate.enrichedAt && (
@@ -111,6 +123,18 @@ export default async function DiscoveryCandidatePage({
               Promote anyway
             </ConfirmForm>
           )}
+          {/* The way back into the queue for a candidate the queue no longer
+              picks up on its own — the qualified-but-nobody-named state, and
+              anything else settled that has since been edited. */}
+          {!candidate.promotedLead && (
+            <ConfirmForm
+              action={requeue}
+              message={`Score ${candidate.clinicName} again? Its current score and reasoning are cleared, and the next “Process queue” run puts it through the whole chain from the top — which costs a full round of actor runs.`}
+              className="btn shrink-0"
+            >
+              Re-run enrichment
+            </ConfirmForm>
+          )}
           <ConfirmForm
             action={remove}
             message={
@@ -124,6 +148,21 @@ export default async function DiscoveryCandidatePage({
           </ConfirmForm>
         </div>
       </div>
+
+      {candidate.status === "QUALIFIED_NO_CONTACT" && (
+        <div className="mt-6 rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
+          <p className="text-sm font-medium">
+            Qualified, but no decision maker is known
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+            It cleared the promotion threshold on the clinic's own evidence.
+            What it has not got is somebody to talk to, and a lead in the
+            pipeline assumes one — so it waits here rather than arriving there
+            with a blank name. Add a contact below and press Promote, or re-run
+            enrichment once there is more to go on.
+          </p>
+        </div>
+      )}
 
       {candidate.status === "FAILED" && candidate.failureReason && (
         <div className="mt-6 rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
@@ -166,6 +205,18 @@ export default async function DiscoveryCandidatePage({
                   id="contactName"
                   name="contactName"
                   defaultValue={candidate.contactName ?? ""}
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="contactTitle">
+                  Contact title
+                </label>
+                <input
+                  id="contactTitle"
+                  name="contactTitle"
+                  defaultValue={candidate.contactTitle ?? ""}
+                  placeholder="Owner, Clinic Director…"
                   className="field"
                 />
               </div>

@@ -19,6 +19,7 @@ import {
   PipelineStepSetting,
   PipelineStepKey,
   readActorId,
+  readClinicDiscoveryActorId,
   readPromotionThreshold,
 } from "@/lib/pipelineSettings";
 import { savePipelineSettings as write } from "@/lib/pipelineSettingsStore";
@@ -39,6 +40,10 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
   const settings: PipelineSettings = {
     steps,
     promotionThreshold: readPromotionThreshold(formData.get("promotionThreshold")),
+    clinicDiscovery: {
+      enabled: formData.get("clinicDiscoveryEnabled") === "on",
+      actorId: readClinicDiscoveryActorId(formData.get("clinicDiscoveryActorId")),
+    },
   };
 
   await write(settings);
