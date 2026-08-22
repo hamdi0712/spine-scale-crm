@@ -104,6 +104,10 @@ export interface PipelineSettings {
   // the chain rather than inside it, costs nothing per candidate, and is off
   // until somebody names an actor for it.
   clinicDiscovery: PipelineStepSetting;
+  // The stage that runs after a clinic-first candidate has qualified
+  // (src/lib/decisionMaker.ts). Same shape again, and off for the same reason:
+  // it spends actor runs the moment somebody presses the button.
+  decisionMaker: PipelineStepSetting;
 }
 
 // The score a candidate has to reach to be promoted rather than rejected. The
@@ -131,6 +135,14 @@ export const DEFAULT_CLINIC_DISCOVERY_ACTOR_ID = "compass~crawler-google-places"
 // did before this existed.
 export const DEFAULT_CLINIC_DISCOVERY_ENABLED = false;
 
+// The profile-search actor the person-first pathway already runs. Reused
+// rather than replaced: it searches by company name and title, which is the
+// shape "who is the owner at this clinic" needs. Any actor that returns one
+// profile per item works — the reader matches on field names.
+export const DEFAULT_DECISION_MAKER_ACTOR_ID = "harvestapi~linkedin-profile-search";
+
+export const DEFAULT_DECISION_MAKER_ENABLED = false;
+
 export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   steps: Object.fromEntries(
     PIPELINE_STEP_KEYS.map((key) => [
@@ -142,6 +154,10 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   clinicDiscovery: {
     enabled: DEFAULT_CLINIC_DISCOVERY_ENABLED,
     actorId: DEFAULT_CLINIC_DISCOVERY_ACTOR_ID,
+  },
+  decisionMaker: {
+    enabled: DEFAULT_DECISION_MAKER_ENABLED,
+    actorId: DEFAULT_DECISION_MAKER_ACTOR_ID,
   },
 };
 
@@ -180,6 +196,10 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
       enabled: record.clinicDiscoveryEnabled === true,
       actorId: readClinicDiscoveryActorId(record.clinicDiscoveryActorId),
     },
+    decisionMaker: {
+      enabled: record.decisionMakerEnabled === true,
+      actorId: readDecisionMakerActorId(record.decisionMakerActorId),
+    },
   };
 }
 
@@ -197,6 +217,12 @@ export function readActorId(raw: unknown, key: PipelineStepKey): string {
 export function readClinicDiscoveryActorId(raw: unknown): string {
   if (typeof raw !== "string") return DEFAULT_CLINIC_DISCOVERY_ACTOR_ID;
   return normalizeApifyId(raw) ?? DEFAULT_CLINIC_DISCOVERY_ACTOR_ID;
+}
+
+// The decision-maker actor, held to the same shape as every other stored ID.
+export function readDecisionMakerActorId(raw: unknown): string {
+  if (typeof raw !== "string") return DEFAULT_DECISION_MAKER_ACTOR_ID;
+  return normalizeApifyId(raw) ?? DEFAULT_DECISION_MAKER_ACTOR_ID;
 }
 
 // The bar, held to the scale. A number outside it, or no number at all, is the
@@ -229,6 +255,8 @@ export function pipelineSettingsRow(
   }
   row.clinicDiscoveryEnabled = settings.clinicDiscovery.enabled;
   row.clinicDiscoveryActorId = settings.clinicDiscovery.actorId;
+  row.decisionMakerEnabled = settings.decisionMaker.enabled;
+  row.decisionMakerActorId = settings.decisionMaker.actorId;
   return row;
 }
 
@@ -247,6 +275,8 @@ export function isDefaultPipelineSettings(settings: PipelineSettings): boolean {
     settings.promotionThreshold === DEFAULT_PROMOTION_THRESHOLD &&
     settings.clinicDiscovery.enabled === DEFAULT_CLINIC_DISCOVERY_ENABLED &&
     settings.clinicDiscovery.actorId === DEFAULT_CLINIC_DISCOVERY_ACTOR_ID &&
+    settings.decisionMaker.enabled === DEFAULT_DECISION_MAKER_ENABLED &&
+    settings.decisionMaker.actorId === DEFAULT_DECISION_MAKER_ACTOR_ID &&
     PIPELINE_STEP_KEYS.every(
       (key) =>
         settings.steps[key].enabled &&

@@ -93,14 +93,12 @@ import {
   readLocation,
 } from "@/lib/discoveryAddByName";
 import { readDiscoverySourceKind } from "@/lib/clinicDiscovery";
+// One promotion path for the queue, the manual override and the
+// decision-maker stage — see src/lib/promoteLead.ts.
+import { promoteToLead } from "@/lib/promoteLead";
 import { firstClinicWebsite, websiteSearchQuery } from "@/lib/googleSearch";
 import { runGoogleSearch } from "@/lib/googleSearchRun";
 import { isUsTimeZone, zoneFromLocation } from "@/lib/timezones";
-
-// The stage a promoted candidate's lead starts at. An import is the top of the
-// funnel by definition, and passing through Discovery does not advance it —
-// scoring says whether to talk to a clinic, not that anybody has.
-const PROMOTED_LEAD_STAGE = "NEW";
 
 // Anything past this is a misclick that got through the confirmation rather
 // than a day's work. Same ceiling, and the same reasoning, as the pipeline
@@ -317,11 +315,40 @@ export async function addDiscoveryCandidateByName(args: {
 // how the app is built.
 export async function updateDiscoveryCandidate(id: string, formData: FormData) {
   const zone = str(formData, "timeZone");
+  const contactName = str(formData, "contactName");
+
+  // A decision maker typed in by hand is a decision maker, and the stage that
+  // looks for one should say so rather than still reading "Not searched". It
+  // is recorded as manually_added with no confidence attached: a name somebody
+  // knows is not evidence this app gathered, and claiming a level for it would
+  // be putting words in their mouth. Clearing the contact puts the stage back
+  // to where it was, so the search can run.
+  const existing = await prisma.discoveryCandidate.findUnique({
+    where: { id },
+    select: { contactName: true, decisionMakerStatus: true },
+  });
+  const wasNamed = (existing?.contactName ?? "").trim() !== "";
+  const nowNamed = (contactName ?? "").trim() !== "";
+  const decisionMaker =
+    !wasNamed && nowNamed
+      ? {
+          decisionMakerStatus: "manually_added",
+          decisionMakerEvidence: "Entered by hand on the candidate.",
+          decisionMakerAt: new Date(),
+        }
+      : wasNamed && !nowNamed && existing?.decisionMakerStatus === "manually_added"
+        ? {
+            decisionMakerStatus: "not_started",
+            decisionMakerEvidence: null,
+            decisionMakerConfidence: null,
+          }
+        : {};
   await prisma.discoveryCandidate.update({
     where: { id },
     data: {
+      ...decisionMaker,
       clinicName: str(formData, "clinicName") ?? "Untitled clinic",
-      contactName: str(formData, "contactName"),
+      contactName,
       contactTitle: str(formData, "contactTitle"),
       phone: str(formData, "phone"),
       email: str(formData, "email"),
@@ -818,72 +845,6 @@ export async function promoteDiscoveryCandidate(id: string) {
   revalidatePath("/pipeline");
   revalidatePath("/");
   redirect(`/pipeline/${leadId}`);
-}
-
-// Creates the lead and marks the candidate promoted, in one transaction: a
-// lead with no candidate pointing at it would be re-created by the next run of
-// the queue, and a candidate pointing at a lead that was never written would
-// be worse.
-//
-// A breakdown of null is the honest case where a candidate is promoted before
-// it was ever scored — the lead is created with its fields and an unscored
-// card, which is exactly what it is.
-async function promoteToLead(
-  candidateId: string,
-  breakdown: DiscoveryBreakdown | null,
-  now: Date,
-): Promise<string> {
-  return prisma.$transaction(async (tx) => {
-    const candidate = await tx.discoveryCandidate.findUniqueOrThrow({
-      where: { id: candidateId },
-    });
-
-    const lead = await tx.lead.create({
-      data: {
-        clinicName: candidate.clinicName,
-        contactName: candidate.contactName,
-        phone: candidate.phone,
-        email: candidate.email,
-        leadSource: candidate.source,
-        stage: PROMOTED_LEAD_STAGE,
-        estValue: candidate.estValue,
-        linkedinUrl: candidate.linkedinUrl,
-        companyLinkedinUrl: candidate.companyLinkedinUrl,
-        websiteUrl: candidate.websiteUrl,
-        facebookUrl: candidate.facebookUrl,
-        location: candidate.location,
-        // Blank is a real answer — a lead whose zone nobody knows — so a zone
-        // outside the four stores as null rather than defaulting.
-        timeZone: isUsTimeZone(candidate.timeZone) ? candidate.timeZone : null,
-        staffCountRaw: candidate.staffCountRaw,
-        // The enrichment comes across as-is. It was gathered against this
-        // clinic and re-gathering it on the lead would spend four actor runs
-        // to arrive at the same four values.
-        metaAdsSignal: candidate.metaAdsSignal,
-        reviewCount: candidate.reviewCount,
-        websiteNotes: candidate.websiteNotes,
-        enrichedAt: candidate.enrichedAt,
-        // The review count's own date. The candidate keeps one date for the
-        // whole run, so this is the closest honest reading of when that number
-        // was taken.
-        reviewsCheckedAt:
-          candidate.reviewCount === null ? null : candidate.enrichedAt,
-        ...(breakdown ? leadScorecardPrefill(breakdown, now) : {}),
-      },
-      select: { id: true },
-    });
-
-    await tx.discoveryCandidate.update({
-      where: { id: candidateId },
-      data: {
-        status: "PROMOTED",
-        promotedLeadId: lead.id,
-        processedAt: now,
-      },
-    });
-
-    return lead.id;
-  });
 }
 
 // ─── Failure ───────────────────────────────────────────────────────────────

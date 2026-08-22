@@ -20,6 +20,7 @@ import {
   PipelineStepKey,
   readActorId,
   readClinicDiscoveryActorId,
+  readDecisionMakerActorId,
   readPromotionThreshold,
 } from "@/lib/pipelineSettings";
 import { savePipelineSettings as write } from "@/lib/pipelineSettingsStore";
@@ -43,6 +44,10 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
     clinicDiscovery: {
       enabled: formData.get("clinicDiscoveryEnabled") === "on",
       actorId: readClinicDiscoveryActorId(formData.get("clinicDiscoveryActorId")),
+    },
+    decisionMaker: {
+      enabled: formData.get("decisionMakerEnabled") === "on",
+      actorId: readDecisionMakerActorId(formData.get("decisionMakerActorId")),
     },
   };
 
