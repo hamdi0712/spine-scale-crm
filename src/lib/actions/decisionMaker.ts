@@ -26,7 +26,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { runApifySync } from "@/lib/apify";
+import { APIFY_MIN_CHARGE_USD, runApifySync } from "@/lib/apify";
 import { runGoogleSearch } from "@/lib/googleSearchRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { promoteToLead } from "@/lib/promoteLead";
@@ -56,6 +56,29 @@ import {
 // in the first handful or the search was the wrong search; everything past
 // this is billed and thrown away.
 const MAX_PROFILES = 10;
+
+// What one profile search is allowed to cost, and the second place in this app
+// that exists because of how an actor is *billed* rather than what it does.
+//
+// The profile search bills per event. The enrichment actors bill per result,
+// and a pay-per-result run is capped by asking for fewer results — which is
+// what maxItems does, and what every one of those runs relies on. There is no
+// per-result price on a pay-per-event actor for that to work against, so Apify
+// reads a small maxItems as a cost ceiling far below its own platform minimum
+// and refuses the run before it starts: "Maximum cost per run is less than the
+// allowed minimum of $0.10". Ten profiles was therefore not a cheap run but no
+// run at all.
+//
+// So it is capped in money instead, exactly as the Google Search actor is
+// (GOOGLE_SEARCH_MAX_CHARGE_USD in src/lib/googleSearchRun.ts). The value is
+// the platform floor rather than a budget anybody picked: one search of one
+// clinic costs a fraction of it, what the run actually does is bounded by the
+// input and by maxItems reading the dataset, and raising this would buy no
+// more searching — only a higher ceiling on a run that went wrong.
+//
+// Not exported: a "use server" module may export nothing but async functions,
+// and nothing outside this file needs the number.
+const DECISION_MAKER_MAX_CHARGE_USD = APIFY_MIN_CHARGE_USD;
 
 // What the browser gets back from a run: what happened, who was found, and
 // everybody else worth offering as an alternative.
@@ -190,7 +213,11 @@ export async function findDecisionMaker(id: string): Promise<FindDecisionMakerRe
       kind: "actor",
       id: actorId,
       input: JSON.stringify(input),
+      // The cap in money, not in items — see DECISION_MAKER_MAX_CHARGE_USD.
+      // maxItems still bounds what is read back out of the dataset; it is only
+      // the *run's* ceiling that has to be expressed as a cost for this actor.
       maxItems: MAX_PROFILES,
+      maxTotalChargeUsd: DECISION_MAKER_MAX_CHARGE_USD,
     });
     if (result.ok) {
       const people: DecisionMakerCandidate[] = [];
