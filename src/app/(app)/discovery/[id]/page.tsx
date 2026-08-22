@@ -27,6 +27,14 @@ import ConfirmForm from "@/components/ConfirmForm";
 import DiscoveryBreakdownView, {
   DiscoveryScoreHeader,
 } from "@/components/DiscoveryBreakdown";
+import DecisionMakerPanel from "@/components/DecisionMakerPanel";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
+import {
+  DecisionMakerConfidence,
+  isDecisionMakerConfidence,
+  parseDecisionMakerLog,
+  readDecisionMakerStatus,
+} from "@/lib/decisionMaker";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +60,10 @@ export default async function DiscoveryCandidatePage({
   const promote = promoteDiscoveryCandidate.bind(null, candidate.id);
   const remove = deleteDiscoveryCandidate.bind(null, candidate.id);
   const requeue = requeueDiscoveryCandidate.bind(null, candidate.id);
+  // Read here rather than in the panel: which actor the stage would run, and
+  // whether it is on at all, are settings, and a client component must not
+  // pull the module that reads them.
+  const settings = await loadPipelineSettings();
   const pathway = readDiscoverySourceKind(candidate.discoverySource);
 
   const breakdown = parseBreakdown(candidate.icpBreakdown);
@@ -158,8 +170,8 @@ export default async function DiscoveryCandidatePage({
             It cleared the promotion threshold on the clinic's own evidence.
             What it has not got is somebody to talk to, and a lead in the
             pipeline assumes one — so it waits here rather than arriving there
-            with a blank name. Add a contact below and press Promote, or re-run
-            enrichment once there is more to go on.
+            with a blank name. Find the decision maker below — or add a contact
+            by hand and press Promote.
           </p>
         </div>
       )}
@@ -177,6 +189,38 @@ export default async function DiscoveryCandidatePage({
             it names below and the next “Process queue” run picks this one up
             again from the top.
           </p>
+        </div>
+      )}
+
+      {/* The stage that answers the one question a qualified clinic-first
+          candidate has left. Shown on any candidate that has been through it
+          or could be — never on a person-first candidate that arrived with a
+          contact, which has nothing for it to do. */}
+      {(candidate.status === "QUALIFIED_NO_CONTACT" ||
+        readDecisionMakerStatus(candidate.decisionMakerStatus) !== "not_started") && (
+        <div className="mt-8">
+          <DecisionMakerPanel
+            candidateId={candidate.id}
+            clinicName={candidate.clinicName}
+            status={readDecisionMakerStatus(candidate.decisionMakerStatus)}
+            contactName={candidate.contactName}
+            contactTitle={candidate.contactTitle}
+            contactLinkedinUrl={candidate.linkedinUrl}
+            confidence={
+              isDecisionMakerConfidence(candidate.decisionMakerConfidence)
+                ? (candidate.decisionMakerConfidence as DecisionMakerConfidence)
+                : null
+            }
+            evidence={candidate.decisionMakerEvidence}
+            attempts={parseDecisionMakerLog(candidate.decisionMakerLog)}
+            runnable={
+              candidate.status === "QUALIFIED_NO_CONTACT" &&
+              candidate.promotedLead === null &&
+              (candidate.contactName ?? "").trim() === ""
+            }
+            enabled={settings.decisionMaker.enabled}
+            actorId={settings.decisionMaker.actorId}
+          />
         </div>
       )}
 

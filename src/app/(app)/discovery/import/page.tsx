@@ -1,7 +1,11 @@
 import Link from "next/link";
-import { importDiscoveryCandidates } from "@/lib/actions/discovery";
+import {
+  addDiscoveryCandidateByName,
+  importDiscoveryCandidates,
+} from "@/lib/actions/discovery";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import DiscoveryImportWizard from "@/components/DiscoveryImportWizard";
+import AddClinicByName from "@/components/AddClinicByName";
 
 // Reads the pipeline settings for the confirm step's cost estimate, so this
 // page is per-request like every other one that touches the database — a
@@ -27,9 +31,15 @@ export default async function ImportCandidatesPage() {
             to map, whatever the source called them
           </p>
         </div>
-        <Link href="/discovery/import/apify" className="btn shrink-0">
-          Import from Apify
-        </Link>
+        {/* The single-record way in. It used to sit in the Discovery header
+            and made a six-button row of it; this is where somebody already
+            thinking about getting clinics in will look for it. */}
+        <div className="flex shrink-0 items-center gap-2">
+          <AddClinicByName add={addDiscoveryCandidateByName} />
+          <Link href="/discovery/import/apify" className="btn">
+            Import from Apify
+          </Link>
+        </div>
       </div>
       <DiscoveryImportWizard
         action={importDiscoveryCandidates}

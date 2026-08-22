@@ -213,6 +213,18 @@ export default async function LeadDetailPage({
                 />
               </div>
               <div>
+                <label className="field-label" htmlFor="contactTitle">
+                  Contact title
+                </label>
+                <input
+                  id="contactTitle"
+                  name="contactTitle"
+                  defaultValue={lead.contactTitle ?? ""}
+                  placeholder="Owner, Clinic Director…"
+                  className="field"
+                />
+              </div>
+              <div>
                 <label className="field-label" htmlFor="leadSource">
                   Lead source
                 </label>

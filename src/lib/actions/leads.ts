@@ -45,6 +45,9 @@ function leadFields(formData: FormData) {
   return {
     clinicName: str(formData, "clinicName") ?? "Untitled clinic",
     contactName: str(formData, "contactName"),
+    // The role, as the decision-maker stage established it or as somebody
+    // corrected it. Editable here like every other field the import filled.
+    contactTitle: str(formData, "contactTitle"),
     phone: str(formData, "phone"),
     email: str(formData, "email"),
     leadSource: str(formData, "leadSource"),

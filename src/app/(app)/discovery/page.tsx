@@ -7,6 +7,10 @@ import {
 } from "@/lib/actions/discovery";
 import { DISCOVERY_QUEUE_STATUSES } from "@/lib/discovery";
 import { readDiscoverySourceKind } from "@/lib/clinicDiscovery";
+import {
+  DecisionMakerConfidence,
+  isDecisionMakerConfidence,
+} from "@/lib/decisionMaker";
 import { IcpTier } from "@/lib/icp";
 import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -88,6 +92,10 @@ export default async function DiscoveryPage({
     id: c.id,
     clinicName: c.clinicName,
     contactName: c.contactName,
+    contactTitle: c.contactTitle,
+    decisionMakerConfidence: isDecisionMakerConfidence(c.decisionMakerConfidence)
+      ? (c.decisionMakerConfidence as DecisionMakerConfidence)
+      : null,
     discoverySource: readDiscoverySourceKind(c.discoverySource),
     source: c.source,
     location: c.location,
@@ -137,9 +145,11 @@ export default async function DiscoveryPage({
           <Link href="/discovery/import/clinic" className="btn">
             Clinic-first search
           </Link>
-          {/* The single-record way in, beside the two bulk ones — a name
-              instead of a file, and the same Pending candidate at the end. */}
-          <AddClinicByName add={addDiscoveryCandidateByName} />
+          {/* Add clinic by name is deliberately not here. Six buttons made
+              this row wrap on any window narrower than a desktop, and of the
+              six it is the one used least — so it lives on the import page
+              (/discovery/import) and in the empty state below, where somebody
+              with nothing in Discovery is looking for a way in. */}
           <DiscoveryQueue
             loadQueue={discoveryQueue}
             process={processDiscoveryCandidate}

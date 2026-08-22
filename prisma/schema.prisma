@@ -85,6 +85,53 @@ model DiscoveryCandidate {
   sourceActor String?
   sourceQuery String?
 
+  // ─── Decision-maker enrichment ───────────────────────────────────────────
+  //
+  // A stage of its own, run by hand from the candidate page and only on a
+  // candidate that has already qualified (see src/lib/decisionMaker.ts). It
+  // writes the contact fields above — contactName, contactTitle, linkedinUrl,
+  // email, phone — and never overwrites one that was already filled.
+  //
+  // Kept out of the main status enum on purpose: a candidate's status says
+  // where it is in the queue, and how the search for a person went is a
+  // different question with its own answers. Constrained to
+  // DECISION_MAKER_STATUSES.
+  //
+  //   not_started    — never looked
+  //   searching      — a run has it right now (or had it when the tab closed)
+  //   found          — somebody was identified, at the confidence below
+  //   not_found      — looked, and nothing verifiable came back
+  //   failed         — the actor or the search failed outright
+  //   manually_added — a person somebody typed in, or chose from the results
+  decisionMakerStatus String @default("not_started")
+
+  // How much the identification is worth: HIGH | MEDIUM | LOW | UNKNOWN,
+  // constrained to DECISION_MAKER_CONFIDENCE. Null until somebody is found.
+  // It exists because "a doctor at this clinic" and "the owner, per the
+  // clinic's own about page" are not the same finding, and a CRM that showed
+  // them the same way would be claiming the second when it had the first.
+  decisionMakerConfidence String?
+
+  // The sentence behind that confidence, in the words of whatever established
+  // it: "Website team page — “Dr John Smith, Founder”." Never generated from
+  // an assumption; a person with no evidence is stored with none.
+  decisionMakerEvidence String?
+
+  // Every attempt, as JSON: when it ran, the queries used, the actor, how many
+  // results came back, who was picked and at what confidence, and any actor
+  // error verbatim. Read through parseDecisionMakerLog(), which never throws
+  // on a row written by an older shape. This is what makes a run that found
+  // nothing debuggable rather than silent.
+  decisionMakerLog String?
+  decisionMakerAt  DateTime?
+
+  // Public profiles for the person, as a JSON list of URLs — Instagram, a
+  // personal site, a professional directory. A list rather than a column each
+  // because which ones exist is the clinic's business, not the schema's. The
+  // two that already have columns above (facebookUrl for the clinic page,
+  // linkedinUrl for the contact) stay where they are.
+  contactSocialUrls String?
+
   // Enrichment — written by the four-actor run (src/lib/enrichRun.ts), the
   // same run and the same readers the lead page uses. Every one of these is a
   // snapshot of what a scrape saw at one moment, which is why enrichedAt
@@ -191,6 +238,15 @@ model Lead {
   websiteUrl         String? // the clinic's own site
   facebookUrl        String? // the clinic's Facebook page
   location           String? // town or metro, as somebody would search for it
+
+  // The contact's role, and their other public profiles as a JSON list of
+  // URLs. Both arrive with a lead promoted out of Discovery — the
+  // decision-maker enrichment stage (src/lib/decisionMaker.ts) establishes
+  // them on the candidate, and losing them at the pipeline door would mean
+  // re-finding what has already been found. Editable by hand like everything
+  // else here, and null on every lead created before that stage existed.
+  contactTitle      String?
+  contactSocialUrls String?
 
   // IANA id, one of the four US zones, and null until somebody sets it or an
   // import reads it off the location. Nullable where the client's is not: a
@@ -776,6 +832,16 @@ model PipelineSettings {
   // same validation (src/lib/pipelineSettings.ts).
   clinicDiscoveryEnabled Boolean @default(false)
   clinicDiscoveryActorId String  @default("compass~crawler-google-places")
+
+  // Decision-maker enrichment — the stage that runs after a clinic-first
+  // candidate has qualified. Same toggle-plus-actor-ID shape as everything
+  // above, and off by default for the same reason: it spends actor runs.
+  //
+  // The default is the profile-search actor the person-first pathway already
+  // uses. It searches by company name and title, which is the shape this stage
+  // needs — "who is the owner at this clinic" — rather than a new integration.
+  decisionMakerEnabled Boolean @default(false)
+  decisionMakerActorId String  @default("harvestapi~linkedin-profile-search")
 
   // The score a candidate must reach to be promoted rather than rejected,
   // out of ICP_MAX_SCORE. It is the promotion bar and not a tier band: the

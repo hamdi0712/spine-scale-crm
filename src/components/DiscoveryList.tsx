@@ -37,6 +37,7 @@ import {
   batchOptions,
 } from "@/lib/discoveryBatch";
 import { SOURCE_ALL, sourceKey, sourceOptions } from "@/lib/discoverySource";
+import { CONFIDENCE_LABELS, DecisionMakerConfidence } from "@/lib/decisionMaker";
 import {
   DISCOVERY_SOURCES,
   DISCOVERY_SOURCE_KIND_LABELS,
@@ -64,6 +65,11 @@ export interface DiscoveryRow {
   id: string;
   clinicName: string;
   contactName: string | null;
+  contactTitle: string | null;
+  // How much the decision maker on this row is worth, where one was found by
+  // the enrichment stage. Null on a contact that arrived with the import, and
+  // on a candidate nobody has looked for one at.
+  decisionMakerConfidence: DecisionMakerConfidence | null;
   // Which pathway found it — the person-first LinkedIn search, or the
   // clinic-first one. Distinct from `source`, which is free text and can name
   // both after a merge.
@@ -528,7 +534,23 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
                       empty cell reads as a name nobody filled in rather than a
                       person nobody has found. */}
                   <td className="td text-muted">
-                    {row.contactName ?? (
+                    {row.contactName ? (
+                      <>
+                        {row.contactName}
+                        {(row.contactTitle || row.decisionMakerConfidence) && (
+                          <span className="block max-w-[180px] truncate text-xs text-muted/80">
+                            {[
+                              row.contactTitle,
+                              row.decisionMakerConfidence
+                                ? `${CONFIDENCE_LABELS[row.decisionMakerConfidence]} confidence`
+                                : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        )}
+                      </>
+                    ) : (
                       <span className="text-muted/70">Not found</span>
                     )}
                   </td>
@@ -647,7 +669,15 @@ function CandidateCard({
             {row.clinicName}
           </Link>
           <p className="mt-0.5 truncate text-xs text-muted">
-            {row.contactName ?? (
+            {row.contactName ? (
+              <>
+                {row.contactName}
+                {row.contactTitle ? ` · ${row.contactTitle}` : ""}
+                {row.decisionMakerConfidence
+                  ? ` · ${CONFIDENCE_LABELS[row.decisionMakerConfidence]} confidence`
+                  : ""}
+              </>
+            ) : (
               <span className="text-muted/70">
                 Decision maker not found yet
               </span>
