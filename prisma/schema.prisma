@@ -981,3 +981,29 @@ model BusinessContext {
 
   updatedAt DateTime @updatedAt
 }
+
+// Daily KPI goals — the four numbers the Daily KPI page tracks a day against.
+//
+// Same singleton shape as PipelineSettings above, and for the same reason: one
+// person runs this app, so there is one set of goals, held on one row at a
+// fixed id. Every read is a findUnique on it and every write an upsert, so
+// there is no path that creates a second row.
+//
+// Only the goals live here. Not one of the four counts is stored: they are all
+// read off records that already carry the instant they happened
+// (Lead.connectionRequestSentAt, Lead.repliedAt, DiscoveryCandidate.processedAt,
+// Call.createdAt), so yesterday, last week and the streak are all the same
+// query asked about a different day. A daily snapshot table would be a second
+// account of the same facts, and the two would eventually disagree.
+model DailyKpiSettings {
+  id String @id
+
+  // The defaults are the targets the page shipped with. An install that never
+  // opens the goals form tracks against these.
+  qualifiedLeadsGoal  Int @default(20)
+  connectionsSentGoal Int @default(50)
+  repliesReceivedGoal Int @default(10)
+  meetingsBookedGoal  Int @default(3)
+
+  updatedAt DateTime @updatedAt
+}
