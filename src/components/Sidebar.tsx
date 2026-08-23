@@ -12,6 +12,7 @@ import {
   IconLayoutDashboard,
   IconRadar2,
   IconSettings,
+  IconTargetArrow,
   IconUsers,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/actions/auth";
@@ -22,24 +23,62 @@ import { LogoIconChip } from "@/components/Logo";
 // Nav glyphs come from Tabler; the rest of the app (including the collapse
 // chevron and Sign out below) stays on the in-house set. Stroke is dialled
 // from Tabler's default 2 down to 1.75 so the two sets sit together.
-const NAV = [
-  { href: "/", label: "Dashboard", Glyph: IconLayoutDashboard },
-  // Sits with the dashboard: both read across every record rather than owning
-  // one, and the pair is where a day starts.
-  { href: "/calendar", label: "Calendar", Glyph: IconCalendarEvent },
-  // With the dashboard and the calendar rather than with the funnel: a task is
-  // work you owe today, not a stage a clinic is at, and the board is read from
-  // the same standing start those two are.
-  { href: "/activities", label: "Activities", Glyph: IconChecklist },
-  // Immediately before Pipeline, because that is where it sits in the funnel:
-  // everything scraped lands in Discovery and only what scores gets through.
-  { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
-  { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
-  { href: "/clients", label: "Clients", Glyph: IconUsers },
-  { href: "/reporting", label: "Reporting", Glyph: IconChartBar },
-  { href: "/ad-hub", label: "Ad Hub", Glyph: IconBulb },
-  { href: "/library", label: "Library", Glyph: IconBook },
+// The nav, in labelled groups. Dashboard stands on its own above them: it is
+// the one item that is not a place in the work but a reading of all of it, and
+// grouping it with anything would say otherwise.
+//
+// The three groups are the app's own structure rather than a taxonomy imposed
+// on it — the funnel a clinic travels, the work a day is made of, and the
+// tools that feed the top of the funnel. Every item is where it was, in a
+// group that says why.
+const DASHBOARD = {
+  href: "/",
+  label: "Dashboard",
+  Glyph: IconLayoutDashboard,
+} as const;
+
+interface NavGroup {
+  label: string;
+  items: { href: string; label: string; Glyph: typeof IconLayoutDashboard }[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    // The funnel, in the order a clinic travels it: everything scraped lands
+    // in Discovery, only what scores gets through to Pipeline, and what closes
+    // becomes a client.
+    label: "Pipeline",
+    items: [
+      { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
+      { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
+      { href: "/clients", label: "Clients", Glyph: IconUsers },
+    ],
+  },
+  {
+    // The day's own work — what is booked, what is owed, and what went out to
+    // clients. None of the three owns a record in the funnel; they are read
+    // from a standing start each morning.
+    label: "Operations",
+    items: [
+      { href: "/calendar", label: "Calendar", Glyph: IconCalendarEvent },
+      { href: "/activities", label: "Activities", Glyph: IconChecklist },
+      { href: "/reporting", label: "Reporting", Glyph: IconChartBar },
+    ],
+  },
+  {
+    // What feeds the funnel rather than sitting in it: the ad workshop, the
+    // day's own numbers against their goals, and the reusable copy.
+    label: "Growth tools",
+    items: [
+      { href: "/ad-hub", label: "Ad Hub", Glyph: IconBulb },
+      { href: "/daily-kpi", label: "Daily KPI", Glyph: IconTargetArrow },
+      { href: "/library", label: "Library", Glyph: IconBook },
+    ],
+  },
 ];
+
+// Every nav item, flat — what the active-item match below reads.
+const NAV = [DASHBOARD, ...NAV_GROUPS.flatMap((g) => g.items)];
 
 // Settings is not in NAV. It is the one thing in the sidebar that is not a
 // place in the funnel — it changes how the app runs rather than showing what is
@@ -130,27 +169,36 @@ export default function Sidebar({
           Internal ops
         </div>
       )}
-      <nav className={`flex-1 space-y-1 py-1 ${collapsed ? "px-2" : "px-3"}`}>
-        {NAV.map((item) => {
-          const active = item.href === activeHref(pathname);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed ? item.label : undefined}
-              className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${NAV_MOTION} ${
-                collapsed ? "justify-center px-0" : "px-3"
-              } ${
-                active
-                  ? "nav-active"
-                  : "text-muted hover:bg-wash hover:text-ink"
-              }`}
-            >
-              <item.Glyph size={20} stroke={1.75} className="shrink-0" />
-              {!collapsed && item.label}
-            </Link>
-          );
-        })}
+      <nav
+        className={`flex-1 overflow-y-auto py-1 ${collapsed ? "px-2" : "px-3"}`}
+      >
+        <NavItem item={DASHBOARD} collapsed={collapsed} pathname={pathname} />
+        {/* One group per section, each headed by its label. Collapsed, the
+            headings go and the rule between groups stays: at 64px wide there
+            is no room for a word, but the grouping is still worth keeping and
+            a hairline is what is left of it. */}
+        {NAV_GROUPS.map((group) => (
+          <div
+            key={group.label}
+            className={`mt-2 pt-2 ${collapsed ? "border-t border-line/50" : ""}`}
+          >
+            {!collapsed && (
+              <div className="px-3 pb-1.5 text-[11px] font-medium tracking-[0.06em] text-muted/80">
+                {group.label.toUpperCase()}
+              </div>
+            )}
+            <div className="space-y-1">
+              {group.items.map((item) => (
+                <NavItem
+                  key={item.href}
+                  item={item}
+                  collapsed={collapsed}
+                  pathname={pathname}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </nav>
       {/* The copilot's trigger. It wears .btn-ai through <AiButton> for the
           reason every other assist does: a violet pill with a sparkle on it
@@ -207,5 +255,32 @@ export default function Sidebar({
         </button>
       </form>
     </aside>
+  );
+}
+
+// One row of the nav. Lifted out of the list when the list became three lists:
+// the row is the same object in every group, and it is drawn in exactly one
+// place so it stays that way.
+function NavItem({
+  item,
+  collapsed,
+  pathname,
+}: {
+  item: { href: string; label: string; Glyph: typeof IconLayoutDashboard };
+  collapsed: boolean;
+  pathname: string;
+}) {
+  const active = item.href === activeHref(pathname);
+  return (
+    <Link
+      href={item.href}
+      title={collapsed ? item.label : undefined}
+      className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${NAV_MOTION} ${
+        collapsed ? "justify-center px-0" : "px-3"
+      } ${active ? "nav-active" : "text-muted hover:bg-wash hover:text-ink"}`}
+    >
+      <item.Glyph size={20} stroke={1.75} className="shrink-0" />
+      {!collapsed && item.label}
+    </Link>
   );
 }
