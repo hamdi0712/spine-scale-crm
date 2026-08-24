@@ -1,5 +1,12 @@
-// The four daily KPIs — what they are, what a goal may be, and how a day,
-// a week and a streak are read off them.
+// The four KPIs — what they are, what timeframe each is judged over, what a
+// goal may be, and how a day, a month, a week and a streak are read off them.
+//
+// Two of the four are yours to do and two are somebody else's to give. A
+// connection request goes out because you sent it; a reply arrives because a
+// clinic owner felt like answering that afternoon. Holding the second pair to
+// a daily number scores you on other people's inboxes, so they carry a monthly
+// goal and are read month to date — the timeframe over which a reply rate is
+// actually a fact about the work rather than about one quiet Tuesday.
 //
 // Pure. No database and no clock beyond what it is handed; the counting lives
 // in src/lib/dailyKpiStore.ts and the page hands everything through here so
@@ -54,6 +61,34 @@ export const DAILY_KPI_HUES: Record<DailyKpiKey, string> = {
   meetingsBooked: "#EC4899",
 };
 
+// ─── Timeframes ────────────────────────────────────────────────────────────
+
+// Which timeframe a metric is judged over. "daily" is counted and scored a day
+// at a time; "monthly" is counted month to date against a monthly goal and
+// never scored against a single day.
+export type DailyKpiCadence = "daily" | "monthly";
+
+export const DAILY_KPI_CADENCE: Record<DailyKpiKey, DailyKpiCadence> = {
+  qualifiedLeads: "daily",
+  connectionsSent: "daily",
+  repliesReceived: "monthly",
+  meetingsBooked: "monthly",
+};
+
+// The two lists the page actually iterates. Derived from the record above so
+// there is one statement of which metric is which, not three.
+export const DAILY_GOAL_KEYS = DAILY_KPI_KEYS.filter(
+  (key) => DAILY_KPI_CADENCE[key] === "daily",
+);
+
+export const MONTHLY_GOAL_KEYS = DAILY_KPI_KEYS.filter(
+  (key) => DAILY_KPI_CADENCE[key] === "monthly",
+);
+
+export function isMonthly(key: DailyKpiKey): boolean {
+  return DAILY_KPI_CADENCE[key] === "monthly";
+}
+
 export type DailyKpiCounts = Record<DailyKpiKey, number>;
 
 export function emptyCounts(): DailyKpiCounts {
@@ -76,14 +111,20 @@ export function sumCounts(days: DailyKpiCounts[]): DailyKpiCounts {
 
 export type DailyKpiGoals = Record<DailyKpiKey, number>;
 
+// A goal is read in its metric's own timeframe: the daily pair is what a full
+// day looks like, the monthly pair what a full month looks like. The monthly
+// defaults are the daily ones they replace multiplied by a working month —
+// ten replies and three meetings a day were the old targets, and 20 working
+// days is what a month of them comes to — so an install that never opens the
+// form is held to the same standard over a timeframe that can carry it.
 export const DEFAULT_DAILY_KPI_GOALS: DailyKpiGoals = {
   qualifiedLeads: 20,
   connectionsSent: 50,
-  repliesReceived: 10,
-  meetingsBooked: 3,
+  repliesReceived: 200,
+  meetingsBooked: 60,
 };
 
-// A goal is a whole number of things to do in a day. Zero is allowed — it is
+// A goal is a whole number of things to do in its timeframe. Zero is allowed — it is
 // how a metric is taken out of the score and out of the streak without being
 // taken off the page — and the ceiling is there so a mistyped goal cannot make
 // every percentage on the page round to nothing.
@@ -103,15 +144,22 @@ export function readGoal(value: unknown, key: DailyKpiKey): number {
 
 // Every read of the row goes through this, so a row written by an older build,
 // hand-edited, or missing entirely lands on a working set of goals.
-export function readDailyKpiGoals(
-  row: Partial<Record<`${DailyKpiKey}Goal`, number | null>> | null,
-): DailyKpiGoals {
+// The column names carry the timeframe — a bare "goal" on a monthly metric
+// would read as a daily one, which is the mistake this change exists to undo.
+export interface DailyKpiGoalsRow {
+  qualifiedLeadsGoal?: number | null;
+  connectionsSentGoal?: number | null;
+  repliesReceivedMonthlyGoal?: number | null;
+  meetingsBookedMonthlyGoal?: number | null;
+}
+
+export function readDailyKpiGoals(row: DailyKpiGoalsRow | null): DailyKpiGoals {
   if (!row) return { ...DEFAULT_DAILY_KPI_GOALS };
   return {
     qualifiedLeads: readGoal(row.qualifiedLeadsGoal, "qualifiedLeads"),
     connectionsSent: readGoal(row.connectionsSentGoal, "connectionsSent"),
-    repliesReceived: readGoal(row.repliesReceivedGoal, "repliesReceived"),
-    meetingsBooked: readGoal(row.meetingsBookedGoal, "meetingsBooked"),
+    repliesReceived: readGoal(row.repliesReceivedMonthlyGoal, "repliesReceived"),
+    meetingsBooked: readGoal(row.meetingsBookedMonthlyGoal, "meetingsBooked"),
   };
 }
 
@@ -119,8 +167,8 @@ export function dailyKpiGoalsRow(goals: DailyKpiGoals): Record<string, number> {
   return {
     qualifiedLeadsGoal: goals.qualifiedLeads,
     connectionsSentGoal: goals.connectionsSent,
-    repliesReceivedGoal: goals.repliesReceived,
-    meetingsBookedGoal: goals.meetingsBooked,
+    repliesReceivedMonthlyGoal: goals.repliesReceived,
+    meetingsBookedMonthlyGoal: goals.meetingsBooked,
   };
 }
 
@@ -143,19 +191,24 @@ export function goalMet(count: number, goal: number): boolean {
   return count >= goal;
 }
 
-// Today's score: the average of the four percentages, each capped at 100
-// first. Capping before the average is what stops one runaway metric — three
-// hundred connection requests on an import day — from covering three that
-// never moved. A score is a reading of the day's balance, not a total.
+// Today's score: the average of the daily metrics' percentages, each capped at
+// 100 first. Capping before the average is what stops one runaway metric — three
+// hundred connection requests on an import day — from covering one that never
+// moved. A score is a reading of the day's balance, not a total.
+//
+// The monthly pair is deliberately not in it. A day where the outreach got
+// done and nobody happened to reply is a good day's work, and a score that
+// marked it down would be scoring the prospect's inbox rather than the work.
+// Their pace is shown beside the score instead — see monthlyPace below.
 export function dailyScore(
   counts: DailyKpiCounts,
   goals: DailyKpiGoals,
 ): number {
-  const total = DAILY_KPI_KEYS.reduce(
+  const total = DAILY_GOAL_KEYS.reduce(
     (sum, key) => sum + progressPct(counts[key], goals[key]),
     0,
   );
-  return Math.round(total / DAILY_KPI_KEYS.length);
+  return Math.round(total / DAILY_GOAL_KEYS.length);
 }
 
 // The line under the score. Encouragement, and never congratulation for a day
@@ -233,14 +286,17 @@ export function pctChange(now: number, before: number): number | null {
   return Math.round(((now - before) / before) * 100);
 }
 
+// A day was "hit" when the daily metrics were hit. The monthly pair cannot be
+// met or missed in a day — that is what makes it monthly — so the streak is
+// read off the two that can.
 export function allGoalsMet(
   counts: DailyKpiCounts,
   goals: DailyKpiGoals,
 ): boolean {
-  return DAILY_KPI_KEYS.every((key) => goalMet(counts[key], goals[key]));
+  return DAILY_GOAL_KEYS.every((key) => goalMet(counts[key], goals[key]));
 }
 
-// Consecutive days, ending at the most recent day given, on which all four
+// Consecutive days, ending at the most recent day given, on which both daily
 // goals were met.
 //
 // Today counts while it is still in progress: a day that has already hit every
@@ -266,4 +322,54 @@ export function streakLength(
     break;
   }
   return streak;
+}
+
+// ─── Months and pace ───────────────────────────────────────────────────────
+
+// The first day of the month a day falls in, read in UTC like every other day
+// on this page.
+export function monthStart(day: Date): Date {
+  return new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1));
+}
+
+export function daysInMonth(day: Date): number {
+  return new Date(
+    Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+}
+
+// Where a monthly metric stands, and where it is heading.
+//
+// The projection is the plainest one there is: what has arrived so far,
+// spread evenly over the days elapsed, run to the end of the month. It is
+// shown as a reference and never scored — a straight-line pace is a fair
+// reading of a month in progress and a poor prediction of one, and the page
+// says "on pace for" rather than "will be" for exactly that reason.
+export interface MonthlyPace {
+  monthToDate: number;
+  goal: number;
+  pct: number; // month to date against the goal, 0–100
+  projected: number; // month to date, run out at today's rate
+  onTrack: boolean; // is the pace enough to land on the goal
+  daysElapsed: number;
+  daysTotal: number;
+}
+
+export function monthlyPace(
+  monthToDate: number,
+  goal: number,
+  day: Date,
+): MonthlyPace {
+  const daysElapsed = day.getUTCDate();
+  const daysTotal = daysInMonth(day);
+  const projected = Math.round((monthToDate / daysElapsed) * daysTotal);
+  return {
+    monthToDate,
+    goal,
+    pct: progressPct(monthToDate, goal),
+    projected,
+    onTrack: projected >= goal,
+    daysElapsed,
+    daysTotal,
+  };
 }

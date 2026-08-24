@@ -998,12 +998,18 @@ model BusinessContext {
 model DailyKpiSettings {
   id String @id
 
-  // The defaults are the targets the page shipped with. An install that never
-  // opens the goals form tracks against these.
-  qualifiedLeadsGoal  Int @default(20)
-  connectionsSentGoal Int @default(50)
-  repliesReceivedGoal Int @default(10)
-  meetingsBookedGoal  Int @default(3)
+  // Two goals a day and two a month, and the column names say which. A reply
+  // and a booked meeting are somebody else's to give, so they are judged over
+  // a month rather than an afternoon (see src/lib/dailyKpi.ts); holding them
+  // to a daily number scored the day against other people's inboxes.
+  //
+  // The defaults are the targets the page shipped with, the monthly pair
+  // carried across at twenty working days to the month — the same standard,
+  // over the timeframe that can actually carry it.
+  qualifiedLeadsGoal         Int @default(20)
+  connectionsSentGoal        Int @default(50)
+  repliesReceivedMonthlyGoal Int @default(200)
+  meetingsBookedMonthlyGoal  Int @default(60)
 
   updatedAt DateTime @updatedAt
 }

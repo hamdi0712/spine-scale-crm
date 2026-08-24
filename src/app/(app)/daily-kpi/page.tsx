@@ -5,16 +5,21 @@ import {
   parseDayKey,
 } from "@/lib/dailyChecklist";
 import {
+  DAILY_GOAL_KEYS,
+  DAILY_KPI_HUES,
   DAILY_KPI_KEYS,
   DAILY_KPI_LABELS,
-  DAILY_KPI_HUES,
   DAILY_KPI_TREND_DAYS,
   DailyKpiDay,
-  DailyKpiKey,
+  MONTHLY_GOAL_KEYS,
+  MonthlyPace,
   allGoalsMet,
   averageFor,
   dailyScore,
   emptyCounts,
+  isMonthly,
+  monthStart,
+  monthlyPace,
   pctChange,
   progressPct,
   scoreNote,
@@ -25,7 +30,7 @@ import {
 import { loadDailyKpiGoals, loadDailyKpiRange } from "@/lib/dailyKpiStore";
 import { saveDailyKpiGoals } from "@/lib/actions/dailyKpi";
 import { fmtDate } from "@/lib/format";
-import DailyKpiCard from "@/components/DailyKpiCard";
+import DailyKpiCard, { KpiMark } from "@/components/DailyKpiCard";
 import DailyKpiGoalsForm from "@/components/DailyKpiGoalsForm";
 import DailyKpiTrend, { DailyKpiPoint } from "@/components/DailyKpiTrend";
 import DayPicker from "@/components/DayPicker";
@@ -92,8 +97,27 @@ export default async function DailyKpiPage({
       day: "numeric",
       timeZone: "UTC",
     }),
-    ...d.counts,
+    qualifiedLeads: d.counts.qualifiedLeads,
+    connectionsSent: d.counts.connectionsSent,
   }));
+
+  // ─── Month to date ───────────────────────────────────────────────────────
+  //
+  // What the two monthly metrics are read against. Summed out of the same
+  // history the rest of the page is read from rather than fetched again — the
+  // window already covers this month unless the viewed day is its first.
+
+  const mStart = monthStart(day);
+  const monthDays = Math.round((day.getTime() - mStart.getTime()) / 86400000) + 1;
+  const monthToDate = sumCounts(
+    Array.from({ length: monthDays }, (_, i) => on(addDays(mStart, i)).counts),
+  );
+  const pace = Object.fromEntries(
+    MONTHLY_GOAL_KEYS.map((key) => [
+      key,
+      monthlyPace(monthToDate[key], goals[key], day),
+    ]),
+  ) as Record<string, MonthlyPace>;
 
   // ─── Score and streak ────────────────────────────────────────────────────
 
@@ -129,7 +153,7 @@ export default async function DailyKpiPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="display text-2xl font-semibold">Daily KPI</h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="mt-1.5 text-sm font-normal text-muted">
             Track your daily progress. Small actions compound into clinic
             growth.
           </p>
@@ -179,34 +203,46 @@ export default async function DailyKpiPage({
         </p>
       )}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {DAILY_KPI_KEYS.map((key) => (
-          <DailyKpiCard
-            key={key}
-            metric={key}
-            count={counts[key]}
-            goal={goals[key]}
-            yesterday={yesterday[key]}
-            isToday={isToday}
-          />
-        ))}
+      {/* Tighter than the dashboard's headline row: four compact tiles on
+          one line, at the gap the rest of this page's rows use. */}
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {DAILY_KPI_KEYS.map((key) => {
+          const monthly = isMonthly(key);
+          return (
+            <DailyKpiCard
+              key={key}
+              metric={key}
+              count={monthly ? monthToDate[key] : counts[key]}
+              goal={goals[key]}
+              yesterday={yesterday[key]}
+              isToday={isToday}
+              pace={monthly ? pace[key] : undefined}
+            />
+          );
+        })}
       </div>
 
       <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4">
         <section className="card p-6 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="display text-xl font-semibold">
-              Daily progress overview
-            </h2>
+            <div>
+              <h2 className="display text-xl font-semibold">
+                Daily progress overview
+              </h2>
+              <p className="mt-0.5 text-xs font-normal text-muted">
+                The two metrics held to a daily goal
+              </p>
+            </div>
             <span className="chip-stat">Last {DAILY_KPI_TREND_DAYS} days</span>
           </div>
           <DailyKpiTrend data={trend} />
         </section>
 
-        {/* The score. One ring, one line of encouragement, and no second
-            statistic — a composite that needs explaining beside it is not
-            doing its job. What it is, is the average of the four percentages
-            with each capped at 100 first (src/lib/dailyKpi.ts). */}
+        {/* The score. One ring, one line of encouragement, and the monthly
+            pair kept out of it: it is the average of the two daily metrics'
+            percentages, each capped at 100 first (src/lib/dailyKpi.ts). A day
+            where the outreach went out and nobody replied is a day's work
+            done, and the score says so. */}
         <section className="card flex flex-col items-center p-6 text-center">
           <h2 className="display self-start text-xl font-semibold">
             {isToday ? "Today’s score" : "Score"}
@@ -229,15 +265,40 @@ export default async function DailyKpiPage({
               {note.detail}
             </p>
           </div>
+
+          {/* The monthly pair, for reference and not for scoring. It sits
+              below a rule rather than in the ring: a reply is somebody else's
+              to send, and the moment it counts toward a day's score the score
+              stops being a reading of the work. */}
+          <div className="w-full border-t border-line/60 pt-3 text-left">
+            {MONTHLY_GOAL_KEYS.map((key) => (
+              <div
+                key={key}
+                className="flex items-center gap-2 py-1 text-[11px] font-normal text-muted"
+              >
+                <span
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: DAILY_KPI_HUES[key] }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {DAILY_KPI_LABELS[key]}
+                </span>
+                <span className="num shrink-0">
+                  on pace for {pace[key].projected}/{pace[key].goal}
+                </span>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="card p-6">
           <h2 className="display text-xl font-semibold">Weekly summary</h2>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs font-normal text-muted">
             Week to date vs the same days last week
           </p>
           <ul className="mt-4 space-y-3">
-            {DAILY_KPI_KEYS.map((key) => {
+            {DAILY_GOAL_KEYS.map((key) => {
               const change = pctChange(thisWeek[key], priorWeek[key]);
               return (
                 <li key={key} className="flex items-center gap-2.5">
@@ -246,7 +307,7 @@ export default async function DailyKpiPage({
                     style={{ background: DAILY_KPI_HUES[key] }}
                     aria-hidden
                   />
-                  <span className="min-w-0 flex-1 truncate text-xs text-muted">
+                  <span className="min-w-0 flex-1 truncate text-xs font-normal text-muted">
                     {DAILY_KPI_LABELS[key]}
                   </span>
                   <span className="num shrink-0 text-xs font-semibold">
@@ -276,6 +337,38 @@ export default async function DailyKpiPage({
               );
             })}
           </ul>
+
+          {/* The monthly pair is not a week's work, so it is not reported as
+              one: month to date against the monthly goal, and the pace that
+              implies. Same rows, a different question. */}
+          <p className="mt-5 border-t border-line/60 pt-4 text-xs font-normal text-muted">
+            Month to date vs the monthly goal
+          </p>
+          <ul className="mt-3 space-y-3">
+            {MONTHLY_GOAL_KEYS.map((key) => (
+              <li key={key} className="flex items-center gap-2.5">
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: DAILY_KPI_HUES[key] }}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate text-xs font-normal text-muted">
+                  {DAILY_KPI_LABELS[key]}
+                </span>
+                <span className="num shrink-0 text-xs font-semibold">
+                  {pace[key].monthToDate}
+                  <span className="font-normal text-muted">/{pace[key].goal}</span>
+                </span>
+                <span
+                  className={`num flex w-12 shrink-0 justify-end text-xs ${
+                    pace[key].onTrack ? "text-ok" : "text-muted"
+                  }`}
+                >
+                  {pace[key].pct}%
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       </div>
 
@@ -285,9 +378,8 @@ export default async function DailyKpiPage({
             <h2 className="display text-xl font-semibold">
               Daily KPI breakdown
             </h2>
-            <p className="mt-0.5 text-xs text-muted">
-              Goal, the three days before, {isToday ? "today" : dayLabel}, and
-              the {DAILY_KPI_TREND_DAYS}-day average
+            <p className="mt-0.5 text-xs font-normal text-muted">
+              Daily metrics by day; the monthly pair month to date
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -316,55 +408,85 @@ export default async function DailyKpiPage({
               <tbody>
                 {DAILY_KPI_KEYS.map((key) => {
                   const hue = DAILY_KPI_HUES[key];
-                  const met = counts[key] >= goals[key];
+                  const monthly = isMonthly(key);
+                  const met = monthly
+                    ? pace[key].onTrack
+                    : counts[key] >= goals[key];
                   return (
                     <tr key={key}>
                       <td className="td">
                         <div className="flex items-center gap-2.5">
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ background: hue }}
-                            aria-hidden
-                          />
+                          {/* The same flat two-tone mark the cards carry, at
+                              table size — one object, drawn once, in
+                              DailyKpiCard. */}
+                          <KpiMark metric={key} size={26} />
                           <div className="min-w-0">
-                            <div className="truncate text-sm">
+                            <div className="truncate text-sm font-normal">
                               {DAILY_KPI_LABELS[key]}
                             </div>
-                            <div className="text-xs text-muted">
-                              {progressPct(counts[key], goals[key])}% of goal
+                            <div className="text-xs font-normal text-muted">
+                              {monthly
+                                ? `${pace[key].pct}% of the monthly goal`
+                                : `${progressPct(counts[key], goals[key])}% of goal`}
                             </div>
                           </div>
                         </div>
                       </td>
                       <td className="td num text-right text-muted">
                         {goals[key]}
-                      </td>
-                      {recent.map((d) => (
-                        <td
-                          key={d.day.getTime()}
-                          className="td num text-right text-muted"
-                        >
-                          {d.counts[key]}
-                        </td>
-                      ))}
-                      {/* The viewed day is the column the row is about, so it
-                          is the one that carries the metric's own colour —
-                          softly when the goal is not met yet, because a tint
-                          is a highlight and not a verdict. */}
-                      <td className="td text-right">
-                        <span
-                          className="num inline-flex min-w-[46px] justify-center rounded-lg px-2 py-1 text-sm font-semibold"
-                          style={{
-                            color: hue,
-                            background: met ? `${hue}1F` : `${hue}12`,
-                          }}
-                        >
-                          {counts[key]}
+                        <span className="ml-1 text-xs">
+                          {monthly ? "/mo" : "/day"}
                         </span>
                       </td>
-                      <td className="td num text-right font-medium">
-                        {averageFor(trendDays, key)}
-                      </td>
+
+                      {monthly ? (
+                        /* A monthly metric has no daily actual worth reading,
+                           so it does not pretend to one: the day columns give
+                           way to the month it is actually judged over. */
+                        <td
+                          className="td text-right text-sm font-normal text-muted"
+                          colSpan={recent.length + 2}
+                        >
+                          <span className="num font-semibold text-ink">
+                            {pace[key].monthToDate}
+                          </span>{" "}
+                          this month · on pace for{" "}
+                          <span
+                            className={`num ${met ? "text-ok" : "text-muted"}`}
+                          >
+                            {pace[key].projected}/{pace[key].goal}
+                          </span>
+                        </td>
+                      ) : (
+                        <>
+                          {recent.map((d) => (
+                            <td
+                              key={d.day.getTime()}
+                              className="td num text-right text-muted"
+                            >
+                              {d.counts[key]}
+                            </td>
+                          ))}
+                          {/* The viewed day is the column the row is about, so
+                              it is the one that carries the metric's own
+                              colour — softly when the goal is not met yet,
+                              because a tint is a highlight and not a verdict. */}
+                          <td className="td text-right">
+                            <span
+                              className="num inline-flex min-w-[46px] justify-center rounded-lg px-2 py-1 text-sm font-semibold"
+                              style={{
+                                color: hue,
+                                background: met ? `${hue}1F` : `${hue}12`,
+                              }}
+                            >
+                              {counts[key]}
+                            </span>
+                          </td>
+                          <td className="td num text-right font-medium">
+                            {averageFor(trendDays, key)}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}
@@ -374,9 +496,10 @@ export default async function DailyKpiPage({
         </section>
 
         {/* The streak. Counted from the same daily counts as everything else —
-            consecutive days on which all four goals were met — with today
+            consecutive days on which both daily goals were met — with today
             counted while it is still in progress and never counted against the
-            run behind it (src/lib/dailyKpi.ts). */}
+            run behind it. The monthly pair is not in it: a day cannot meet or
+            miss a monthly goal (src/lib/dailyKpi.ts). */}
         <section className="card flex flex-col items-center p-6 text-center">
           <h2 className="display self-start text-xl font-semibold">
             Keep the streak 🔥
@@ -398,10 +521,10 @@ export default async function DailyKpiPage({
             </ProgressRing>
             <p className="mt-4 text-xs leading-relaxed text-muted">
               {streak === 0
-                ? "No run going. Hit all four goals in a day to start one."
+                ? "No run going. Hit both daily goals in a day to start one."
                 : metToday
-                  ? `All four goals hit ${streak} ${streak === 1 ? "day" : "days"} in a row.`
-                  : `${streak} ${streak === 1 ? "day" : "days"} in a row behind you — hit all four ${isToday ? "today" : "that day"} to keep it.`}
+                  ? `Both daily goals hit ${streak} ${streak === 1 ? "day" : "days"} in a row.`
+                  : `${streak} ${streak === 1 ? "day" : "days"} in a row behind you — hit both daily goals ${isToday ? "today" : "that day"} to keep it.`}
             </p>
           </div>
           <Link href="/activities?view=checklist" className="btn w-full justify-center">
