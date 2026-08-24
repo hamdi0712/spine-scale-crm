@@ -14,7 +14,7 @@
 // stay where they were put.
 
 import { prisma } from "@/lib/prisma";
-import { addDays, toChecklistDay } from "@/lib/dailyChecklist";
+import { addDays } from "@/lib/dailyChecklist";
 import { leadTier } from "@/lib/icp";
 import {
   DAILY_KPI_SETTINGS_ID,
@@ -22,8 +22,10 @@ import {
   DailyKpiDay,
   DailyKpiGoals,
   dailyKpiGoalsRow,
+  DailyKpiKey,
   emptyCounts,
   readDailyKpiGoals,
+  toUtcDay,
 } from "@/lib/dailyKpi";
 
 // ─── The goals row ─────────────────────────────────────────────────────────
@@ -62,8 +64,8 @@ export async function loadDailyKpiRange(
   from: Date,
   through: Date,
 ): Promise<DailyKpiDay[]> {
-  const start = toChecklistDay(from);
-  const end = addDays(toChecklistDay(through), 1); // exclusive
+  const start = toUtcDay(from);
+  const end = addDays(toUtcDay(through), 1); // exclusive
   const inRange = { gte: start, lt: end };
 
   const [candidates, scoredLeads, connections, replies, discoveryCalls, booked] =
@@ -141,31 +143,53 @@ export async function loadDailyKpiRange(
     days.push({ day, counts });
   }
 
-  const bucket = (at: Date | null): DailyKpiCounts | undefined =>
-    at ? byKey.get(toChecklistDay(at).getTime()) : undefined;
+  // Which day's counts a record belongs to, read the same way the bounds above
+  // were, so a row the range returned always has a bucket waiting for it.
+  //
+  // It still returns null rather than asserting. Bucketing and fetching agree
+  // now, but a lookup that cannot be answered should fail as a record quietly
+  // uncounted rather than as a page that will not render — the crash this
+  // replaced was a non-null assertion on exactly this call.
+  const bucket = (at: Date | null): DailyKpiCounts | null =>
+    at ? byKey.get(toUtcDay(at).getTime()) ?? null : null;
 
-  for (const c of candidates) bucket(c.processedAt)!.qualifiedLeads++;
+  // One record, into one metric, if it lands anywhere. Every count below goes
+  // through this, so there is one place that decides what happens to a row
+  // that cannot be filed rather than four that each assume it cannot happen.
+  const count = (at: Date | null, key: DailyKpiKey): void => {
+    const counts = bucket(at);
+    if (counts) counts[key]++;
+  };
+
+  for (const c of candidates) count(c.processedAt, "qualifiedLeads");
   for (const lead of scoredLeads) {
     const tier = leadTier({ ...lead, icpScoredAt: lead.icpScoredAt });
-    if (tier === "A" || tier === "B") bucket(lead.icpScoredAt)!.qualifiedLeads++;
+    if (tier === "A" || tier === "B") count(lead.icpScoredAt, "qualifiedLeads");
   }
-  for (const l of connections) bucket(l.connectionRequestSentAt)!.connectionsSent++;
-  for (const l of replies) bucket(l.repliedAt)!.repliesReceived++;
+  for (const l of connections) {
+    count(l.connectionRequestSentAt, "connectionsSent");
+  }
+  for (const l of replies) count(l.repliedAt, "repliesReceived");
 
   // The two halves of a meeting, deduplicated by lead and day: a call logged
   // against a lead is the booking, and the lead's stage move on that same day
   // is the same event seen from the other side.
+  //
+  // The dedupe key is recorded for every call, including one that could not be
+  // counted: a call outside the window must still suppress the stage move
+  // behind it, or a booking dropped at an edge would come back through the
+  // other half as a second one.
   const callDays = new Set<string>();
   for (const call of discoveryCalls) {
-    bucket(call.createdAt)!.meetingsBooked++;
+    count(call.createdAt, "meetingsBooked");
     if (call.leadId) {
-      callDays.add(`${call.leadId}:${toChecklistDay(call.createdAt).getTime()}`);
+      callDays.add(`${call.leadId}:${toUtcDay(call.createdAt).getTime()}`);
     }
   }
   for (const lead of booked) {
-    const key = `${lead.id}:${toChecklistDay(lead.updatedAt).getTime()}`;
+    const key = `${lead.id}:${toUtcDay(lead.updatedAt).getTime()}`;
     if (callDays.has(key)) continue;
-    bucket(lead.updatedAt)!.meetingsBooked++;
+    count(lead.updatedAt, "meetingsBooked");
   }
 
   return days;
