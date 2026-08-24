@@ -21,6 +21,9 @@ import {
 import { saveDailyKpiGoals as write } from "@/lib/dailyKpiStore";
 
 export async function saveDailyKpiGoals(formData: FormData): Promise<void> {
+  // One field per metric, named for the metric rather than for its timeframe —
+  // what the number means is settled by DAILY_KPI_CADENCE, in one place, and
+  // the form only has to say which metric it is posting.
   const goals = Object.fromEntries(
     DAILY_KPI_KEYS.map((key) => [key, readGoal(formData.get(`${key}Goal`), key)]),
   ) as Record<DailyKpiKey, number>;

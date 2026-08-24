@@ -1,14 +1,15 @@
 // One of the Daily KPI page's four goal cards.
 //
-// The same shell as the dashboard's headline row (.card-kpi, the tinted disc,
-// the app's numeric type scale) with the one thing that row does not have: a
-// goal. The number is read against it twice over — as current/goal, and as the
-// ring beside it — and the line underneath says which way the day moved
-// compared with the same count yesterday.
+// Two shapes, one card. A daily metric shows today against today's goal and
+// how it moved since yesterday; a monthly one shows month to date against a
+// monthly goal and the pace that implies. Which is which is settled by
+// DAILY_KPI_CADENCE (src/lib/dailyKpi.ts) and never by the caller.
 //
-// Yesterday's count is a real query over yesterday, not a stored snapshot: all
-// four metrics are read off timestamped records, so "yesterday" is the same
-// question asked about a different day (src/lib/dailyKpiStore.ts).
+// Deliberately not the dashboard's KpiCard. That row's tinted disc is a
+// gradient with a halo behind it — a lit object, sized for four headline
+// numbers on the page a day starts from. This page carries the same four ideas
+// at working density: a flat two-tone disc, the sidebar's own type, and
+// padding tight enough that the number and its ring read as one object.
 
 import {
   IconCalendarCheck,
@@ -23,12 +24,13 @@ import {
   DAILY_KPI_HUES,
   DAILY_KPI_LABELS,
   DailyKpiKey,
+  MonthlyPace,
   progressPct,
 } from "@/lib/dailyKpi";
 
-// Tabler at the sidebar's 1.75 stroke, the same four glyphs the dashboard's
-// KPI row uses for the same four ideas — a clinic qualified, a request sent, a
-// reply, a call booked.
+// Tabler at the sidebar's 1.75 stroke, the same four glyphs the dashboard uses
+// for the same four ideas — a clinic qualified, a request sent, a reply, a call
+// booked.
 const GLYPHS: Record<DailyKpiKey, typeof IconTargetArrow> = {
   qualifiedLeads: IconTargetArrow,
   connectionsSent: IconUserPlus,
@@ -36,11 +38,31 @@ const GLYPHS: Record<DailyKpiKey, typeof IconTargetArrow> = {
   meetingsBooked: IconCalendarCheck,
 };
 
-// Hex → rgba, so the disc's wash and halo come from the one hue named in
-// src/lib/dailyKpi.ts rather than from a second set of colours.
-function alpha(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+// The disc a glyph sits in: one flat wash of the metric's own hue, no gradient
+// and no halo. Exported because the chart legend and the breakdown table draw
+// the same mark, and three copies of a colour rule is how they drift apart.
+export function KpiMark({
+  metric,
+  size = 34,
+}: {
+  metric: DailyKpiKey;
+  size?: number;
+}) {
+  const hue = DAILY_KPI_HUES[metric];
+  const Glyph = GLYPHS[metric];
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-full"
+      style={{
+        width: size,
+        height: size,
+        color: hue,
+        background: `${hue}1A`, // the hue at 10%, flat
+      }}
+    >
+      <Glyph size={Math.round(size * 0.5)} stroke={1.75} aria-hidden />
+    </span>
+  );
 }
 
 export default function DailyKpiCard({
@@ -49,81 +71,98 @@ export default function DailyKpiCard({
   goal,
   yesterday,
   isToday,
+  pace,
 }: {
   metric: DailyKpiKey;
+  // Today's count and today's goal for a daily metric; month to date and the
+  // monthly goal for a monthly one. The card reads the same either way — what
+  // changes is the line under it.
   count: number;
   goal: number;
   yesterday: number;
   isToday: boolean;
+  // Present on a monthly metric and absent on a daily one, which is what the
+  // card branches on.
+  pace?: MonthlyPace;
 }) {
   const hue = DAILY_KPI_HUES[metric];
-  const Glyph = GLYPHS[metric];
   const pct = progressPct(count, goal);
   const delta = count - yesterday;
 
   return (
-    <div className="card-kpi p-5">
+    <div className="card-kpi px-4 py-3.5">
       <div className="flex items-center gap-2.5">
-        <div
-          className="kpi-mark"
-          style={
-            {
-              color: hue,
-              background: `linear-gradient(140deg, ${alpha(hue, 0.2)}, ${alpha(hue, 0.09)})`,
-              "--mark-halo": alpha(hue, 0.1),
-            } as React.CSSProperties
-          }
-        >
-          <Glyph size={17} stroke={1.75} aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1 text-xs font-medium leading-snug tracking-[0.02em] text-muted">
-          {DAILY_KPI_LABELS[metric]}
-        </div>
-      </div>
-
-      {/* The count, the goal and the ring on one line: three readings of the
-          same thing, so they sit together rather than stacking. The count and
-          the goal are one phrase — the number at the page’s headline size and
-          the goal beside it in the muted tier. */}
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="num flex items-baseline gap-1.5 leading-none">
-          <span className="text-[28px] font-semibold tracking-tight">
-            {count}
-          </span>
-          <span className="text-sm font-medium text-muted">/ {goal}</span>
+        <KpiMark metric={metric} />
+        <div className="min-w-0 flex-1">
+          {/* The sidebar's own type: 14px, regular weight, no extra tracking.
+              A label here is a name for a number, exactly as a nav item is a
+              name for a page, and it should not be set louder than one. */}
+          <div className="truncate text-sm font-normal leading-tight text-muted">
+            {DAILY_KPI_LABELS[metric]}
+          </div>
+          <div className="num mt-1 flex items-baseline gap-1 leading-none">
+            <span className="text-[22px] font-semibold tracking-tight">
+              {count}
+            </span>
+            <span className="text-xs font-normal text-muted">/ {goal}</span>
+            {pace && (
+              <span className="text-xs font-normal text-muted">this month</span>
+            )}
+          </div>
         </div>
 
         <ProgressRing
           pct={pct}
           hue={hue}
-          label={`${DAILY_KPI_LABELS[metric]}: ${count} of ${goal}, ${pct}% of goal`}
+          size={44}
+          stroke={5}
+          label={
+            pace
+              ? `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal} this month, ${pct}% of goal`
+              : `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal}, ${pct}% of goal`
+          }
         >
-          <span className="num text-[12px] font-semibold" style={{ color: hue }}>
+          <span
+            className="num text-[11px] font-semibold"
+            style={{ color: hue }}
+          >
             {pct}%
           </span>
         </ProgressRing>
       </div>
 
-      {/* The comparison line. An arrow shows for a rise and for nothing else —
-          a fall wearing an up arrow would be a lie told in an icon, which is
-          the rule the dashboard's delta line already follows. */}
-      <div
-        className={`mt-3 flex items-center gap-1 text-xs ${
-          delta > 0 ? "text-ok" : delta < 0 ? "text-bad" : "text-muted"
-        }`}
-      >
-        {delta !== 0 && (
-          <Icon
-            name={delta > 0 ? "arrowUp" : "arrowDown"}
-            className="h-3.5 w-3.5"
-          />
-        )}
-        {delta === 0
-          ? `Level with ${isToday ? "yesterday" : "the day before"}`
-          : `${Math.abs(delta)} vs ${isToday ? "yesterday" : "the day before"}`}
-      </div>
+      {/* The line under the number. A monthly metric says where the month is
+          heading; a daily one says which way today moved. An arrow shows for a
+          rise and for nothing else — a fall wearing an up arrow would be a lie
+          told in an icon. */}
+      {pace ? (
+        <div
+          className={`mt-2.5 flex items-center gap-1 text-xs font-normal ${
+            pace.onTrack ? "text-ok" : "text-muted"
+          }`}
+        >
+          {pace.onTrack && <Icon name="arrowUp" className="h-3.5 w-3.5" />}
+          On pace for {pace.projected}/{pace.goal} this month
+        </div>
+      ) : (
+        <div
+          className={`mt-2.5 flex items-center gap-1 text-xs font-normal ${
+            delta > 0 ? "text-ok" : delta < 0 ? "text-bad" : "text-muted"
+          }`}
+        >
+          {delta !== 0 && (
+            <Icon
+              name={delta > 0 ? "arrowUp" : "arrowDown"}
+              className="h-3.5 w-3.5"
+            />
+          )}
+          {delta === 0
+            ? `Level with ${isToday ? "yesterday" : "the day before"}`
+            : `${Math.abs(delta)} vs ${isToday ? "yesterday" : "the day before"}`}
+        </div>
+      )}
 
-      <div className="mt-1 text-[11px] leading-relaxed text-muted">
+      <div className="mt-0.5 text-[11px] font-normal leading-relaxed text-muted/90">
         {DAILY_KPI_BLURBS[metric]}
       </div>
     </div>
