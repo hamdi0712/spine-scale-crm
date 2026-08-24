@@ -1,7 +1,7 @@
 "use client";
 
-// The four daily goals — a plain form posting a server action, like every
-// other settings-shaped form in the app.
+// The four goals — two a day, two a month — as a plain form posting a server
+// action, like every other settings-shaped form in the app.
 //
 // It is a client component for the reason the pipeline settings form is one:
 // the save bar should say whether what is on screen has been saved, which
@@ -18,6 +18,7 @@ import {
   DAILY_KPI_LABELS,
   DEFAULT_DAILY_KPI_GOALS,
   DailyKpiGoals,
+  isMonthly,
 } from "@/lib/dailyKpi";
 
 export default function DailyKpiGoalsForm({
@@ -33,10 +34,11 @@ export default function DailyKpiGoalsForm({
     <form action={save} className="card p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="display text-xl font-semibold">Daily goals</h2>
+          <h2 className="display text-xl font-semibold">Goals</h2>
           <p className="mt-1 text-sm text-muted">
-            What a full day looks like. A goal of 0 takes a metric out of the
-            score and the streak without taking it off the page.
+            What a full day looks like for the work you control, and a full
+            month for the answers it earns. A goal of 0 takes a metric out of
+            the score and the streak without taking it off the page.
           </p>
         </div>
       </div>
@@ -46,6 +48,12 @@ export default function DailyKpiGoalsForm({
           <div key={key}>
             <label className="field-label" htmlFor={`${key}Goal`}>
               {DAILY_KPI_LABELS[key]}
+              {/* The timeframe rides on the field, because a bare number in a
+                  box is the one place the difference between ten a day and ten
+                  a month is invisible. */}
+              <span className="ml-1.5 font-normal normal-case text-muted/80">
+                {isMonthly(key) ? "per month" : "per day"}
+              </span>
             </label>
             <input
               id={`${key}Goal`}
@@ -118,8 +126,8 @@ function SaveBar({
       </button>
       <p className="text-xs leading-relaxed text-muted">
         {changed
-          ? "Unsaved changes — the day is still measured against the saved goals."
-          : "Saved. Every day on this page is measured against these."}
+          ? "Unsaved changes — the page is still measured against the saved goals."
+          : "Saved. Every day and month on this page is measured against these."}
       </p>
     </div>
   );

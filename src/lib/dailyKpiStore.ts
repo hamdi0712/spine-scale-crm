@@ -24,7 +24,9 @@ import {
   dailyKpiGoalsRow,
   DailyKpiKey,
   emptyCounts,
+  monthStart,
   readDailyKpiGoals,
+  sumCounts,
   toUtcDay,
 } from "@/lib/dailyKpi";
 
@@ -199,4 +201,12 @@ export async function loadDailyKpiRange(
 export async function loadDailyKpiCounts(day: Date): Promise<DailyKpiCounts> {
   const [only] = await loadDailyKpiRange(day, day);
   return only.counts;
+}
+
+// Month to date, up to and including the day given — what the two monthly
+// metrics are read against. The same pass over the days of one month, summed,
+// so a month total and a day total can never be counted two different ways.
+export async function loadMonthToDate(day: Date): Promise<DailyKpiCounts> {
+  const days = await loadDailyKpiRange(monthStart(day), day);
+  return sumCounts(days.map((d) => d.counts));
 }
