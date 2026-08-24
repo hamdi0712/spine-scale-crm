@@ -14,17 +14,18 @@
 // stay where they were put.
 
 import { prisma } from "@/lib/prisma";
-import { addDays, toChecklistDay } from "@/lib/dailyChecklist";
+import { addDays } from "@/lib/dailyChecklist";
 import { leadTier } from "@/lib/icp";
 import {
   DAILY_KPI_SETTINGS_ID,
   DailyKpiCounts,
   DailyKpiDay,
   DailyKpiGoals,
-  DailyKpiKey,
   dailyKpiGoalsRow,
+  DailyKpiKey,
   emptyCounts,
   readDailyKpiGoals,
+  toUtcDay,
 } from "@/lib/dailyKpi";
 
 // ─── The goals row ─────────────────────────────────────────────────────────
@@ -63,8 +64,8 @@ export async function loadDailyKpiRange(
   from: Date,
   through: Date,
 ): Promise<DailyKpiDay[]> {
-  const start = toChecklistDay(from);
-  const end = addDays(toChecklistDay(through), 1); // exclusive
+  const start = toUtcDay(from);
+  const end = addDays(toUtcDay(through), 1); // exclusive
   const inRange = { gte: start, lt: end };
 
   const [candidates, scoredLeads, connections, replies, discoveryCalls, booked] =
@@ -142,21 +143,19 @@ export async function loadDailyKpiRange(
     days.push({ day, counts });
   }
 
-  // Which day's counts a record belongs to, or null when it belongs to none.
+  // Which day's counts a record belongs to, read the same way the bounds above
+  // were, so a row the range returned always has a bucket waiting for it.
   //
-  // A record read back from a range query is normally inside that range, but
-  // "normally" is not "always": the day a timestamp is filed under is its UTC
-  // midnight read off the server's local calendar (toChecklistDay), and near
-  // either edge of the window that reading can land a row one day outside the
-  // buckets the range built. A row that cannot be filed is dropped rather than
-  // counted somewhere it does not belong — which is also the only honest thing
-  // to do with it, since the day it belongs to is not on screen.
+  // It still returns null rather than asserting. Bucketing and fetching agree
+  // now, but a lookup that cannot be answered should fail as a record quietly
+  // uncounted rather than as a page that will not render — the crash this
+  // replaced was a non-null assertion on exactly this call.
   const bucket = (at: Date | null): DailyKpiCounts | null =>
-    at ? byKey.get(toChecklistDay(at).getTime()) ?? null : null;
+    at ? byKey.get(toUtcDay(at).getTime()) ?? null : null;
 
   // One record, into one metric, if it lands anywhere. Every count below goes
-  // through this, so there is one place where an unbucketable row is ignored
-  // rather than four assertions that each assume it cannot happen.
+  // through this, so there is one place that decides what happens to a row
+  // that cannot be filed rather than four that each assume it cannot happen.
   const count = (at: Date | null, key: DailyKpiKey): void => {
     const counts = bucket(at);
     if (counts) counts[key]++;
@@ -176,19 +175,19 @@ export async function loadDailyKpiRange(
   // against a lead is the booking, and the lead's stage move on that same day
   // is the same event seen from the other side.
   //
-  // The dedupe key is recorded for every call, including one that fell outside
-  // the window: a call that could not be counted must still suppress the stage
-  // move behind it, or a booking dropped at one edge would come back through
-  // the other half as a second one.
+  // The dedupe key is recorded for every call, including one that could not be
+  // counted: a call outside the window must still suppress the stage move
+  // behind it, or a booking dropped at an edge would come back through the
+  // other half as a second one.
   const callDays = new Set<string>();
   for (const call of discoveryCalls) {
     count(call.createdAt, "meetingsBooked");
     if (call.leadId) {
-      callDays.add(`${call.leadId}:${toChecklistDay(call.createdAt).getTime()}`);
+      callDays.add(`${call.leadId}:${toUtcDay(call.createdAt).getTime()}`);
     }
   }
   for (const lead of booked) {
-    const key = `${lead.id}:${toChecklistDay(lead.updatedAt).getTime()}`;
+    const key = `${lead.id}:${toUtcDay(lead.updatedAt).getTime()}`;
     if (callDays.has(key)) continue;
     count(lead.updatedAt, "meetingsBooked");
   }

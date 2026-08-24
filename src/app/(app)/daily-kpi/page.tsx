@@ -3,7 +3,6 @@ import {
   addDays,
   dayKey as toDayKey,
   parseDayKey,
-  toChecklistDay,
 } from "@/lib/dailyChecklist";
 import {
   DAILY_KPI_KEYS,
@@ -21,6 +20,7 @@ import {
   scoreNote,
   streakLength,
   sumCounts,
+  toUtcDay,
 } from "@/lib/dailyKpi";
 import { loadDailyKpiGoals, loadDailyKpiRange } from "@/lib/dailyKpiStore";
 import { saveDailyKpiGoals } from "@/lib/actions/dailyKpi";
@@ -63,7 +63,10 @@ export default async function DailyKpiPage({
   searchParams: { date?: string };
 }) {
   const now = new Date();
-  const today = toChecklistDay(now);
+  // Today read in UTC, the same reading the counts are filed under. Read off
+  // the local calendar instead, "today" east of UTC would be a day the store
+  // has no bucket for — which is what made this page throw.
+  const today = toUtcDay(now);
   // A ?date= in the future would show a day that has not happened, so it is
   // pulled back to today the same way a junk one is.
   const asked = parseDayKey(searchParams.date, now);

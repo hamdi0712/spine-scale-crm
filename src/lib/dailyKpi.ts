@@ -190,6 +190,23 @@ export function scoreNote(score: number): { headline: string; detail: string } {
 
 // ─── Days, weeks, streaks ──────────────────────────────────────────────────
 
+// The day an instant belongs to, read in UTC.
+//
+// Deliberately not toChecklistDay (src/lib/dailyChecklist.ts), which builds a
+// UTC midnight out of the *local* calendar fields of the instant it is handed.
+// That is right for the thing it was written for — a day the person in front
+// of the app is living through, keyed the same way whichever page asks — but
+// it is wrong for filing a stored timestamp: run anywhere east of UTC, an
+// instant at 23:30 UTC on the 21st reads as the 22nd, so a record files under
+// a day the range that fetched it never built a bucket for.
+//
+// Every day on this page — the viewed day, the range bounds, and the day each
+// record is filed under — is read through this one function, so the three can
+// no longer disagree.
+export function toUtcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
 // One day's counts with the day they belong to. The order is always oldest
 // first, which is the order the chart and the breakdown table both read in.
 export interface DailyKpiDay {
