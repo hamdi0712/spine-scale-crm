@@ -26,7 +26,7 @@ import { IcpAnswers, leadTier } from "@/lib/icp";
 // do the work this week", so it is short enough that a quiet week shows;
 // the rate needs more than a week of replies before a percentage means
 // anything, and a month is the shortest window that usually has some.
-export const CONNECTIONS_WINDOW_DAYS = 7;
+export const MESSAGES_WINDOW_DAYS = 7;
 export const REPLY_RATE_WINDOW_DAYS = 30;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -77,38 +77,56 @@ export function qualifiedSubtitle(q: QualifiedLeads): string {
   return `${q.untouched} to approach, ${q.contacted} in play`;
 }
 
-// ─── Card 2 — Connections sent ─────────────────────────────────────────────
+// ─── Card 2 — Messages sent ────────────────────────────────────────────────
 
+// Leads that have reached the Contacted stage, counted off the pipeline rather
+// than off connectionRequestSentAt.
+//
+// The stage is the record of the approach. connectionRequestSentAt was one
+// optional field somebody had to remember to tick, and a lead dragged into
+// Contacted on the board — the way the work actually gets logged — left it
+// null, so the card under-reported the outreach it existed to report. A lead
+// standing at Contacted or past it was written to; that is the fact the number
+// is made of.
+//
+// Which stages count is CONTACTED_STAGES (src/lib/constants.ts), and Lost is
+// not among them for the reason stated there.
+//
+// Lead carries no stage-change timestamp, so the day a message is filed under
+// is the lead's updatedAt — the closest honest reading, and the same one the
+// Daily KPI store takes. It is approximate in one direction: a lead edited for
+// some other reason moves into the week of that edit.
+//
 // This week against the week before it. Both windows are the same length and
 // the second sits immediately behind the first, so the comparison is like for
 // like — the one claim a "+3 vs last week" has to earn.
-export interface ConnectionsSent {
+export interface MessagesSent {
   thisWeek: number;
   lastWeek: number;
 }
 
-export function connectionsSent(
-  leads: { connectionRequestSentAt: Date | null }[],
+export function messagesSent(
+  leads: { updatedAt: Date }[],
   now: Date,
-): ConnectionsSent {
-  const weekAgo = daysAgo(now, CONNECTIONS_WINDOW_DAYS);
-  const twoWeeksAgo = daysAgo(now, CONNECTIONS_WINDOW_DAYS * 2);
-  const sent = leads
-    .map((l) => l.connectionRequestSentAt)
-    .filter((d): d is Date => d !== null);
+): MessagesSent {
+  const weekAgo = daysAgo(now, MESSAGES_WINDOW_DAYS);
+  const twoWeeksAgo = daysAgo(now, MESSAGES_WINDOW_DAYS * 2);
+  const sent = leads.map((l) => l.updatedAt);
   return {
     thisWeek: sent.filter((d) => d >= weekAgo).length,
     lastWeek: sent.filter((d) => d >= twoWeeksAgo && d < weekAgo).length,
   };
 }
 
-export function connectionsSubtitle(c: ConnectionsSent): string {
+export function messagesSubtitle(c: MessagesSent): string {
   const diff = c.thisWeek - c.lastWeek;
   // A first week has nothing behind it, so it says what it is rather than
   // claiming a rise from a week that never happened.
   if (c.lastWeek === 0 && c.thisWeek === 0) return "None sent this week";
-  if (c.lastWeek === 0) return "Connection requests sent";
+  if (c.lastWeek === 0) return "Leads moved to Contacted";
   if (diff === 0) return "Same as last week";
+  // The sign is in the text because the card only draws an arrow for a rise;
+  // a fall with neither would not say which way it went.
   return `${diff > 0 ? "+" : "−"}${Math.abs(diff)} vs last week`;
 }
 

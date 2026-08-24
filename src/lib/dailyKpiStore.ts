@@ -15,6 +15,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { addDays } from "@/lib/dailyChecklist";
+import { CONTACTED_STAGES } from "@/lib/constants";
 import { leadTier } from "@/lib/icp";
 import {
   DAILY_KPI_SETTINGS_ID,
@@ -70,7 +71,7 @@ export async function loadDailyKpiRange(
   const end = addDays(toUtcDay(through), 1); // exclusive
   const inRange = { gte: start, lt: end };
 
-  const [candidates, scoredLeads, connections, replies, discoveryCalls, booked] =
+  const [candidates, scoredLeads, messaged, replies, discoveryCalls, booked] =
     await Promise.all([
       // Qualified — the discovery half. A candidate that came out of the queue
       // at A or B tier on that day cleared the bar, whether or not anybody has
@@ -102,9 +103,20 @@ export async function loadDailyKpiRange(
           icpGapRemarketing: true,
         },
       }),
+      // Messages sent — leads that have reached the Contacted stage
+      // (CONTACTED_STAGES in src/lib/constants.ts), filed under the day they
+      // were last touched.
+      //
+      // The stage is the record of the approach rather than
+      // connectionRequestSentAt, which was one optional field on the lead that
+      // only counted what somebody remembered to tick. Lead carries no
+      // stage-change timestamp, so updatedAt is the closest honest reading of
+      // when the message went out — the same reading the meetings half below
+      // takes of a lead sitting at Discovery Call Booked, and it has the same
+      // limit: a lead edited later moves with its last edit.
       prisma.lead.findMany({
-        where: { connectionRequestSentAt: inRange },
-        select: { connectionRequestSentAt: true },
+        where: { stage: { in: [...CONTACTED_STAGES] }, updatedAt: inRange },
+        select: { updatedAt: true },
       }),
       prisma.lead.findMany({
         where: { repliedAt: inRange },
@@ -168,9 +180,7 @@ export async function loadDailyKpiRange(
     const tier = leadTier({ ...lead, icpScoredAt: lead.icpScoredAt });
     if (tier === "A" || tier === "B") count(lead.icpScoredAt, "qualifiedLeads");
   }
-  for (const l of connections) {
-    count(l.connectionRequestSentAt, "connectionsSent");
-  }
+  for (const l of messaged) count(l.updatedAt, "messagesSent");
   for (const l of replies) count(l.repliedAt, "repliesReceived");
 
   // The two halves of a meeting, deduplicated by lead and day: a call logged

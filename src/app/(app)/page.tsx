@@ -4,16 +4,17 @@ import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_SHORT_LABELS,
   LeadStage,
+  CONTACTED_STAGES,
   OPEN_STAGES,
 } from "@/lib/constants";
 import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
 import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
 import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import {
-  CONNECTIONS_WINDOW_DAYS,
+  MESSAGES_WINDOW_DAYS,
   REPLY_RATE_WINDOW_DAYS,
-  connectionsSent,
-  connectionsSubtitle,
+  messagesSent,
+  messagesSubtitle,
   daysAgo,
   discoveryBooked,
   discoverySubtitle,
@@ -45,7 +46,7 @@ const ACTIVITY_ROWS = 3;
 const HEALTH_ROWS = 2;
 
 // One hue per KPI card, in the order the row runs: qualified leads,
-// connections, replies, calls. Positional rather than keyed off the label,
+// messages, replies, calls. Positional rather than keyed off the label,
 // because the labels are composed below and the row's order is what the reader
 // actually sees. The order itself is unchanged from when the row counted
 // clients and revenue — same four hues, same sequence.
@@ -74,6 +75,7 @@ export default async function DashboardPage() {
     focusTasks,
     activity,
     outreachLeads,
+    contactedLeads,
     discoveryCalls,
   ] = await Promise.all([
     prisma.client.findMany({
@@ -120,7 +122,7 @@ export default async function DashboardPage() {
       orderBy: { createdAt: "desc" },
       take: ACTIVITY_ROWS,
     }),
-    // Outreach activity, for the connections and reply-rate cards. Archived
+    // Outreach activity, for the reply-rate card. Archived
     // leads are included: a request that went out three weeks ago went out
     // whatever happened to the lead since, and leaving them out would make a
     // week look quieter than it was. Bounded by the longer of the two windows.
@@ -129,6 +131,19 @@ export default async function DashboardPage() {
         connectionRequestSentAt: { gte: daysAgo(now, REPLY_RATE_WINDOW_DAYS) },
       },
       select: { connectionRequestSentAt: true, repliedAt: true },
+    }),
+    // Messages sent, for the second card: leads standing at Contacted or past
+    // it, which is what the pipeline records an approach as (see
+    // src/lib/funnel.ts). Archived leads are included for the same reason the
+    // query above includes them — a message sent three weeks ago was sent
+    // whatever happened to the lead since. Bounded by the two windows the card
+    // compares.
+    prisma.lead.findMany({
+      where: {
+        stage: { in: [...CONTACTED_STAGES] },
+        updatedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
+      },
+      select: { updatedAt: true },
     }),
     // The discovery calls on this month's calendar. Counted off the call log
     // rather than off a lead's stage: a stage cannot be un-set when a call is
@@ -153,7 +168,7 @@ export default async function DashboardPage() {
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
 
   const qualified = qualifiedLeads(openLeads);
-  const connections = connectionsSent(outreachLeads, now);
+  const messages = messagesSent(contactedLeads, now);
   const replies = replyRate(outreachLeads, now);
   const discovery = discoveryBooked(discoveryCalls);
 
@@ -168,14 +183,14 @@ export default async function DashboardPage() {
       tone: qualified.untouched > 0 ? "up" : "flat",
     },
     {
-      label: `Connections sent (${CONNECTIONS_WINDOW_DAYS}d)`,
-      value: String(connections.thisWeek),
-      icon: "connections",
-      delta: connectionsSubtitle(connections),
+      label: `Messages sent (${MESSAGES_WINDOW_DAYS}d)`,
+      value: String(messages.thisWeek),
+      icon: "messages",
+      delta: messagesSubtitle(messages),
       // The delta line's only decoration is an up arrow, so it shows for a
       // rise and for nothing else — a fall wearing an up arrow would be a lie
       // told in an icon.
-      tone: connections.thisWeek > connections.lastWeek ? "up" : "flat",
+      tone: messages.thisWeek > messages.lastWeek ? "up" : "flat",
     },
     {
       label: `Reply rate (${REPLY_RATE_WINDOW_DAYS}d)`,

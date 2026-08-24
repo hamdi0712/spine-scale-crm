@@ -1007,7 +1007,7 @@ model DailyKpiSettings {
   // carried across at twenty working days to the month — the same standard,
   // over the timeframe that can actually carry it.
   qualifiedLeadsGoal         Int @default(20)
-  connectionsSentGoal        Int @default(50)
+  messagesSentGoal           Int @default(50)
   repliesReceivedMonthlyGoal Int @default(200)
   meetingsBookedMonthlyGoal  Int @default(60)
 

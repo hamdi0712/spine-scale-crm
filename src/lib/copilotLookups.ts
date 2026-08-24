@@ -48,6 +48,7 @@ import {
   LIBRARY_CATEGORY_LABELS,
   LeadStage,
   LibraryCategory,
+  CONTACTED_STAGES,
   OPEN_STAGES,
 } from "@/lib/constants";
 import {
@@ -124,9 +125,9 @@ import {
 import { readDayRows } from "@/lib/dailyChecklistStore";
 import { loadDailyNumbers } from "@/lib/dailyNumbers";
 import {
-  CONNECTIONS_WINDOW_DAYS,
+  MESSAGES_WINDOW_DAYS,
   REPLY_RATE_WINDOW_DAYS,
-  connectionsSent,
+  messagesSent,
   daysAgo,
   discoveryBooked,
   qualifiedLeads,
@@ -1064,7 +1065,7 @@ export async function getOutreachFunnel(): Promise<unknown> {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [openLeads, outreachLeads, discoveryCalls] = await Promise.all([
+  const [openLeads, outreachLeads, contactedLeads, discoveryCalls] = await Promise.all([
     prisma.lead.findMany({
       where: { archived: false, stage: { in: [...OPEN_STAGES] } },
     }),
@@ -1076,6 +1077,15 @@ export async function getOutreachFunnel(): Promise<unknown> {
         connectionRequestSentAt: { gte: daysAgo(now, REPLY_RATE_WINDOW_DAYS) },
       },
       select: { connectionRequestSentAt: true, repliedAt: true },
+    }),
+    // Messages sent: leads standing at Contacted or past it, which is what the
+    // pipeline records an approach as (src/lib/funnel.ts).
+    prisma.lead.findMany({
+      where: {
+        stage: { in: [...CONTACTED_STAGES] },
+        updatedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
+      },
+      select: { updatedAt: true },
     }),
     // Counted off the call log rather than off a lead's stage, for the reason
     // the dashboard counts them that way: a cancelled or deleted booking should
@@ -1091,7 +1101,7 @@ export async function getOutreachFunnel(): Promise<unknown> {
   ]);
 
   const qualified = qualifiedLeads(openLeads);
-  const connections = connectionsSent(outreachLeads, now);
+  const messages = messagesSent(contactedLeads, now);
   const replies = replyRate(outreachLeads, now);
   const discovery = discoveryBooked(discoveryCalls);
 
@@ -1105,11 +1115,12 @@ export async function getOutreachFunnel(): Promise<unknown> {
       meaning:
         "Open leads scored A or B. C-tier and unscored leads are deliberately not counted.",
     },
-    connectionRequests: {
-      windowDays: CONNECTIONS_WINDOW_DAYS,
-      thisWeek: connections.thisWeek,
-      lastWeek: connections.lastWeek,
-      meaning: "Leads marked as having had a connection request sent.",
+    messagesSent: {
+      windowDays: MESSAGES_WINDOW_DAYS,
+      thisWeek: messages.thisWeek,
+      lastWeek: messages.lastWeek,
+      meaning:
+        "Leads that have reached the Contacted stage, counted by when the lead was last touched. Lost leads are excluded — nothing on the record says whether they were ever written to.",
     },
     replyRate: {
       windowDays: REPLY_RATE_WINDOW_DAYS,
