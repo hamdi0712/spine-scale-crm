@@ -222,6 +222,13 @@ export interface EnrichActor {
   identityFields: string[];
   buildInput(inputs: EnrichInputs): Record<string, unknown>;
   read(table: EnrichTable): EnrichUpdate;
+  // What the result actually contained, for a step whose empty result is
+  // ambiguous. Set on the crawler only: "nothing came back" from a Maps search
+  // means the search matched nothing and needs no elaborating, whereas
+  // "nothing came back" from a crawl of a page that returned HTTP 200 is a
+  // question rather than an answer. Read by src/lib/enrichRun.ts when the read
+  // wrote no fields.
+  diagnose?(table: EnrichTable): string;
 }
 
 // The four actors — what each is asked, and how each is read.
@@ -350,15 +357,34 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     buildInput: (inputs) => ({
       startUrls: [{ url: inputs.websiteUrl }],
       maxCrawlPages: WEBSITE_NOTES_MAX_PAGES,
-      // The cheap crawler: this is reading copy off a clinic's marketing site,
-      // not rendering an application.
-      crawlerType: "cheerio",
-      saveMarkdown: false,
+      // This used to be "cheerio" — the cheap crawler that fetches the HTML
+      // and never runs a line of JavaScript — on the reasoning that reading
+      // copy off a clinic's marketing site is not rendering an application.
+      //
+      // That reasoning was wrong about the sites. A chiropractic clinic's site
+      // is, more often than not, Wix or Squarespace or a React template, and
+      // what those serve to a crawler that does not run scripts is a shell
+      // with the copy missing. The crawl succeeded, the page was fetched, and
+      // there was nothing in it — which is exactly the failure this step kept
+      // reporting as "nothing reads as website notes".
+      //
+      // "playwright:adaptive" is the crawler's own answer to that: it fetches
+      // plainly first and only starts a browser for the pages that turn out to
+      // need one. The cheap path still runs on the sites where it worked; the
+      // sites where it did not now come back with a body.
+      crawlerType: "playwright:adaptive",
+      // Asked for so the reader has a second field to fall back on when the
+      // plain-text extraction of a page comes back thin (CRAWLED_TEXT_FIELDS).
+      saveMarkdown: true,
     }),
     read: (table) => {
       const notes = crawledText(table);
       return notes === null ? {} : { websiteNotes: notes };
     },
+    // Why nothing was read, when nothing was read. The rest of the actors fail
+    // legibly — a 404 is a 404 — and this one does not, so it is the only step
+    // that carries an explanation of its own empty result.
+    diagnose: crawlDiagnostics,
   },
 ];
 
@@ -765,23 +791,183 @@ function duration(ms: number): string {
   return `${Math.floor(days / 365)}y`;
 }
 
+// ─── Reading the Website Content Crawler ───────────────────────────────────
+//
+// This reader had to be widened, and the reason is worth writing down: a crawl
+// that succeeded and returned nothing readable is indistinguishable, from the
+// run summary alone, from a crawl this code failed to read. Both came back as
+// "ran, but nothing in the result reads as website notes". Three separate
+// things were hiding behind that one sentence:
+//
+//   1. The field the copy arrives under. The crawler's own output puts it in
+//      `text`, but the actor is swappable in Pipeline Settings and the crawler
+//      itself renames it depending on the output format asked for — markdown,
+//      content, textContent. One name was never enough; the list below is.
+//
+//   2. A page whose body is assembled by JavaScript. A Wix, Squarespace or
+//      React marketing site served to a crawler that does not run scripts is a
+//      shell: nav, footer, and a <div id="root"> with nothing in it. The
+//      crawler reports success — it fetched the page — and `text` is empty or
+//      near-empty. That is not a bug this file can fix, but two things help:
+//      the crawler is now asked to render (see buildInput), and when the body
+//      is still thin the page's own <title> and meta description are read
+//      instead, since those are server-rendered on every one of those stacks.
+//
+//   3. A page that was fetched but refused — 403 behind a bot wall, a 404 from
+//      a stale URL. Same empty `text`, same silent summary. Those now say so,
+//      through crawlDiagnostics below.
+//
+// The names the crawled copy might arrive under, best first. `text` is what
+// the stock actor uses; the rest are what its other output modes and the
+// swappable alternatives use. Matched on the last path segment too, so a
+// nested `page.text` is found by the same entry (see cell).
+const CRAWLED_TEXT_FIELDS = [
+  "text",
+  "markdown",
+  "content",
+  "pageContent",
+  "textContent",
+  "mainContent",
+  "articleText",
+  "body",
+];
+
+// Where a page says which page it is.
+const CRAWLED_URL_FIELDS = ["url", "loadedUrl", "crawl.loadedUrl", "pageUrl"];
+
+// The server-rendered scraps that survive on a JavaScript-built page: the
+// <title> and the meta description, which every one of those stacks emits into
+// the HTML because search engines read them. Thin, but not nothing — and on a
+// site whose body never arrives they are the only description of the clinic
+// there is.
+const CRAWLED_META_FIELDS = {
+  title: ["metadata.title", "title", "pageTitle"],
+  description: [
+    "metadata.description",
+    "description",
+    "metaDescription",
+    "metadata.openGraph.description",
+  ],
+};
+
+// Where the crawler records what the server actually said.
+const CRAWLED_STATUS_FIELDS = ["crawl.httpStatusCode", "httpStatusCode", "statusCode"];
+
+// Below this, a page's body is a shell rather than a page: a nav bar, a cookie
+// banner and a footer come to well under this on every site, and the shortest
+// real "about us" comes to well over it. It is the line between "the crawler
+// read the page" and "the crawler read the wrapper around the page".
+const MIN_PAGE_TEXT_CHARS = 200;
+
+// And below this there is no point storing the meta fallback either — a bare
+// clinic name is not evidence of anything.
+const MIN_META_NOTES_CHARS = 60;
+
 // The crawled pages, run together in the order they were crawled — the start
 // URL first, which is the page most likely to say what the clinic does. Each
 // page is labelled with its own URL so a note read weeks later says which page
 // it came off.
-function crawledText(table: EnrichTable): string | null {
+//
+// Exported for tools/inspect-website-crawl.ts, which runs a real crawl against
+// one URL and prints both the raw items and what this makes of them.
+export function crawledText(table: EnrichTable): string | null {
   const parts: string[] = [];
   for (let i = 0; i < table.rows.length && parts.length < WEBSITE_NOTES_MAX_PAGES; i++) {
-    const text = cell(table, i, ["text", "markdown", "content", "pageContent"]);
-    if (text === "") continue;
-    const url = cell(table, i, ["url", "loadedUrl", "pageUrl"]);
-    parts.push(url === "" ? text : `${url}\n${text}`);
+    const text = cell(table, i, CRAWLED_TEXT_FIELDS);
+    // Thin bodies are held back rather than dropped: if no page on the site
+    // clears the bar, the best of them is still better than the meta fallback,
+    // and the fallback is still better than nothing.
+    if (text.length < MIN_PAGE_TEXT_CHARS) continue;
+    parts.push(labelled(cell(table, i, CRAWLED_URL_FIELDS), text));
   }
-  if (parts.length === 0) return null;
-  const joined = parts.join("\n\n");
-  return joined.length > WEBSITE_NOTES_MAX_CHARS
-    ? `${joined.slice(0, WEBSITE_NOTES_MAX_CHARS)}…`
-    : joined;
+
+  if (parts.length === 0) return thinCrawlText(table);
+  return capped(parts.join("\n\n"));
+}
+
+// What to store when no page came back with a body worth reading. Two goes at
+// it, in order: the longest thin body the crawl did return, and failing that
+// the pages' own titles and meta descriptions. Either is labelled for what it
+// is, because a note read later must not pass for a full crawl.
+function thinCrawlText(table: EnrichTable): string | null {
+  let longest = "";
+  let longestUrl = "";
+  const meta: string[] = [];
+
+  for (let i = 0; i < table.rows.length; i++) {
+    const url = cell(table, i, CRAWLED_URL_FIELDS);
+    const text = cell(table, i, CRAWLED_TEXT_FIELDS);
+    if (text.length > longest.length) {
+      longest = text;
+      longestUrl = url;
+    }
+    const title = cell(table, i, CRAWLED_META_FIELDS.title);
+    const description = cell(table, i, CRAWLED_META_FIELDS.description);
+    const line = [title, description].filter((v) => v !== "").join(" — ");
+    if (line !== "") meta.push(labelled(url, line));
+  }
+
+  if (longest.length >= MIN_META_NOTES_CHARS) {
+    return capped(
+      `${THIN_CRAWL_PREFIX}\n\n${labelled(longestUrl, longest)}`,
+    );
+  }
+  const joined = meta.join("\n\n");
+  if (joined.length >= MIN_META_NOTES_CHARS) {
+    return capped(`${META_ONLY_PREFIX}\n\n${joined}`);
+  }
+  return null;
+}
+
+// Said at the top of the note rather than left for the reader to infer. Both
+// of these are real evidence and thinner than a full crawl, and every later
+// reader of websiteNotes — the ICP assist, the outreach draft, a person — is
+// entitled to know which it is holding.
+const THIN_CRAWL_PREFIX =
+  "[Thin crawl — the site returned very little server-side text, most likely because its pages are built in the browser. This is all that was there.]";
+const META_ONLY_PREFIX =
+  "[Page metadata only — no body text came back from this site, most likely because its pages are built in the browser. These are the pages' own titles and descriptions.]";
+
+function labelled(url: string, text: string): string {
+  return url === "" ? text : `${url}\n${text}`;
+}
+
+function capped(text: string): string {
+  return text.length > WEBSITE_NOTES_MAX_CHARS
+    ? `${text.slice(0, WEBSITE_NOTES_MAX_CHARS)}…`
+    : text;
+}
+
+// Why a crawl that ran came back with nothing — in one line, next to the
+// summary that says it did, rather than in a server log nobody reading the
+// candidate can see.
+//
+// It reports what the actor actually returned: how many pages, what the server
+// said about each, and how much text arrived under which field. That is enough
+// to tell the three cases apart without a rerun — a bot wall (403s), a dead
+// URL (404s), a JavaScript-built site (200s with almost no text), and a field
+// this reader does not know (text under a name not in CRAWLED_TEXT_FIELDS,
+// which shows up as a page with no measured text but a header list that
+// plainly has one).
+export function crawlDiagnostics(table: EnrichTable): string {
+  if (table.rows.length === 0) return "the crawler returned no pages at all";
+
+  const pages = table.rows.map((_, i) => {
+    const status = cell(table, i, CRAWLED_STATUS_FIELDS);
+    const chars = cell(table, i, CRAWLED_TEXT_FIELDS).length;
+    const url = cell(table, i, CRAWLED_URL_FIELDS);
+    const where = url === "" ? `page ${i + 1}` : shortUrl(url);
+    return `${where}: ${status === "" ? "no status" : `HTTP ${status}`}, ${chars} characters of text`;
+  });
+
+  return `${table.rows.length} page${table.rows.length === 1 ? "" : "s"} came back — ${pages.join("; ")}. Fields returned: ${table.headers.join(", ")}.`;
+}
+
+// Enough of a URL to tell two pages of one site apart, without the note being
+// mostly URL.
+function shortUrl(url: string): string {
+  const stripped = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  return stripped.length > 60 ? `${stripped.slice(0, 60)}…` : stripped;
 }
 
 // The last gate before anything reaches the database. The readers above

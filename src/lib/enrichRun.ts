@@ -234,14 +234,22 @@ export async function runEnrichActors(
 
     const fields = enrichFieldsWritten(update);
     if (fields.length === 0) {
+      // "Nothing in the result reads as website notes" was, for a long time,
+      // the whole of what a failed crawl said for itself — and it covers a
+      // site behind a bot wall, a dead URL, a page whose copy is assembled in
+      // the browser, and a field name this app does not know, without
+      // distinguishing them. An actor that can say which it was (the crawler;
+      // see EnrichActor.diagnose) now does, on the same line.
+      const diagnosis = actor.diagnose?.(table) ?? "";
+      const base = droppedWebsite
+        ? "ran, and the only thing it added was a website URL this record already has"
+        : `ran, but nothing in the result reads as ${actor.writes
+            .map((f) => ENRICH_FIELD_LABELS[f].toLowerCase())
+            .join(" or ")}`;
       outcomes.push({
         key: actor.key,
         status: "empty",
-        detail: droppedWebsite
-          ? "ran, and the only thing it added was a website URL this record already has"
-          : `ran, but nothing in the result reads as ${actor.writes
-              .map((f) => ENRICH_FIELD_LABELS[f].toLowerCase())
-              .join(" or ")}`,
+        detail: diagnosis === "" ? base : `${base} — ${diagnosis}`,
       });
       continue;
     }
