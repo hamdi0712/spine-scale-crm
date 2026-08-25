@@ -19,7 +19,6 @@ import { normalizeApifyId } from "@/lib/apifyId";
 import {
   DEFAULT_ACTOR_IDS,
   DEFAULT_CLINIC_DISCOVERY_ACTOR_ID,
-  DEFAULT_DECISION_MAKER_ACTOR_ID,
   DEFAULT_PIPELINE_SETTINGS,
   DEFAULT_PROMOTION_THRESHOLD,
   MAX_PROMOTION_THRESHOLD,
@@ -58,10 +57,6 @@ export default function PipelineSettingsForm({
   const clinicActorTyped = draft.clinicDiscovery.actorId.trim();
   const clinicActorMalformed =
     clinicActorTyped !== "" && normalizeApifyId(clinicActorTyped) === null;
-
-  const dmActorTyped = draft.decisionMaker.actorId.trim();
-  const dmActorMalformed =
-    dmActorTyped !== "" && normalizeApifyId(dmActorTyped) === null;
 
   const enabledCount = PIPELINE_STEP_KEYS.filter(
     (k) => draft.steps[k].enabled,
@@ -224,71 +219,6 @@ export default function PipelineSettingsForm({
               {clinicActorMalformed
                 ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
                 : `Any actor returning one object per clinic works: its fields are matched by name — clinic, website, address, phone — rather than mapped by hand. Blank runs ${DEFAULT_CLINIC_DISCOVERY_ACTOR_ID}.`}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── The stage after qualification ──────────────────────────────── */}
-      <section>
-        <h2 className="display mb-1 text-xl font-semibold">
-          Decision-maker enrichment
-        </h2>
-        <p className="mb-4 text-sm text-muted">
-          Who to talk to at a clinic that has already qualified — run by hand,
-          from the candidate, never from the queue
-        </p>
-        <div className="card p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">Find decision maker</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                Reads the crawled website copy first, then searches for a
-                profile at that clinic by name and title. It only ever runs on a
-                candidate that scored at or above the bar and has nobody named,
-                so it never spends a run on a clinic that would have been
-                rejected. Off until it is switched on.
-              </p>
-            </div>
-            <Toggle
-              name="decisionMakerEnabled"
-              checked={draft.decisionMaker.enabled}
-              onChange={(enabled) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  decisionMaker: { ...prev.decisionMaker, enabled },
-                }))
-              }
-              label={`Decision-maker enrichment — ${draft.decisionMaker.enabled ? "on" : "off"}`}
-            />
-          </div>
-
-          <div className="mt-4">
-            <label className="field-label" htmlFor="decisionMakerActorId">
-              Apify actor
-            </label>
-            <input
-              id="decisionMakerActorId"
-              name="decisionMakerActorId"
-              value={draft.decisionMaker.actorId}
-              onChange={(e) =>
-                setDraft((prev) => ({
-                  ...prev,
-                  decisionMaker: { ...prev.decisionMaker, actorId: e.target.value },
-                }))
-              }
-              spellCheck={false}
-              autoComplete="off"
-              placeholder={DEFAULT_DECISION_MAKER_ACTOR_ID}
-              aria-invalid={dmActorMalformed || undefined}
-              className={`field font-mono text-xs ${
-                dmActorMalformed ? "border-bad focus:border-bad focus:ring-bad/15" : ""
-              }`}
-            />
-            <p className="mt-1.5 text-xs leading-relaxed text-muted">
-              {dmActorMalformed
-                ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
-                : `Any actor returning one profile per item works: its fields are matched by name — full name, headline, profile URL. Blank runs ${DEFAULT_DECISION_MAKER_ACTOR_ID}, the profile search the person-first pathway already uses.`}
             </p>
           </div>
         </div>

@@ -10,10 +10,15 @@
 // answer is a sort or a scan down one column. The pipeline is untouched and
 // still opens as a table.
 //
-// Search, the filters, the sort, the selection and the view are all one piece
-// of state living here, which is why the toggle is a button rather than a link
-// like the pipeline's: switching from cards to table keeps the search you
-// typed and the tier you filtered to, and a navigation would throw both away.
+// The filters, the sort and the view all live in the query string
+// (src/lib/useUrlState.ts) rather than in this component. Switching from cards
+// to table keeps the tier you filtered to — the state is one URL either way —
+// and, because the browser remembers URLs,
+// opening a candidate and pressing Back returns to the exact filtered and
+// sorted list rather than to an unfiltered one.
+//
+// The search box and the selection are the exceptions and stay local state:
+// see below.
 //
 // Selection only ever covers rows currently on screen — in either view — so
 // filtering something out of view takes it out of the selection too, and a
@@ -26,6 +31,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useUrlState } from "@/lib/useUrlState";
 import {
   DISCOVERY_STATUSES,
   DISCOVERY_STATUS_LABELS,
@@ -99,22 +105,47 @@ type SortKey = "clinicName" | "status" | "icpTier" | "icpTotal" | "createdAt";
 const QUICK_TIERS: IcpTier[] = ["A", "B", "C"];
 
 export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
-  const [view, setView] = useState<"cards" | "table">("cards");
+  const [view, setView] = useUrlState<"cards" | "table">("view", "cards", [
+    "cards",
+    "table",
+  ]);
+  // The search box stays local state. Every keystroke would otherwise be a
+  // navigation, and on a force-dynamic page that is a server round trip per
+  // letter typed — the filters and the sort are the state worth restoring, and
+  // they are the ones a URL holds cheaply.
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
-  const [batchFilter, setBatchFilter] = useState<string>(BATCH_ALL);
-  const [sourceFilter, setSourceFilter] = useState<string>(SOURCE_ALL);
+  const [statusFilter, setStatusFilter] = useUrlState<string>("status", "ALL");
+  const [batchFilter, setBatchFilter] = useUrlState<string>("batch", BATCH_ALL);
+  const [sourceFilter, setSourceFilter] = useUrlState<string>(
+    "source",
+    SOURCE_ALL,
+  );
   // Which pathway, as its own filter beside the free-text source one: "show me
   // the clinic-first ones" is the question this feature exists to make askable.
-  const [pathwayFilter, setPathwayFilter] = useState<DiscoverySourceKind | "ALL">(
-    "ALL",
-  );
+  const [pathwayFilter, setPathwayFilter] = useUrlState<
+    DiscoverySourceKind | "ALL"
+  >("pathway", "ALL", [...DISCOVERY_SOURCES, "ALL"]);
   // One tier at a time, and pressing the one already on clears it — three
   // buttons that could each be half-on would be a set of checkboxes wearing a
-  // segmented control's clothes.
-  const [tierFilter, setTierFilter] = useState<IcpTier | null>(null);
-  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
-  const [sortDir, setSortDir] = useState<1 | -1>(-1);
+  // segmented control's clothes. "ALL" is the cleared state in the URL; null is
+  // what the filtering below reads.
+  const [tierParam, setTierParam] = useUrlState<IcpTier | "ALL">("tier", "ALL", [
+    ...ICP_TIER_ORDER,
+    "ALL",
+  ]);
+  const tierFilter: IcpTier | null = tierParam === "ALL" ? null : tierParam;
+  const [sortKey, setSortKey] = useUrlState<SortKey>("sort", "createdAt", [
+    "clinicName",
+    "status",
+    "icpTier",
+    "icpTotal",
+    "createdAt",
+  ]);
+  const [dirParam, setDirParam] = useUrlState<"asc" | "desc">("dir", "desc", [
+    "asc",
+    "desc",
+  ]);
+  const sortDir: 1 | -1 = dirParam === "asc" ? 1 : -1;
   // Selection is state and nothing else — no URL, no storage — so navigating
   // away or refreshing starts again with nothing selected, which is the only
   // safe default for a set of rows with a delete button pointed at them.
@@ -243,10 +274,10 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
-      setSortDir((d) => (d === 1 ? -1 : 1));
+      setDirParam(sortDir === 1 ? "desc" : "asc");
     } else {
       setSortKey(key);
-      setSortDir(1);
+      setDirParam("asc");
     }
   }
 
@@ -356,7 +387,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
                 key={tier}
                 type="button"
                 aria-pressed={on}
-                onClick={() => setTierFilter(on ? null : tier)}
+                onClick={() => setTierParam(on ? "ALL" : tier)}
                 title={`${ICP_TIER_LABELS[tier]} only${
                   ICP_TIER_ACTIONS[tier] ? ` — ${ICP_TIER_ACTIONS[tier]}` : ""
                 }. Press again to clear.`}
@@ -647,27 +678,38 @@ function CandidateCard({
   onToggle: (on: boolean) => void;
 }) {
   return (
+    /* The whole card opens the candidate, not just its name. A card is one
+       record and reads as one target, and a 300px tile whose only live pixels
+       are eleven characters of clinic name is a tile that has to be aimed at.
+       Done as a stretched link over the card rather than by wrapping it: the
+       checkbox is interactive too, and an <a> may not contain one. The overlay
+       sits above the text so a click anywhere lands on it, and the checkbox is
+       lifted above the overlay so it still takes its own clicks. */
     <div
-      className={`card flex flex-col p-4 transition-colors ${
+      className={`card group relative flex flex-col p-4 transition-colors ${
         selected ? "border-accent/40 bg-accent/5" : "hover:bg-wash/40"
       }`}
     >
+      <Link
+        href={`/discovery/${row.id}`}
+        aria-label={row.clinicName}
+        className="absolute inset-0 z-10 rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+      />
       <div className="flex items-start gap-2.5">
         <input
           type="checkbox"
           checked={selected}
           onChange={(e) => onToggle(e.target.checked)}
           aria-label={`Select ${row.clinicName}`}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+          className="relative z-20 mt-0.5 h-4 w-4 shrink-0 accent-accent"
         />
         <div className="min-w-0 flex-1">
-          <Link
-            href={`/discovery/${row.id}`}
-            className="block truncate text-sm font-medium text-ink hover:underline"
+          <span
+            className="block truncate text-sm font-medium text-ink group-hover:underline"
             title={row.clinicName}
           >
             {row.clinicName}
-          </Link>
+          </span>
           <p className="mt-0.5 truncate text-xs text-muted">
             {row.contactName ? (
               <>
@@ -678,9 +720,7 @@ function CandidateCard({
                   : ""}
               </>
             ) : (
-              <span className="text-muted/70">
-                Decision maker not found yet
-              </span>
+              <span className="text-muted/70">No contact yet</span>
             )}
           </p>
         </div>
