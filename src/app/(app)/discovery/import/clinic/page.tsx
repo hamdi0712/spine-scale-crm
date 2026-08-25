@@ -49,14 +49,9 @@ export default async function ClinicDiscoveryPage() {
           Every clinic imported here becomes a Pending candidate and goes
           through the existing chain — Company Details, Google Maps, the Google
           Search fallback, the Facebook Ads library, the website crawler, then
-          scoring. A clinic that clears the promotion threshold but has nobody
-          named at it stops at{" "}
-          <span className="font-medium text-ink">
-            Qualified — Decision Maker Missing
-          </span>{" "}
-          rather than becoming a lead: the pipeline is written to a person, and
-          a blank name is not one. Add a decision maker on the candidate and
-          promote it from there.
+          scoring. A clinic that clears the promotion threshold becomes a lead
+          whether or not anybody is named at it: the score is what decides, and
+          the contact name is typed onto the lead once it is known.
         </p>
       </div>
 

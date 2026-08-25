@@ -11,6 +11,7 @@ import {
   IconGitBranch,
   IconLayoutDashboard,
   IconRadar2,
+  IconSend,
   IconSettings,
   IconTargetArrow,
   IconUsers,
@@ -45,12 +46,17 @@ interface NavGroup {
 const NAV_GROUPS: NavGroup[] = [
   {
     // The funnel, in the order a clinic travels it: everything scraped lands
-    // in Discovery, only what scores gets through to Pipeline, and what closes
-    // becomes a client.
+    // in Discovery, only what scores gets through to Pipeline, the A- and
+    // B-tier ones nobody has written to yet queue up for outreach, and what
+    // closes becomes a client.
     label: "Pipeline",
     items: [
       { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
       { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
+      // Between the pipeline and the clients because that is where it sits in
+      // the work: a lead is in the pipeline before anybody has written to it,
+      // and this is the list of the ones nobody has.
+      { href: "/outreach", label: "Outreach Queue", Glyph: IconSend },
       { href: "/clients", label: "Clients", Glyph: IconUsers },
     ],
   },
@@ -183,9 +189,17 @@ export default function Sidebar({
             className={`mt-2 pt-2 ${collapsed ? "border-t border-line/50" : ""}`}
           >
             {!collapsed && (
-              <div className="px-3 pb-1.5 text-[11px] font-medium tracking-[0.06em] text-muted/80">
-                {group.label.toUpperCase()}
-              </div>
+              <>
+                <div className="px-3 pb-1.5 text-[11px] font-medium tracking-[0.06em] text-muted/80">
+                  {group.label.toUpperCase()}
+                </div>
+                {/* A hairline under the heading, the same border-line/60 rule
+                    that separates Settings at the foot — so the label reads as
+                    the head of the list beneath it rather than as another row
+                    floating above it. Collapsed there is no heading and the
+                    rule between groups above does this job instead. */}
+                <div className="mx-3 mb-1.5 border-t border-line/60" />
+              </>
             )}
             <div className="space-y-1">
               {group.items.map((item) => (

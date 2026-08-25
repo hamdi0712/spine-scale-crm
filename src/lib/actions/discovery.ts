@@ -92,7 +92,6 @@ import {
   readClinicName,
   readLocation,
 } from "@/lib/discoveryAddByName";
-import { readDiscoverySourceKind } from "@/lib/clinicDiscovery";
 // One promotion path for the queue, the manual override and the
 // decision-maker stage — see src/lib/promoteLead.ts.
 import { promoteToLead } from "@/lib/promoteLead";
@@ -435,9 +434,6 @@ export async function processDiscoveryCandidate(
       id: true,
       clinicName: true,
       batchLabel: true,
-      // Both read for the verdict at the end: a clinic-first candidate that
-      // cleared the bar with nobody named at it waits for a decision maker
-      // rather than becoming a lead. See the verdict section below.
       contactName: true,
       discoverySource: true,
       companyLinkedinUrl: true,
@@ -763,45 +759,13 @@ export async function processDiscoveryCandidate(
     };
   }
 
-  // ─── Qualified, but nobody to talk to ────────────────────────────────────
-  //
-  // The clinic-first pathway finds clinics before it finds people, so a
-  // candidate can clear the bar with no decision-maker on it at all. A lead in
-  // the pipeline assumes a contact — the outreach sequence is written to a
-  // person — so promoting one of these would put a lead in front of somebody
-  // with nobody to send it to, and the fix for that is not a blank name.
-  //
-  // It stops here instead, in a state that says exactly what it is: scored,
-  // qualified, waiting on a person. Nothing is rejected and nothing is lost —
-  // adding a decision maker on the candidate and pressing Promote takes it the
-  // rest of the way, and the follow-up work that finds one automatically has a
-  // queue of these to work from.
-  //
-  // Only the clinic-first pathway is held to this. A person-first candidate
-  // with no contact name is the case this app has always promoted, and
-  // changing that would re-decide clinics nobody asked about.
-  const noContact =
-    readDiscoverySourceKind(candidate.discoverySource) === "CLINIC_FIRST" &&
-    (candidate.contactName ?? "").trim() === "";
-  if (noContact) {
-    const headline = `Qualified at ${breakdown.total}/${ICP_MAX_SCORE} (${breakdown.tier}-tier), but no decision maker is known — add one to promote it.`;
-    await prisma.discoveryCandidate.update({
-      where: { id },
-      data: { status: "QUALIFIED_NO_CONTACT", processedAt: now },
-    });
-    steps.push({ label: "Verdict", status: "warned", detail: headline });
-    revalidatePath("/discovery");
-    return {
-      id,
-      clinicName: candidate.clinicName,
-      status: "QUALIFIED_NO_CONTACT",
-      headline,
-      total: breakdown.total,
-      tier: breakdown.tier,
-      promotedLeadId: null,
-      steps,
-    };
-  }
+  // Qualified is qualified, whichever pathway found it. A clinic-first
+  // candidate used to stop here when no decision maker had been found and wait
+  // in QUALIFIED_NO_CONTACT for one — which left qualified clinics sitting in
+  // Discovery on a missing field rather than a missing verdict. The scoring
+  // says whether the clinic is worth pursuing; who to pursue it with is a name
+  // typed onto the lead afterwards, so it promotes with a blank contact and is
+  // filled in by hand from the pipeline.
 
   const leadId = await promoteToLead(id, breakdown, now);
   const headline = `Promoted — ${breakdown.tier}-tier, ${breakdown.total}/${ICP_MAX_SCORE}`;
