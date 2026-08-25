@@ -16,7 +16,6 @@ import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
 import DiscoveryList, { DiscoveryRow } from "@/components/DiscoveryList";
-import HistoryNav from "@/components/HistoryNav";
 
 export const dynamic = "force-dynamic";
 
@@ -131,11 +130,6 @@ export default async function DiscoveryPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
-          {/* Back and Forward. Discovery is read as a loop — narrow the list,
-              open a candidate, come back, open the next — and the filters
-              travelling in the URL are what make Back land on the list as it
-              was rather than on all of it. */}
-          <HistoryNav />
           <Link href="/discovery/rejected" className="btn">
             Rejected{rejected > 0 && <span className="num">({rejected})</span>}
           </Link>

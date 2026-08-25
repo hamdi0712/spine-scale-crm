@@ -10,15 +10,10 @@
 // answer is a sort or a scan down one column. The pipeline is untouched and
 // still opens as a table.
 //
-// The filters, the sort and the view all live in the query string
-// (src/lib/useUrlState.ts) rather than in this component. Switching from cards
-// to table keeps the tier you filtered to — the state is one URL either way —
-// and, because the browser remembers URLs,
-// opening a candidate and pressing Back returns to the exact filtered and
-// sorted list rather than to an unfiltered one.
-//
-// The search box and the selection are the exceptions and stay local state:
-// see below.
+// Search, the filters, the sort, the selection and the view are all one piece
+// of state living here, which is why the toggle is a button rather than a link
+// like the pipeline's: switching from cards to table keeps the search you
+// typed and the tier you filtered to, and a navigation would throw both away.
 //
 // Selection only ever covers rows currently on screen — in either view — so
 // filtering something out of view takes it out of the selection too, and a
@@ -31,7 +26,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useUrlState } from "@/lib/useUrlState";
 import {
   DISCOVERY_STATUSES,
   DISCOVERY_STATUS_LABELS,
@@ -105,47 +99,22 @@ type SortKey = "clinicName" | "status" | "icpTier" | "icpTotal" | "createdAt";
 const QUICK_TIERS: IcpTier[] = ["A", "B", "C"];
 
 export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
-  const [view, setView] = useUrlState<"cards" | "table">("view", "cards", [
-    "cards",
-    "table",
-  ]);
-  // The search box stays local state. Every keystroke would otherwise be a
-  // navigation, and on a force-dynamic page that is a server round trip per
-  // letter typed — the filters and the sort are the state worth restoring, and
-  // they are the ones a URL holds cheaply.
+  const [view, setView] = useState<"cards" | "table">("cards");
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useUrlState<string>("status", "ALL");
-  const [batchFilter, setBatchFilter] = useUrlState<string>("batch", BATCH_ALL);
-  const [sourceFilter, setSourceFilter] = useUrlState<string>(
-    "source",
-    SOURCE_ALL,
-  );
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [batchFilter, setBatchFilter] = useState<string>(BATCH_ALL);
+  const [sourceFilter, setSourceFilter] = useState<string>(SOURCE_ALL);
   // Which pathway, as its own filter beside the free-text source one: "show me
   // the clinic-first ones" is the question this feature exists to make askable.
-  const [pathwayFilter, setPathwayFilter] = useUrlState<
-    DiscoverySourceKind | "ALL"
-  >("pathway", "ALL", [...DISCOVERY_SOURCES, "ALL"]);
+  const [pathwayFilter, setPathwayFilter] = useState<DiscoverySourceKind | "ALL">(
+    "ALL",
+  );
   // One tier at a time, and pressing the one already on clears it — three
   // buttons that could each be half-on would be a set of checkboxes wearing a
-  // segmented control's clothes. "ALL" is the cleared state in the URL; null is
-  // what the filtering below reads.
-  const [tierParam, setTierParam] = useUrlState<IcpTier | "ALL">("tier", "ALL", [
-    ...ICP_TIER_ORDER,
-    "ALL",
-  ]);
-  const tierFilter: IcpTier | null = tierParam === "ALL" ? null : tierParam;
-  const [sortKey, setSortKey] = useUrlState<SortKey>("sort", "createdAt", [
-    "clinicName",
-    "status",
-    "icpTier",
-    "icpTotal",
-    "createdAt",
-  ]);
-  const [dirParam, setDirParam] = useUrlState<"asc" | "desc">("dir", "desc", [
-    "asc",
-    "desc",
-  ]);
-  const sortDir: 1 | -1 = dirParam === "asc" ? 1 : -1;
+  // segmented control's clothes.
+  const [tierFilter, setTierFilter] = useState<IcpTier | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
+  const [sortDir, setSortDir] = useState<1 | -1>(-1);
   // Selection is state and nothing else — no URL, no storage — so navigating
   // away or refreshing starts again with nothing selected, which is the only
   // safe default for a set of rows with a delete button pointed at them.
@@ -274,10 +243,10 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
-      setDirParam(sortDir === 1 ? "desc" : "asc");
+      setSortDir((d) => (d === 1 ? -1 : 1));
     } else {
       setSortKey(key);
-      setDirParam("asc");
+      setSortDir(1);
     }
   }
 
@@ -387,7 +356,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
                 key={tier}
                 type="button"
                 aria-pressed={on}
-                onClick={() => setTierParam(on ? "ALL" : tier)}
+                onClick={() => setTierFilter(on ? null : tier)}
                 title={`${ICP_TIER_LABELS[tier]} only${
                   ICP_TIER_ACTIONS[tier] ? ` — ${ICP_TIER_ACTIONS[tier]}` : ""
                 }. Press again to clear.`}

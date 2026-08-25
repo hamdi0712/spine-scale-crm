@@ -10,7 +10,6 @@ import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
-import { useUrlState } from "@/lib/useUrlState";
 
 type SortKey =
   | "clinicName"
@@ -21,27 +20,11 @@ type SortKey =
   | "createdAt";
 
 export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
-  // The stage, the tier and the sort live in the query string
-  // (src/lib/useUrlState.ts), so opening a lead and pressing Back returns to
-  // the list as it was rather than to an unfiltered one. The search box stays
-  // local state: every keystroke would otherwise be a navigation, and on a
-  // force-dynamic page that is a server round trip per letter typed.
   const [query, setQuery] = useState("");
-  const [stageFilter, setStageFilter] = useUrlState<string>("stage", "ALL");
-  const [tierFilter, setTierFilter] = useUrlState<string>("tier", "ALL");
-  const [sortKey, setSortKey] = useUrlState<SortKey>("sort", "createdAt", [
-    "clinicName",
-    "stage",
-    "icpTier",
-    "estValue",
-    "nextFollowUp",
-    "createdAt",
-  ]);
-  const [dirParam, setDirParam] = useUrlState<"asc" | "desc">("dir", "desc", [
-    "asc",
-    "desc",
-  ]);
-  const sortDir: 1 | -1 = dirParam === "asc" ? 1 : -1;
+  const [stageFilter, setStageFilter] = useState<string>("ALL");
+  const [tierFilter, setTierFilter] = useState<string>("ALL");
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
+  const [sortDir, setSortDir] = useState<1 | -1>(-1);
   // Selection is state and nothing else — no URL, no storage — so navigating
   // away or refreshing starts again with nothing selected, which is the only
   // safe default for a set of rows with a delete button pointed at them.
@@ -155,10 +138,10 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
-      setDirParam(sortDir === 1 ? "desc" : "asc");
+      setSortDir((d) => (d === 1 ? -1 : 1));
     } else {
       setSortKey(key);
-      setDirParam("asc");
+      setSortDir(1);
     }
   }
 

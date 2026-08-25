@@ -3,35 +3,19 @@ import { prisma } from "@/lib/prisma";
 import { leadTier } from "@/lib/icp";
 import KanbanBoard, { KanbanLead } from "@/components/KanbanBoard";
 import LeadTable from "@/components/LeadTable";
-import HistoryNav from "@/components/HistoryNav";
 
 export const dynamic = "force-dynamic";
 
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: { view?: string };
 }) {
   // The table is what loads. It is the view that answers the questions asked
   // most often of a pipeline — who is where, what is scored, what is due — and
   // it is the one that reads at forty rows as well as at four. The board is a
   // press away and is still where a stage gets changed by dragging.
   const view = searchParams.view === "board" ? "board" : "table";
-  // The table's filters and sort live in the query string too, so the view
-  // toggle carries whatever else is on the URL across rather than resetting a
-  // narrowed list to everything.
-  const withView = (next: "table" | "board") => {
-    const params = new URLSearchParams();
-    for (const [key, value] of Object.entries(searchParams)) {
-      if (key === "view" || value === undefined) continue;
-      for (const one of Array.isArray(value) ? value : [value]) {
-        params.append(key, one);
-      }
-    }
-    if (next === "board") params.set("view", "board");
-    const qs = params.toString();
-    return qs ? `/pipeline?${qs}` : "/pipeline";
-  };
   const leads = await prisma.lead.findMany({
     where: { archived: false },
     orderBy: { updatedAt: "desc" },
@@ -65,22 +49,17 @@ export default async function PipelinePage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Back and Forward, first in the row: the pipeline is read as a
-              loop — narrow the list, open a lead, come back, open the next —
-              and the filters travelling in the URL are what make Back land on
-              the list as it was. */}
-          <HistoryNav />
           {/* Table first, because table is what loads. A toggle whose second
               item is the default reads as though the first one were. */}
           <div className="segment">
             <Link
-              href={withView("table")}
+              href="/pipeline"
               className={`segment-item ${view === "table" ? "segment-item-on" : ""}`}
             >
               Table
             </Link>
             <Link
-              href={withView("board")}
+              href="/pipeline?view=board"
               className={`segment-item ${view === "board" ? "segment-item-on" : ""}`}
             >
               Board
