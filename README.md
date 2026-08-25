@@ -404,6 +404,27 @@ again.
   real host is discarded rather than stored, because the value goes on to be
   requested.
 
+  **When the crawl comes back empty.** A crawl can succeed — no error, HTTP
+  200, pages fetched — and still yield nothing readable, and for a long time
+  the run summary said only *ran, but nothing in the result reads as website
+  notes* about every version of that. It now says which version. The crawler
+  step reports how many pages came back, what each server answered, how much
+  text arrived and under which field names, so a bot wall (403 on every page),
+  a stale URL (404), a site whose copy is assembled in the browser (200 with
+  almost no text) and a field this app does not know how to read are told apart
+  from the summary alone. `tools/inspect-website-crawl.ts` prints the raw
+  dataset JSON for one URL when the summary is not enough.
+
+  The browser-built site is the one of those that is not a bug. A clinic on
+  Wix, Squarespace or a React template serves a crawler almost no HTML, and the
+  copy only exists once scripts have run. Two things are done about it: the
+  crawler is asked for `playwright:adaptive`, which fetches plainly and only
+  starts a browser for the pages that need one, and where the body is still
+  thin the pages' own `<title>` and meta descriptions are stored instead —
+  labelled as such at the top of the note, because thin evidence must not read
+  as a full crawl. A site that refuses the crawl outright still stores nothing,
+  which is the honest answer.
+
   A scraped headcount is stored as `staffCountRaw`, deliberately alongside the
   scorecard's 0–2 Staff Size Fit band rather than instead of it. On a lead it
   **suggests** a band (3–15 = 2, 2 or 16–20 = 1, 1 or 20+ = 0), pre-selected
