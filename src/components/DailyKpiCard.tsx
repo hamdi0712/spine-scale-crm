@@ -5,6 +5,12 @@
 // monthly goal and the pace that implies. Which is which is settled by
 // DAILY_KPI_CADENCE (src/lib/dailyKpi.ts) and never by the caller.
 //
+// Four things and no more: the glyph, the label, the number against its goal,
+// and one delta line. What the number is counted off used to ride under that
+// as a fifth — it lives under the goals form's fields now (DAILY_KPI_BLURBS in
+// src/lib/dailyKpi.ts), where it is answering a question somebody is actually
+// asking.
+//
 // Deliberately not the dashboard's KpiCard. That row's tinted disc is a
 // gradient with a halo behind it — a lit object, sized for four headline
 // numbers on the page a day starts from. This page carries the same four ideas
@@ -14,13 +20,12 @@
 import {
   IconCalendarCheck,
   IconMessage2,
+  IconSend,
   IconTargetArrow,
-  IconUserPlus,
 } from "@tabler/icons-react";
 import Icon from "@/components/Icons";
 import ProgressRing from "@/components/ProgressRing";
 import {
-  DAILY_KPI_BLURBS,
   DAILY_KPI_HUES,
   DAILY_KPI_LABELS,
   DailyKpiKey,
@@ -29,11 +34,11 @@ import {
 } from "@/lib/dailyKpi";
 
 // Tabler at the sidebar's 1.75 stroke, the same four glyphs the dashboard uses
-// for the same four ideas — a clinic qualified, a request sent, a reply, a call
+// for the same four ideas — a clinic qualified, a message sent, a reply, a call
 // booked.
 const GLYPHS: Record<DailyKpiKey, typeof IconTargetArrow> = {
   qualifiedLeads: IconTargetArrow,
-  connectionsSent: IconUserPlus,
+  messagesSent: IconSend,
   repliesReceived: IconMessage2,
   meetingsBooked: IconCalendarCheck,
 };
@@ -41,9 +46,13 @@ const GLYPHS: Record<DailyKpiKey, typeof IconTargetArrow> = {
 // The disc a glyph sits in: one flat wash of the metric's own hue, no gradient
 // and no halo. Exported because the chart legend and the breakdown table draw
 // the same mark, and three copies of a colour rule is how they drift apart.
+// The default is 40 rather than 34: it stands 4px inside the 44px ring across
+// the card, which is the proportion the two marks have to hold to read as a
+// matched pair at either end of the row. Every card is one line of content
+// now, so the pair is the whole visual rhythm of the row.
 export function KpiMark({
   metric,
-  size = 34,
+  size = 40,
 }: {
   metric: DailyKpiKey;
   size?: number;
@@ -161,10 +170,6 @@ export default function DailyKpiCard({
             : `${Math.abs(delta)} vs ${isToday ? "yesterday" : "the day before"}`}
         </div>
       )}
-
-      <div className="mt-0.5 text-[11px] font-normal leading-relaxed text-muted/90">
-        {DAILY_KPI_BLURBS[metric]}
-      </div>
     </div>
   );
 }

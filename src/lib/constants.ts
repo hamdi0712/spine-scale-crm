@@ -32,6 +32,23 @@ export const LEAD_STAGE_SHORT_LABELS: Record<LeadStage, string> = {
   LOST: "Lost",
 };
 
+// Stages that mean a message went out: Contacted itself, and everything the
+// pipeline only reaches by passing through it. This is what "Messages Sent"
+// counts — the lead was approached, whether or not anybody remembered to tick
+// a field on it afterwards.
+//
+// Lost is deliberately not in the list. A lead can be marked Lost straight
+// from New — disqualified before anybody wrote to it — and nothing on the
+// record says which of the two happened, so counting it would inflate the
+// number with clinics that were never messaged.
+export const CONTACTED_STAGES: LeadStage[] = [
+  "CONTACTED",
+  "DISCOVERY",
+  "PROPOSAL",
+  "NEGOTIATING",
+  "WON",
+];
+
 // Stages that count toward open pipeline value.
 export const OPEN_STAGES: LeadStage[] = [
   "NEW",

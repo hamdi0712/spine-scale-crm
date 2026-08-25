@@ -98,7 +98,7 @@ export default async function DailyKpiPage({
       timeZone: "UTC",
     }),
     qualifiedLeads: d.counts.qualifiedLeads,
-    connectionsSent: d.counts.connectionsSent,
+    messagesSent: d.counts.messagesSent,
   }));
 
   // ─── Month to date ───────────────────────────────────────────────────────
@@ -238,11 +238,17 @@ export default async function DailyKpiPage({
           <DailyKpiTrend data={trend} />
         </section>
 
-        {/* The score. One ring, one line of encouragement, and the monthly
-            pair kept out of it: it is the average of the two daily metrics'
-            percentages, each capped at 100 first (src/lib/dailyKpi.ts). A day
-            where the outreach went out and nobody replied is a day's work
-            done, and the score says so. */}
+        {/* The score. One ring and one line of encouragement, and nothing
+            else: it is the average of the two daily metrics' percentages, each
+            capped at 100 first (src/lib/dailyKpi.ts). A day where the outreach
+            went out and nobody replied is a day's work done, and the score
+            says so.
+
+            The monthly pair's pace used to sit under a rule here, for
+            reference and never for scoring. It was a third copy — the metric
+            cards above carry it and Weekly summary carries it again — and it
+            was the reason this card stood taller than the two beside it. The
+            row is level now and the pace has lost nothing. */}
         <section className="card flex flex-col items-center p-6 text-center">
           <h2 className="display self-start text-xl font-semibold">
             {isToday ? "Today’s score" : "Score"}
@@ -264,31 +270,6 @@ export default async function DailyKpiPage({
             <p className="mt-1 text-xs leading-relaxed text-muted">
               {note.detail}
             </p>
-          </div>
-
-          {/* The monthly pair, for reference and not for scoring. It sits
-              below a rule rather than in the ring: a reply is somebody else's
-              to send, and the moment it counts toward a day's score the score
-              stops being a reading of the work. */}
-          <div className="w-full border-t border-line/60 pt-3 text-left">
-            {MONTHLY_GOAL_KEYS.map((key) => (
-              <div
-                key={key}
-                className="flex items-center gap-2 py-1 text-[11px] font-normal text-muted"
-              >
-                <span
-                  className="h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ background: DAILY_KPI_HUES[key] }}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate">
-                  {DAILY_KPI_LABELS[key]}
-                </span>
-                <span className="num shrink-0">
-                  on pace for {pace[key].projected}/{pace[key].goal}
-                </span>
-              </div>
-            ))}
           </div>
         </section>
 

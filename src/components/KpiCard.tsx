@@ -12,8 +12,8 @@
 import {
   IconCalendarCheck,
   IconMessage2,
+  IconSend,
   IconTargetArrow,
-  IconUserPlus,
 } from "@tabler/icons-react";
 import Icon from "@/components/Icons";
 
@@ -23,7 +23,10 @@ import Icon from "@/components/Icons";
 // belong to the same family as the navigation beside them.
 const GLYPHS = {
   qualified: IconTargetArrow,
-  connections: IconUserPlus,
+  // A paper plane for a message going out, against the speech bubble for one
+  // coming back — the two cards sit side by side and the glyphs have to be
+  // tellable apart at 17px.
+  messages: IconSend,
   replies: IconMessage2,
   calls: IconCalendarCheck,
 } as const;
@@ -47,7 +50,7 @@ export type KpiTone = "blue" | "teal" | "purple" | "pink";
 
 const KPI_TONES: Record<KpiTone, string> = {
   blue: "#3B82F6", // qualified leads
-  teal: "#14B8A6", // connections sent
+  teal: "#14B8A6", // messages sent
   purple: "#7C3AED", // reply rate
   pink: "#EC4899", // discovery calls
 };

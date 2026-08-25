@@ -2,7 +2,7 @@
 // goal may be, and how a day, a month, a week and a streak are read off them.
 //
 // Two of the four are yours to do and two are somebody else's to give. A
-// connection request goes out because you sent it; a reply arrives because a
+// message goes out because you sent it; a reply arrives because a
 // clinic owner felt like answering that afternoon. Holding the second pair to
 // a daily number scores you on other people's inboxes, so they carry a monthly
 // goal and are read month to date — the timeframe over which a reply rate is
@@ -27,7 +27,7 @@ export const DAILY_KPI_SETTINGS_ID = "singleton";
 // this array, so the four always appear in the same order.
 export const DAILY_KPI_KEYS = [
   "qualifiedLeads",
-  "connectionsSent",
+  "messagesSent",
   "repliesReceived",
   "meetingsBooked",
 ] as const;
@@ -36,17 +36,23 @@ export type DailyKpiKey = (typeof DAILY_KPI_KEYS)[number];
 
 export const DAILY_KPI_LABELS: Record<DailyKpiKey, string> = {
   qualifiedLeads: "Qualified Leads",
-  connectionsSent: "Connections Sent",
+  messagesSent: "Messages Sent",
   repliesReceived: "Replies Received",
   meetingsBooked: "Meetings Booked",
 };
 
-// The one line under each name — what the number is counted off, said in the
-// same spirit DailyNumbers says it: a count with no stated source invites the
-// question every time it looks wrong.
+// What each number is counted off, said in the same spirit DailyNumbers says
+// it: a count with no stated source invites the question every time it looks
+// wrong.
+//
+// It rides under the goals form's fields and no longer under the cards. On a
+// card it was a fourth line of small grey type on a tile whose whole job is
+// one number, and the four of them together turned the row into a paragraph.
+// Under a field it is doing real work — it says what the goal you are typing
+// will be measured against.
 export const DAILY_KPI_BLURBS: Record<DailyKpiKey, string> = {
   qualifiedLeads: "Scored A or B tier",
-  connectionsSent: "Marked sent on the lead",
+  messagesSent: "Leads that reached Contacted",
   repliesReceived: "Marked replied on the lead",
   meetingsBooked: "Discovery calls booked",
 };
@@ -56,7 +62,7 @@ export const DAILY_KPI_BLURBS: Record<DailyKpiKey, string> = {
 // One palette for "the four numbers of a day", wherever they are drawn.
 export const DAILY_KPI_HUES: Record<DailyKpiKey, string> = {
   qualifiedLeads: "#3B82F6",
-  connectionsSent: "#14B8A6",
+  messagesSent: "#14B8A6",
   repliesReceived: "#7C3AED",
   meetingsBooked: "#EC4899",
 };
@@ -70,7 +76,7 @@ export type DailyKpiCadence = "daily" | "monthly";
 
 export const DAILY_KPI_CADENCE: Record<DailyKpiKey, DailyKpiCadence> = {
   qualifiedLeads: "daily",
-  connectionsSent: "daily",
+  messagesSent: "daily",
   repliesReceived: "monthly",
   meetingsBooked: "monthly",
 };
@@ -94,7 +100,7 @@ export type DailyKpiCounts = Record<DailyKpiKey, number>;
 export function emptyCounts(): DailyKpiCounts {
   return {
     qualifiedLeads: 0,
-    connectionsSent: 0,
+    messagesSent: 0,
     repliesReceived: 0,
     meetingsBooked: 0,
   };
@@ -119,7 +125,7 @@ export type DailyKpiGoals = Record<DailyKpiKey, number>;
 // form is held to the same standard over a timeframe that can carry it.
 export const DEFAULT_DAILY_KPI_GOALS: DailyKpiGoals = {
   qualifiedLeads: 20,
-  connectionsSent: 50,
+  messagesSent: 50,
   repliesReceived: 200,
   meetingsBooked: 60,
 };
@@ -148,7 +154,7 @@ export function readGoal(value: unknown, key: DailyKpiKey): number {
 // would read as a daily one, which is the mistake this change exists to undo.
 export interface DailyKpiGoalsRow {
   qualifiedLeadsGoal?: number | null;
-  connectionsSentGoal?: number | null;
+  messagesSentGoal?: number | null;
   repliesReceivedMonthlyGoal?: number | null;
   meetingsBookedMonthlyGoal?: number | null;
 }
@@ -157,7 +163,7 @@ export function readDailyKpiGoals(row: DailyKpiGoalsRow | null): DailyKpiGoals {
   if (!row) return { ...DEFAULT_DAILY_KPI_GOALS };
   return {
     qualifiedLeads: readGoal(row.qualifiedLeadsGoal, "qualifiedLeads"),
-    connectionsSent: readGoal(row.connectionsSentGoal, "connectionsSent"),
+    messagesSent: readGoal(row.messagesSentGoal, "messagesSent"),
     repliesReceived: readGoal(row.repliesReceivedMonthlyGoal, "repliesReceived"),
     meetingsBooked: readGoal(row.meetingsBookedMonthlyGoal, "meetingsBooked"),
   };
@@ -166,7 +172,7 @@ export function readDailyKpiGoals(row: DailyKpiGoalsRow | null): DailyKpiGoals {
 export function dailyKpiGoalsRow(goals: DailyKpiGoals): Record<string, number> {
   return {
     qualifiedLeadsGoal: goals.qualifiedLeads,
-    connectionsSentGoal: goals.connectionsSent,
+    messagesSentGoal: goals.messagesSent,
     repliesReceivedMonthlyGoal: goals.repliesReceived,
     meetingsBookedMonthlyGoal: goals.meetingsBooked,
   };
@@ -193,7 +199,7 @@ export function goalMet(count: number, goal: number): boolean {
 
 // Today's score: the average of the daily metrics' percentages, each capped at
 // 100 first. Capping before the average is what stops one runaway metric — three
-// hundred connection requests on an import day — from covering one that never
+// hundred leads moved to Contacted on an import day — from covering one that never
 // moved. A score is a reading of the day's balance, not a total.
 //
 // The monthly pair is deliberately not in it. A day where the outreach got
@@ -237,7 +243,7 @@ export function scoreNote(score: number): { headline: string; detail: string } {
     };
   return {
     headline: "Nothing logged yet",
-    detail: "The day is still open — the first connection request starts it.",
+    detail: "The day is still open — the first message out starts it.",
   };
 }
 
