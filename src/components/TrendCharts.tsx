@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import useTheme from "@/components/useTheme";
 
 export interface TrendPoint {
   week: string; // short label
@@ -16,35 +17,78 @@ export interface TrendPoint {
   showRate: number | null; // 0–100
 }
 
-// Primary accent for headline series; the teal secondary accent is reserved
-// for the secondary series (show rate).
-const PRIMARY = "#126DFB";
-const SECONDARY = "#3FD1C8";
+// Recharts writes its colours onto SVG as attributes rather than as CSS, and
+// `var()` does not resolve there — so unlike the rest of the app these cannot
+// be token classes and have to be real values chosen at render time. The two
+// palettes below are the light one this file used to hard-code and its dark
+// counterpart, picked with `useTheme()`.
+//
+// The series colours climb in dark for the same reason the accent token does:
+// a bar in #126DFB against a #161B24 card is a dark shape on a dark ground.
+// The grid, axis and tick values are simply the line/muted tokens' two
+// halves, and the tooltip is the card surface it is supposed to look like.
+interface ChartPalette {
+  primary: string;
+  secondary: string;
+  line: string;
+  tick: string;
+  tooltipBg: string;
+  tooltipInk: string;
+  cursor: string;
+  shadow: string;
+}
+
+const PALETTE: Record<"light" | "dark", ChartPalette> = {
+  light: {
+    primary: "#126DFB",
+    secondary: "#3FD1C8",
+    line: "#E7E9EE",
+    tick: "#6B7280",
+    tooltipBg: "#FFFFFF",
+    tooltipInk: "#1C1B27",
+    cursor: "#F4F5F7",
+    shadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
+  },
+  dark: {
+    primary: "#4D8DFF",
+    secondary: "#3FD1C8",
+    line: "#2A313D",
+    tick: "#949CAB",
+    tooltipBg: "#161B24",
+    tooltipInk: "#E8EAF0",
+    cursor: "#1E242E",
+    shadow: "0 4px 16px rgba(0, 0, 0, 0.5)",
+  },
+};
 
 // Rounded bar tops, matching the UI's 8-10px radius language.
 const BAR_RADIUS: [number, number, number, number] = [8, 8, 0, 0];
 const MAX_BAR = 28;
 
-const AXIS = {
-  stroke: "#E7E9EE",
-  tick: { fill: "#6B7280", fontSize: 11, fontFamily: "var(--font-sans)" },
-  tickLine: false as const,
-  axisLine: { stroke: "#E7E9EE" },
-};
+function axisProps(p: ChartPalette) {
+  return {
+    stroke: p.line,
+    tick: { fill: p.tick, fontSize: 11, fontFamily: "var(--font-sans)" },
+    tickLine: false as const,
+    axisLine: { stroke: p.line },
+  };
+}
 
-const TOOLTIP_STYLE = {
-  contentStyle: {
-    background: "#FFFFFF",
-    border: "1px solid #E7E9EE",
-    borderRadius: 10,
-    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
-    fontSize: 12,
-    fontFamily: "var(--font-sans)",
-  },
-  labelStyle: { color: "#6B7280", marginBottom: 4 },
-  itemStyle: { color: "#1C1B27" },
-  cursor: { fill: "#F4F5F7", opacity: 0.6 },
-};
+function tooltipProps(p: ChartPalette) {
+  return {
+    contentStyle: {
+      background: p.tooltipBg,
+      border: `1px solid ${p.line}`,
+      borderRadius: 10,
+      boxShadow: p.shadow,
+      fontSize: 12,
+      fontFamily: "var(--font-sans)",
+    },
+    labelStyle: { color: p.tick, marginBottom: 4 },
+    itemStyle: { color: p.tooltipInk },
+    cursor: { fill: p.cursor, opacity: 0.6 },
+  };
+}
 
 function Panel({
   title,
@@ -70,6 +114,9 @@ function Panel({
 // Three single-series panels rather than one multi-axis chart — leads, CPL,
 // and show rate are different units and never share an axis.
 export default function TrendCharts({ data }: { data: TrendPoint[] }) {
+  const palette = PALETTE[useTheme()];
+  const AXIS = axisProps(palette);
+  const TOOLTIP_STYLE = tooltipProps(palette);
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <Panel title="Leads / week">
@@ -80,7 +127,7 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
           <Bar
             dataKey="leads"
             name="Leads"
-            fill={PRIMARY}
+            fill={palette.primary}
             radius={BAR_RADIUS}
             maxBarSize={MAX_BAR}
             isAnimationActive={false}
@@ -98,7 +145,7 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
           <Bar
             dataKey="cpl"
             name="CPL"
-            fill={PRIMARY}
+            fill={palette.primary}
             radius={BAR_RADIUS}
             maxBarSize={MAX_BAR}
             isAnimationActive={false}
@@ -121,7 +168,7 @@ export default function TrendCharts({ data }: { data: TrendPoint[] }) {
           <Bar
             dataKey="showRate"
             name="Show rate"
-            fill={SECONDARY}
+            fill={palette.secondary}
             radius={BAR_RADIUS}
             maxBarSize={MAX_BAR}
             isAnimationActive={false}

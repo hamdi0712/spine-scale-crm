@@ -29,9 +29,10 @@ import {
 } from "recharts";
 import {
   DAILY_GOAL_KEYS,
-  DAILY_KPI_HUES,
   DAILY_KPI_LABELS,
+  type DailyKpiKey,
 } from "@/lib/dailyKpi";
+import useTheme from "@/components/useTheme";
 
 export interface DailyKpiPoint {
   day: string; // short label — "May 22"
@@ -39,35 +40,98 @@ export interface DailyKpiPoint {
   messagesSent: number;
 }
 
+// This is the one chart that cannot use DAILY_KPI_HUES' token references.
+// Recharts puts colours on SVG as attributes — `stroke`, and the `stopColor`
+// of the gradient stops under each curve — and `var()` does not resolve there.
+// So the four hues are written out literally in both themes, and must be kept
+// in step with the --kpi-* tokens in globals.css if either moves.
+//
+// Dark lifts each hue for the same reason the tokens do: the fill under a
+// curve is the hue at 22% and less, and a mid-tone at 22% over a #161B24 card
+// is not a glow, it is nothing.
+const SERIES: Record<"light" | "dark", Record<DailyKpiKey, string>> = {
+  light: {
+    qualifiedLeads: "#3B82F6",
+    messagesSent: "#14B8A6",
+    repliesReceived: "#7C3AED",
+    meetingsBooked: "#EC4899",
+  },
+  dark: {
+    qualifiedLeads: "#60A5FA",
+    messagesSent: "#2DD4BF",
+    repliesReceived: "#A78BFA",
+    meetingsBooked: "#F472B6",
+  },
+};
+
 // Axis furniture in the muted grey the rest of the app sets supporting text
 // in, at the same 11px the card blurbs use. The line colours carry the data;
-// the scaffolding stays quiet.
-const AXIS = {
-  stroke: "#E7E9EE",
-  tick: {
-    fill: "#6B7280",
-    fontSize: 11,
-    fontWeight: 400,
-    fontFamily: "var(--font-sans)",
+// the scaffolding stays quiet. Lifted from TrendCharts, dark values included,
+// so the two charts in the app stay one language.
+interface Furniture {
+  line: string;
+  grid: string;
+  tick: string;
+  tooltipBg: string;
+  tooltipInk: string;
+  shadow: string;
+}
+
+const FURNITURE: Record<"light" | "dark", Furniture> = {
+  light: {
+    line: "#E7E9EE",
+    grid: "#F1F2F5",
+    tick: "#6B7280",
+    tooltipBg: "#FFFFFF",
+    tooltipInk: "#1C1B27",
+    shadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
   },
-  tickLine: false as const,
-  axisLine: { stroke: "#E7E9EE" },
+  dark: {
+    line: "#2A313D",
+    // A touch lighter than the border, as in light — the rules behind the
+    // curves are quieter than the axis that frames them.
+    grid: "#242B36",
+    tick: "#949CAB",
+    tooltipBg: "#161B24",
+    tooltipInk: "#E8EAF0",
+    shadow: "0 4px 16px rgba(0, 0, 0, 0.5)",
+  },
 };
 
-const TOOLTIP_STYLE = {
-  contentStyle: {
-    background: "#FFFFFF",
-    border: "1px solid #E7E9EE",
-    borderRadius: 10,
-    boxShadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
-    fontSize: 12,
-    fontFamily: "var(--font-sans)",
-  },
-  labelStyle: { color: "#6B7280", marginBottom: 4 },
-  itemStyle: { color: "#1C1B27" },
-};
+function axisProps(f: Furniture) {
+  return {
+    stroke: f.line,
+    tick: {
+      fill: f.tick,
+      fontSize: 11,
+      fontWeight: 400,
+      fontFamily: "var(--font-sans)",
+    },
+    tickLine: false as const,
+    axisLine: { stroke: f.line },
+  };
+}
+
+function tooltipProps(f: Furniture) {
+  return {
+    contentStyle: {
+      background: f.tooltipBg,
+      border: `1px solid ${f.line}`,
+      borderRadius: 10,
+      boxShadow: f.shadow,
+      fontSize: 12,
+      fontFamily: "var(--font-sans)",
+    },
+    labelStyle: { color: f.tick, marginBottom: 4 },
+    itemStyle: { color: f.tooltipInk },
+  };
+}
 
 export default function DailyKpiTrend({ data }: { data: DailyKpiPoint[] }) {
+  const theme = useTheme();
+  const hues = SERIES[theme];
+  const AXIS = axisProps(FURNITURE[theme]);
+  const TOOLTIP_STYLE = tooltipProps(FURNITURE[theme]);
   return (
     <div>
       {/* The legend, as two pills at the top right rather than a line of text
@@ -83,11 +147,11 @@ export default function DailyKpiTrend({ data }: { data: DailyKpiPoint[] }) {
         {DAILY_GOAL_KEYS.map((key) => (
           <span
             key={key}
-            className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-line/70 bg-white px-2.5 text-[12px] font-medium text-muted"
+            className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-line/70 bg-surface px-2.5 text-[12px] font-medium text-muted"
           >
             <span
               className="h-2 w-2 rounded-full"
-              style={{ background: DAILY_KPI_HUES[key] }}
+              style={{ background: hues[key] }}
               aria-hidden
             />
             {DAILY_KPI_LABELS[key]}
@@ -117,12 +181,12 @@ export default function DailyKpiTrend({ data }: { data: DailyKpiPoint[] }) {
                 >
                   <stop
                     offset="0%"
-                    stopColor={DAILY_KPI_HUES[key]}
+                    stopColor={hues[key]}
                     stopOpacity={0.22}
                   />
                   <stop
                     offset="100%"
-                    stopColor={DAILY_KPI_HUES[key]}
+                    stopColor={hues[key]}
                     stopOpacity={0}
                   />
                 </linearGradient>
@@ -131,7 +195,7 @@ export default function DailyKpiTrend({ data }: { data: DailyKpiPoint[] }) {
 
             {/* Horizontal rules only. Vertical ones would fence seven days into
                 seven columns, and the point of a line is that it crosses them. */}
-            <CartesianGrid stroke="#F1F2F5" vertical={false} />
+            <CartesianGrid stroke={FURNITURE[theme].grid} vertical={false} />
             <XAxis dataKey="day" {...AXIS} />
             <YAxis {...AXIS} allowDecimals={false} width={44} />
             <Tooltip {...TOOLTIP_STYLE} />
@@ -147,11 +211,11 @@ export default function DailyKpiTrend({ data }: { data: DailyKpiPoint[] }) {
                 type="monotone"
                 dataKey={key}
                 name={DAILY_KPI_LABELS[key]}
-                stroke={DAILY_KPI_HUES[key]}
+                stroke={hues[key]}
                 strokeWidth={2}
                 fill={`url(#daily-kpi-fill-${key})`}
                 fillOpacity={1}
-                dot={{ r: 2.5, strokeWidth: 0, fill: DAILY_KPI_HUES[key] }}
+                dot={{ r: 2.5, strokeWidth: 0, fill: hues[key] }}
                 activeDot={{ r: 4, strokeWidth: 0 }}
                 isAnimationActive={false}
               />

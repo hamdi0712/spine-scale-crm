@@ -47,13 +47,13 @@ type Tone =
   | "neutral";
 
 const TONE_CLS: Record<Tone, { pill: string; dot: string }> = {
-  green: { pill: "bg-ok-soft text-ok", dot: "bg-ok" },
-  amber: { pill: "bg-warn-soft text-warn", dot: "bg-warn" },
-  red: { pill: "bg-bad-soft text-bad", dot: "bg-bad" },
-  blue: { pill: "bg-[#E8F0FE] text-accent", dot: "bg-accent" },
-  purple: { pill: "bg-[#F3EDFD] text-[#7C3AED]", dot: "bg-[#7C3AED]" },
-  teal: { pill: "bg-[#E2F7F5] text-[#0E9F94]", dot: "bg-[#0E9F94]" },
-  indigo: { pill: "bg-[#EDEEFD] text-[#5A5FE0]", dot: "bg-[#5A5FE0]" },
+  green: { pill: "bg-ok-soft text-ok-on-soft", dot: "bg-ok" },
+  amber: { pill: "bg-warn-soft text-warn-on-soft", dot: "bg-warn" },
+  red: { pill: "bg-bad-soft text-bad-on-soft", dot: "bg-bad" },
+  blue: { pill: "bg-accent-soft text-accent", dot: "bg-accent" },
+  purple: { pill: "bg-purple-soft text-purple", dot: "bg-purple" },
+  teal: { pill: "bg-teal-soft text-teal", dot: "bg-teal" },
+  indigo: { pill: "bg-indigo-soft text-indigo", dot: "bg-indigo" },
   neutral: { pill: "bg-line/70 text-muted", dot: "bg-muted" },
 };
 

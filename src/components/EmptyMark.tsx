@@ -24,22 +24,15 @@ export type EmptyGlyph = keyof typeof GLYPHS;
 
 type MarkTone = "blue" | "teal" | "indigo";
 
-const TONES: Record<MarkTone, { disc: string; glyph: string; halo: string }> = {
-  blue: {
-    disc: "linear-gradient(135deg, #EAF1FE, #D6E5FD)",
-    glyph: "#126DFB",
-    halo: "rgba(18, 109, 251, 0.07)",
-  },
-  teal: {
-    disc: "linear-gradient(135deg, #E3F7F5, #CBEFEA)",
-    glyph: "#0E9F94",
-    halo: "rgba(14, 159, 148, 0.07)",
-  },
-  indigo: {
-    disc: "linear-gradient(135deg, #EDEEFD, #DEE0FB)",
-    glyph: "#5A5FE0",
-    halo: "rgba(90, 95, 224, 0.07)",
-  },
+// Two custom properties per tone: the disc's own gradient, and the hue the
+// glyph and the halo are drawn from. Both move with the theme (see
+// globals.css) — light keeps the exact washes this file used to hard-code,
+// dark swaps them for a deep tint of the same hue rather than the pastel,
+// which on a near-black card would read as a bright sticker.
+const TONES: Record<MarkTone, { disc: string; hue: string }> = {
+  blue: { disc: "var(--empty-disc-blue)", hue: "var(--c-accent)" },
+  teal: { disc: "var(--empty-disc-teal)", hue: "var(--c-teal)" },
+  indigo: { disc: "var(--empty-disc-indigo)", hue: "var(--c-indigo)" },
 };
 
 export default function EmptyMark({
@@ -57,8 +50,8 @@ export default function EmptyMark({
       style={
         {
           background: t.disc,
-          color: t.glyph,
-          "--empty-halo": t.halo,
+          color: `rgb(${t.hue})`,
+          "--empty-halo": `rgb(${t.hue} / var(--empty-halo-a))`,
         } as React.CSSProperties
       }
     >

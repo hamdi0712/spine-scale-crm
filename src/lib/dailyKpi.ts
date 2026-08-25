@@ -60,11 +60,18 @@ export const DAILY_KPI_BLURBS: Record<DailyKpiKey, string> = {
 // The KPI row's four hues, the same set and the same order the dashboard's
 // headline row runs in (src/components/KpiCard.tsx): blue, teal, purple, pink.
 // One palette for "the four numbers of a day", wherever they are drawn.
+// The same four hues the dashboard's KPI row wears, named as tokens rather
+// than as hexes so they follow the theme (globals.css lifts each one in dark;
+// the light values are the hexes that used to be written here). They are only
+// ever handed to a CSS declaration — an inline `style`, or ProgressRing's
+// stroke — because `var()` does not resolve in an SVG presentation attribute.
+// The one place that needs literal values is the Recharts trend chart, which
+// resolves them itself; see DailyKpiTrend.
 export const DAILY_KPI_HUES: Record<DailyKpiKey, string> = {
-  qualifiedLeads: "#3B82F6",
-  messagesSent: "#14B8A6",
-  repliesReceived: "#7C3AED",
-  meetingsBooked: "#EC4899",
+  qualifiedLeads: "rgb(var(--kpi-blue))",
+  messagesSent: "rgb(var(--kpi-teal))",
+  repliesReceived: "rgb(var(--kpi-purple))",
+  meetingsBooked: "rgb(var(--kpi-pink))",
 };
 
 // ─── Timeframes ────────────────────────────────────────────────────────────

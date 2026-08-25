@@ -42,24 +42,28 @@ export type KpiGlyph = keyof typeof GLYPHS;
 // is drawn from, which is what keeps the dashboard and the assists looking like
 // one app.
 //
-// The purple is the same #7C3AED the AI treatment uses elsewhere. That is worth
+// The purple is the same violet the AI treatment uses elsewhere. That is worth
 // knowing rather than worrying about: nothing on this page is model-generated,
 // so the two never appear together, and the AI meaning is carried by the
 // sparkle and the gradient rather than by the hue alone.
 export type KpiTone = "blue" | "teal" | "purple" | "pink";
 
 const KPI_TONES: Record<KpiTone, string> = {
-  blue: "#3B82F6", // qualified leads
-  teal: "#14B8A6", // messages sent
-  purple: "#7C3AED", // reply rate
-  pink: "#EC4899", // discovery calls
+  blue: "var(--kpi-blue)", // qualified leads
+  teal: "var(--kpi-teal)", // messages sent
+  purple: "var(--kpi-purple)", // reply rate
+  pink: "var(--kpi-pink)", // discovery calls
 };
 
-// Hex → rgba, so a colour from the shared palette can be used at the alphas the
-// glass wants without a second set of colours being written down anywhere.
-function alpha(hex: string, a: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+// Each tone is a custom property holding a bare `R G B` triple rather than a
+// finished colour, which is what lets the same four lines below serve both
+// themes: the triple changes with the theme (the dark hues are lifted, since a
+// mid-blue at 20% on near-black is nothing), and so do the alphas the disc is
+// mixed at (--mark-wash-*, --mark-halo-a in globals.css). The light values and
+// the light alphas are the ones this file used to hard-code, so the row looks
+// exactly as it did.
+function tint(tone: string, a: string): string {
+  return `rgb(${tone} / ${a})`;
 }
 
 export interface Kpi {
@@ -87,9 +91,9 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
           className="kpi-mark"
           style={
             {
-              color: hue,
-              background: `linear-gradient(140deg, ${alpha(hue, 0.2)}, ${alpha(hue, 0.09)})`,
-              "--mark-halo": alpha(hue, 0.1),
+              color: `rgb(${hue})`,
+              background: `linear-gradient(140deg, ${tint(hue, "var(--mark-wash-a)")}, ${tint(hue, "var(--mark-wash-b)")})`,
+              "--mark-halo": tint(hue, "var(--mark-halo-a)"),
             } as React.CSSProperties
           }
         >

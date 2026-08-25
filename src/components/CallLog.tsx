@@ -152,7 +152,7 @@ function CallRowItem({ call }: { call: CallRow }) {
                           ? "bg-bad-soft text-bad"
                           : s === "CANCELLED"
                             ? "bg-line/70 text-ink"
-                            : "bg-[#E8F0FE] text-accent"
+                            : "bg-accent-soft text-accent"
                       : "text-muted/70 hover:bg-wash/70 hover:text-ink"
                   }`}
                 >

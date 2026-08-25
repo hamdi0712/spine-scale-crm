@@ -4,10 +4,15 @@ import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import { fmtMoney } from "@/lib/format";
 import {
   EMPTY_LIGHT,
+  EMPTY_LIGHT_DARK,
   EMPTY_RAMP,
+  EMPTY_RAMP_DARK,
   RAMP_LIGHT,
+  RAMP_LIGHT_DARK,
   STAGE_RAMP,
+  STAGE_RAMP_DARK,
 } from "@/lib/dashboardPalette";
+import useTheme from "@/components/useTheme";
 
 // Open pipeline value split by stage: a donut with the total in the middle and
 // a labelled legend beside it. The ramp it is drawn in lives in
@@ -25,6 +30,14 @@ export default function PipelineDonut({
   slices: PipelineSlice[];
   total: number;
 }) {
+  // The gradient stops go onto SVG as attributes, so — as with every other
+  // chart in the app — the ramp has to be a real value picked here rather than
+  // a token the stylesheet swaps.
+  const dark = useTheme() === "dark";
+  const stageRamp = dark ? STAGE_RAMP_DARK : STAGE_RAMP;
+  const rampLight = dark ? RAMP_LIGHT_DARK : RAMP_LIGHT;
+  const emptyRamp = dark ? EMPTY_RAMP_DARK : EMPTY_RAMP;
+  const emptyLight = dark ? EMPTY_LIGHT_DARK : EMPTY_LIGHT;
   // Recharts draws nothing for an all-zero dataset, and an empty ring reads as
   // a bug. An empty pipeline is drawn as a full ring in the soft ramp, with
   // honest zeroes in the legend and in the middle.
@@ -42,7 +55,7 @@ export default function PipelineDonut({
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <defs>
-              {STAGE_RAMP.map((base, i) => (
+              {stageRamp.map((base, i) => (
                 <linearGradient
                   key={base}
                   id={`donut-step-${i}`}
@@ -51,11 +64,11 @@ export default function PipelineDonut({
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="0%" stopColor={RAMP_LIGHT[i]} />
+                  <stop offset="0%" stopColor={rampLight[i]} />
                   <stop offset="100%" stopColor={base} />
                 </linearGradient>
               ))}
-              {EMPTY_RAMP.map((base, i) => (
+              {emptyRamp.map((base, i) => (
                 <linearGradient
                   key={base}
                   id={`donut-empty-${i}`}
@@ -64,7 +77,7 @@ export default function PipelineDonut({
                   x2="0"
                   y2="1"
                 >
-                  <stop offset="0%" stopColor={EMPTY_LIGHT[i]} />
+                  <stop offset="0%" stopColor={emptyLight[i]} />
                   <stop offset="100%" stopColor={base} />
                 </linearGradient>
               ))}
@@ -91,7 +104,7 @@ export default function PipelineDonut({
                 <Cell
                   key={slice.stage}
                   fill={`url(#donut-${total > 0 ? "step" : "empty"}-${
-                    i % STAGE_RAMP.length
+                    i % stageRamp.length
                   })`}
                 />
               ))}
@@ -111,7 +124,7 @@ export default function PipelineDonut({
           <li key={slice.stage} className="flex items-center gap-2.5">
             <span
               className="h-2 w-2 shrink-0 rounded-full"
-              style={{ background: STAGE_RAMP[i % STAGE_RAMP.length] }}
+              style={{ background: stageRamp[i % stageRamp.length] }}
               aria-hidden
             />
             <span className="min-w-0 flex-1 truncate text-xs text-muted">

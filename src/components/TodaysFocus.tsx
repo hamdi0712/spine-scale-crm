@@ -23,7 +23,7 @@ const TONE: Record<FocusTone, { chip: string; box: string }> = {
     box: "border-warn/35 bg-warn-soft text-warn",
   },
   blue: {
-    chip: "bg-[#E8F0FE] text-accent",
+    chip: "bg-accent-soft text-accent",
     box: "border-accent/30 bg-accent/10 text-accent",
   },
   neutral: { chip: "bg-wash text-muted", box: "border-line bg-wash text-muted" },
@@ -42,7 +42,7 @@ function Row({ item, mounted }: { item: FocusItem; mounted: boolean }) {
         className="glass-panel glass-panel-hover flex items-center gap-3 px-3 py-2 transition-all"
       >
         <span
-          className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border bg-white/70 ${tone.box}`}
+          className={`flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border bg-[var(--glass-chip)] ${tone.box}`}
           aria-hidden
         >
           <Icon name={item.icon} className="h-3 w-3" />

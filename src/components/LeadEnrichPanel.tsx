@@ -321,7 +321,7 @@ function StatusChip({
   const [label, cls]: [string, string] = !outcome
     ? running
       ? willRun
-        ? ["Running…", "bg-[#E8F0FE] text-accent"]
+        ? ["Running…", "bg-accent-soft text-accent"]
         : ["Skipped", "bg-line/70 text-muted"]
       : ["—", "bg-line/70 text-muted"]
     : outcome.status === "wrote"

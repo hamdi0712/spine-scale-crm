@@ -450,7 +450,7 @@ function QueueChip({ item }: { item: QueueItem }) {
     item.state === "waiting"
       ? ["Queued", "bg-line/70 text-muted"]
       : item.state === "running"
-        ? ["Running…", "bg-[#E8F0FE] text-accent"]
+        ? ["Running…", "bg-accent-soft text-accent"]
         : item.result?.status === "PROMOTED"
           ? ["Promoted", "bg-ok-soft text-ok"]
           : item.result?.status === "REJECTED"

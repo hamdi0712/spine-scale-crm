@@ -36,3 +36,24 @@ export const RAMP_LIGHT = ["#1A63C8", "#2D7BEA", "#4C93FF", "#22BFCB", "#63D3CB"
 // composed rather than the pipeline being described.
 export const EMPTY_RAMP = ["#9CC4F2", "#A8B8EE", "#B2ADE9", "#9FCBDD", "#8FD6CC"];
 export const EMPTY_LIGHT = ["#C8DDF8", "#CFD8F5", "#D5D2F2", "#CBE2EC", "#C2EAE3"];
+
+// ─── Dark ──────────────────────────────────────────────────────────────────
+// The same two ramps, rebuilt for a dark card.
+//
+// The light ramp is spaced by lightness starting from a deep #0C46A2, which is
+// what gives it its order — and on a #161B24 card that first step is very
+// nearly the card itself, so the sequence loses its darkest two segments to
+// the background. The dark ramp keeps the identical construction (deep primary
+// blue → primary → secondary teal, each step ≥0.06 OKLCH L from its
+// neighbour) and slides the whole run upward, so the order still reads and
+// every segment clears the card it is drawn on.
+//
+// The empty ramp moves the other way. Its light values are pale pastels chosen
+// to sit *below* the live ramp in saturation; on a dark card pale pastels are
+// the loudest thing on the page, so the dark empty ramp is a set of muted
+// mid-tones instead — still desaturated relative to the live ramp, which is
+// the property that matters, just approached from the other side.
+export const STAGE_RAMP_DARK = ["#3B82F6", "#4C93FF", "#60A5FA", "#2DD4BF", "#5EEAD4"];
+export const RAMP_LIGHT_DARK = ["#5B9CFF", "#6BA9FF", "#7DB8FF", "#4EE0CE", "#7FF0E0"];
+export const EMPTY_RAMP_DARK = ["#3E5473", "#455172", "#4B4E70", "#3F5A6B", "#3C6068"];
+export const EMPTY_LIGHT_DARK = ["#4D688C", "#55648B", "#5B6189", "#4E6E82", "#4A7580"];

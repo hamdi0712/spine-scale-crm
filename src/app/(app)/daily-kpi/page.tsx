@@ -256,7 +256,7 @@ export default async function DailyKpiPage({
           <div className="flex flex-1 flex-col items-center justify-center py-4">
             <ProgressRing
               pct={score}
-              hue="#7C3AED"
+              hue="rgb(var(--kpi-purple))"
               size={132}
               stroke={12}
               label={`Score ${score} out of 100`}
@@ -488,7 +488,7 @@ export default async function DailyKpiPage({
           <div className="flex flex-1 flex-col items-center justify-center py-4">
             <ProgressRing
               pct={streak > 0 ? 100 : 0}
-              hue="#3B82F6"
+              hue="rgb(var(--kpi-blue))"
               size={116}
               stroke={8}
               label={`${streak} day streak`}

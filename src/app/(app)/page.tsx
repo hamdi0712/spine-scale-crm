@@ -317,7 +317,7 @@ export default async function DashboardPage() {
               blue gradient with a pale edge, so the headline sits on glass
               rather than on a flat tint. */}
           <div className="glass-panel mt-4 flex items-center gap-4 !rounded-[18px] p-4">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-accent shadow-[0_1px_2px_rgba(28,27,39,0.07)]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--glass-chip-strong)] text-accent shadow-[0_1px_2px_rgba(28,27,39,0.07)]">
               <Icon name="bell" />
             </span>
             <span className="min-w-0 flex-1">
@@ -384,7 +384,7 @@ export default async function DashboardPage() {
                 >
                   <Icon
                     name="clock"
-                    className="h-[18px] w-[18px] text-[#CFE4FF]"
+                    className="h-[18px] w-[18px] text-hero-ink"
                   />
                 </span>
                 US business hours
