@@ -241,7 +241,7 @@ export default function TaskBoard({
                           <Link
                             href={task.link.href}
                             draggable={false}
-                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-[#E8F0FE] px-2 py-0.5 text-xs font-medium text-accent hover:underline"
+                            className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent hover:underline"
                           >
                             <Icon name="tag" className="h-3 w-3 shrink-0" />
                             <span className="truncate">{task.link.label}</span>

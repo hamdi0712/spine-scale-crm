@@ -51,7 +51,7 @@ export function BusinessHoursChip() {
     ? US_TIME_ZONES.filter((z) => businessHours(now, z.id).state === "open").length
     : null;
   return (
-    <span className="inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-line bg-surface px-[18px] text-sm font-medium text-[#4B5563]">
+    <span className="inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-line bg-surface px-[18px] text-sm font-medium text-ink-soft">
       <Icon name="clock" className="h-4 w-4 text-muted" />
       US business hours
       <span className="num text-muted">

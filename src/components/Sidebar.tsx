@@ -20,6 +20,7 @@ import { logout } from "@/lib/actions/auth";
 import AiButton from "@/components/AiButton";
 import Icon from "@/components/Icons";
 import { LogoIconChip } from "@/components/Logo";
+import ThemeToggle from "@/components/ThemeToggle";
 
 // Nav glyphs come from Tabler; the rest of the app (including the collapse
 // chevron and Sign out below) stays on the in-house set. Stroke is dialled
@@ -252,6 +253,11 @@ export default function Sidebar({
           <SETTINGS.Glyph size={20} stroke={1.75} className="shrink-0" />
           {!collapsed && SETTINGS.label}
         </Link>
+        {/* Directly under Settings, inside the same block behind the rule.
+            It belongs with Settings rather than with the nav for the same
+            reason Settings does: it changes how the app is drawn, not where
+            you are in it. */}
+        <ThemeToggle collapsed={collapsed} />
       </div>
       <form
         action={logout}

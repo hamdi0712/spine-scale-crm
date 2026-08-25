@@ -2,9 +2,193 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Theme tokens ──────────────────────────────────────────────────────────
+   Every colour the app draws with is named once here, in light and again in
+   dark. Values are bare `R G B` triples rather than finished colours so that
+   Tailwind's opacity modifiers still work through them (see tailwind.config.ts).
+
+   The light column is the palette the app already had, unchanged — this file
+   is where those hexes moved to, not a retune of them. The dark column is the
+   only new thing.
+
+   Dark is not an inversion. Surfaces climb rather than fall (page darkest,
+   cards lifted off it) because a dark UI reads by elevation the way a light
+   one reads by shadow; accents are lifted toward their brighter cousins
+   because a mid-saturation hue that carries a label on white disappears on
+   near-black; and the soft status fills become deep tints of their own hue
+   rather than pale pastels, with a separate lighter value for the text that
+   sits on them. */
+:root {
+  /* Surfaces, page → card. */
+  --c-bg: 254 254 254;          /* #FEFEFE */
+  --c-panel: 250 250 251;       /* #FAFAFB — the sidebar */
+  --c-wash: 244 245 247;        /* #F4F5F7 — hover fills, inset rows */
+  --c-surface: 255 255 255;     /* #FFFFFF — cards, fields */
+  --c-line: 231 233 238;        /* #E7E9EE */
+
+  /* Brand blue and its states. */
+  --c-accent: 18 109 251;       /* #126DFB */
+  --c-accent-hover: 35 120 255; /* #2378FF */
+  --c-accent-press: 15 94 221;  /* #0F5EDD */
+  --c-accent-soft: 232 240 254; /* #E8F0FE — the blue pill fill */
+  --c-accent2: 63 209 200;      /* #3FD1C8 */
+
+  /* The AI pair. */
+  --c-ai: 124 58 237;           /* #7C3AED */
+  --c-ai-deep: 75 50 195;       /* #4B32C3 */
+  --c-ai-soft: 243 237 253;     /* #F3EDFD */
+
+  /* Text. */
+  --c-ink: 28 27 39;            /* #1C1B27 */
+  --c-ink-soft: 75 85 99;       /* #4B5563 — secondary button lettering */
+  --c-muted: 107 114 128;       /* #6B7280 */
+
+  /* Status, saturated + soft-pill fill + the text that sits on the fill. */
+  --c-ok: 31 170 109;           /* #1FAA6D */
+  --c-ok-soft: 231 248 239;     /* #E7F8EF */
+  --c-ok-on-soft: 31 170 109;
+  --c-warn: 216 155 45;         /* #D89B2D */
+  --c-warn-soft: 253 243 226;   /* #FDF3E2 */
+  --c-warn-on-soft: 216 155 45;
+  --c-bad: 225 76 87;           /* #E14C57 */
+  --c-bad-soft: 253 235 236;    /* #FDEBEC */
+  --c-bad-on-soft: 225 76 87;
+
+  /* The remaining badge hues, which used to be arbitrary values inline. */
+  --c-teal: 14 159 148;         /* #0E9F94 */
+  --c-teal-soft: 226 247 245;   /* #E2F7F5 */
+  --c-indigo: 90 95 224;        /* #5A5FE0 */
+  --c-indigo-soft: 237 238 253; /* #EDEEFD */
+  --c-purple: 124 58 237;       /* #7C3AED */
+  --c-purple-soft: 243 237 253; /* #F3EDFD */
+  --c-pink: 236 72 153;         /* #EC4899 */
+
+  /* The navy hero widget's own scale — dark in both themes by design. */
+  --c-hero: 18 48 90;           /* #12305A */
+  --c-hero-ink: 207 228 255;    /* #CFE4FF */
+
+  /* The four KPI hues. Kept as their own tokens rather than reusing the badge
+     ones: the cards tint a disc with them at low alpha, which wants a value
+     chosen for a fill rather than for lettering. */
+  --kpi-blue: 59 130 246;       /* #3B82F6 */
+  --kpi-teal: 20 184 166;       /* #14B8A6 */
+  --kpi-purple: 124 58 237;     /* #7C3AED */
+  --kpi-pink: 236 72 153;       /* #EC4899 */
+  /* How hard a KPI/empty disc's wash and halo are pushed. On white a 20%
+     tint of the hue is a whisper; on near-black the same 20% is invisible,
+     so dark raises all three together rather than picking new hues. */
+  --mark-wash-a: 0.2;
+  --mark-wash-b: 0.09;
+  --mark-halo-a: 0.1;
+  /* The empty-state discs are twice the size and carry a lighter halo. */
+  --empty-halo-a: 0.07;
+  --mark-inner-light: rgba(255, 255, 255, 0.75);
+
+  /* Chart furniture, read by Recharts through getComputedStyle. */
+  --chart-grid: 231 233 238;
+  --chart-axis: 231 233 238;
+  --chart-tick: 107 114 128;
+  --chart-tooltip-bg: 255 255 255;
+  --chart-cursor: 244 245 247;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --selection: rgba(18, 109, 251, 0.18);
+  --glass-panel-edge: #DEE8FA;
+  /* The three empty-state discs, kept as finished gradients rather than as a
+     hue mixed at an alpha: these are the exact washes the light theme shipped
+     with, and they are near enough to a mix of the hue that rebuilding them
+     that way would have shifted them by a few units for no gain. */
+  /* The small round chip that sits on a .glass-panel — the bell disc on the
+     Now banner, the tone dot on a Today's-focus row. On the light glass it is
+     near-white; on the dark glass it has to be a lift of that glass rather
+     than white, which at 70-80% would be a hole punched in the panel. */
+  --glass-chip: rgba(255, 255, 255, 0.7);
+  --glass-chip-strong: rgba(255, 255, 255, 0.8);
+  --empty-disc-blue: linear-gradient(135deg, #EAF1FE, #D6E5FD);
+  --empty-disc-teal: linear-gradient(135deg, #E3F7F5, #CBEFEA);
+  --empty-disc-indigo: linear-gradient(135deg, #EDEEFD, #DEE0FB);
+}
+
+.dark {
+  --c-bg: 11 14 20;             /* #0B0E14 — the page floor */
+  --c-panel: 16 20 27;          /* #10141B — the sidebar, just off the floor */
+  --c-wash: 30 36 46;           /* #1E242E — hover fills, inset rows */
+  --c-surface: 22 27 36;        /* #161B24 — cards lift off the page */
+  --c-line: 42 49 61;           /* #2A313D */
+
+  --c-accent: 77 141 255;       /* #4D8DFF */
+  --c-accent-hover: 107 161 255;/* #6BA1FF */
+  --c-accent-press: 59 130 255; /* #3B82FF */
+  --c-accent-soft: 25 45 80;    /* #192D50 */
+  --c-accent2: 63 209 200;
+
+  --c-ai: 167 139 250;          /* #A78BFA */
+  --c-ai-deep: 196 181 253;     /* #C4B5FD — this is lettering on dark, so it
+                                   climbs rather than deepens */
+  --c-ai-soft: 44 34 66;        /* #2C2242 */
+
+  --c-ink: 232 234 240;         /* #E8EAF0 */
+  --c-ink-soft: 195 201 214;    /* #C3C9D6 */
+  --c-muted: 148 156 171;       /* #949CAB — held at ≥4.5:1 on --c-surface */
+
+  --c-ok: 52 211 153;           /* #34D399 */
+  --c-ok-soft: 18 51 38;        /* #123326 */
+  --c-ok-on-soft: 110 231 183;  /* #6EE7B7 */
+  --c-warn: 240 180 74;         /* #F0B44A */
+  --c-warn-soft: 58 44 18;      /* #3A2C12 */
+  --c-warn-on-soft: 252 214 138;/* #FCD68A */
+  --c-bad: 248 113 113;         /* #F87171 */
+  --c-bad-soft: 62 28 31;       /* #3E1C1F */
+  --c-bad-on-soft: 252 165 165; /* #FCA5A5 */
+
+  --c-teal: 45 212 191;         /* #2DD4BF */
+  --c-teal-soft: 15 52 48;      /* #0F3430 */
+  --c-indigo: 165 168 245;      /* #A5A8F5 */
+  --c-indigo-soft: 35 37 74;    /* #23254A */
+  --c-purple: 167 139 250;      /* #A78BFA */
+  --c-purple-soft: 44 34 66;    /* #2C2242 */
+  --c-pink: 244 114 182;        /* #F472B6 */
+
+  /* The hero stays navy — see .hero-navy below for why. */
+  --c-hero: 18 48 90;
+  --c-hero-ink: 207 228 255;
+
+  --kpi-blue: 96 165 250;       /* #60A5FA */
+  --kpi-teal: 45 212 191;       /* #2DD4BF */
+  --kpi-purple: 167 139 250;    /* #A78BFA */
+  --kpi-pink: 244 114 182;      /* #F472B6 */
+  --mark-wash-a: 0.3;
+  --mark-wash-b: 0.14;
+  --mark-halo-a: 0.14;
+  --empty-halo-a: 0.11;
+  --mark-inner-light: rgba(255, 255, 255, 0.08);
+
+  --chart-grid: 42 49 61;
+  --chart-axis: 42 49 61;
+  --chart-tick: 148 156 171;
+  --chart-tooltip-bg: 22 27 36;
+  --chart-cursor: 30 36 46;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --selection: rgba(77, 141, 255, 0.28);
+  --glass-panel-edge: rgb(51 68 100);
+  /* Dark: a deep tint of the same hue rather than the pastel, mixed off the
+     card surface so the disc reads as part of the card and not a sticker. */
+  --glass-chip: rgba(255, 255, 255, 0.09);
+  --glass-chip-strong: rgba(255, 255, 255, 0.12);
+  --empty-disc-blue: linear-gradient(135deg, rgb(var(--c-accent) / 0.14), rgb(var(--c-accent) / 0.3));
+  --empty-disc-teal: linear-gradient(135deg, rgb(var(--c-teal) / 0.14), rgb(var(--c-teal) / 0.3));
+  --empty-disc-indigo: linear-gradient(135deg, rgb(var(--c-indigo) / 0.14), rgb(var(--c-indigo) / 0.3));
+}
+
 @layer base {
   html {
     color-scheme: light;
+  }
+  /* Native furniture — scrollbars, the caret, date pickers, autofill — is the
+     browser's to draw, and it only knows which way to draw it from this. */
+  html.dark {
+    color-scheme: dark;
   }
   body {
     @apply bg-bg text-ink antialiased;
@@ -23,7 +207,7 @@
     font-weight: 600;
   }
   ::selection {
-    background: rgba(18, 109, 251, 0.18);
+    background: var(--selection);
   }
 }
 
@@ -41,7 +225,7 @@
      wrapped onto a second line would break the 42px height every one of
      these shares — a row of four in a page header is where that showed. */
   .btn {
-    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-surface px-[18px] text-sm font-medium text-[#4B5563] hover:bg-wash/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
+    @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-line bg-surface px-[18px] text-sm font-medium text-ink-soft hover:bg-wash/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
   }
   .btn-primary {
     @apply inline-flex h-[42px] shrink-0 items-center gap-2 whitespace-nowrap rounded-[10px] border border-accent px-[18px] text-sm font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30;
@@ -130,7 +314,8 @@
      shallow blue glass, so the two halves of the Now card are one material.
      The gradient and the edges are below; this is the shape. */
   .glass-panel {
-    @apply rounded-[14px] border border-[#DEE8FA];
+    @apply rounded-[14px] border;
+    border-color: var(--glass-panel-edge);
   }
   /* The soft disc behind an empty card's glyph. Big, quiet, and centred over
      the copy that was already there. */
@@ -486,3 +671,208 @@ tbody tr:last-child > .td {
 .prose-doc table { @apply mb-3 w-full border-collapse text-sm; }
 .prose-doc th,
 .prose-doc td { @apply border border-line px-2 py-1 text-left; }
+
+/* ═══ Dark ══════════════════════════════════════════════════════════════════
+   Everything above this line is the light theme, unchanged. The token swap in
+   `.dark` at the top of the file already carries every flat colour in the app;
+   what is left here is the handful of treatments that are gradients, glows and
+   shadows rather than colours — those cannot be expressed as a token, and
+   several of them need a different *construction* on a dark ground rather than
+   a different value.
+
+   The recurring reason: on white, depth is drawn with shadow (a dark thing
+   under an object). On near-black a shadow is invisible, so depth is drawn
+   with light instead (a lit top edge, a raised surface), and a glow that read
+   as a soft halo on white reads as a smear unless it is tightened and the
+   ambient bloom is cut back. */
+
+/* The primary button. Same tactile, lit-from-above construction; the ramp is
+   rebuilt from the lifted dark accent, and the outer brand-tinted lift is
+   pulled down because a 35%-alpha blue bloom on a near-black page is a light
+   source rather than an elevation. */
+.dark .btn-primary {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(var(--c-accent-hover)),
+    rgb(var(--c-accent))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    0 6px 16px rgba(0, 0, 0, 0.45),
+    0 0 18px rgba(var(--c-accent) / 0.22);
+}
+.dark .btn-primary:hover {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(var(--c-accent-hover)),
+    rgb(var(--c-accent-press))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+    0 8px 20px rgba(0, 0, 0, 0.5),
+    0 0 24px rgba(var(--c-accent) / 0.3);
+}
+.dark .btn-primary:active {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(var(--c-accent)),
+    rgb(var(--c-accent-press))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* The AI button. The rim's ramp is the one part that must not change — it is
+   the mark, and a teal→blue→violet→magenta arc is as legible on black as on
+   white. What changes is the fill it is clipped against (the card's dark
+   surface instead of white) and the bloom.
+
+   On white the halo's job was to stop a white capsule reading as a plain
+   secondary button. On dark the capsule is already distinct, and a violet glow
+   is far more visible against near-black — so the bloom is *raised in colour
+   and cut in spread*: a tighter, slightly stronger violet ring rather than the
+   wide soft wash, which at light-mode radius would haze the whole sidebar
+   foot. The contact shadow goes to black, since a violet-tinted one under a
+   dark button does nothing. */
+.dark .btn-ai {
+  background-image:
+    linear-gradient(rgb(var(--c-surface)), rgb(var(--c-surface))),
+    var(--ai-ramp);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 0 14px rgba(167, 139, 250, 0.28);
+}
+.dark .btn-ai:hover:not(:disabled) {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 6px 16px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(167, 139, 250, 0.42);
+}
+.dark .btn-ai:active:not(:disabled) {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 0 8px rgba(167, 139, 250, 0.3);
+}
+.dark .btn-ai:disabled {
+  box-shadow: none;
+}
+
+/* The AI panel. Same rule as the button: a fifth of the button's strength, but
+   the violet raised to the lighter --c-ai value so it registers at all against
+   the page, and the outer 52px bloom tightened — a half-width card haloed at
+   that radius on a dark page lights the column beside it. The card also gains
+   a black contact shadow, which is what separates it from the page now that
+   the light-mode 5%-black seat does nothing. */
+.dark .card-ai {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 16px rgba(167, 139, 250, 0.16),
+    0 0 40px rgba(167, 139, 250, 0.09);
+}
+
+/* The gradient mark at the head of an AI panel. The ramp is pulled a shade
+   brighter at both ends — the light-mode #4B32C3 foot is nearly the page
+   colour in dark and the square would read as a hole — and the inner highlight
+   drops, since a 28%-white top edge on a small dark square is a hard line. */
+.dark .ai-mark {
+  background-image: linear-gradient(to bottom, #c4b5fd, #7c3aed);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 0 12px rgba(167, 139, 250, 0.4);
+}
+
+/* The active nav card. Light mode lifts it off the panel with a white
+   highlight and two neutral shadows; dark cannot use the white (it would be a
+   bright seam) and cannot use the shadows (invisible on a near-black panel),
+   so the lift is carried by the surface being lighter than the sidebar plus a
+   faint accent-tinted ring. */
+.dark .nav-active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(var(--c-accent) / 0.18);
+}
+
+/* The KPI tile. Diffusion still, just deep enough to register. */
+.dark .card-kpi {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* The tinted discs. The recipe is unchanged and the alphas it reads
+   (--mark-wash-*, --mark-halo-a, --mark-inner-light) are already raised by the
+   token block, so this only has to swap the lit top edge — at light mode's 75%
+   white it is a bright crescent on a dark disc — and re-seat the shadow. */
+.dark .kpi-mark,
+.dark .empty-mark {
+  box-shadow:
+    inset 0 1px 0 var(--mark-inner-light),
+    0 0 0 5px var(--mark-halo, var(--empty-halo, rgba(77, 141, 255, 0.1))),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+/* The donut's surface. The white core of the light-mode wash becomes a lift of
+   the surface itself; the blue stays, at the strength it needs to be seen. */
+.dark .donut-glass {
+  background-image: radial-gradient(
+    circle at 38% 30%,
+    rgba(255, 255, 255, 0.07),
+    rgba(var(--c-accent) / 0.14) 58%,
+    rgba(var(--c-accent) / 0) 78%
+  );
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+
+/* Today's focus and the Now banner. The same diagonal blue glass, rebuilt from
+   the dark end: a deep blue-slate that is still visibly *blue* against the
+   neutral cards beside it, which is the whole point of the material. */
+.dark .glass-panel {
+  background-image: linear-gradient(135deg, #17202F 0%, #182338 45%, #1A2740 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+.dark .glass-panel-hover:hover {
+  background-image: linear-gradient(135deg, #1B2537 0%, #1D2942 45%, #20304C 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 8px 20px rgba(0, 0, 0, 0.45);
+}
+
+/* The business-hours widget.
+   This is the one panel that was already dark on a light page on purpose, and
+   the risk in dark mode is the opposite of everywhere else: it stops being a
+   focal object and dissolves into the page.
+
+   So it keeps its navy — the field, the map inside it and the frosted zone
+   tiles are all built for that ground, and re-lighting them would be a
+   redesign rather than a dark variant. What changes is only what separates it
+   from what is behind it: the top-left blue glow is brought up so the widget
+   is visibly *lit* against an unlit page, the border goes from a hairline to a
+   readable edge, and the drop shadow is replaced by a wide ambient blue bloom
+   — on a dark page the widget has to push light outward to read as raised,
+   because there is nothing left to darken underneath it. */
+.dark .hero-navy {
+  background-image:
+    radial-gradient(
+      90% 70% at 30% -10%,
+      rgba(84, 158, 250, 0.5),
+      rgba(84, 158, 250, 0) 68%
+    ),
+    linear-gradient(168deg, #21507f 0%, #143563 42%, #071a36 100%);
+  border: 1px solid rgba(126, 173, 232, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(190, 219, 255, 0.32),
+    inset 0 -1px 0 rgba(3, 12, 28, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 16px 44px rgba(0, 0, 0, 0.55),
+    0 0 40px rgba(37, 99, 235, 0.16);
+}

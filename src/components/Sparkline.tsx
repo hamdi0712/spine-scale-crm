@@ -8,11 +8,15 @@ const H = 20;
 // by the viewBox at either edge.
 const PAD = 3.5;
 
+// The status tokens, read through custom properties so the line follows the
+// theme. They are handed to `style` rather than to a `stroke` attribute
+// throughout this file: `var()` resolves in a CSS declaration, and an SVG
+// presentation attribute is not one.
 const STROKE: Record<string, string> = {
-  green: "#1FAA6D",
-  amber: "#D89B2D",
-  red: "#E14C57",
-  neutral: "#9AA1AE",
+  green: "rgb(var(--c-ok))",
+  amber: "rgb(var(--c-warn))",
+  red: "rgb(var(--c-bad))",
+  neutral: "rgb(var(--c-muted))",
 };
 
 export default function Sparkline({
@@ -37,7 +41,7 @@ export default function Sparkline({
           y1={H / 2}
           x2={W - PAD}
           y2={H / 2}
-          stroke={STROKE.neutral}
+          style={{ stroke: STROKE.neutral }}
           strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray="2 3"
@@ -71,8 +75,8 @@ export default function Sparkline({
       role="img"
       aria-label={label ?? "Show rate over recent weeks"}
     >
-      <path d={d} stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={x(last)} cy={y(values[last])} r="2.5" fill={stroke} />
+      <path d={d} style={{ stroke }} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(last)} cy={y(values[last])} r="2.5" style={{ fill: stroke }} />
     </svg>
   );
 }

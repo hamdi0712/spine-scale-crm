@@ -48,7 +48,7 @@ export default function ProgressRing({
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="#E7E9EE"
+            style={{ stroke: "rgb(var(--c-line))" }}
             strokeWidth={stroke}
           />
           <circle
@@ -56,7 +56,7 @@ export default function ProgressRing({
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke={hue}
+            style={{ stroke: hue }}
             strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
