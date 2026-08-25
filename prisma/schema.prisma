@@ -227,6 +227,20 @@ model Lead {
   email        String?
   leadSource   String?
   stage        String    @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST
+  // When the stage above last actually changed.
+  //
+  // Not updatedAt, which is what the date-based stage metrics used to read and
+  // is the reason this column exists: updatedAt moves for a typo fixed in a
+  // phone number, so a lead approached three weeks ago and edited this morning
+  // filed its approach under this morning. This one moves when — and only
+  // when — the stage value is different from the one already stored, which is
+  // the single rule every write of it obeys (src/lib/leadStage.ts).
+  //
+  // Defaulted to now() so a lead created at a stage is stamped at its
+  // creation, which is true: reaching a stage by being made at it is still
+  // reaching it. Backfilled to createdAt on existing rows for the same reason
+  // — it is the only instant about them the database can honestly claim.
+  stageChangedAt DateTime @default(now())
   estValue     Float?
   nextFollowUp DateTime?
   archived     Boolean   @default(false) // set when converted to a client (or otherwise closed out)

@@ -137,13 +137,13 @@ export default async function DashboardPage() {
     // src/lib/funnel.ts). Archived leads are included for the same reason the
     // query above includes them — a message sent three weeks ago was sent
     // whatever happened to the lead since. Bounded by the two windows the card
-    // compares.
+    // compares, on the timestamp the card reads.
     prisma.lead.findMany({
       where: {
         stage: { in: [...CONTACTED_STAGES] },
-        updatedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
+        stageChangedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
       },
-      select: { updatedAt: true },
+      select: { stageChangedAt: true },
     }),
     // The discovery calls on this month's calendar. Counted off the call log
     // rather than off a lead's stage: a stage cannot be un-set when a call is

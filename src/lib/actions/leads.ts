@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { LEAD_STAGES, LeadStage, seedChecklist } from "@/lib/constants";
+import { seedChecklist } from "@/lib/constants";
+import { isLeadStage, stageChangePatch } from "@/lib/leadStage";
 import { recordMilestone } from "@/lib/milestones";
 import { ONBOARDING_FIRST_STEP } from "@/lib/onboarding";
 import {
@@ -88,12 +89,23 @@ export async function createLead(formData: FormData) {
 // candidate becomes once it has scored 5 or more out of 10.
 
 export async function updateLead(id: string, formData: FormData) {
-  const stage = str(formData, "stage");
+  // The stage is read against the one already stored, because this form saves
+  // the whole lead: fixing a typo in a phone number posts the stage the lead
+  // is already at, and stamping stageChangedAt for that would put the move
+  // under the day of the typo. stageChangePatch is what decides
+  // (src/lib/leadStage.ts); a lead that has since been deleted changes
+  // nothing, the same as before.
+  const current = await prisma.lead.findUnique({
+    where: { id },
+    select: { stage: true },
+  });
+  if (!current) return;
+
   await prisma.lead.update({
     where: { id },
     data: {
       ...leadFields(formData),
-      ...(stage && LEAD_STAGES.includes(stage as LeadStage) ? { stage } : {}),
+      ...stageChangePatch(str(formData, "stage"), current.stage),
     },
   });
   revalidatePath("/pipeline");
@@ -123,9 +135,19 @@ export async function deleteLeads(ids: string[]) {
 }
 
 export async function moveLeadsStage(ids: string[], stage: string) {
-  if (!LEAD_STAGES.includes(stage as LeadStage)) return;
+  if (!isLeadStage(stage)) return;
   const list = leadIds(ids);
   if (list.length === 0) return;
+  // Two statements rather than one, because a bulk move is not one event: a
+  // selection dropped on Contacted usually holds some leads already there,
+  // and stamping the whole selection would file those as moving again today.
+  // The stage goes on every row it was asked for; the timestamp goes only on
+  // the rows the stage is new to, which the WHERE clause picks out for us.
+  const now = new Date();
+  await prisma.lead.updateMany({
+    where: { id: { in: list }, stage: { not: stage } },
+    data: { stage, stageChangedAt: now },
+  });
   await prisma.lead.updateMany({
     where: { id: { in: list } },
     data: { stage },
@@ -143,8 +165,16 @@ function leadIds(raw: unknown): string[] {
 }
 
 export async function moveLeadStage(id: string, stage: string) {
-  if (!LEAD_STAGES.includes(stage as LeadStage)) return;
-  await prisma.lead.update({ where: { id }, data: { stage } });
+  if (!isLeadStage(stage)) return;
+  // Dropping a card back on the column it is already in is a miss, not a
+  // move, so it must not re-date the lead. updateMany rather than update: the
+  // stage has to be part of the WHERE clause to say "only if this is actually
+  // a change", and a lead already at the stage matches nothing and is left
+  // exactly as it was.
+  await prisma.lead.updateMany({
+    where: { id, stage: { not: stage } },
+    data: { stage, stageChangedAt: new Date() },
+  });
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
   revalidatePath("/");
@@ -251,9 +281,12 @@ export async function convertLeadToClient(id: string) {
       checklist: { create: seedChecklist() },
     },
   });
+  // Won and archived. The stage goes through the same rule as every other
+  // write of it: a lead converted from Negotiating moved today, and one
+  // already marked Won keeps the day it was won on.
   await prisma.lead.update({
     where: { id },
-    data: { stage: "WON", archived: true },
+    data: { archived: true, ...stageChangePatch("WON", lead.stage) },
   });
   await recordMilestone(
     "LEAD_CONVERTED",

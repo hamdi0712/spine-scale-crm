@@ -51,6 +51,12 @@ export async function promoteToLead(
         email: candidate.email,
         leadSource: candidate.source,
         stage: PROMOTED_LEAD_STAGE,
+        // Stamped with the promotion's own instant rather than left to the
+        // column's now() default, so the lead, its scorecard and the
+        // candidate it came from all carry the one time this transaction
+        // happened. A lead created at a stage reached it by being made at it,
+        // which is a stage change like any other.
+        stageChangedAt: now,
         estValue: candidate.estValue,
         linkedinUrl: candidate.linkedinUrl,
         companyLinkedinUrl: candidate.companyLinkedinUrl,

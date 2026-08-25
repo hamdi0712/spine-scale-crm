@@ -105,18 +105,23 @@ export async function loadDailyKpiRange(
       }),
       // Messages sent — leads that have reached the Contacted stage
       // (CONTACTED_STAGES in src/lib/constants.ts), filed under the day they
-      // were last touched.
+      // moved there.
       //
       // The stage is the record of the approach rather than
       // connectionRequestSentAt, which was one optional field on the lead that
-      // only counted what somebody remembered to tick. Lead carries no
-      // stage-change timestamp, so updatedAt is the closest honest reading of
-      // when the message went out — the same reading the meetings half below
-      // takes of a lead sitting at Discovery Call Booked, and it has the same
-      // limit: a lead edited later moves with its last edit.
+      // only counted what somebody remembered to tick.
+      //
+      // The day comes off stageChangedAt, which is written only when the stage
+      // value actually changes (src/lib/leadStage.ts). It was updatedAt until
+      // that column existed, and that was an approximation with a real cost: a
+      // lead approached three weeks ago and edited this morning counted as
+      // this morning's outreach.
       prisma.lead.findMany({
-        where: { stage: { in: [...CONTACTED_STAGES] }, updatedAt: inRange },
-        select: { updatedAt: true },
+        where: {
+          stage: { in: [...CONTACTED_STAGES] },
+          stageChangedAt: inRange,
+        },
+        select: { stageChangedAt: true },
       }),
       prisma.lead.findMany({
         where: { repliedAt: inRange },
@@ -135,15 +140,15 @@ export async function loadDailyKpiRange(
         },
         select: { createdAt: true, leadId: true },
       }),
-      // Meetings — the stage half: a lead sitting at Discovery Call Booked
-      // that was last touched on that day. Lead carries no stage-change
-      // timestamp, so updatedAt is the closest honest reading of when it got
-      // there, and it is only ever used to catch a booking that was recorded
+      // Meetings — the stage half: a lead that moved to Discovery Call Booked
+      // on that day, read off stageChangedAt (src/lib/leadStage.ts) rather
+      // than off updatedAt, which used to stand in for it and moved for any
+      // edit at all. It is only ever used to catch a booking that was recorded
       // as a stage move with no call logged behind it. Anything that does have
       // a call on the same day is dropped below rather than counted twice.
       prisma.lead.findMany({
-        where: { stage: "DISCOVERY", updatedAt: inRange },
-        select: { id: true, updatedAt: true },
+        where: { stage: "DISCOVERY", stageChangedAt: inRange },
+        select: { id: true, stageChangedAt: true },
       }),
     ]);
 
@@ -180,7 +185,7 @@ export async function loadDailyKpiRange(
     const tier = leadTier({ ...lead, icpScoredAt: lead.icpScoredAt });
     if (tier === "A" || tier === "B") count(lead.icpScoredAt, "qualifiedLeads");
   }
-  for (const l of messaged) count(l.updatedAt, "messagesSent");
+  for (const l of messaged) count(l.stageChangedAt, "messagesSent");
   for (const l of replies) count(l.repliedAt, "repliesReceived");
 
   // The two halves of a meeting, deduplicated by lead and day: a call logged
@@ -199,9 +204,9 @@ export async function loadDailyKpiRange(
     }
   }
   for (const lead of booked) {
-    const key = `${lead.id}:${toUtcDay(lead.updatedAt).getTime()}`;
+    const key = `${lead.id}:${toUtcDay(lead.stageChangedAt).getTime()}`;
     if (callDays.has(key)) continue;
-    count(lead.updatedAt, "meetingsBooked");
+    count(lead.stageChangedAt, "meetingsBooked");
   }
 
   return days;

@@ -1083,9 +1083,9 @@ export async function getOutreachFunnel(): Promise<unknown> {
     prisma.lead.findMany({
       where: {
         stage: { in: [...CONTACTED_STAGES] },
-        updatedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
+        stageChangedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
       },
-      select: { updatedAt: true },
+      select: { stageChangedAt: true },
     }),
     // Counted off the call log rather than off a lead's stage, for the reason
     // the dashboard counts them that way: a cancelled or deleted booking should
@@ -1120,7 +1120,7 @@ export async function getOutreachFunnel(): Promise<unknown> {
       thisWeek: messages.thisWeek,
       lastWeek: messages.lastWeek,
       meaning:
-        "Leads that have reached the Contacted stage, counted by when the lead was last touched. Lost leads are excluded — nothing on the record says whether they were ever written to.",
+        "Leads that have reached the Contacted stage, counted by when the lead moved there. Lost leads are excluded — nothing on the record says whether they were ever written to.",
     },
     replyRate: {
       windowDays: REPLY_RATE_WINDOW_DAYS,

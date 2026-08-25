@@ -92,10 +92,11 @@ export function qualifiedSubtitle(q: QualifiedLeads): string {
 // Which stages count is CONTACTED_STAGES (src/lib/constants.ts), and Lost is
 // not among them for the reason stated there.
 //
-// Lead carries no stage-change timestamp, so the day a message is filed under
-// is the lead's updatedAt — the closest honest reading, and the same one the
-// Daily KPI store takes. It is approximate in one direction: a lead edited for
-// some other reason moves into the week of that edit.
+// The day a message is filed under is the lead's stageChangedAt, which is
+// written when — and only when — the stage value actually changes
+// (src/lib/leadStage.ts). It was updatedAt until that column existed, and that
+// was approximate in one direction that mattered: a lead approached three
+// weeks ago and edited this morning counted as this morning's outreach.
 //
 // This week against the week before it. Both windows are the same length and
 // the second sits immediately behind the first, so the comparison is like for
@@ -106,12 +107,12 @@ export interface MessagesSent {
 }
 
 export function messagesSent(
-  leads: { updatedAt: Date }[],
+  leads: { stageChangedAt: Date }[],
   now: Date,
 ): MessagesSent {
   const weekAgo = daysAgo(now, MESSAGES_WINDOW_DAYS);
   const twoWeeksAgo = daysAgo(now, MESSAGES_WINDOW_DAYS * 2);
-  const sent = leads.map((l) => l.updatedAt);
+  const sent = leads.map((l) => l.stageChangedAt);
   return {
     thisWeek: sent.filter((d) => d >= weekAgo).length,
     lastWeek: sent.filter((d) => d >= twoWeeksAgo && d < weekAgo).length,
