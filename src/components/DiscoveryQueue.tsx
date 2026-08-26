@@ -16,6 +16,11 @@
 // call per candidate, awaited in turn, with the result of each shown as it
 // lands and the ones behind it still waiting.
 //
+// What it runs is either everything pending or exactly what was ticked on the
+// list below. Selection is the list's, shared through DiscoverySelection —
+// tick nothing and this is the batch button it has always been; tick five and
+// it says so on its face, quotes five in the estimate, and runs those five.
+//
 // Stopping is honest about what it can do: the candidate in flight finishes on
 // the server (its four actors are already running), and nothing after it
 // starts. Every candidate the queue never reached is exactly as it was.
@@ -38,6 +43,7 @@ import { PipelineSettings } from "@/lib/pipelineSettings";
 import CostEstimate from "@/components/CostEstimate";
 import AiButton from "@/components/AiButton";
 import useDialogMotion from "@/components/useDialogMotion";
+import { useDiscoverySelection } from "@/components/DiscoverySelection";
 
 interface QueueItem {
   id: string;
@@ -48,11 +54,18 @@ interface QueueItem {
 
 export default function DiscoveryQueue({
   loadQueue,
+  loadSelected,
   process,
   queued,
   settings,
 }: {
   loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
+  // The same read, narrowed to ticked candidates. Given the ids rather than
+  // the rows, so the queue is still re-read on the server at the moment the
+  // run starts rather than trusted from a page that may be an hour old.
+  loadSelected: (
+    ids: string[],
+  ) => Promise<{ id: string; clinicName: string }[]>;
   process: (
     id: string,
     runBatchLabel?: string | null,
@@ -67,21 +80,35 @@ export default function DiscoveryQueue({
   settings: PipelineSettings;
 }) {
   const [open, setOpen] = useState(false);
+  const { selectedQueueable } = useDiscoverySelection();
+  const scoped = selectedQueueable.length > 0;
+  // What this press would run. With a selection it is the ticked candidates
+  // the chain has work to do on; without one it is the whole pending queue,
+  // as counted by the page.
+  const count = scoped ? selectedQueueable.length : queued;
 
   return (
     <>
       <AiButton
         onClick={() => setOpen(true)}
-        disabled={queued === 0}
+        disabled={count === 0}
+        title={
+          scoped
+            ? "Run the chain on the candidates you have selected"
+            : undefined
+        }
         className="disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Process queue{queued > 0 && <span className="num">({queued})</span>}
+        Process queue{scoped && " (selected)"}
+        {count > 0 && <span className="num">({count})</span>}
       </AiButton>
       {open && (
         <QueueDialog
           loadQueue={loadQueue}
+          loadSelected={loadSelected}
+          selectedIds={scoped ? selectedQueueable : null}
           process={process}
-          queued={queued}
+          queued={count}
           settings={settings}
           onClose={() => setOpen(false)}
         />
@@ -92,12 +119,21 @@ export default function DiscoveryQueue({
 
 function QueueDialog({
   loadQueue,
+  loadSelected,
+  selectedIds,
   process,
   queued,
   settings,
   onClose,
 }: {
   loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
+  loadSelected: (
+    ids: string[],
+  ) => Promise<{ id: string; clinicName: string }[]>;
+  // The ticked candidates, or null for the whole pending queue. Captured when
+  // the dialog opened: a selection that changed underneath a plan somebody is
+  // reading is not a plan they agreed to.
+  selectedIds: string[] | null;
   process: (
     id: string,
     runBatchLabel?: string | null,
@@ -130,7 +166,7 @@ function QueueDialog({
 
     let queue: { id: string; clinicName: string }[];
     try {
-      queue = await loadQueue();
+      queue = selectedIds ? await loadSelected(selectedIds) : await loadQueue();
     } catch {
       setError(
         "The queue could not be read. Check the server is still up and try again.",
@@ -152,7 +188,10 @@ function QueueDialog({
     // candidate — otherwise a queue that took two hours over midnight would
     // file its candidates under two different days. It only ever fills a gap
     // on a candidate that arrived without a batch; every import stamps its own.
-    const runBatchLabel = defaultBatchLabel(new Date(), BATCH_QUEUE_DESCRIPTION);
+    const runBatchLabel = defaultBatchLabel(
+      new Date(),
+      BATCH_QUEUE_DESCRIPTION,
+    );
 
     // One at a time, awaited. In parallel this would finish sooner and cost
     // the same, but four actor runs times eight candidates at once is a shape
@@ -182,9 +221,7 @@ function QueueDialog({
       }
       setItems((prev) =>
         prev.map((item) =>
-          item.id === candidate.id
-            ? { ...item, state: "done", result }
-            : item,
+          item.id === candidate.id ? { ...item, state: "done", result } : item,
         ),
       );
     }
@@ -192,7 +229,7 @@ function QueueDialog({
     setPhase("finished");
     // The list behind the dialog is showing statuses this just changed.
     router.refresh();
-  }, [loadQueue, process, router]);
+  }, [loadQueue, loadSelected, selectedIds, process, router]);
 
   // Escape closes, like the dialog it looks like — but not while the queue is
   // running. A stray keypress must not look like it stopped something that is
@@ -238,11 +275,12 @@ function QueueDialog({
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
           <div className="min-w-0">
             <h2 id="queue-title" className="display text-lg font-semibold">
-              Process queue
+              Process queue{selectedIds && " (selected)"}
             </h2>
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
-              Enrich, score and decide — every pending candidate, and every one
-              that failed last time.
+              {selectedIds
+                ? "Enrich, score and decide — only the candidates you selected. Everything else stays queued."
+                : "Enrich, score and decide — every pending candidate, and every one that failed last time."}
             </p>
           </div>
           <button
@@ -265,11 +303,10 @@ function QueueDialog({
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
               It is not a background job. Each candidate takes an actor run per
               enabled step and a model call, in turn, so a few minutes each is
-              normal. Close
-              this tab, navigate away, or put the machine to sleep and the queue
-              stops after whatever candidate is in flight — everything it never
-              reached stays exactly as it is, and pressing this again picks up
-              where it left off.
+              normal. Close this tab, navigate away, or put the machine to sleep
+              and the queue stops after whatever candidate is in flight —
+              everything it never reached stays exactly as it is, and pressing
+              this again picks up where it left off.
             </p>
           </div>
 
@@ -323,8 +360,9 @@ function QueueDialog({
               </li>
               <li>
                 <span className="num font-medium text-ink">4.</span> Total it
-                out of {ICP_MAX_SCORE}, band it — <span className="num">{ICP_TIER_BANDS}</span> — and store the whole
-                breakdown.
+                out of {ICP_MAX_SCORE}, band it —{" "}
+                <span className="num">{ICP_TIER_BANDS}</span> — and store the
+                whole breakdown.
               </li>
               <li>
                 <span className="num font-medium text-ink">5.</span> Anything
@@ -333,8 +371,8 @@ function QueueDialog({
                 more becomes a lead with its scorecard pre-filled; anything
                 disqualified or under the bar is rejected with its reasoning
                 kept. An actor that fails outright stops that candidate before
-                anything is scored, and so does evidence too thin to attempt
-                the card — two or more categories with nothing behind them is a
+                anything is scored, and so does evidence too thin to attempt the
+                card — two or more categories with nothing behind them is a
                 Failed with the missing inputs named, not a low score.
               </li>
             </ol>
@@ -399,7 +437,9 @@ function QueueDialog({
           {phase === "finished" && (
             <p className="num text-xs leading-relaxed text-muted">
               {items.length === 0
-                ? "Nothing was queued — every candidate has already been through the chain."
+                ? selectedIds
+                  ? "Nothing was run — every candidate you selected has already been through the chain."
+                  : "Nothing was queued — every candidate has already been through the chain."
                 : `${done.length} processed — ${tally.promoted} promoted, ${tally.rejected} rejected, ${tally.failed} failed.`}
               {unreached > 0 &&
                 ` ${unreached} not reached, still queued for next time.`}

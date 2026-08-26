@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import {
   addDiscoveryCandidateByName,
   discoveryQueue,
+  discoveryQueueSelected,
   processDiscoveryCandidate,
 } from "@/lib/actions/discovery";
 import { DISCOVERY_QUEUE_STATUSES } from "@/lib/discovery";
@@ -16,6 +17,7 @@ import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
 import DiscoveryList, { DiscoveryRow } from "@/components/DiscoveryList";
+import DiscoverySelectionProvider from "@/components/DiscoverySelection";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +95,9 @@ export default async function DiscoveryPage({
     clinicName: c.clinicName,
     contactName: c.contactName,
     contactTitle: c.contactTitle,
-    decisionMakerConfidence: isDecisionMakerConfidence(c.decisionMakerConfidence)
+    decisionMakerConfidence: isDecisionMakerConfidence(
+      c.decisionMakerConfidence,
+    )
       ? (c.decisionMakerConfidence as DecisionMakerConfidence)
       : null,
     discoverySource: readDiscoverySourceKind(c.discoverySource),
@@ -112,93 +116,103 @@ export default async function DiscoveryPage({
     createdAt: c.createdAt.toISOString(),
   }));
 
+  // Which of these rows the queue would actually take. Decided here, where
+  // the statuses are, so the header button can tell a selection of five
+  // pending candidates from a selection of five already-promoted ones.
+  const queueable = rows
+    .filter((r) => (DISCOVERY_QUEUE_STATUSES as string[]).includes(r.status))
+    .map((r) => r.id);
+
   return (
-    <div>
-      {/* Five actions is more than any other page header carries, so the row
+    <DiscoverySelectionProvider queueable={queueable}>
+      <div>
+        {/* Five actions is more than any other page header carries, so the row
           is built to take it. Wide enough for both, they share a line and the
           buttons keep their own width — the title column is the one that
           gives way, its subtitle wrapping to another line rather than every
           button wrapping onto two. Too narrow for both, the whole thing
           stacks: a shrink-0 row that never yields would push the page wider
           than the window instead. */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div className="min-w-0">
-          <h1 className="display text-[32px] font-semibold">Discovery</h1>
-          <p className="mt-1.5 text-sm text-muted">
-            Scraped clinics waiting to be qualified — nothing reaches the
-            pipeline from here without a score
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
-          <Link href="/discovery/rejected" className="btn">
-            Rejected{rejected > 0 && <span className="num">({rejected})</span>}
-          </Link>
-          <Link href="/discovery/import" className="btn">
-            Import CSV
-          </Link>
-          <Link href="/discovery/import/apify" className="btn">
-            Import from Apify
-          </Link>
-          {/* The second pathway. It sits with the other ways in rather than
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="min-w-0">
+            <h1 className="display text-[32px] font-semibold">Discovery</h1>
+            <p className="mt-1.5 text-sm text-muted">
+              Scraped clinics waiting to be qualified — nothing reaches the
+              pipeline from here without a score
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
+            <Link href="/discovery/rejected" className="btn">
+              Rejected
+              {rejected > 0 && <span className="num">({rejected})</span>}
+            </Link>
+            <Link href="/discovery/import" className="btn">
+              Import CSV
+            </Link>
+            <Link href="/discovery/import/apify" className="btn">
+              Import from Apify
+            </Link>
+            {/* The second pathway. It sits with the other ways in rather than
               replacing any of them — the LinkedIn person search is still the
               first way, and this one starts from the clinic. */}
-          <Link href="/discovery/import/clinic" className="btn">
-            Clinic-first search
-          </Link>
-          {/* Add clinic by name is deliberately not here. Six buttons made
+            <Link href="/discovery/import/clinic" className="btn">
+              Clinic-first search
+            </Link>
+            {/* Add clinic by name is deliberately not here. Six buttons made
               this row wrap on any window narrower than a desktop, and of the
               six it is the one used least — so it lives on the import page
               (/discovery/import) and in the empty state below, where somebody
               with nothing in Discovery is looking for a way in. */}
-          <DiscoveryQueue
-            loadQueue={discoveryQueue}
-            process={processDiscoveryCandidate}
-            queued={queued}
-            settings={settings}
-          />
-        </div>
-      </div>
-
-      {summary && (
-        <div className="mt-6 rounded-[10px] border border-ok/30 bg-ok-soft/60 px-4 py-3">
-          <p className="num text-sm font-medium">{summary.headline}</p>
-          {summary.detail && (
-            <p className="num mt-0.5 text-xs leading-relaxed text-muted">
-              {summary.detail}
-            </p>
-          )}
-        </div>
-      )}
-
-      {candidates.length === 0 ? (
-        <div className="card mt-8 px-6 py-10 text-center">
-          <p className="text-sm font-medium">Nothing in Discovery yet</p>
-          <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
-            Imports land here rather than in the pipeline. Bring in a CSV export,
-            run an Apify actor, search for clinics directly, or add a single
-            clinic by name — then press
-            Process queue, and each candidate is enriched, scored against the ICP
-            framework, and either promoted to a lead or rejected with its
-            reasoning kept.
-          </p>
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            <Link href="/discovery/import" className="btn">
-              Import CSV
-            </Link>
-            <AddClinicByName add={addDiscoveryCandidateByName} />
-            <Link href="/discovery/import/clinic" className="btn">
-              Clinic-first search
-            </Link>
-            <Link href="/discovery/import/apify" className="btn-primary">
-              Import from Apify
-            </Link>
+            <DiscoveryQueue
+              loadQueue={discoveryQueue}
+              loadSelected={discoveryQueueSelected}
+              process={processDiscoveryCandidate}
+              queued={queued}
+              settings={settings}
+            />
           </div>
         </div>
-      ) : (
-        <div className="mt-8">
-          <DiscoveryList rows={rows} />
-        </div>
-      )}
-    </div>
+
+        {summary && (
+          <div className="mt-6 rounded-[10px] border border-ok/30 bg-ok-soft/60 px-4 py-3">
+            <p className="num text-sm font-medium">{summary.headline}</p>
+            {summary.detail && (
+              <p className="num mt-0.5 text-xs leading-relaxed text-muted">
+                {summary.detail}
+              </p>
+            )}
+          </div>
+        )}
+
+        {candidates.length === 0 ? (
+          <div className="card mt-8 px-6 py-10 text-center">
+            <p className="text-sm font-medium">Nothing in Discovery yet</p>
+            <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
+              Imports land here rather than in the pipeline. Bring in a CSV
+              export, run an Apify actor, search for clinics directly, or add a
+              single clinic by name — then press Process queue, and each
+              candidate is enriched, scored against the ICP framework, and
+              either promoted to a lead or rejected with its reasoning kept.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <Link href="/discovery/import" className="btn">
+                Import CSV
+              </Link>
+              <AddClinicByName add={addDiscoveryCandidateByName} />
+              <Link href="/discovery/import/clinic" className="btn">
+                Clinic-first search
+              </Link>
+              <Link href="/discovery/import/apify" className="btn-primary">
+                Import from Apify
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-8">
+            <DiscoveryList rows={rows} />
+          </div>
+        )}
+      </div>
+    </DiscoverySelectionProvider>
   );
 }
