@@ -19,7 +19,11 @@
 // filtering something out of view takes it out of the selection too, and a
 // delete can never reach past the list somebody was looking at.
 //
-// The one bulk action here is delete. There is deliberately no bulk promote —
+// The two bulk actions are delete, here, and Process queue, in the page header
+// — the same ticks scope both, so "run these five" is the same gesture as
+// "delete these five".
+//
+// The one bulk action inside this list is delete. There is deliberately no bulk promote —
 // promotion is what the queue decides, and the one override on it is a single
 // button on a single rejected candidate, where the reasoning being overruled
 // is on screen next to it.
@@ -27,17 +31,17 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
+  DISCOVERY_QUEUE_STATUSES,
   DISCOVERY_STATUSES,
   DISCOVERY_STATUS_LABELS,
   DiscoveryStatus,
 } from "@/lib/discovery";
-import {
-  BATCH_ALL,
-  BATCH_NONE,
-  batchOptions,
-} from "@/lib/discoveryBatch";
+import { BATCH_ALL, BATCH_NONE, batchOptions } from "@/lib/discoveryBatch";
 import { SOURCE_ALL, sourceKey, sourceOptions } from "@/lib/discoverySource";
-import { CONFIDENCE_LABELS, DecisionMakerConfidence } from "@/lib/decisionMaker";
+import {
+  CONFIDENCE_LABELS,
+  DecisionMakerConfidence,
+} from "@/lib/decisionMaker";
 import {
   DISCOVERY_SOURCES,
   DISCOVERY_SOURCE_KIND_LABELS,
@@ -60,6 +64,7 @@ import {
   icpTierDot,
 } from "@/components/Badge";
 import Icon from "@/components/Icons";
+import { useDiscoverySelection } from "@/components/DiscoverySelection";
 
 export interface DiscoveryRow {
   id: string;
@@ -106,19 +111,19 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
   const [sourceFilter, setSourceFilter] = useState<string>(SOURCE_ALL);
   // Which pathway, as its own filter beside the free-text source one: "show me
   // the clinic-first ones" is the question this feature exists to make askable.
-  const [pathwayFilter, setPathwayFilter] = useState<DiscoverySourceKind | "ALL">(
-    "ALL",
-  );
+  const [pathwayFilter, setPathwayFilter] = useState<
+    DiscoverySourceKind | "ALL"
+  >("ALL");
   // One tier at a time, and pressing the one already on clears it — three
   // buttons that could each be half-on would be a set of checkboxes wearing a
   // segmented control's clothes.
   const [tierFilter, setTierFilter] = useState<IcpTier | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
-  // Selection is state and nothing else — no URL, no storage — so navigating
-  // away or refreshing starts again with nothing selected, which is the only
-  // safe default for a set of rows with a delete button pointed at them.
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // Selection lives above this list rather than in it, because the Process
+  // queue button in the page header acts on the same set — see
+  // DiscoverySelection for why, and for the no-URL-no-storage rule it keeps.
+  const { selected, setSelected } = useDiscoverySelection();
   const [pending, startTransition] = useTransition();
   const allRef = useRef<HTMLInputElement>(null);
 
@@ -137,7 +142,10 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
     const filtered = rows.filter((r) => {
       if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
       if (tierFilter !== null && r.icpTier !== tierFilter) return false;
-      if (batchFilter !== BATCH_ALL && (r.batchLabel ?? BATCH_NONE) !== batchFilter) {
+      if (
+        batchFilter !== BATCH_ALL &&
+        (r.batchLabel ?? BATCH_NONE) !== batchFilter
+      ) {
         return false;
       }
       if (sourceFilter !== SOURCE_ALL && sourceKey(r.source) !== sourceFilter) {
@@ -147,7 +155,15 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
         return false;
       }
       if (!q) return true;
-      return [r.clinicName, r.contactName, r.source, r.location, r.email, r.batchLabel, r.websiteUrl]
+      return [
+        r.clinicName,
+        r.contactName,
+        r.source,
+        r.location,
+        r.email,
+        r.batchLabel,
+        r.websiteUrl,
+      ]
         .filter(Boolean)
         .some((s) => (s as string).toLowerCase().includes(q));
     });
@@ -190,6 +206,11 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
   ]);
 
   const chosen = visible.filter((r) => selected.has(r.id));
+  // How many of the chosen the queue would actually take. Same rule the
+  // server applies when the run starts — see discoveryQueueSelected.
+  const queueableChosen = chosen.filter((r) =>
+    (DISCOVERY_QUEUE_STATUSES as string[]).includes(r.status),
+  ).length;
   const allChosen = visible.length > 0 && chosen.length === visible.length;
 
   useEffect(() => {
@@ -259,7 +280,9 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
           className="inline-flex items-center gap-1 hover:text-ink"
         >
           {children}
-          {sortKey === k && <span aria-hidden>{sortDir === 1 ? "↑" : "↓"}</span>}
+          {sortKey === k && (
+            <span aria-hidden>{sortDir === 1 ? "↑" : "↓"}</span>
+          )}
         </button>
       </th>
     );
@@ -409,6 +432,16 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
             <span className="num text-sm font-medium">
               {chosen.length} selected
             </span>
+            {/* The other bulk action is a button in the page header, out of
+                this bar's reach, so the bar says what it would do rather than
+                leaving somebody to work it out from a count that doesn't
+                match. Silent when nothing selected can be processed — a
+                promoted candidate has no chain left to run. */}
+            {queueableChosen > 0 && (
+              <span className="num text-xs text-muted">
+                {queueableChosen} of them run on Process queue (selected)
+              </span>
+            )}
             <button
               type="button"
               onClick={bulkDelete}
@@ -559,7 +592,9 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
                       the card, in the filter above, and on the candidate. */}
                   <td className="td text-muted">
                     <span
-                      title={DISCOVERY_SOURCE_KIND_MEANINGS[row.discoverySource]}
+                      title={
+                        DISCOVERY_SOURCE_KIND_MEANINGS[row.discoverySource]
+                      }
                     >
                       {DISCOVERY_SOURCE_KIND_LABELS[row.discoverySource]}
                     </span>

@@ -413,6 +413,26 @@ export async function discoveryQueue(): Promise<
   });
 }
 
+// The same queue, narrowed to the candidates somebody ticked.
+//
+// The status filter stays: a selection is a set of rows on a list, and that
+// list holds promoted and rejected candidates too. Ticking one of those and
+// pressing Process queue asks for something the chain has no work to do on,
+// so it is dropped here rather than run — the dialog then quotes the count
+// that will actually be processed, which is the honest number.
+//
+// Read fresh and ordered the same way, for the same reasons as above.
+export async function discoveryQueueSelected(
+  ids: string[],
+): Promise<{ id: string; clinicName: string }[]> {
+  if (ids.length === 0) return [];
+  return prisma.discoveryCandidate.findMany({
+    where: { id: { in: ids }, status: { in: DISCOVERY_QUEUE_STATUSES } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, clinicName: true },
+  });
+}
+
 // One candidate, all the way through. Called once per candidate by the queue
 // component, which awaits each result before asking for the next — so the four
 // actor runs and the model call in here are the reason a queue of thirty takes
