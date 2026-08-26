@@ -37,6 +37,7 @@ import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
 import { PipelineSettings } from "@/lib/pipelineSettings";
 import CostEstimate from "@/components/CostEstimate";
 import AiButton from "@/components/AiButton";
+import useDialogMotion from "@/components/useDialogMotion";
 
 interface QueueItem {
   id: string;
@@ -106,6 +107,10 @@ function QueueDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  // Opening is CSS; closing has to be sequenced, or the dialog would be
+  // unmounted mid-fade. `close` plays the exit and then calls onClose —
+  // every dismissal below goes through it rather than through onClose.
+  const { close, scrimClass, dialogClass } = useDialogMotion(onClose);
   const [phase, setPhase] = useState<"planning" | "running" | "finished">(
     "planning",
   );
@@ -194,11 +199,11 @@ function QueueDialog({
   // still spending money on the server.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && phase !== "running") onClose();
+      if (e.key === "Escape" && phase !== "running") close();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, phase]);
+  }, [close, phase]);
 
   // The page behind a modal should not scroll under it.
   useEffect(() => {
@@ -219,16 +224,16 @@ function QueueDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8"
+      className={`${scrimClass} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && phase !== "running") onClose();
+        if (e.target === e.currentTarget && phase !== "running") close();
       }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="queue-title"
-        className="card my-auto flex max-h-[88vh] w-full max-w-2xl flex-col"
+        className={`${dialogClass} card my-auto flex max-h-[88vh] w-full max-w-2xl flex-col`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
           <div className="min-w-0">
@@ -242,7 +247,7 @@ function QueueDialog({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             disabled={phase === "running"}
             aria-label="Close"
             className="btn-ghost h-[34px] shrink-0 px-3 text-base leading-none disabled:cursor-not-allowed disabled:opacity-40"
@@ -430,7 +435,7 @@ function QueueDialog({
           )}
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             disabled={phase === "running"}
             className={`${phase === "finished" ? "btn-primary" : "btn-ghost"} disabled:cursor-not-allowed disabled:opacity-40`}
           >

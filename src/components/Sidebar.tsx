@@ -121,10 +121,12 @@ function activeHref(pathname: string): string | null {
   return best;
 }
 
-// Long enough to read as a fade, short enough to stay out of the way. Colour,
-// border and the active card's shadow all ease together; nothing moves.
+// Colour, border and the active card's shadow all ease together; nothing
+// moves. No duration or curve here: the app's shared timing is Tailwind's
+// default (tailwind.config.ts), so this reads the same value every other
+// transition in the app does.
 const NAV_MOTION =
-  "transition-[color,background-color,border-color,box-shadow] duration-150 ease-out";
+  "transition-[color,background-color,border-color,box-shadow]";
 
 export default function Sidebar({
   collapsed,

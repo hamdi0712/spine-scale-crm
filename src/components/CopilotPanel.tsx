@@ -165,8 +165,15 @@ export default function CopilotPanel({
     <aside
       // Hidden rather than unmounted: the conversation is this component's
       // state, and closing the panel is not meant to throw it away.
+      //
+      // Because it is hidden rather than unmounted, the arrival animation
+      // needs re-keying to run on every open: a CSS animation on an element
+      // that is only being un-hidden plays once, on first paint, and never
+      // again. The key remounts this element's DOM, not the component, so the
+      // conversation — which is state in this function — survives untouched.
+      key={open ? "open" : "closed"}
       className={`fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-ai/25 bg-surface shadow-[0_0_40px_rgba(28,27,39,0.12)] sm:w-[420px] ${
-        open ? "" : "hidden"
+        open ? "motion-panel-in" : "hidden"
       }`}
       aria-label="AI Copilot"
       aria-hidden={!open}
@@ -219,7 +226,7 @@ export default function CopilotPanel({
         )}
 
         {asking && (
-          <div className="flex items-center gap-2 text-xs text-muted">
+          <div className="motion-bubble-in flex items-center gap-2 text-xs text-muted">
             <span className="flex gap-1" aria-hidden>
               <Dot delay="0ms" />
               <Dot delay="150ms" />
@@ -281,7 +288,7 @@ export default function CopilotPanel({
 function BubbleRow({ bubble }: { bubble: Bubble }) {
   if (bubble.role === "user") {
     return (
-      <div className="flex justify-end">
+      <div className="motion-bubble-in flex justify-end">
         <p className="max-w-[85%] whitespace-pre-wrap rounded-[14px] rounded-br-[6px] bg-accent px-3.5 py-2.5 text-sm text-white">
           {bubble.content}
         </p>
@@ -294,7 +301,7 @@ function BubbleRow({ bubble }: { bubble: Bubble }) {
   // than as something wrong with the page.
   if (bubble.role === "error") {
     return (
-      <div className="max-w-[92%] rounded-[14px] rounded-bl-[6px] border border-bad/30 bg-bad-soft/60 px-3.5 py-2.5">
+      <div className="motion-bubble-in max-w-[92%] rounded-[14px] rounded-bl-[6px] border border-bad/30 bg-bad-soft/60 px-3.5 py-2.5">
         <p className="text-xs font-medium text-bad">No answer</p>
         <p className="mt-0.5 text-xs leading-relaxed text-muted">
           {bubble.content}
@@ -304,7 +311,7 @@ function BubbleRow({ bubble }: { bubble: Bubble }) {
   }
 
   return (
-    <div className="max-w-[92%]">
+    <div className="motion-bubble-in max-w-[92%]">
       {/* Answers come back as markdown, rendered on the library's own
           typographic defaults. The last-child rule drops the trailing margin
           .prose-doc puts under every paragraph and list, which inside a
@@ -326,10 +333,14 @@ function BubbleRow({ bubble }: { bubble: Bubble }) {
   );
 }
 
+// One dot of the thinking indicator. The three of them run the same 1.1s
+// cycle offset in thirds, so the group reads as a wave rather than as three
+// things blinking. The keyframes are in globals.css beside the rest of the
+// motion; what is here is only the stagger.
 function Dot({ delay }: { delay: string }) {
   return (
     <span
-      className="h-1.5 w-1.5 animate-pulse rounded-full bg-ai"
+      className="thinking-dot h-1.5 w-1.5 rounded-full bg-ai"
       style={{ animationDelay: delay }}
     />
   );

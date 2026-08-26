@@ -81,7 +81,7 @@ export default function DailyChecklist({
                 return (
                   <li
                     key={item.key}
-                    className="min-h-[48px] border-b border-line/60 px-4 py-2.5 last:border-b-0 hover:bg-wash/60"
+                    className="row-hover min-h-[48px] border-b border-line/60 px-4 py-2.5 last:border-b-0 hover:bg-wash/60"
                   >
                     <div className="flex items-center gap-3">
                       <form
@@ -101,7 +101,7 @@ export default function DailyChecklist({
                                 ? "Checked — click to clear"
                                 : "Mark as done"
                           }
-                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors ${
+                          className={`check-box flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border ${
                             isChecked
                               ? "border-ok bg-ok-soft text-ok"
                               : "border-line text-transparent"
@@ -120,7 +120,7 @@ export default function DailyChecklist({
                         </button>
                       </form>
                       <span
-                        className={`min-w-0 flex-1 text-sm ${
+                        className={`check-label min-w-0 flex-1 text-sm ${
                           isChecked ? "text-muted" : ""
                         }`}
                       >

@@ -64,6 +64,18 @@ const config: Config = {
       },
       boxShadow: {
         card: "var(--shadow-card)",
+        "card-hover": "var(--shadow-card-hover)",
+      },
+      // The app's one transition timing, declared once in globals.css and made
+      // the default for every Tailwind `transition-*` utility here. That is
+      // what keeps the motion consistent without every call site having to
+      // remember a duration: `transition-colors` on a checklist row and the
+      // hand-written transition on a card are the same 160ms curve.
+      transitionDuration: {
+        DEFAULT: "var(--motion)",
+      },
+      transitionTimingFunction: {
+        DEFAULT: "var(--motion-ease)",
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
