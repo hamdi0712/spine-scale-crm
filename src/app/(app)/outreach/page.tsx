@@ -87,7 +87,7 @@ export default async function OutreachQueuePage() {
             <Link
               key={row.id}
               href={`/pipeline/${row.id}`}
-              className="card group flex flex-col p-4 transition-colors hover:bg-wash/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+              className="card card-interactive group flex flex-col p-4 hover:bg-wash/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
             >
               <div className="flex items-start gap-2.5">
                 <div className="min-w-0 flex-1">

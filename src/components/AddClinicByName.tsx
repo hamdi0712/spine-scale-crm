@@ -21,6 +21,7 @@ import {
   LOCATION_MAX_CHARS,
 } from "@/lib/discoveryAddByName";
 import { DISCOVERY_STATUS_LABELS, isDiscoveryStatus } from "@/lib/discovery";
+import useDialogMotion from "@/components/useDialogMotion";
 
 // Where the clinic that's already here got to — " (Rejected)", or nothing at
 // all for a status this build doesn't know, which is a link that still works
@@ -62,6 +63,10 @@ function AddDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  // Opening is CSS; closing has to be sequenced, or the dialog would be
+  // unmounted mid-fade. `close` plays the exit and then calls onClose —
+  // every dismissal below goes through it rather than through onClose.
+  const { close, scrimClass, dialogClass } = useDialogMotion(onClose);
   const [clinicName, setClinicName] = useState("");
   const [location, setLocation] = useState("");
   const [running, setRunning] = useState(false);
@@ -72,11 +77,11 @@ function AddDialog({
   // something that is still running on the server.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !running) onClose();
+      if (e.key === "Escape" && !running) close();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, running]);
+  }, [close, running]);
 
   // The page behind a modal should not scroll under it.
   useEffect(() => {
@@ -123,9 +128,9 @@ function AddDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8"
+      className={`${scrimClass} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !running) onClose();
+        if (e.target === e.currentTarget && !running) close();
       }}
     >
       <form
@@ -133,7 +138,7 @@ function AddDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-clinic-title"
-        className="card my-auto flex max-h-[88vh] w-full max-w-lg flex-col"
+        className={`${dialogClass} card my-auto flex max-h-[88vh] w-full max-w-lg flex-col`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
           <div className="min-w-0">
@@ -147,7 +152,7 @@ function AddDialog({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             disabled={running}
             aria-label="Close"
             className="btn-ghost h-[34px] shrink-0 px-3 text-base leading-none disabled:cursor-not-allowed disabled:opacity-40"
@@ -265,7 +270,7 @@ function AddDialog({
           )}
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             disabled={running}
             className={`${added ? "btn-primary" : "btn-ghost"} disabled:cursor-not-allowed disabled:opacity-40`}
           >

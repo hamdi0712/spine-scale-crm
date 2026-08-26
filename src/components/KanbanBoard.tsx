@@ -92,7 +92,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                     setDragId(null);
                     setOverStage(null);
                   }}
-                  className={`cursor-grab rounded-xl border border-line bg-surface px-3.5 py-3 shadow-card hover:border-accent/50 ${
+                  className={`card-interactive cursor-grab rounded-xl border border-line bg-surface px-3.5 py-3 shadow-card hover:border-accent/50 ${
                     dragId === lead.id ? "opacity-40" : ""
                   }`}
                 >

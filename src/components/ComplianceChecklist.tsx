@@ -58,7 +58,7 @@ export default function ComplianceChecklist({
         {items.map((item) => (
           <li
             key={item.id}
-            className="min-h-[56px] border-b border-line/60 px-4 py-3 last:border-b-0 hover:bg-wash/60"
+            className="row-hover min-h-[56px] border-b border-line/60 px-4 py-3 last:border-b-0 hover:bg-wash/60"
           >
             <div className="flex items-center gap-3">
               <form action={toggleComplianceItem.bind(null, item.id)}>
@@ -67,7 +67,7 @@ export default function ComplianceChecklist({
                   title={
                     item.checked ? "Checked — click to clear" : "Mark as checked"
                   }
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border transition-colors ${
+                  className={`check-box flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border ${
                     item.checked
                       ? "border-ok bg-ok-soft text-ok"
                       : "border-line text-transparent hover:bg-wash hover:text-muted/40"
@@ -80,7 +80,7 @@ export default function ComplianceChecklist({
                 </button>
               </form>
               <span
-                className={`min-w-0 flex-1 text-sm ${
+                className={`check-label min-w-0 flex-1 text-sm ${
                   item.checked ? "text-muted" : ""
                 }`}
               >

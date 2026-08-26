@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import useDialogMotion from "@/components/useDialogMotion";
 import {
   ENRICH_FIELD_LABELS,
   EnrichActorKey,
@@ -83,6 +84,10 @@ function EnrichDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  // Opening is CSS; closing has to be sequenced, or the dialog would be
+  // unmounted mid-fade. `close` plays the exit and then calls onClose —
+  // every dismissal below goes through it rather than through onClose.
+  const { close, scrimClass, dialogClass } = useDialogMotion(onClose);
   const [running, setRunning] = useState(true);
   const [result, setResult] = useState<EnrichRunResult | null>(null);
   const [applying, setApplying] = useState<EnrichActorKey | null>(null);
@@ -129,11 +134,11 @@ function EnrichDialog({
   // report, not the work.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [close]);
 
   // The page behind a modal should not scroll under it.
   useEffect(() => {
@@ -182,16 +187,16 @@ function EnrichDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8"
+      className={`${scrimClass} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) close();
       }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="enrich-title"
-        className="card my-auto flex max-h-[88vh] w-full max-w-2xl flex-col"
+        className={`${dialogClass} card my-auto flex max-h-[88vh] w-full max-w-2xl flex-col`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
           <div className="min-w-0">
@@ -206,7 +211,7 @@ function EnrichDialog({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             aria-label="Close"
             className="btn-ghost h-[34px] shrink-0 px-3 text-base leading-none"
           >
@@ -297,7 +302,7 @@ function EnrichDialog({
           >
             {running ? "Running…" : "Run again"}
           </button>
-          <button type="button" onClick={onClose} className="btn-primary">
+          <button type="button" onClick={close} className="btn-primary">
             Done
           </button>
         </div>

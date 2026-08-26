@@ -85,7 +85,7 @@ export default function ThemeToggle({ collapsed }: { collapsed: boolean }) {
       onClick={toggle}
       title={collapsed ? label : undefined}
       aria-label={label}
-      className={`flex h-[42px] w-full items-center gap-2 rounded-[10px] text-left text-sm font-normal text-muted transition-[color,background-color] duration-150 ease-out hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+      className={`flex h-[42px] w-full items-center gap-2 rounded-[10px] text-left text-sm font-normal text-muted transition-[color,background-color] hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
         collapsed ? "justify-center px-0" : "px-3"
       }`}
     >

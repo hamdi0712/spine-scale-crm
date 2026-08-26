@@ -224,7 +224,7 @@ function Row({
   meta?: string;
 }) {
   return (
-    <div className={`flex items-center hover:bg-wash/60 ${INDENT[indent]}`}>
+    <div className={`row-hover flex items-center hover:bg-wash/60 ${INDENT[indent]}`}>
       {onToggle ? (
         <button
           type="button"

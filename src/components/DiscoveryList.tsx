@@ -655,7 +655,7 @@ function CandidateCard({
        sits above the text so a click anywhere lands on it, and the checkbox is
        lifted above the overlay so it still takes its own clicks. */
     <div
-      className={`card group relative flex flex-col p-4 transition-colors ${
+      className={`card card-interactive group relative flex flex-col p-4 ${
         selected ? "border-accent/40 bg-accent/5" : "hover:bg-wash/40"
       }`}
     >
