@@ -97,5 +97,34 @@ export function KickoffTime({
   );
 }
 
+// A lead's local time, small enough to sit beside the tier badge on a queue
+// card without competing with it: muted text at the same size as the rest of
+// the card's meta, and the badge's height so the two share a baseline.
+//
+// Nothing at all when the lead has no zone stored. A dash here would be a
+// second thing to read on every card that has no answer, and the queue is
+// scanned rather than read — an absent element is quieter than an empty one.
+export function LeadLocalTime({
+  timeZone,
+  className = "",
+}: {
+  timeZone: string | null | undefined;
+  className?: string;
+}) {
+  const now = useNow();
+  if (!timeZone) return null;
+  return (
+    <span
+      title={`Local time for this lead — ${zoneLabel(timeZone)} (${timeZone})`}
+      className={`inline-flex h-[28px] shrink-0 items-center gap-1 whitespace-nowrap text-xs text-muted ${className}`}
+    >
+      <Icon name="clock" className="h-3 w-3 text-muted/70" />
+      <span className="num leading-none">
+        {now ? fmtTimeInZone(now, timeZone) : "—:—"}
+      </span>
+    </span>
+  );
+}
+
 // The dashboard's four-zone strip lives in BusinessHoursPanel: it needs to say
 // whether each zone is inside working hours, not just what the clock reads.

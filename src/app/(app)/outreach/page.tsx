@@ -4,6 +4,7 @@ import { ICP_MAX_SCORE, IcpTier, leadTier, scoreIcp } from "@/lib/icp";
 import { fmtDate } from "@/lib/format";
 import { IcpScoreBadge } from "@/components/Badge";
 import Icon from "@/components/Icons";
+import { LeadLocalTime } from "@/components/Clock";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function OutreachQueuePage() {
       contactName: l.contactName,
       leadSource: l.leadSource,
       location: l.location,
+      timeZone: l.timeZone,
       email: l.email,
       createdAt: l.createdAt.toISOString(),
       icpTier: leadTier(l),
@@ -105,11 +107,17 @@ export default async function OutreachQueuePage() {
                     )}
                   </p>
                 </div>
-                <IcpScoreBadge
-                  tier={row.icpTier}
-                  total={row.icpTotal}
-                  max={ICP_MAX_SCORE}
-                />
+                {/* The clock rides with the badge rather than down in the
+                    meta rows: whether now is a reasonable hour to call is read
+                    at the same moment as whether the lead is worth calling. */}
+                <div className="flex shrink-0 items-center gap-2">
+                  <LeadLocalTime timeZone={row.timeZone} />
+                  <IcpScoreBadge
+                    tier={row.icpTier}
+                    total={row.icpTotal}
+                    max={ICP_MAX_SCORE}
+                  />
+                </div>
               </div>
 
               <div className="mt-3.5 space-y-1.5">
