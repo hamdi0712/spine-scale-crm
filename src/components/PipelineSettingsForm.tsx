@@ -19,6 +19,7 @@ import { normalizeApifyId } from "@/lib/apifyId";
 import {
   DEFAULT_ACTOR_IDS,
   DEFAULT_CLINIC_DISCOVERY_ACTOR_ID,
+  DEFAULT_DECISION_MAKER_ACTOR_ID,
   DEFAULT_PIPELINE_SETTINGS,
   DEFAULT_PROMOTION_THRESHOLD,
   MAX_PROMOTION_THRESHOLD,
@@ -57,6 +58,10 @@ export default function PipelineSettingsForm({
   const clinicActorTyped = draft.clinicDiscovery.actorId.trim();
   const clinicActorMalformed =
     clinicActorTyped !== "" && normalizeApifyId(clinicActorTyped) === null;
+
+  const dmActorTyped = draft.decisionMaker.actorId.trim();
+  const dmActorMalformed =
+    dmActorTyped !== "" && normalizeApifyId(dmActorTyped) === null;
 
   const enabledCount = PIPELINE_STEP_KEYS.filter(
     (k) => draft.steps[k].enabled,
@@ -219,6 +224,73 @@ export default function PipelineSettingsForm({
               {clinicActorMalformed
                 ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
                 : `Any actor returning one object per clinic works: its fields are matched by name — clinic, website, address, phone — rather than mapped by hand. Blank runs ${DEFAULT_CLINIC_DISCOVERY_ACTOR_ID}.`}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── The stage after qualification ──────────────────────────────── */}
+      <section>
+        <h2 className="display mb-1 text-xl font-semibold">
+          Decision-maker enrichment
+        </h2>
+        <p className="mb-4 text-sm text-muted">
+          Who to talk to at a clinic that has already qualified — run by hand,
+          from the candidate, never from the queue
+        </p>
+        <div className="card p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Find decision maker</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                Reads a name — any doctor, owner or member of staff, with or
+                without a stated role — out of the website copy the crawler
+                already stored, searches for that exact name against the
+                clinic&apos;s on LinkedIn, and checks the profile it finds back
+                against the clinic before writing it down. A clinic whose site
+                names nobody falls back to owner and director searches anchored
+                to the clinic. Off until it is switched on.
+              </p>
+            </div>
+            <Toggle
+              name="decisionMakerEnabled"
+              checked={draft.decisionMaker.enabled}
+              onChange={(enabled) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  decisionMaker: { ...prev.decisionMaker, enabled },
+                }))
+              }
+              label={`Decision-maker enrichment — ${draft.decisionMaker.enabled ? "on" : "off"}`}
+            />
+          </div>
+
+          <div className="mt-4">
+            <label className="field-label" htmlFor="decisionMakerActorId">
+              Search actor
+            </label>
+            <input
+              id="decisionMakerActorId"
+              name="decisionMakerActorId"
+              value={draft.decisionMaker.actorId}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  decisionMaker: { ...prev.decisionMaker, actorId: e.target.value },
+                }))
+              }
+              spellCheck={false}
+              autoComplete="off"
+              placeholder={DEFAULT_DECISION_MAKER_ACTOR_ID}
+              aria-invalid={dmActorMalformed || undefined}
+              className={`field font-mono text-xs ${
+                dmActorMalformed ? "border-bad focus:border-bad focus:ring-bad/15" : ""
+              }`}
+            />
+            <p className="mt-1.5 text-xs leading-relaxed text-muted">
+              {dmActorMalformed
+                ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
+                : `Every step of this stage that costs anything is a Google search, so this is a search actor: any that returns a result's link, title and snippet works. Blank runs ${DEFAULT_DECISION_MAKER_ACTOR_ID}, the one the chain already searches with.`}
             </p>
           </div>
         </div>

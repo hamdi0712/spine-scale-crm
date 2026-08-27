@@ -135,11 +135,20 @@ export const DEFAULT_CLINIC_DISCOVERY_ACTOR_ID = "compass~crawler-google-places"
 // did before this existed.
 export const DEFAULT_CLINIC_DISCOVERY_ENABLED = false;
 
-// The profile-search actor the person-first pathway already runs. Reused
-// rather than replaced: it searches by company name and title, which is the
-// shape "who is the owner at this clinic" needs. Any actor that returns one
-// profile per item works — the reader matches on field names.
-export const DEFAULT_DECISION_MAKER_ACTOR_ID = "harvestapi~linkedin-profile-search";
+// The search actor the stage runs, and the only actor it runs: every step of
+// the procedure that costs anything is a Google search — for a name read off
+// the clinic's website, or for the clinic itself when the site named nobody.
+// Any actor returning one page or one result per item works; the reader in
+// src/lib/googleSearch.ts matches both shapes by field name.
+export const DEFAULT_DECISION_MAKER_ACTOR_ID = GOOGLE_SEARCH_ACTOR_ID;
+
+// What the column defaulted to before the stage was rebuilt around the search:
+// a LinkedIn profile-search actor, which the procedure no longer runs. A row
+// still carrying it is an install that never chose an actor rather than one
+// that chose this one, so it is read as the default above rather than handed
+// to a run that would not know what to do with it. Anything else somebody
+// typed is theirs and is left alone.
+const RETIRED_DECISION_MAKER_ACTOR_ID = "harvestapi~linkedin-profile-search";
 
 export const DEFAULT_DECISION_MAKER_ENABLED = false;
 
@@ -222,7 +231,8 @@ export function readClinicDiscoveryActorId(raw: unknown): string {
 // The decision-maker actor, held to the same shape as every other stored ID.
 export function readDecisionMakerActorId(raw: unknown): string {
   if (typeof raw !== "string") return DEFAULT_DECISION_MAKER_ACTOR_ID;
-  return normalizeApifyId(raw) ?? DEFAULT_DECISION_MAKER_ACTOR_ID;
+  const id = normalizeApifyId(raw) ?? DEFAULT_DECISION_MAKER_ACTOR_ID;
+  return id === RETIRED_DECISION_MAKER_ACTOR_ID ? DEFAULT_DECISION_MAKER_ACTOR_ID : id;
 }
 
 // The bar, held to the scale. A number outside it, or no number at all, is the

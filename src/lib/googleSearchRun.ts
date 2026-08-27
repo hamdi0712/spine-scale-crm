@@ -15,7 +15,7 @@ import {
   GOOGLE_SEARCH_MAX_ITEMS,
   GoogleSearchResult,
   buildGoogleSearchInput,
-  resultUrls,
+  resultEntries,
 } from "@/lib/googleSearch";
 
 // What one search is allowed to cost, and the one line in this app that exists
@@ -48,7 +48,7 @@ export async function runGoogleSearch(
   actorId: string = GOOGLE_SEARCH_ACTOR_ID,
 ): Promise<GoogleSearchResult> {
   if (query.trim() === "") {
-    return { ok: false, urls: [], error: "There was nothing to search for." };
+    return { ok: false, urls: [], entries: [], error: "There was nothing to search for." };
   }
 
   let result;
@@ -70,6 +70,7 @@ export async function runGoogleSearch(
     return {
       ok: false,
       urls: [],
+      entries: [],
       error:
         "The search could not be reached. Check the server's network connection and try again.",
     };
@@ -81,10 +82,11 @@ export async function runGoogleSearch(
   // is reported as a clean run that found no links.
   if (!result.ok) {
     return emptyDataset(result.error)
-      ? { ok: true, urls: [] }
-      : { ok: false, urls: [], error: result.error };
+      ? { ok: true, urls: [], entries: [] }
+      : { ok: false, urls: [], entries: [], error: result.error };
   }
-  return { ok: true, urls: resultUrls(result.headers, result.rows) };
+  const entries = resultEntries(result.headers, result.rows);
+  return { ok: true, urls: entries.map((e) => e.url), entries };
 }
 
 // The one Apify message that means "no results" rather than "something went

@@ -148,8 +148,24 @@ export const GOOGLE_SEARCH_MAX_ITEMS = RESULTS_PER_PAGE;
 export interface GoogleSearchResult {
   ok: boolean;
   urls: string[];
+  // The same results with the text Google printed under them. Kept alongside
+  // urls rather than replacing it because most callers here want a link and
+  // nothing else — only the decision-maker stage reads a snippet, and it reads
+  // it to check that a profile is the person it went looking for.
+  entries: GoogleSearchEntry[];
   // Set only when the run itself failed — Apify's own sentence, passed through.
   error?: string;
+}
+
+// One result, as much of it as the actor gives up: the link, the blue title
+// line, and the snippet beneath. Title and snippet are "" rather than null
+// when the actor returns a shape without them — an absent snippet is a result
+// with nothing to read, which is a thing a reader can handle, and not an
+// error.
+export interface GoogleSearchEntry {
+  url: string;
+  title: string;
+  snippet: string;
 }
 
 // ─── Reading a result ──────────────────────────────────────────────────────
@@ -162,25 +178,63 @@ export interface GoogleSearchResult {
 // puts the link in a url field of its own. Reading both means an actor swap is
 // an edit to GOOGLE_SEARCH_ACTOR_ID and to nothing else.
 export function resultUrls(headers: string[], rows: string[][]): string[] {
-  const urls: string[] = [];
-  const add = (raw: string) => {
+  return resultEntries(headers, rows).map((entry) => entry.url);
+}
+
+// The results with their text, in the order Google ranked them, one entry per
+// link and never the same link twice.
+//
+// Both actor shapes are read here rather than in resultUrls, which is now a
+// projection of this — there is one place that knows what a result looks like,
+// and adding a field to an entry cannot leave the two readers disagreeing
+// about what the first result was.
+export function resultEntries(headers: string[], rows: string[][]): GoogleSearchEntry[] {
+  const entries: GoogleSearchEntry[] = [];
+  const add = (raw: string, title: unknown, snippet: unknown) => {
     const url = plausibleUrl(raw);
-    if (url !== null && !urls.includes(url)) urls.push(url);
+    if (url === null || entries.some((e) => e.url === url)) return;
+    entries.push({ url, title: text(title), snippet: text(snippet) });
   };
 
   const nested = columnIndex(headers, "organicResults");
   const flat = columnIndex(headers, "url");
+  const flatTitle = columnIndex(headers, "title");
+  const flatSnippet = columnIndex(headers, "description");
+  const flatSnippetAlt = columnIndex(headers, "snippet");
 
   for (const row of rows) {
     if (nested !== -1) {
       for (const entry of jsonList(row[nested] ?? "")) {
         const value = entry["url"] ?? entry["link"];
-        if (typeof value === "string") add(value);
+        if (typeof value === "string") {
+          add(value, entry["title"], entry["description"] ?? entry["snippet"]);
+        }
       }
     }
-    if (flat !== -1) add(row[flat] ?? "");
+    if (flat !== -1) {
+      add(
+        row[flat] ?? "",
+        flatTitle === -1 ? "" : row[flatTitle],
+        flatSnippet === -1
+          ? flatSnippetAlt === -1
+            ? ""
+            : row[flatSnippetAlt]
+          : row[flatSnippet],
+      );
+    }
   }
-  return urls;
+  return entries;
+}
+
+// A cell or a JSON value as the one line of text it is worth keeping. Held to
+// a length that keeps a snippet a snippet: everything read out of here is
+// eventually put in front of a model, and a result that returned a whole page
+// is not evidence, it is a bill.
+const MAX_TEXT_CHARS = 400;
+
+function text(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.replace(/\s+/g, " ").trim().slice(0, MAX_TEXT_CHARS);
 }
 
 // Matched on the whole path first, then on the last segment — the same rule

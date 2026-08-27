@@ -1,28 +1,34 @@
 // Decision-maker enrichment — who to talk to at a clinic that has qualified.
 //
-// The clinic-first pathway finds clinics before it finds people, so a
-// candidate can clear the promotion bar with nobody named at it and stop at
-// QUALIFIED_NO_CONTACT. This is the stage that goes and looks — and it is a
-// stage of its own rather than a sixth step in the enrichment chain, for two
-// reasons that between them describe the whole design:
+// The clinic-first pathway finds clinics before it finds people, so a clinic
+// can arrive with nobody named at it. This is the stage that goes and looks,
+// and it follows one procedure, in this order:
 //
-//   It runs only on a candidate that has already qualified. Looking for the
-//   owner of a clinic that is about to be rejected is money spent on a person
-//   nobody will ever contact, so the gate is the score, not the import.
+//   1-2. Read the website copy the crawler already stored and have DeepSeek
+//        pull out any named individual on it — a doctor, an owner, anyone who
+//        reads as staff. A bare name counts. A stated role is context, not a
+//        requirement, because most clinic sites simply list their people.
+//   3-4. Search that name exactly as it was written, in quotes, against the
+//        clinic's name: "[name]" "[clinic]" LinkedIn.
+//   5.   Take the first result that is a linkedin.com/in/ profile.
+//   6.   Have DeepSeek check the result's own visible text against the clinic
+//        and the name, to tell this person from a stranger who shares a name.
+//   7.   Write the name, the profile URL and a confidence onto the record.
 //
-//   It is retried on its own. Nothing here re-runs the company lookup, Maps,
-//   the ads library or the crawler — it reads what those already wrote and
-//   spends at most one profile search and one Google search. "Try again" costs
-//   one stage, not six.
+// And when the site names nobody at all, and only then, a second tier: the
+// clinic-anchored owner/founder/director searches, which are a guess about who
+// runs the place rather than a search for somebody the site named.
 //
-// The rule underneath all of it is that unknown beats wrong. A doctor working
-// at a clinic is not the clinic's owner, and a CRM that recorded him as one
-// would be inventing the single fact the outreach depends on. So every
-// identification carries the evidence behind it and a confidence that says how
-// much that evidence is worth, and a stage that finds nobody says so.
+// Two rules run through all of it. Verification lowers confidence rather than
+// rejecting — a plausible match nobody can prove is worth more than an empty
+// field, as long as the record says which it is holding. And the stage is
+// retried on its own: nothing here re-runs the company lookup, Maps, the ads
+// library or the crawler, so "try again" costs one stage rather than six.
 //
 // Pure: no network, no database. src/lib/actions/decisionMaker.ts does the
 // running, and the actor it runs is a setting.
+
+import { GoogleSearchEntry } from "@/lib/googleSearch";
 
 // ─── Status ────────────────────────────────────────────────────────────────
 
@@ -88,10 +94,10 @@ export const CONFIDENCE_LABELS: Record<DecisionMakerConfidence, string> = {
 // as what the evidence says rather than as how sure the app feels, because the
 // second is not a thing software can have.
 export const CONFIDENCE_MEANINGS: Record<DecisionMakerConfidence, string> = {
-  HIGH: "The clinic's own site states the relationship — “John Smith, Founder” on a team or about page",
-  MEDIUM: "A profile states it — “Owner at Elite Spine & Rehab” on LinkedIn",
-  LOW: "This person is associated with the clinic, but nothing found says they decide anything",
-  UNKNOWN: "Somebody entered this by hand, or the source said nothing about the role",
+  HIGH: "The clinic named this person and the profile found for them names the clinic back",
+  MEDIUM: "The clinic named this person, and the profile agrees on their profession or their town",
+  LOW: "A plausible match nothing has confirmed — worth a glance before it is used",
+  UNKNOWN: "Somebody entered this by hand, or nothing found said anything about them",
 };
 
 const CONFIDENCE_RANK: Record<DecisionMakerConfidence, number> = {
@@ -183,6 +189,12 @@ export function titleTier(title: string | null | undefined): 1 | 2 | 3 | 4 | nul
 // this stage can find, and the same name scraped off a directory is not.
 export const EVIDENCE_SOURCES = [
   "website",
+  // The procedure this stage actually runs: a name read off the clinic's own
+  // site, searched for by that exact text, and verified against the result.
+  // Its own source rather than "website" or "search" because it is neither —
+  // the website said the name and the search said the profile, and a log that
+  // called it either one would be describing half of what happened.
+  "name_search",
   "linkedin",
   "search",
   "maps",
@@ -193,6 +205,7 @@ export type EvidenceSource = (typeof EVIDENCE_SOURCES)[number];
 
 export const EVIDENCE_SOURCE_LABELS: Record<EvidenceSource, string> = {
   website: "Clinic website",
+  name_search: "Name from the website, found on LinkedIn",
   linkedin: "LinkedIn",
   search: "Google search",
   maps: "Google Maps",
@@ -211,6 +224,10 @@ export function confidenceFor(
 ): DecisionMakerConfidence {
   const tier = titleTier(title);
   if (source === "manual") return "UNKNOWN";
+  // The name-search path never derives its confidence from a title. What that
+  // finding is worth is what the verification in step six said it was worth,
+  // and it is passed in rather than re-guessed from words on a profile.
+  if (source === "name_search") return "LOW";
   if (tier === null) return "LOW";
   if (tier === 4) return "LOW";
   if (source === "website") return "HIGH";
@@ -340,233 +357,271 @@ export function looksLikePersonName(raw: string): boolean {
   return words.filter((w) => /^[A-Z]/.test(w)).length >= 2;
 }
 
-// ─── 1. The clinic's own website ───────────────────────────────────────────
-
-// The strongest evidence there is, and it costs nothing: the website crawler
-// has already run, and its copy is sitting on the candidate as websiteNotes.
-// A team or about page written by the clinic says "Dr John Smith, Founder" in
-// so many words, which is the one thing no amount of searching can improve on.
+// ─── 1. The name on the clinic's own website ───────────────────────────────
 //
-// Two shapes are read, because both are how these pages are written:
-// "Name, Title" / "Name — Title", and "Title: Name". Anything else is left
-// alone rather than guessed at — this function returning nothing is a normal
-// outcome and the stage has three more places to look.
-export function peopleFromWebsiteNotes(
-  notes: string | null | undefined,
-): DecisionMakerCandidate[] {
-  const text = (notes ?? "").replace(/\r/g, "");
-  if (text.trim() === "") return [];
+// Step one of the procedure, and the only step that costs nothing: the website
+// crawler has already run and its copy is sitting on the candidate as
+// websiteNotes, so this reads what is there rather than fetching it again.
+//
+// What it is looking for is *a named individual* — a doctor, an owner, anyone
+// who reads as staff. Deliberately not "a name with a role next to it". A team
+// page that says "Dr. Elena Marsh" and nothing else has told us who to search
+// for, and the old rule — which threw that away because no title followed it —
+// was discarding the single most common shape these pages come in. Whatever
+// role context happens to sit near the name is carried along as context, and
+// its absence is not a reason to drop the name.
+//
+// The extraction is DeepSeek's rather than a regular expression's for the same
+// reason: prose names a person in more ways than a pattern can enumerate.
 
-  const found: DecisionMakerCandidate[] = [];
-  // Case-insensitive per letter rather than a case-insensitive regex: the name
-  // half of these patterns depends on capitals to tell a person from prose, so
-  // the whole expression cannot be given the i flag. "founder" becomes
-  // [fF][oO][uU]… and matches "Founder" without loosening anything else.
-  const titleWords = TITLE_TIERS.flatMap((g) => g.titles)
-    .filter((t) => t.length > 2)
-    .map((t) =>
-      t
-        .split("")
-        .map((ch) =>
-          /[a-z]/.test(ch)
-            ? `[${ch}${ch.toUpperCase()}]`
-            : ch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-        )
-        .join(""),
-    )
-    .join("|");
+// The system half, stated once. "json" appears in it because deepSeekJson
+// pins the reply to an object and DeepSeek refuses that request unless the
+// word is in the prompt — see src/lib/deepseek.ts.
+export const WEBSITE_NAME_SYSTEM_PROMPT = [
+  "You read the copy crawled from a medical or chiropractic clinic's website and pull out the people named on it.",
+  "A person counts if they are named and appear to be a doctor, an owner, or any member of staff at the clinic.",
+  "A name on its own counts. Do NOT require a role or title to be stated next to it — most clinic sites simply list people.",
+  "Return each name EXACTLY as it appears in the text, character for character, including any honorific or letters after it.",
+  "Do not invent, correct, complete or reformat a name. Do not return patients, testimonial authors, brand names, treatment names, or the clinic's own name.",
+  "Reply with json only.",
+].join(" ");
 
-  // One word of a name: an honorific with its full stop ("Dr.", "Mr."), or an
-  // ordinary capitalised word without one. Keeping the full stop out of the
-  // long form is what stops a match running backwards over a sentence
-  // boundary — "Meet our team. Dr John Smith" is one name, not four words of
-  // the sentence before it.
-  const NAME_WORD = "(?:[A-Z][a-z]{0,2}\\.|[A-Z][A-Za-z'\u2019-]{1,20})";
-  const NAME = `(${NAME_WORD}(?:\\s+${NAME_WORD}){1,3})`;
+// How much crawled copy one extraction reads. The people on a clinic site are
+// named on its team and about pages, which the crawler puts near the top of
+// what it stores; past this is footer text and treatment descriptions, and
+// every character of it is billed.
+export const MAX_WEBSITE_NOTE_CHARS = 6000;
 
-  // "John Smith, Founder" / "Dr. John Smith — Medical Director"
-  const nameFirst = new RegExp(
-    `${NAME}\\s*[,\\u2013\\u2014|-]\\s*((?:${titleWords})[A-Za-z /&-]{0,30})`,
-    "g",
-  );
-  // "Founder: John Smith" / "Owner - Dr John Smith"
-  const titleFirst = new RegExp(
-    `((?:${titleWords})[A-Za-z /&-]{0,30})\\s*[:\\u2013\\u2014|-]\\s*${NAME}`,
-    "g",
-  );
+export function websiteNamePrompt(clinicName: string, notes: string | null | undefined): string {
+  const text = (notes ?? "").replace(/\r/g, "").trim().slice(0, MAX_WEBSITE_NOTE_CHARS);
+  return [
+    `CLINIC: ${clinicName}`,
+    "",
+    "WEBSITE COPY:",
+    text,
+    "",
+    "REPLY FORMAT — json, and nothing else:",
+    '{"people":[{"name":"exactly as written in the copy","roleContext":"the words near the name that suggest what they do, or null"}]}',
+    "",
+    "Order them by how likely each is to be the person who decides things at this clinic. An empty list is a correct answer when the copy names nobody.",
+  ].join("\n");
+}
 
-  for (const [pattern, nameGroup, titleGroup] of [
-    [nameFirst, 1, 2] as const,
-    [titleFirst, 2, 1] as const,
-  ]) {
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(text)) !== null) {
-      const name = match[nameGroup].trim();
-      const title = match[titleGroup].trim().replace(/\s+/g, " ");
-      if (!looksLikePersonName(name)) continue;
-      if (titleTier(title) === null) continue;
-      found.push(
-        person({
-          name,
-          title,
-          source: "website",
-          evidence: `Clinic website — “${name}${title ? `, ${title}` : ""}”, read from the page the crawler already had.`,
-        }),
-      );
-      if (found.length >= 8) break;
-    }
+// One name the model found, before anything has been searched for it.
+export interface ExtractedName {
+  // Verbatim, because step 3 searches this string in quotes. Trimming
+  // whitespace is the only thing done to it.
+  name: string;
+  // Whatever the copy said around the name — often nothing, and nothing is a
+  // perfectly good answer here rather than a reason to discard the name.
+  roleContext: string | null;
+}
+
+// How many extracted names one attempt will search. Each is a billed search,
+// and a clinic's decider is at the top of the list or the list was the wrong
+// list — the rest are there for the retry.
+export const MAX_NAMES_SEARCHED = 3;
+
+// The model's reply as names, never throwing on anything it might have said.
+// A name that does not read as a person's name is dropped: the model is asked
+// for exact text and a treatment heading returned as a person would otherwise
+// be searched for, in quotes, at this clinic's expense.
+export function readExtractedNames(content: string): ExtractedName[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return [];
   }
-  return rankCandidates(found);
+  const list = (parsed as Record<string, unknown> | null)?.["people"];
+  if (!Array.isArray(list)) return [];
+
+  const out: ExtractedName[] = [];
+  const seen = new Set<string>();
+  for (const entry of list) {
+    if (entry === null || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim().replace(/\s+/g, " ") : "";
+    if (name === "" || !looksLikePersonName(name)) continue;
+    const key = personKey(name);
+    if (key === "" || seen.has(key)) continue;
+    seen.add(key);
+    const context =
+      typeof record.roleContext === "string" && record.roleContext.trim() !== ""
+        ? record.roleContext.trim().replace(/\s+/g, " ").slice(0, 160)
+        : null;
+    out.push({ name, roleContext: context });
+    if (out.length >= 8) break;
+  }
+  return out;
 }
 
-// ─── 2. The profile search ─────────────────────────────────────────────────
+// ─── 2. The search for that exact name ─────────────────────────────────────
 
-// What the configured actor is asked, and it is asked about *this clinic*.
+// Steps three and four: the extracted text, verbatim and in quotes, against
+// the clinic's name, on LinkedIn. Both halves are quoted so the search is for
+// this person at this clinic rather than for either word anywhere — a bare
+// name search returns every namesake in the country, which is precisely the
+// mistake step six exists to catch and is cheaper not to make.
 //
-// Never a bare "owner" or "founder": a search that is not anchored to the
-// clinic returns the owners of other clinics, and a name is worse than useless
-// if it belongs to somebody else's practice. Every field here carries the
-// clinic name, and the titles narrow it rather than defining it.
-//
-// The same alias-spreading the clinic-first search uses, and for the same
-// reason: which actor is configured is a setting, actors disagree about what
-// they call their inputs, and a spare key costs nothing while a missing one
-// costs a run that returns nothing.
-export const DECISION_MAKER_TITLES_SEARCHED = [
-  "Owner",
-  "Founder",
-  "CEO",
-  "President",
-  "Medical Director",
-  "Clinic Director",
-  "Practice Manager",
-];
+// The only edit made to either string is dropping the quote characters inside
+// it, which would otherwise close the quoting early and change what is asked.
+export function nameLinkedinQuery(name: string, clinicName: string): string {
+  const quoted = (raw: string) => `"${raw.replace(/["“”]/g, "").trim()}"`;
+  return `${quoted(name)} ${quoted(clinicName)} LinkedIn`;
+}
 
-export function profileSearchInput(
-  clinicName: string,
-  location: string | null | undefined,
-  maxResults: number,
-): Record<string, unknown> {
-  const anchored = `"${clinicName}" ${DECISION_MAKER_TITLES_SEARCHED.slice(0, 4).join(" OR ")}`;
+// ─── 3. The profile out of the results ─────────────────────────────────────
+
+// Step five: the first result that is a personal LinkedIn profile. "First"
+// literally — Google has already ranked them and a quoted two-term search that
+// puts a profile at the top has said something the app should not second-guess
+// by preferring a later one.
+export function firstLinkedinProfile(entries: GoogleSearchEntry[]): GoogleSearchEntry | null {
+  for (const entry of entries) {
+    if (isLinkedinProfileUrl(entry.url)) return entry;
+  }
+  return null;
+}
+
+export function isLinkedinProfileUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      /(^|\.)linkedin\.com$/i.test(parsed.hostname) &&
+      /^\/in\/[^/]+\/?$/i.test(parsed.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// A LinkedIn personal profile out of a list of result links. Kept because the
+// fallback tier below has only links to work with.
+export function profileUrlsFromResults(urls: string[]): string[] {
+  return urls.filter(isLinkedinProfileUrl);
+}
+
+// ─── 4. Verifying that it is the same person ───────────────────────────────
+//
+// Step six, and the reason the search may be trusted at all: a quoted search
+// can still return a profile for somebody who shares the name, so the visible
+// text of the result is checked against the clinic and the extracted name
+// before anything is written down.
+//
+// The bar is deliberately not "prove it". A profile that plausibly belongs to
+// this person at this clinic but does not say so outright is kept at a lower
+// confidence rather than thrown away — an uncertain name somebody can check in
+// ten seconds is worth more than an empty field, and the confidence is what
+// says which of the two it is. Only a positive contradiction rejects.
+
+export const VERIFY_SYSTEM_PROMPT = [
+  "You check whether a LinkedIn search result belongs to a named person at a named clinic.",
+  "You are shown the name taken from the clinic's own website, the clinic's name, and the visible title and snippet of the search result.",
+  "Decide whether this is plausibly the same person at that clinic, or somebody else who happens to share the name.",
+  "Be pragmatic: agreement on the clinic name, the town, the profession or the specialty all count in favour, and a snippet that says little is grounds for lower confidence, NOT for rejection.",
+  "Only answer 'different' when something in the result actually contradicts it — a different employer, a different profession, a different person.",
+  "Reply with json only.",
+].join(" ");
+
+export function verificationPrompt(args: {
+  clinicName: string;
+  extractedName: string;
+  roleContext: string | null;
+  profileUrl: string;
+  resultTitle: string;
+  resultSnippet: string;
+}): string {
+  return [
+    `CLINIC: ${args.clinicName}`,
+    `NAME FROM THE CLINIC'S WEBSITE: ${args.extractedName}`,
+    `ROLE CONTEXT ON THE WEBSITE: ${args.roleContext ?? "none stated"}`,
+    "",
+    "SEARCH RESULT:",
+    `URL: ${args.profileUrl}`,
+    `Title: ${args.resultTitle === "" ? "(none returned)" : args.resultTitle}`,
+    `Snippet: ${args.resultSnippet === "" ? "(none returned)" : args.resultSnippet}`,
+    "",
+    "REPLY FORMAT — json, and nothing else:",
+    '{"verdict":"same"|"unsure"|"different","confidence":"HIGH"|"MEDIUM"|"LOW","name":"the person\'s name as the result gives it, or null","title":"their role as the result gives it, or null","reason":"one sentence of what you matched on"}',
+    "",
+    "HIGH means the result names this clinic or otherwise ties the person to it. MEDIUM means it agrees on profession or place. LOW means nothing contradicts it and nothing confirms it.",
+  ].join("\n");
+}
+
+export interface Verification {
+  verdict: "same" | "unsure" | "different";
+  confidence: DecisionMakerConfidence;
+  // What the profile calls them, when the result gave a fuller or better
+  // spelling than the website did. Null keeps the website's own text.
+  name: string | null;
+  title: string | null;
+  reason: string;
+}
+
+// The model's verdict, never throwing, and clamped rather than trusted.
+//
+// Two clamps, both of them the "unknown beats wrong" rule in arithmetic: an
+// unsure verdict is never worth more than Low however sure the model claims to
+// be about being unsure, and an unparseable reply is an unsure Low rather than
+// a rejection — a search that returned a profile and a verifier that returned
+// gibberish is still a lead, held at the confidence that says so.
+export function readVerification(content: string): Verification {
+  let parsed: Record<string, unknown> | null = null;
+  try {
+    const value = JSON.parse(content);
+    if (value !== null && typeof value === "object") parsed = value as Record<string, unknown>;
+  } catch {
+    parsed = null;
+  }
+  if (parsed === null) {
+    return {
+      verdict: "unsure",
+      confidence: "LOW",
+      name: null,
+      title: null,
+      reason: "The verification could not be read, so the match is kept at low confidence rather than assumed.",
+    };
+  }
+
+  const raw = typeof parsed.verdict === "string" ? parsed.verdict.toLowerCase().trim() : "";
+  const verdict: Verification["verdict"] =
+    raw === "same" ? "same" : raw === "different" ? "different" : "unsure";
+
+  const claimed = isDecisionMakerConfidence(parsed.confidence)
+    ? (parsed.confidence as DecisionMakerConfidence)
+    : "LOW";
+  const confidence: DecisionMakerConfidence =
+    verdict === "different" ? "UNKNOWN" : verdict === "unsure" ? "LOW" : claimed;
+
+  const str = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const trimmed = v.trim().replace(/\s+/g, " ");
+    return trimmed === "" || trimmed.toLowerCase() === "null" ? null : trimmed.slice(0, 120);
+  };
+
   return {
-    // harvestapi/linkedin-profile-search and its siblings take the company as
-    // a list and the titles as another; the free-text keys are for the search
-    // scrapers that take a query instead.
-    currentCompanies: [clinicName],
-    companyNames: [clinicName],
-    companyName: clinicName,
-    jobTitles: DECISION_MAKER_TITLES_SEARCHED,
-    title: DECISION_MAKER_TITLES_SEARCHED.join(" OR "),
-    search: anchored,
-    searchQuery: anchored,
-    query: anchored,
-    queries: anchored,
-    ...(location ? { location, locations: [location] } : {}),
-    maxItems: maxResults,
-    maxResults,
-    profileScraperMode: "Short",
+    verdict,
+    confidence,
+    name: str(parsed.name),
+    title: str(parsed.title),
+    reason:
+      str(parsed.reason)?.slice(0, 300) ??
+      "No reason was given for the verdict.",
   };
 }
 
-// One row of whatever the actor returned, read as a person — or null when
-// there is no name in it, or when the row is about somebody at a different
-// clinic.
+// ─── 5. The fallback: the clinic-anchored search ───────────────────────────
 //
-// The clinic check is the important half. A profile search anchored to a
-// clinic still returns near-matches, and taking one of those would attach the
-// owner of another practice to this record. So a row is only accepted if the
-// company it names matches the clinic being searched for, or if the row names
-// no company at all and the search itself was anchored.
-export interface ProfileRow {
-  headers: string[];
-  cells: string[];
-}
-
-const PROFILE_ALIASES = {
-  name: ["fullname", "name", "profilename", "displayname"],
-  firstName: ["firstname", "givenname"],
-  lastName: ["lastname", "surname", "familyname"],
-  title: ["headline", "jobtitle", "title", "position", "currentposition", "occupation"],
-  linkedinUrl: ["profileurl", "linkedinurl", "url", "publicprofileurl", "link"],
-  email: ["email", "emailaddress", "workemail"],
-  phone: ["phone", "phonenumber", "mobile"],
-  company: ["companyname", "currentcompany", "company", "organization", "employer"],
-  instagram: ["instagram", "instagramurl"],
-  website: ["website", "personalwebsite", "websiteurl"],
-} as const;
-
-export function normalizeProfileRow(
-  row: ProfileRow,
-  clinicName: string,
-): DecisionMakerCandidate | null {
-  const byKey = new Map<string, string>();
-  row.headers.forEach((header, i) => {
-    const value = (row.cells[i] ?? "").trim();
-    if (value === "") return;
-    const leaf = header.slice(header.lastIndexOf(".") + 1).toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (!byKey.has(leaf)) byKey.set(leaf, value);
-  });
-  const read = (field: keyof typeof PROFILE_ALIASES): string | null => {
-    for (const alias of PROFILE_ALIASES[field]) {
-      const value = byKey.get(alias);
-      if (value !== undefined && value !== "") return value;
-    }
-    return null;
-  };
-
-  const first = read("firstName");
-  const last = read("lastName");
-  const name = read("name") ?? [first, last].filter(Boolean).join(" ");
-  if (name.trim() === "" || !looksLikePersonName(name)) return null;
-
-  // Somebody at another clinic of a similar name is not this clinic's owner.
-  const company = read("company");
-  if (company !== null && !companiesMatch(company, clinicName)) return null;
-
-  const title = read("title");
-  const socials = [read("instagram"), read("website")].filter(
-    (u): u is string => typeof u === "string" && u.trim() !== "",
-  );
-
-  return person({
-    name: name.trim(),
-    title,
-    linkedinUrl: read("linkedinUrl"),
-    email: read("email"),
-    phone: read("phone"),
-    socialUrls: socials,
-    source: "linkedin",
-    evidence:
-      title === null
-        ? `LinkedIn profile search anchored to “${clinicName}” returned this profile, which states no role.`
-        : `LinkedIn — “${name.trim()}, ${title}”${company ? ` at ${company}` : ""}.`,
-  });
-}
-
-// Whether the company on a profile is the clinic being searched for. The same
-// flattening the duplicate test uses on clinic names, then a containment check
-// either way round: "Elite Spine" on a profile and "Elite Spine & Rehab" on
-// the record are the same practice, and neither is "Denver Spine".
-export function companiesMatch(a: string, b: string): boolean {
-  const norm = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/&/g, " and ")
-      .replace(/[^a-z0-9]+/g, " ")
-      .replace(/\b(the|inc|llc|pllc|pc|pa|ltd|co|corp|and)\b/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  const x = norm(a);
-  const y = norm(b);
-  if (x === "" || y === "") return false;
-  return x === y || x.includes(y) || y.includes(x);
-}
-
-// ─── 3. The anchored Google search ─────────────────────────────────────────
-
-// The queries, and every one of them names the clinic. This is the list the
-// brief asks for, in the order it is worth running: ownership first, the roles
-// that run the place next, then the two catch-alls.
+// Second tier, and it runs only after the name path above has been tried and
+// genuinely found nobody — no name on the site, or names that searched and
+// verified to nothing. That ordering is the whole point of it: the name path
+// is specific and this one is a guess, and a guess run first would spend the
+// budget answering a question the website could have answered.
+//
+// The queries, and every one of them names the clinic. Ownership first, the
+// roles that run the place next, then the two catch-alls. There is no bare
+// "owner" search here — that returns the owners of other people's practices.
 export function decisionMakerQueries(
   clinicName: string,
   location?: string | null,
@@ -590,25 +645,6 @@ export function decisionMakerQueries(
 // the queries exist for the retry, which starts from the top again with
 // whatever the crawler has learned since.
 export const MAX_SEARCH_QUERIES = 3;
-
-// A LinkedIn personal profile out of a list of search results, with the name
-// read off the URL slug. It is the weakest thing this stage will accept and it
-// is accepted for one reason: a linkedin.com/in/ URL anchored to a clinic
-// search is a real person associated with that clinic, which is a lead worth
-// having as long as nothing pretends it is more than that.
-export function profileUrlsFromResults(urls: string[]): string[] {
-  return urls.filter((url) => {
-    try {
-      const parsed = new URL(url);
-      return (
-        /(^|\.)linkedin\.com$/i.test(parsed.hostname) &&
-        /^\/in\/[^/]+\/?$/i.test(parsed.pathname)
-      );
-    } catch {
-      return false;
-    }
-  });
-}
 
 // "https://www.linkedin.com/in/john-smith-dc-1a2b3c" → "John Smith". The
 // trailing hash is dropped, the honorific letters with it. Null when the slug
