@@ -17,8 +17,8 @@ import {
   IconUsers,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/actions/auth";
-import AiButton from "@/components/AiButton";
 import Icon from "@/components/Icons";
+import ImanAvatar from "@/components/ImanAvatar";
 import { LogoIconChip } from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
 
@@ -92,6 +92,17 @@ const NAV = [DASHBOARD, ...NAV_GROUPS.flatMap((g) => g.items)];
 // in it — and it is drawn below the divider at the foot rather than in the list.
 // Everything under /settings lights it, including the pipeline settings that
 // used to be a nav item of their own.
+
+// Iman is not in NAV either, and for the same reason Settings is not: it sits
+// below the list rather than in it. It was the "AI Copilot" button here until
+// the copilot became a page; the row it replaced that button with is the one
+// place in the sidebar that carries the assistant's own face rather than a
+// glyph.
+const COPILOT = {
+  href: "/copilot",
+  label: "Iman",
+} as const;
+
 const SETTINGS = {
   href: "/settings",
   label: "Settings",
@@ -131,13 +142,13 @@ const NAV_MOTION =
 export default function Sidebar({
   collapsed,
   onToggle,
-  onOpenCopilot,
 }: {
   collapsed: boolean;
   onToggle: () => void;
-  onOpenCopilot: () => void;
 }) {
   const pathname = usePathname();
+  const copilotActive =
+    pathname === COPILOT.href || pathname.startsWith(`${COPILOT.href}/`);
   const settingsActive =
     pathname === SETTINGS.href || pathname.startsWith(`${SETTINGS.href}/`);
   return (
@@ -217,21 +228,26 @@ export default function Sidebar({
           </div>
         ))}
       </nav>
-      {/* The copilot's trigger. It wears .btn-ai through <AiButton> for the
-          reason every other assist does: a violet pill with a sparkle on it
-          spends a model call, and this is the only control in the nav that
-          does. It is a button rather than a nav item because it opens a panel
-          over whatever page you are on instead of taking you somewhere —
-          which is also why it sits below the nav rather than in it. */}
+      {/* Iman, the copilot. A nav row rather than a button, because it is a
+          page you go to now instead of a panel that opened over whatever you
+          were looking at. It keeps its place below the nav all the same: it is
+          not a stage of the funnel, and grouping it with one would say it was.
+          Its glyph is Iman's own face, which is what the page is headed with. */}
       <div className={`py-3 ${collapsed ? "px-2" : "px-3"}`}>
-        <AiButton
-          onClick={onOpenCopilot}
-          title={collapsed ? "AI Copilot" : undefined}
-          aria-label={collapsed ? "AI Copilot" : undefined}
-          className={`w-full ${collapsed ? "justify-center !px-0" : ""}`}
+        <Link
+          href={COPILOT.href}
+          title={collapsed ? COPILOT.label : undefined}
+          className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${NAV_MOTION} ${
+            collapsed ? "justify-center px-0" : "px-3"
+          } ${
+            copilotActive
+              ? "nav-active"
+              : "text-muted hover:bg-wash hover:text-ink"
+          }`}
         >
-          {!collapsed && "AI Copilot"}
-        </AiButton>
+          <ImanAvatar size="nav" />
+          {!collapsed && COPILOT.label}
+        </Link>
       </div>
       {/* Settings, alone at the foot behind a rule. It is a real nav item —
           same 42px row, same active treatment — held apart from the group above
