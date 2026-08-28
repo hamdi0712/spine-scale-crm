@@ -25,7 +25,7 @@ export const BUSINESS_CONTEXT_ID = "singleton";
 // enough that this cannot quietly become a document that costs a fortune to
 // carry on every question. Enforced on save, so the limit is visible at the
 // place it applies rather than silently truncating a model call later.
-export const BUSINESS_CONTEXT_MAX_CHARS = 8000;
+export const BUSINESS_CONTEXT_MAX_CHARS = 16000;
 
 // What an empty page opens on. Comment lines, because they are headings rather
 // than content: whatever survives is prose under a heading, and a section
