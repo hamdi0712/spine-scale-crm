@@ -1027,3 +1027,62 @@ model DailyKpiSettings {
 
   updatedAt DateTime @updatedAt
 }
+
+// ─── Copilot conversations ─────────────────────────────────────────────────
+//
+// A saved chat with Iman, the copilot on /copilot.
+//
+// The panel this page replaced kept its thread in component state and lost it
+// on reload, on the grounds that the value was in the answer rather than in
+// the transcript. A full page changes that: a page you navigate to is a place
+// you come back to, and coming back to an empty one throws away the question
+// you asked this morning along with the lookups that answered it.
+//
+// The title is generated from the first thing typed rather than asked for.
+// Nobody names a conversation before having it, and "New chat" is what a
+// conversation that has not been started yet is called.
+//
+// Nothing here is trusted on the way back out. A stored assistant turn is
+// replayed to the model as prose only, through the same sanitiseHistory the
+// browser's turns go through (src/lib/copilot.ts) — the toolsUsed column is a
+// receipt drawn under an answer, never a tool result fed back in. That is the
+// same rule the panel held: the browser cannot put a fact in the model's
+// mouth, and now neither can the database.
+model CopilotConversation {
+  id        String   @id @default(cuid())
+  title     String   @default("New chat")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages CopilotMessage[]
+
+  // The history dropdown reads this list newest-first and nothing else does.
+  @@index([updatedAt])
+}
+
+// One turn of a saved conversation.
+//
+// "error" is a role here as it is in the page: a failure answers a specific
+// question and belongs in the thread beside it. It is stored so that reopening
+// a conversation shows what it actually looked like, and it is dropped again
+// on the way to the model, which never said it.
+//
+// toolsUsed is the receipt — the lookup names, JSON-encoded, in the order they
+// ran — because SQLite has no array column. Empty string means none, which is
+// every user turn and every error.
+model CopilotMessage {
+  id             String              @id @default(cuid())
+  conversationId String
+  conversation   CopilotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role      String // user | assistant | error
+  content   String
+  toolsUsed String   @default("")
+  // The order the turns were said in. createdAt alone is not enough: a
+  // question and its answer are saved in the same write and can land on the
+  // same millisecond.
+  position  Int
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, position])
+}
