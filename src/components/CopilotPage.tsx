@@ -84,6 +84,9 @@ const TOOL_LABELS: Record<string, string> = {
   getCreativeDetail: "Creative",
   getLibraryEntries: "Library",
   getPipelineSettings: "Pipeline settings",
+  getActivityTrend: "Activity trend",
+  getBusinessHoursStatus: "US business hours",
+  getDailyKpiStatus: "Daily KPI",
 };
 
 export default function CopilotPage({

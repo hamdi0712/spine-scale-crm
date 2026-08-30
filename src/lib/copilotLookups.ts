@@ -115,6 +115,7 @@ import {
   DAILY_CHECKLIST_CATEGORIES,
   DAILY_CHECKLIST_CATEGORY_LABELS,
   DAILY_CHECKLIST_ITEMS,
+  addDays,
   checkedCount,
   dayKey,
   itemsInCategory,
@@ -123,7 +124,38 @@ import {
   toChecklistDay,
 } from "@/lib/dailyChecklist";
 import { readDayRows } from "@/lib/dailyChecklistStore";
+import {
+  DAILY_KPI_BLURBS,
+  DAILY_KPI_CADENCE,
+  DAILY_KPI_KEYS,
+  DAILY_KPI_LABELS,
+  DAILY_KPI_TREND_DAYS,
+  averageFor,
+  dailyScore,
+  emptyCounts,
+  goalMet,
+  monthlyPace,
+  pctChange,
+  streakLength,
+  toUtcDay,
+} from "@/lib/dailyKpi";
+import {
+  loadDailyKpiGoals,
+  loadDailyKpiRange,
+  loadMonthToDate,
+} from "@/lib/dailyKpiStore";
 import { loadDailyNumbers } from "@/lib/dailyNumbers";
+import {
+  BUSINESS_CLOSE_HOUR,
+  BUSINESS_OPEN_HOUR,
+  businessHours,
+} from "@/lib/businessHours";
+import {
+  US_TIME_ZONES,
+  fmtDayInZone,
+  fmtTimeInZone,
+  zoneAbbr,
+} from "@/lib/timezones";
 import {
   MESSAGES_WINDOW_DAYS,
   REPLY_RATE_WINDOW_DAYS,
@@ -186,6 +218,11 @@ const UPCOMING_DAYS = 7;
 const SCRAPED_NOTES_MAX_CHARS = 1500;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// How far back getDailyKpiStatus reads. Two weeks of week-on-week plus enough
+// behind it for a streak worth reporting; the page itself reads ninety, which
+// is more history than an answer in prose ever quotes.
+const KPI_HISTORY_DAYS = 45;
 
 // ─── Shared shaping ────────────────────────────────────────────────────────
 
@@ -1635,6 +1672,294 @@ export async function getPipelineSettings(): Promise<unknown> {
   };
 }
 
+// ─── 20. Activity over the last N days ─────────────────────────────────────
+
+// The five series, and what each is counted off. Written once here because the
+// answer names them, the gap detection walks them, and neither should be able
+// to drift from the query that fills it.
+const TREND_SERIES = [
+  {
+    key: "leadsDiscovered",
+    label: "Leads discovered",
+    countedFrom:
+      "Discovery candidates created, plus leads typed straight into the pipeline. A lead promoted out of Discovery is not counted again — it was counted the day its candidate arrived.",
+  },
+  {
+    key: "messagesSent",
+    label: "Messages sent",
+    countedFrom:
+      "Outreach sequence messages marked sent, every step: connection request, first message, audit offer, Loom, follow-up.",
+  },
+  {
+    key: "repliesReceived",
+    label: "Replies received",
+    countedFrom: "Leads marked replied, by the day they were marked.",
+  },
+  {
+    key: "callsLogged",
+    label: "Calls logged",
+    countedFrom:
+      "Calls written onto a lead or client, by the day the record was made rather than the day the call is due. Cancelled calls are excluded.",
+  },
+  {
+    key: "candidatesPromoted",
+    label: "Candidates promoted",
+    countedFrom:
+      "Discovery candidates promoted into the pipeline, by the day the lead was created.",
+  },
+] as const;
+
+type TrendKey = (typeof TREND_SERIES)[number]["key"];
+
+// The window the model gets when it asks for one, and the ceiling on what it
+// may ask for. A fortnight is enough to see last week beside this one; beyond
+// a month the per-day rows are a wall of numbers nobody reads and
+// getReportingTrends is the better question.
+const TREND_DEFAULT_DAYS = 7;
+const TREND_MIN_DAYS = 2;
+const TREND_MAX_DAYS = 30;
+
+export async function getActivityTrend(args: {
+  days?: number;
+}): Promise<unknown> {
+  const now = new Date();
+  const requested =
+    typeof args.days === "number" && Number.isFinite(args.days)
+      ? Math.round(args.days)
+      : null;
+  const days =
+    requested === null
+      ? TREND_DEFAULT_DAYS
+      : Math.min(Math.max(requested, TREND_MIN_DAYS), TREND_MAX_DAYS);
+
+  // Days read in UTC, the same reading the KPI page and the checklist give
+  // them, so "yesterday" here is the same twenty-four hours it is there.
+  const today = toUtcDay(now);
+  const start = addDays(today, -(days - 1));
+  const end = addDays(today, 1); // exclusive
+  const inRange = { gte: start, lt: end };
+
+  const [
+    newCandidates,
+    ownLeads,
+    sentMessages,
+    replies,
+    calls,
+    promotions,
+  ] = await Promise.all([
+    prisma.discoveryCandidate.findMany({
+      where: { createdAt: inRange },
+      select: { createdAt: true },
+    }),
+    // Leads with no candidate behind them: the ones somebody added directly.
+    // A promoted lead is counted under candidatesPromoted instead, and its
+    // clinic already counted as discovered the day the candidate landed.
+    prisma.lead.findMany({
+      where: { createdAt: inRange, candidate: { is: null } },
+      select: { createdAt: true },
+    }),
+    prisma.outreachMessage.findMany({
+      where: { sentAt: inRange },
+      select: { sentAt: true },
+    }),
+    prisma.lead.findMany({
+      where: { repliedAt: inRange },
+      select: { repliedAt: true },
+    }),
+    prisma.call.findMany({
+      where: { createdAt: inRange, status: { not: "CANCELLED" } },
+      select: { createdAt: true },
+    }),
+    prisma.lead.findMany({
+      where: { createdAt: inRange, candidate: { isNot: null } },
+      select: { createdAt: true },
+    }),
+  ]);
+
+  // One bucket per day, in order, so a day nothing happened on is a row of
+  // zeroes rather than a gap. The gaps are the point of this lookup.
+  const buckets = new Map<number, Record<TrendKey, number>>();
+  const rows: { date: string; counts: Record<TrendKey, number> }[] = [];
+  for (let d = start; d < end; d = addDays(d, 1)) {
+    const counts = {
+      leadsDiscovered: 0,
+      messagesSent: 0,
+      repliesReceived: 0,
+      callsLogged: 0,
+      candidatesPromoted: 0,
+    };
+    buckets.set(d.getTime(), counts);
+    rows.push({ date: dayKey(d), counts });
+  }
+
+  const count = (at: Date | null, key: TrendKey): void => {
+    if (!at) return;
+    const counts = buckets.get(toUtcDay(at).getTime());
+    if (counts) counts[key]++;
+  };
+
+  for (const c of newCandidates) count(c.createdAt, "leadsDiscovered");
+  for (const l of ownLeads) count(l.createdAt, "leadsDiscovered");
+  for (const m of sentMessages) count(m.sentAt, "messagesSent");
+  for (const l of replies) count(l.repliedAt, "repliesReceived");
+  for (const c of calls) count(c.createdAt, "callsLogged");
+  for (const l of promotions) count(l.createdAt, "candidatesPromoted");
+
+  // Per series: the total, the daily average, and how long it has been quiet.
+  //
+  // The quiet run is computed here rather than left to the model to read off
+  // the rows, because it is the one thing this lookup exists to surface and
+  // counting back through a table is exactly the arithmetic a model gets
+  // subtly wrong. It counts back from today inclusive: a day that has had
+  // nothing yet is a quiet day, and today being young is said separately
+  // rather than by pretending the count is something else.
+  const series = TREND_SERIES.map((s) => {
+    const total = rows.reduce((sum, r) => sum + r.counts[s.key], 0);
+    let quietDays = 0;
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].counts[s.key] > 0) break;
+      quietDays++;
+    }
+    const lastRow = [...rows].reverse().find((r) => r.counts[s.key] > 0);
+    return {
+      key: s.key,
+      label: s.label,
+      countedFrom: s.countedFrom,
+      total,
+      perDayAverage: Math.round((total / rows.length) * 10) / 10,
+      today: rows[rows.length - 1].counts[s.key],
+      // Null when nothing in the window did: "not once in the last N days" is
+      // the honest reading, and a date from before the window is not in hand.
+      lastDayWithAny: lastRow ? lastRow.date : null,
+      // Counting today. 0 means something landed today.
+      consecutiveQuietDaysIncludingToday: quietDays,
+      // True only where the whole window is empty, so "nothing all week" can
+      // be said differently from "nothing since Tuesday".
+      quietForWholeWindow: total === 0,
+    };
+  });
+
+  return {
+    now: iso(now),
+    windowDays: rows.length,
+    from: dayKey(start),
+    through: dayKey(today),
+    ...(requested !== null && requested !== rows.length
+      ? {
+          note: `${requested} days was asked for; the window is held between ${TREND_MIN_DAYS} and ${TREND_MAX_DAYS} days, so ${rows.length} were read.`,
+        }
+      : {}),
+    howToReadIt:
+      "Days are read in UTC, oldest first, and a day with nothing on it is a row of zeroes rather than a missing row. Today is the last row and is still in progress, so a low number there is not yet a bad day. The per-series quiet run is already counted for you — do not count back through the rows yourself.",
+    whatItIsFor:
+      "Seeing the shape of the last few days rather than one day's snapshot. If a series has been quiet for several days running and it bears on what was asked, mention it in passing, conversationally and without alarm. Do not open every answer with it.",
+    series,
+    days: rows.map((r) => ({ date: r.date, ...r.counts })),
+    reminder:
+      "You cannot send a message, log a call or promote a candidate. A gap is something to point out, not something you can close.",
+  };
+}
+
+// ─── 21. The clock in the four US zones ────────────────────────────────────
+
+export async function getBusinessHoursStatus(): Promise<unknown> {
+  const now = new Date();
+  const zones = US_TIME_ZONES.map((zone) => {
+    const hours = businessHours(now, zone.id);
+    return {
+      zone: zone.label,
+      timeZone: zone.id,
+      localTime: fmtTimeInZone(now, zone.id),
+      abbreviation: zoneAbbr(now, zone.id),
+      localDay: fmtDayInZone(now, zone.id),
+      state: hours.state, // open | opening-soon | closed
+      label: hours.label, // what the dashboard badge reads
+    };
+  });
+
+  return {
+    now: iso(now),
+    note: "The dashboard's US business hours strip, computed the same way. Business hours are a convention, not a measurement: 9am to 5pm local, Monday to Friday.",
+    openHour: BUSINESS_OPEN_HOUR,
+    closeHour: BUSINESS_CLOSE_HOUR,
+    openNow: zones.filter((z) => z.state === "open").length,
+    zonesTotal: zones.length,
+    zones,
+    caveat:
+      "Nothing here says which hour actually converts — the reporting data has not answered that, so do not invent a best time to call. A clinic's own zone is on its lead record.",
+  };
+}
+
+// ─── 22. The daily KPI tracker ─────────────────────────────────────────────
+
+export async function getDailyKpiStatus(args: {
+  date?: string;
+}): Promise<unknown> {
+  const now = new Date();
+  const requested = typeof args.date === "string" ? args.date : undefined;
+  const asked = parseDayKey(requested, now);
+  const day = toUtcDay(asked);
+  const key = dayKey(day);
+  const isToday = key === dayKey(toUtcDay(now));
+
+  const [goals, history, monthToDate] = await Promise.all([
+    loadDailyKpiGoals(),
+    // Enough history for the streak the page shows and the week-on-week
+    // comparison under it.
+    loadDailyKpiRange(addDays(day, -(KPI_HISTORY_DAYS - 1)), day),
+    loadMonthToDate(day),
+  ]);
+
+  const counts = history[history.length - 1]?.counts ?? emptyCounts();
+  const recent = history.slice(-DAILY_KPI_TREND_DAYS);
+  const priorWeek = history.slice(
+    -(DAILY_KPI_TREND_DAYS * 2),
+    -DAILY_KPI_TREND_DAYS,
+  );
+  const score = dailyScore(counts, goals);
+
+  return {
+    date: key,
+    isToday,
+    ...(requested && requested !== key
+      ? {
+          note: `"${requested}" is not a date in YYYY-MM-DD form, so ${key} was read instead.`,
+        }
+      : {}),
+    howItWorks:
+      "The four goals on the Daily KPI page. Nothing here is a stored total — every count is read off the records, so a past day reads as it actually happened. Two of the four are daily goals (what you do); replies and meetings carry monthly goals instead, because they depend on other people answering.",
+    score,
+    scoreMeans:
+      "The average of the two daily metrics against their goals, each capped at 100 first. Replies and meetings are deliberately not in it.",
+    streakDays: streakLength(history, goals),
+    streakMeans:
+      "Consecutive days both daily goals were met, ending at this day. A day still in progress does not break the run behind it.",
+    metrics: DAILY_KPI_KEYS.map((k) => {
+      const cadence = DAILY_KPI_CADENCE[k];
+      const weekTotal = recent.reduce((sum, d) => sum + d.counts[k], 0);
+      const priorTotal = priorWeek.reduce((sum, d) => sum + d.counts[k], 0);
+      return {
+        metric: DAILY_KPI_LABELS[k],
+        countedFrom: DAILY_KPI_BLURBS[k],
+        cadence,
+        today: counts[k],
+        goal: goals[k],
+        met: cadence === "daily" ? goalMet(counts[k], goals[k]) : null,
+        sevenDayTotal: weekTotal,
+        sevenDayAverage: averageFor(recent, k),
+        previousSevenDayTotal: priorWeek.length > 0 ? priorTotal : null,
+        weekOnWeekPercent:
+          priorWeek.length > 0 ? pctChange(weekTotal, priorTotal) : null,
+        ...(cadence === "monthly"
+          ? { monthToDate: monthlyPace(monthToDate[k], goals[k], day) }
+          : {}),
+      };
+    }),
+    reminder:
+      "You cannot change a goal or log a number against one. Goals are edited on the Daily KPI page.",
+  };
+}
+
 // ─── The dispatcher ────────────────────────────────────────────────────────
 //
 // The allow-list, and the only place a tool name becomes a call. A name that
@@ -1662,6 +1987,9 @@ const LOOKUPS = {
   getCreativeDetail,
   getLibraryEntries,
   getPipelineSettings,
+  getActivityTrend,
+  getBusinessHoursStatus,
+  getDailyKpiStatus,
 } as const;
 
 export type CopilotToolName = keyof typeof LOOKUPS;
@@ -1809,6 +2137,18 @@ export async function runCopilotTool(
       };
     case "getPipelineSettings":
       return { ok: true, data: await getPipelineSettings() };
+    case "getActivityTrend":
+      return {
+        ok: true,
+        data: await getActivityTrend({ days: num(args.days) }),
+      };
+    case "getBusinessHoursStatus":
+      return { ok: true, data: await getBusinessHoursStatus() };
+    case "getDailyKpiStatus":
+      return {
+        ok: true,
+        data: await getDailyKpiStatus({ date: str(args.date) }),
+      };
   }
 }
 
@@ -1818,4 +2158,16 @@ export async function runCopilotTool(
 // filters were actually applied.
 function str(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+// The one numeric argument any lookup takes. A model that sends "7" rather
+// than 7 means seven, so a numeric string is read as the number it says;
+// anything else is undefined and the lookup falls back to its default.
+function num(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }

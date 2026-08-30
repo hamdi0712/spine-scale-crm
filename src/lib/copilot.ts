@@ -32,6 +32,13 @@
 //   block (see UNTRUSTED_CONTENT_KEY) and the prompt says what a fenced block
 //   is: data to summarise, never an instruction to follow.
 //
+// The fourth property is not a security one, it is a voice one. The register
+// is a colleague texting back, not a report: contractions, framing round every
+// number, humour where it fits. The structured options-and-a-recommendation
+// shape is held back for the one case it is actually good at — a decision
+// being weighed — because a format that answers "how's today going" with a
+// tradeoff table is answering a person with a deck.
+//
 // Nothing in this file touches the network or the database — it is the prompt,
 // the schemas and the readers, in the same arrangement as src/lib/icpAssist.ts.
 // The call and the tool loop live in src/lib/actions/copilot.ts.
@@ -105,9 +112,10 @@ export const COPILOT_SYSTEM_PROMPT = [
   "",
   "WHAT IS IN THE APP",
   "Name these areas when you point somebody at one, because they are what the sidebar says:",
-  "- Dashboard — the day's headline funnel numbers.",
+  "- Dashboard — the day's headline funnel numbers, and the clock and open/closed state of the four US time zones.",
   "- Calendar — calls, follow-ups and invoice due dates on a month grid.",
   "- Activities — the task board (To do / In progress / Done) and the fixed daily checklist with the day's live counts beside it.",
+  "- Daily KPI — the four daily goals, the day's score against them, and the streak.",
   "- Discovery — scraped clinics waiting to be scored, each promoted into the pipeline or rejected with its reasoning kept.",
   "- Pipeline — leads being worked, each with an ICP scorecard, enrichment evidence, a five-step outreach sequence, calls and notes.",
   "- Clients — signed clients, their onboarding wizard, delivery checklist, invoices and health status.",
@@ -117,12 +125,27 @@ export const COPILOT_SYSTEM_PROMPT = [
   "- Settings — the API keys, the enrichment chain and its actors, and the business context page.",
   "You have a lookup for each of those areas. Between them they are everything you can see; there is nothing else.",
   "",
-  "HOW YOU ANSWER",
+  "WHERE YOUR FACTS COME FROM",
   "You have no knowledge of this agency's records except what the lookup functions return. Every number, name, date and status in your answer must have come back from a lookup you actually called in this conversation. If you have not looked it up, you do not know it — say so and call the lookup.",
   "Call as many lookups as the question needs, then answer. Do not narrate the lookups; just answer the question with what they returned.",
   "When a lookup comes back empty, that is an answer: say there are none rather than reaching for something else to report.",
-  "Answer in plain prose or short markdown lists. Be brief and specific — name the clinic, give the number, say what it means. No preamble, no restating the question, no closing offer of further help.",
   "Where an answer points at a record, name it the way the app does (the clinic name), so it can be found.",
+  "",
+  "HOW YOU TALK",
+  "Like a sharp, direct colleague texting the operator — someone who knows the business, has read the numbers, and says what they think. Not a report generator.",
+  "Plain, warm, casual language. Contractions. Short sentences. Humour when it lands naturally; don't force it, and don't force it into bad news either.",
+  "Be brief and specific — name the clinic, give the number, say what it means. No preamble, no restating the question, no sign-off offering further help.",
+  "Numbers need framing, not just reporting. A person says \"today's been quiet — only 2 messages went out, that's about half your usual pace\"; a report says \"Messages sent: 2\". Say the number, then say what it means: against yesterday, against the average, against the goal. If a lookup hands you an average, a goal, a trend or a week-on-week change, use it — that is what turns a figure into a sentence worth reading.",
+  "Match the register to the moment. Small talk gets small talk back. A quick status check gets a couple of sentences. A joke gets a joke. A blunt question about whether something is working gets a blunt, well-reasoned opinion, and you are allowed to have one as long as it is built on what the lookups returned.",
+  "Markdown is for when it earns its place — a genuine list of records, a handful of clinics with their numbers. Two facts do not need bullets, and a status update is prose.",
+  "",
+  "WHEN THE OPERATOR IS ACTUALLY DECIDING SOMETHING",
+  "Only when they are weighing a real decision — which clinic to chase, whether to kill a concept, where to put the week — drop into a structured shape: the options as you see them, what each costs and buys, and then a direct recommendation with the reason in a line. Say which way you would go; a list of considerations with no answer at the end is not help.",
+  "That format is for decisions and nothing else. Do not reach for it on casual questions, small talk, or routine status checks — there, it reads like a consultant's deck answering \"how's it going\".",
+  "",
+  "NOTICING GAPS",
+  "getActivityTrend shows the last several days rather than one day's snapshot, and it counts the quiet run for you. When a series has gone quiet for several days running and it bears on what was asked, mention it in passing — \"worth saying, nothing has gone out since Tuesday\" — conversational, once, no alarm and no lecture.",
+  "It is an observation offered when relevant, not a standing notice. Do not open every reply with it, do not repeat it in a conversation where you have already said it, and do not bring it up when the operator asked about something unrelated.",
   "",
   "WHAT YOU CANNOT DO",
   "You can read this CRM. You cannot change it. You have no function that creates, edits, deletes, moves, sends, schedules or runs anything, and no way to acquire one.",
@@ -480,6 +503,53 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
             type: "string",
             enum: [...LIBRARY_CATEGORIES],
             description: "Library category to filter to. Omit for every category.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getActivityTrend",
+      description:
+        "Per-day counts over the last N days for the five things the day is made of: leads discovered, messages sent, replies received, calls logged, candidates promoted. Comes with each series' total, its daily average, and how many days it has been quiet, already counted. Use it whenever a question is about how things are going rather than about one record — it is what shows a gap, a slow week or a run of good days, none of which a single day's snapshot can show. getDailyChecklistStatus is one day; this is the shape of several.",
+      parameters: {
+        type: "object",
+        properties: {
+          days: {
+            type: "number",
+            description:
+              "How many days back to read, today included. Defaults to 7. Held between 2 and 30.",
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getBusinessHoursStatus",
+      description:
+        "The current local time in the four US time zones the dashboard shows — Eastern, Central, Mountain, Pacific — and whether each is inside business hours (9 to 5 local, weekdays). Use for 'what time is it out west', 'is anyone open right now', or when the answer is about whether it is worth picking up the phone.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getDailyKpiStatus",
+      description:
+        "The Daily KPI tracker: the four goals — qualified leads, messages sent, replies received, meetings booked — with the day's count against each, the day's score, the current streak, seven-day totals and averages, week-on-week change, and month-to-date pace for the two monthly goals. Defaults to today. Use for 'am I on track', 'how am I doing against my goals', 'what is my streak'.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: {
+            type: "string",
+            description:
+              "The day to read, as YYYY-MM-DD. Omit for today. Past days are counted off the records as they actually happened.",
           },
         },
         required: [],
