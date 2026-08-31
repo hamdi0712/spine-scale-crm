@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { TASK_STATUSES, TASK_STATUS_LABELS, TaskStatus } from "@/lib/tasks";
-import { createTask, moveTaskStatus } from "@/lib/actions/tasks";
+import { createTask, deleteTask, moveTaskStatus } from "@/lib/actions/tasks";
 import { fmtDate } from "@/lib/format";
 import Icon from "@/components/Icons";
 
@@ -62,6 +62,9 @@ export default function TaskBoard({
   // Local optimistic overrides so a drop paints instantly.
   const [moved, setMoved] = useState<Record<string, string>>({});
   const [formOpen, setFormOpen] = useState(false);
+  // Cards already removed, held locally so a delete clears the card before the
+  // round trip the same way a drop repaints before it.
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
 
   const statusOf = (t: BoardTask) => moved[t.id] ?? t.status;
 
@@ -77,6 +80,24 @@ export default function TaskBoard({
     setMoved((m) => ({ ...m, [id]: status }));
     startTransition(async () => {
       await moveTaskStatus(id, status);
+      router.refresh();
+    });
+  }
+
+  // Deleting a task is the one destructive thing the board can do, so it asks
+  // first — the same confirm-then-act the lead table's bulk delete uses, in a
+  // window.confirm rather than a dialog of its own for the same reason: one
+  // sentence and two buttons is what the question is.
+  function handleDelete(task: BoardTask) {
+    if (
+      !confirm(
+        `Delete “${task.title}”? This cannot be undone.`,
+      )
+    )
+      return;
+    setRemoved((r) => new Set(r).add(task.id));
+    startTransition(async () => {
+      await deleteTask(task.id);
       router.refresh();
     });
   }
@@ -186,7 +207,9 @@ export default function TaskBoard({
 
       <div className="flex gap-4 overflow-x-auto pb-1">
         {TASK_STATUSES.map((status) => {
-          const column = tasks.filter((t) => statusOf(t) === status);
+          const column = tasks.filter(
+            (t) => statusOf(t) === status && !removed.has(t.id),
+          );
           return (
             <div
               key={status}
@@ -223,11 +246,31 @@ export default function TaskBoard({
                         setDragId(null);
                         setOverStatus(null);
                       }}
-                      className={`card-interactive cursor-grab rounded-xl border border-line bg-surface px-3.5 py-3 shadow-card hover:border-accent/50 ${
+                      className={`card-interactive group cursor-grab rounded-xl border border-line bg-surface px-3.5 py-3 shadow-card hover:border-accent/50 ${
                         dragId === task.id ? "opacity-40" : ""
                       }`}
                     >
-                      <div className="text-sm font-medium">{task.title}</div>
+                      {/* The title and its delete, on one row: the button is
+                          the card's only control, so it sits at the top right
+                          where a card's affordance is looked for rather than
+                          under the detail it would then compete with. It shows
+                          on hover and on keyboard focus — always-on trash cans
+                          on forty cards read as a board about deleting. */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1 text-sm font-medium">
+                          {task.title}
+                        </div>
+                        <button
+                          type="button"
+                          draggable={false}
+                          onClick={() => handleDelete(task)}
+                          title="Delete task"
+                          aria-label={`Delete ${task.title}`}
+                          className="-mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-muted opacity-0 transition hover:bg-bad-soft hover:text-bad focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <Icon name="trash" className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                       {task.description && (
                         <div className="mt-0.5 line-clamp-2 text-xs text-muted">
                           {task.description}

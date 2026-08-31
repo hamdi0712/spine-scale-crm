@@ -93,33 +93,18 @@ export const DAILY_CHECKLIST_ITEMS: DailyChecklistItem[] = [
     category: "OUTREACH",
   },
 
-  // Conversations — what happens once somebody answers. Two of these are
-  // conditional by design: an audit offer and a Loom are owed only where the
-  // conversation earned one, so the item says "when earned" rather than
-  // pretending every thread reaches them.
+  // Conversations — what happens once somebody answers.
+  //
+  // One item, and only one, because only one of them is a thing a person can
+  // decide to do. Checking the replies is done whether or not anybody wrote
+  // back; answering one, sending an audit offer, cutting a Loom and clearing a
+  // follow-up all wait on somebody else having moved first. Those four used to
+  // be ticks here, and on a quiet day they read as four failures for work that
+  // was never available to do — so they are counted rather than ticked now
+  // (src/lib/dailyBonus.ts), off the same records the numbers panel reads.
   {
     key: "CONVO_REPLIES_CHECKED",
     label: "Replies checked",
-    category: "CONVERSATIONS",
-  },
-  {
-    key: "CONVO_REPLIES_ANSWERED",
-    label: "Replies answered",
-    category: "CONVERSATIONS",
-  },
-  {
-    key: "CONVO_AUDIT_OFFERS",
-    label: "Audit offers sent (when earned)",
-    category: "CONVERSATIONS",
-  },
-  {
-    key: "CONVO_LOOMS",
-    label: "Looms created / sent (when earned)",
-    category: "CONVERSATIONS",
-  },
-  {
-    key: "CONVO_FOLLOW_UPS",
-    label: "Follow-ups completed",
     category: "CONVERSATIONS",
   },
 
@@ -190,6 +175,10 @@ export function readDay(rows: DailyChecklistRow[]): Map<string, boolean> {
   );
 }
 
+// The day's score, and it is a score over controllable work only: every item
+// left in the routine is something that can be done on any day, whatever the
+// inboxes did. What happened because somebody else moved is bonus, added
+// beside this rather than into it (src/lib/dailyBonus.ts).
 export function checkedCount(checked: Map<string, boolean>): number {
   return DAILY_CHECKLIST_ITEMS.filter((i) => checked.get(i.key)).length;
 }

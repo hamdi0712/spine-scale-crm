@@ -16,16 +16,21 @@ import {
   DAILY_CHECKLIST_ITEMS,
   itemsInCategory,
 } from "@/lib/dailyChecklist";
+import { DailyBonus } from "@/lib/dailyBonus";
 import { toggleDailyChecklistItem } from "@/lib/actions/dailyChecklist";
 import Icon from "@/components/Icons";
 
 export default function DailyChecklist({
   dayKey,
   checked,
+  bonus,
   readOnly = false,
 }: {
   dayKey: string;
   checked: Map<string, boolean>;
+  // The day's reactive work, counted off the records rather than ticked. It
+  // sits beside the score and never inside it — see src/lib/dailyBonus.ts.
+  bonus: DailyBonus;
   // A past day is a record of what happened, not a thing to fill in now.
   readOnly?: boolean;
 }) {
@@ -47,15 +52,24 @@ export default function DailyChecklist({
           <p className="mt-0.5 text-xs leading-relaxed text-muted">
             {readOnly
               ? "A past day, as it was left. Ticks are only made on the day itself."
-              : "The same routine every day. It starts empty each morning — yesterday's ticks stay on yesterday."}
+              : "The same routine every day, and only the parts of it you control. It starts empty each morning — yesterday's ticks stay on yesterday."}
           </p>
         </div>
-        <span
-          className={`num shrink-0 text-xs font-medium ${
-            complete ? "text-ok" : "text-muted"
-          }`}
-        >
-          {done} / {total}
+        {/* The score and the bonus, on one line and in that order: the score
+            is out of a fixed number and the bonus is not, so the bonus reads
+            as an addition rather than as a second fraction. It is only drawn
+            once there is something to draw — "+0" is the missing item this
+            whole section exists to stop showing. */}
+        <span className="shrink-0 text-xs font-medium">
+          <span className={`num ${complete ? "text-ok" : "text-muted"}`}>
+            {done} / {total}
+          </span>
+          {bonus.total > 0 && (
+            <>
+              <span className="px-1.5 text-muted">·</span>
+              <span className="num text-accent">Bonus +{bonus.total}</span>
+            </>
+          )}
         </span>
       </div>
 
@@ -131,9 +145,87 @@ export default function DailyChecklist({
                 );
               })}
             </ul>
+            {/* Bonus sits under Conversations because it is what conversations
+                produced. Rows rather than checkboxes, and no denominator: none
+                of it was on offer until somebody else moved, so there is
+                nothing here to have failed to do. */}
+            {category === "CONVERSATIONS" && (
+              <BonusSection bonus={bonus} readOnly={readOnly} />
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// The automatic half of the Conversations group.
+//
+// Same row metrics as the ticked items above it, with the checkbox's place
+// taken by the count that earned the points — so the two halves line up as one
+// list rather than reading as a widget dropped into the card.
+function BonusSection({
+  bonus,
+  readOnly,
+}: {
+  bonus: DailyBonus;
+  readOnly: boolean;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between border-y border-line/60 bg-wash/60 px-6 py-2">
+        <span className="text-xs font-medium tracking-[0.02em] text-muted">
+          Bonus points — counted, not ticked
+        </span>
+        <span
+          className={`num text-xs font-medium ${
+            bonus.total > 0 ? "text-accent" : "text-muted"
+          }`}
+        >
+          +{bonus.total}
+        </span>
+      </div>
+      <ul>
+        {bonus.rows.map((row) => (
+          <li
+            key={row.key}
+            className="row-hover min-h-[48px] border-b border-line/60 px-4 py-2.5 last:border-b-0 hover:bg-wash/60"
+          >
+            <div className="flex items-center gap-3">
+              {/* Where a checkbox would be. A count, not a control: there is
+                  nothing to press, and the number is the whole of the record. */}
+              <span
+                className={`num flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-[11px] font-medium ${
+                  row.count > 0
+                    ? "bg-accent-soft text-accent"
+                    : "bg-wash text-muted"
+                }`}
+                aria-hidden
+              >
+                {row.count}
+              </span>
+              <span className="min-w-0 flex-1 text-sm">
+                {row.label}
+                <span className="ml-1.5 text-xs text-muted">
+                  {row.points} {row.points === 1 ? "pt" : "pts"} each
+                </span>
+              </span>
+              <span
+                className={`num shrink-0 text-xs font-medium ${
+                  row.earned > 0 ? "text-accent" : "text-muted"
+                }`}
+              >
+                +{row.earned}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="border-b border-line/60 px-6 py-2.5 text-xs leading-relaxed text-muted">
+        {readOnly
+          ? "Counted off that day's records — replies, audit offers, Looms and follow-ups that actually happened."
+          : "Added automatically as replies, audit offers, Looms and follow-ups land today. Nothing here is ticked, and a quiet day costs nothing."}
+      </p>
     </div>
   );
 }

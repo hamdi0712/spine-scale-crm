@@ -1086,3 +1086,33 @@ model CopilotMessage {
 
   @@index([conversationId, position])
 }
+
+// The dashboard's motivational line — one quote a day, cached.
+//
+// The row is the cache. The line is written by a model given the day's real
+// situation (the KPI score against goals, the streak, whether the last fortnight
+// has been quiet or busy, what day of the week it is), and asking for it costs
+// a network call, so it is asked once per day and read from here every time
+// after. The id is the day itself in YYYY-MM-DD, so "have we already got
+// today's" is a findUnique on a primary key and there is no path that writes
+// two rows for one day.
+//
+// Only a model's answer is stored. A day the call failed writes nothing at all,
+// which is what lets the fallback line show now and the real one arrive on the
+// next load once the key is fixed — a cached failure would hold a dashboard on
+// its fallback until midnight.
+//
+// Nothing here is an instruction to anything. It is one sentence and its
+// author, rendered as text.
+model DailyQuote {
+  // "2026-08-31" — the day, read in UTC, the same reading the checklist and the
+  // KPI page file a day under.
+  id String @id
+
+  text   String
+  // Who said it. Kept separate from the sentence so the line can draw the two
+  // in different weights rather than parsing an em dash back out of a string.
+  author String
+
+  createdAt DateTime @default(now())
+}

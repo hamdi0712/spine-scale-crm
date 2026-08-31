@@ -18,7 +18,24 @@
 import { prisma } from "@/lib/prisma";
 import { addDays, toChecklistDay } from "@/lib/dailyChecklist";
 
+// The eight counts, named. The keys are what the bonus tally reads the panel
+// by (src/lib/dailyBonus.ts) — a label is wording and can be reworded, a key
+// is the identity of the count.
+export const DAILY_NUMBER_KEYS = [
+  "NEW_CLINICS",
+  "CONNECTION_REQUESTS",
+  "ACCEPTED",
+  "FIRST_MESSAGES",
+  "REPLIES",
+  "AUDIT_OFFERS",
+  "LOOMS",
+  "FOLLOW_UPS",
+] as const;
+
+export type DailyNumberKey = (typeof DAILY_NUMBER_KEYS)[number];
+
 export interface DailyNumber {
+  key: DailyNumberKey;
   label: string;
   value: number;
   // What the number is read off, shown under it. Present because a count with
@@ -64,33 +81,49 @@ export async function loadDailyNumbers(day: Date): Promise<DailyNumber[]> {
 
   return [
     {
+      key: "NEW_CLINICS",
       label: "New clinics",
       value: newLeads + newCandidates,
       source: "Leads and discovery candidates created",
     },
     {
+      key: "CONNECTION_REQUESTS",
       label: "Connection requests",
       value: requests,
       source: "Marked sent on the lead",
     },
     {
+      key: "ACCEPTED",
       label: "Accepted",
       value: accepted,
       source: "Marked accepted on the lead",
     },
     {
+      key: "FIRST_MESSAGES",
       label: "First messages",
       value: firstMessages,
       source: "Sequence step 2, marked sent",
     },
-    { label: "Replies", value: replies, source: "Marked replied on the lead" },
     {
+      key: "REPLIES",
+      label: "Replies",
+      value: replies,
+      source: "Marked replied on the lead",
+    },
+    {
+      key: "AUDIT_OFFERS",
       label: "Audit offers",
       value: auditOffers,
       source: "Sequence step 3, marked sent",
     },
-    { label: "Looms", value: looms, source: "Sequence step 4, marked sent" },
     {
+      key: "LOOMS",
+      label: "Looms",
+      value: looms,
+      source: "Sequence step 4, marked sent",
+    },
+    {
+      key: "FOLLOW_UPS",
       label: "Follow-ups",
       value: followUps,
       source: "Sequence step 5, marked sent",

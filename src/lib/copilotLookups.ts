@@ -124,6 +124,7 @@ import {
   toChecklistDay,
 } from "@/lib/dailyChecklist";
 import { readDayRows } from "@/lib/dailyChecklistStore";
+import { computeDailyBonus } from "@/lib/dailyBonus";
 import {
   DAILY_KPI_BLURBS,
   DAILY_KPI_CADENCE,
@@ -1061,6 +1062,7 @@ export async function getDailyChecklistStatus(args: {
   ]);
   const checked = readDay(rows);
   const done = checkedCount(checked);
+  const bonus = computeDailyBonus(numbers);
 
   return {
     date: key,
@@ -1071,12 +1073,22 @@ export async function getDailyChecklistStatus(args: {
         }
       : {}),
     howItWorks:
-      "The routine is fixed in code, not data: the same items every day, ticked by hand. A day nobody opened has nothing ticked, which is not the same as the work not being done — say so if it matters to the answer.",
+      "The routine is fixed in code, not data: the same items every day, ticked by hand, and only work that is fully within the operator's control. A day nobody opened has nothing ticked, which is not the same as the work not being done — say so if it matters to the answer. Replies answered, audit offers, Looms and follow-ups are deliberately NOT ticked items: they wait on somebody else replying first, so they are counted as bonus points instead and a day with none of them has failed nothing.",
     ticked: done,
     total: DAILY_CHECKLIST_ITEMS.length,
     untickedItems: DAILY_CHECKLIST_ITEMS.filter((i) => !checked.get(i.key)).map(
       (i) => i.label,
     ),
+    bonus: {
+      total: bonus.total,
+      rows: bonus.rows.map((r) => ({
+        label: r.label,
+        count: r.count,
+        pointsEach: r.points,
+        earned: r.earned,
+      })),
+      note: "Bonus is added, never subtracted, and is no part of the ticked score above.",
+    },
     categories: DAILY_CHECKLIST_CATEGORIES.map((category) => ({
       category: DAILY_CHECKLIST_CATEGORY_LABELS[category],
       items: itemsInCategory(category).map((i) => ({

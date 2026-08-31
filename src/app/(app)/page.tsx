@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import {
   LEAD_STAGE_LABELS,
@@ -29,9 +30,13 @@ import BusinessHoursPanel, {
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
 import ClientHealthList, { HealthRow } from "@/components/ClientHealthList";
+import { daySeed } from "@/lib/greeting";
 import Greeting from "@/components/Greeting";
 import Icon from "@/components/Icons";
 import KpiCard, { Kpi, KpiTone } from "@/components/KpiCard";
+import MotivationalLine, {
+  MotivationalLineFallback,
+} from "@/components/MotivationalLine";
 import PipelineDonut from "@/components/PipelineDonut";
 import TodaysFocus from "@/components/TodaysFocus";
 import UsNightMap from "@/components/UsNightMap";
@@ -255,8 +260,18 @@ export default async function DashboardPage() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Greeting serverHour={now.getHours()} />
-          <p className="mt-1.5 text-sm text-muted">Agency at a glance</p>
+          <Greeting
+            serverHour={now.getHours()}
+            serverWeekday={now.getDay()}
+            serverSeed={daySeed(now)}
+          />
+          {/* Suspended on its own, because the first load of a new day pays
+              for a model call and the rest of the dashboard should not wait
+              behind a quotation. Every load after it reads the cached row and
+              resolves immediately. */}
+          <Suspense fallback={<MotivationalLineFallback />}>
+            <MotivationalLine />
+          </Suspense>
         </div>
         <div className="flex items-center gap-3">
           <BusinessHoursChip />
