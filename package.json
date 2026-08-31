@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "prisma migrate deploy && next dev",
-    "build": "prisma migrate deploy && next build",
+    "dev": "prisma generate && prisma migrate deploy && next dev",
+    "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate"
