@@ -8,6 +8,7 @@ import {
   toChecklistDay,
 } from "@/lib/dailyChecklist";
 import { ensureDay, readDayRows } from "@/lib/dailyChecklistStore";
+import { computeDailyBonus } from "@/lib/dailyBonus";
 import { loadDailyNumbers } from "@/lib/dailyNumbers";
 import { fmtDate } from "@/lib/format";
 import DailyChecklist from "@/components/DailyChecklist";
@@ -38,6 +39,9 @@ export default async function ActivitiesPage({
     const rows = isToday ? await ensureDay(day) : await readDayRows(day);
     const numbers = await loadDailyNumbers(day);
     const checked = readDay(rows);
+    // The bonus is derived from the same counts the panel above draws, so the
+    // two are one reading of the day rather than two.
+    const bonus = computeDailyBonus(numbers);
     const key = toDayKey(day);
 
     return (
@@ -84,6 +88,7 @@ export default async function ActivitiesPage({
           <DailyChecklist
             dayKey={key}
             checked={checked}
+            bonus={bonus}
             readOnly={!isToday}
           />
         </div>

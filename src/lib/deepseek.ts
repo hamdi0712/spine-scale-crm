@@ -75,28 +75,37 @@ export async function deepSeekJson({
   system,
   user,
   maxTokens = MAX_OUTPUT_TOKENS,
+  timeoutMs,
 }: {
   system: string;
   user: string;
   maxTokens?: number;
+  // A tighter budget than the default, for a caller that is rendering rather
+  // than answering a press. The dashboard's daily quote passes one: a line of
+  // decoration is not worth a minute of a page load, and it has a fallback to
+  // show the moment it gives up.
+  timeoutMs?: number;
 }): Promise<DeepSeekResult> {
-  const reply = await postChat({
-    // The reply is read by code, so it is pinned to an object rather than
-    // hoped to be one. The prompt still states the shape — this only
-    // guarantees valid JSON, not the right JSON.
-    //
-    // DeepSeek honours this on one condition OpenAI shares: the word
-    // "json" has to appear in the prompt or the request is refused. It
-    // does — the system prompt and the REPLY FORMAT block in
-    // src/lib/icpAssist.ts both say it — so this is noted rather than
-    // worked around. Anyone rewriting those prompts needs to keep it.
-    response_format: { type: "json_object" },
-    max_tokens: maxTokens,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-  });
+  const reply = await postChat(
+    {
+      // The reply is read by code, so it is pinned to an object rather than
+      // hoped to be one. The prompt still states the shape — this only
+      // guarantees valid JSON, not the right JSON.
+      //
+      // DeepSeek honours this on one condition OpenAI shares: the word
+      // "json" has to appear in the prompt or the request is refused. It
+      // does — the system prompt and the REPLY FORMAT block in
+      // src/lib/icpAssist.ts both say it — so this is noted rather than
+      // worked around. Anyone rewriting those prompts needs to keep it.
+      response_format: { type: "json_object" },
+      max_tokens: maxTokens,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    },
+    timeoutMs,
+  );
   if (!reply.ok) return reply;
 
   // Cut off mid-object. Worth its own sentence: the JSON below would fail to

@@ -354,7 +354,7 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
     function: {
       name: "getDailyChecklistStatus",
       description:
-        "One day of the fixed daily routine: every checklist item by category with whether it is ticked, plus the day's live numbers counted off the records — new clinics, connection requests sent, accepted, first messages, replies, audit offers, Looms, follow-ups. Defaults to today. Use for 'how is today going', 'what have I not done yet', 'how many connection requests went out yesterday'.",
+        "One day of the fixed daily routine: every checklist item by category with whether it is ticked, plus the automatic bonus points earned from replies, audit offers, Looms and follow-ups, plus the day's live numbers counted off the records — new clinics, connection requests sent, accepted, first messages, replies, audit offers, Looms, follow-ups. Defaults to today. Use for 'how is today going', 'what have I not done yet', 'how many connection requests went out yesterday'.",
       parameters: {
         type: "object",
         properties: {

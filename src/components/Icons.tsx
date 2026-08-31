@@ -135,6 +135,13 @@ const PATHS: Record<string, React.ReactNode> = {
     </>
   ),
   close: <path d="M6.5 6.5l11 11M17.5 6.5l-11 11" />,
+  trash: (
+    <>
+      <path d="M4.5 6.5h15M9.5 6.5V5a1 1 0 011-1h3a1 1 0 011 1v1.5" />
+      <path d="M6.5 6.5l.8 12a1 1 0 001 .9h7.4a1 1 0 001-.9l.8-12" />
+      <path d="M10.5 10.5v5M13.5 10.5v5" />
+    </>
+  ),
   arrowUp: <path d="M12 19V6M6.5 11.5L12 6l5.5 5.5" />,
   arrowDown: <path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" />,
   arrowRight: <path d="M5 12h14M13.5 6.5L19 12l-5.5 5.5" />,
