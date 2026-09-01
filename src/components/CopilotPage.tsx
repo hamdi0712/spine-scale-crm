@@ -87,6 +87,8 @@ const TOOL_LABELS: Record<string, string> = {
   getActivityTrend: "Activity trend",
   getBusinessHoursStatus: "US business hours",
   getDailyKpiStatus: "Daily KPI",
+  getLeadOutreachLog: "Outreach log",
+  getOutreachFunnelSummary: "Outreach conversion",
 };
 
 export default function CopilotPage({
