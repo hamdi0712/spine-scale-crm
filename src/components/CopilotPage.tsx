@@ -66,6 +66,7 @@ const SUGGESTIONS: { title: string; hint: string; prompt: string }[] = [
 // was read; getClientHealthSummary says what was called.
 const TOOL_LABELS: Record<string, string> = {
   getPipelineLeads: "Pipeline",
+  searchLeads: "Lead search",
   getLeadDetail: "Lead record",
   getDiscoveryQueueStatus: "Discovery queue",
   getClientHealthSummary: "Client health",
