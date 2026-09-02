@@ -131,6 +131,15 @@ export function messagesSubtitle(c: MessagesSent): string {
   return `${diff > 0 ? "+" : "−"}${Math.abs(diff)} vs last week`;
 }
 
+// The Dashboard's card counts every lead standing at or past Contacted, with
+// no date bound at all: it is a running total of everyone approached to date,
+// not a week's activity. The windowed pair above still backs the Copilot
+// lookup, which is asked a "this week vs last" question.
+export function messagesTotalSubtitle(total: number): string {
+  if (total === 0) return "No leads contacted yet";
+  return "All leads contacted to date";
+}
+
 // ─── Card 3 — Reply rate ───────────────────────────────────────────────────
 
 // Replies over requests, among leads approached in the last 30 days.

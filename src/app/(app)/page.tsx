@@ -12,10 +12,8 @@ import { HEALTH_WINDOW_WEEKS, computeHealth } from "@/lib/health";
 import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
 import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import {
-  MESSAGES_WINDOW_DAYS,
   REPLY_RATE_WINDOW_DAYS,
-  messagesSent,
-  messagesSubtitle,
+  messagesTotalSubtitle,
   daysAgo,
   discoveryBooked,
   discoverySubtitle,
@@ -141,14 +139,10 @@ export default async function DashboardPage() {
     // it, which is what the pipeline records an approach as (see
     // src/lib/funnel.ts). Archived leads are included for the same reason the
     // query above includes them — a message sent three weeks ago was sent
-    // whatever happened to the lead since. Bounded by the two windows the card
-    // compares, on the timestamp the card reads.
-    prisma.lead.findMany({
-      where: {
-        stage: { in: [...CONTACTED_STAGES] },
-        stageChangedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
-      },
-      select: { stageChangedAt: true },
+    // whatever happened to the lead since. No date bound: this card is an
+    // all-time total of everyone approached, so a count is all it needs.
+    prisma.lead.count({
+      where: { stage: { in: [...CONTACTED_STAGES] } },
     }),
     // The discovery calls on this month's calendar. Counted off the call log
     // rather than off a lead's stage: a stage cannot be un-set when a call is
@@ -173,7 +167,7 @@ export default async function DashboardPage() {
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
 
   const qualified = qualifiedLeads(openLeads);
-  const messages = messagesSent(contactedLeads, now);
+  const messages = contactedLeads;
   const replies = replyRate(outreachLeads, now);
   const discovery = discoveryBooked(discoveryCalls);
 
@@ -188,14 +182,13 @@ export default async function DashboardPage() {
       tone: qualified.untouched > 0 ? "up" : "flat",
     },
     {
-      label: `Messages sent (${MESSAGES_WINDOW_DAYS}d)`,
-      value: String(messages.thisWeek),
+      label: "Messages sent",
+      value: String(messages),
       icon: "messages",
-      delta: messagesSubtitle(messages),
-      // The delta line's only decoration is an up arrow, so it shows for a
-      // rise and for nothing else — a fall wearing an up arrow would be a lie
-      // told in an icon.
-      tone: messages.thisWeek > messages.lastWeek ? "up" : "flat",
+      delta: messagesTotalSubtitle(messages),
+      // An all-time total has nothing behind it to compare against, so the up
+      // arrow only marks that there is something there at all.
+      tone: messages > 0 ? "up" : "flat",
     },
     {
       label: `Reply rate (${REPLY_RATE_WINDOW_DAYS}d)`,
