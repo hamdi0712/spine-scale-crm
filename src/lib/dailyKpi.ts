@@ -337,6 +337,83 @@ export function streakLength(
   return streak;
 }
 
+// ─── Surplus rollover (Qualified Leads only) ───────────────────────────────
+
+// Qualified Leads is the one metric whose surplus banks.
+//
+// The other three do not, and deliberately. A message sent is an action taken
+// on a day and cannot be taken on a later one retroactively; the monthly pair
+// already spreads over a month, which is its own kind of averaging. Qualifying
+// is the odd one out — it comes in lumps, because a good discovery session
+// surfaces a dozen clinics at once and the next morning has nothing left to
+// score. Holding a lumpy input to a flat daily line punishes the exact
+// behaviour it is meant to encourage, so the leftover is banked instead.
+export const ROLLOVER_KEY: DailyKpiKey = "qualifiedLeads";
+
+export function hasRollover(key: DailyKpiKey): boolean {
+  return key === ROLLOVER_KEY;
+}
+
+// One day in the carry-forward ledger.
+//
+// `raw` is what actually happened that day and is what the trend chart and the
+// breakdown table's day columns keep showing — the ledger is a way of scoring
+// the days, not a rewriting of them. Everything that judges a day against the
+// goal reads `credited` (or `progress`, which is `credited` capped at it).
+export interface RolloverDay {
+  day: Date;
+  raw: number; // what was actually qualified that day
+  carryIn: number; // surplus arriving from the day before
+  credited: number; // raw + carryIn
+  progress: number; // credited, capped at the goal — what the ring reads
+  carryOut: number; // surplus leaving for the next day
+}
+
+// Walk the days in order, banking each day's leftover into the next.
+//
+// Computed on read rather than stored, which is the same choice the rest of
+// this page already makes: nothing here is a stored daily total, so a ledger
+// row would be the one number on the page that could disagree with the records
+// behind it — and it would go stale the moment the goal changed. Walking the
+// counts costs one pass over a window the page has already fetched.
+//
+// The carry starts at zero at the first day given: the window is where
+// tracking starts, and there is no surplus behind it to inherit.
+//
+// A goal of zero is "nothing asked for" — every day is met and nothing banks,
+// because a surplus over no goal at all is not a quantity worth carrying.
+export function rolloverLedger(
+  days: DailyKpiDay[],
+  goal: number,
+): RolloverDay[] {
+  const ledger: RolloverDay[] = [];
+  let carryIn = 0;
+  for (const d of days) {
+    const raw = d.counts[ROLLOVER_KEY];
+    const credited = raw + carryIn;
+    const progress = goal <= 0 ? credited : Math.min(credited, goal);
+    const carryOut = goal <= 0 ? 0 : Math.max(0, credited - goal);
+    ledger.push({ day: d.day, raw, carryIn, credited, progress, carryOut });
+    carryIn = carryOut;
+  }
+  return ledger;
+}
+
+// The same days with Qualified Leads swapped for its credited value, so
+// everything that already scores a day off `DailyKpiCounts` — the score, the
+// streak — gets the rollover without knowing it exists. Every other metric is
+// passed through untouched.
+export function creditedDays(
+  days: DailyKpiDay[],
+  goal: number,
+): DailyKpiDay[] {
+  const ledger = rolloverLedger(days, goal);
+  return days.map((d, i) => ({
+    day: d.day,
+    counts: { ...d.counts, [ROLLOVER_KEY]: ledger[i].credited },
+  }));
+}
+
 // ─── Months and pace ───────────────────────────────────────────────────────
 
 // The first day of the month a day falls in, read in UTC like every other day

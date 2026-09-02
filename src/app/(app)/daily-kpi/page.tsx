@@ -15,6 +15,7 @@ import {
   MonthlyPace,
   allGoalsMet,
   averageFor,
+  creditedDays,
   dailyScore,
   emptyCounts,
   isMonthly,
@@ -22,6 +23,8 @@ import {
   monthlyPace,
   pctChange,
   progressPct,
+  ROLLOVER_KEY,
+  rolloverLedger,
   scoreNote,
   streakLength,
   sumCounts,
@@ -88,6 +91,40 @@ export default async function DailyKpiPage({
   const counts = on(day).counts;
   const yesterday = on(addDays(day, -1)).counts;
 
+  // ─── Qualified Leads' surplus rollover ───────────────────────────────────
+  //
+  // Qualified Leads banks its leftover: a day that overshoots the goal carries
+  // the surplus into the next day, and the next day is credited with it before
+  // it is scored (src/lib/dailyKpi.ts). Qualifying arrives in lumps — one good
+  // discovery session surfaces a dozen clinics and the morning after has none
+  // left to score — and a flat daily line would mark down the day after the
+  // work rather than the day the work was skipped.
+  //
+  // The ledger is walked over the same history the rest of the page reads,
+  // oldest first, so the carry arriving at the viewed day is the one the days
+  // behind it actually produced. It is computed here and stored nowhere: a
+  // stored carry would be the one number on this page that could disagree with
+  // the records behind it, and it would go stale the moment the goal changed.
+  //
+  // Only what *judges* a day reads it — the card's ring, the score, the
+  // streak. The trend chart and the breakdown table's day columns stay on the
+  // raw counts below, because those two exist to show the real day-to-day
+  // pattern, and a banked day drawn as activity would hide the very lumpiness
+  // this rollover exists to forgive.
+  const creditedHistory = creditedDays(history, goals.qualifiedLeads);
+  const creditedByDay = new Map(
+    creditedHistory.map((d) => [d.day.getTime(), d]),
+  );
+  const onCredited = (d: Date): DailyKpiDay =>
+    creditedByDay.get(d.getTime()) ?? { day: d, counts: emptyCounts() };
+
+  const credited = onCredited(day).counts;
+  const creditedYesterday = onCredited(addDays(day, -1)).counts;
+  // The viewed day's row of the ledger, for the card's banked line.
+  const ledgerToday = rolloverLedger(history, goals.qualifiedLeads).find(
+    (r) => r.day.getTime() === day.getTime(),
+  );
+
   // ─── Trend ───────────────────────────────────────────────────────────────
 
   const trendDays = history.slice(-DAILY_KPI_TREND_DAYS);
@@ -121,10 +158,13 @@ export default async function DailyKpiPage({
 
   // ─── Score and streak ────────────────────────────────────────────────────
 
-  const score = dailyScore(counts, goals);
+  // Scored and streaked off the credited counts, so Qualified Leads' banked
+  // surplus counts the same way here as it does on its card. Every other
+  // metric passes through creditedDays untouched.
+  const score = dailyScore(credited, goals);
   const note = scoreNote(score);
-  const streak = streakLength(history, goals);
-  const metToday = allGoalsMet(counts, goals);
+  const streak = streakLength(creditedHistory, goals);
+  const metToday = allGoalsMet(credited, goals);
 
   // ─── Weekly summary ──────────────────────────────────────────────────────
   //
@@ -212,11 +252,20 @@ export default async function DailyKpiPage({
             <DailyKpiCard
               key={key}
               metric={key}
-              count={monthly ? monthToDate[key] : counts[key]}
+              count={
+                monthly
+                  ? monthToDate[key]
+                  : key === ROLLOVER_KEY
+                    ? credited[key]
+                    : counts[key]
+              }
               goal={goals[key]}
-              yesterday={yesterday[key]}
+              yesterday={
+                key === ROLLOVER_KEY ? creditedYesterday[key] : yesterday[key]
+              }
               isToday={isToday}
               pace={monthly ? pace[key] : undefined}
+              carryIn={key === ROLLOVER_KEY ? ledgerToday?.carryIn : undefined}
             />
           );
         })}
@@ -390,9 +439,13 @@ export default async function DailyKpiPage({
                 {DAILY_KPI_KEYS.map((key) => {
                   const hue = DAILY_KPI_HUES[key];
                   const monthly = isMonthly(key);
+                  // The day columns stay raw (below), but whether the goal was
+                  // met is the same question the card and the streak answer,
+                  // and Qualified Leads answers it off its credited value.
+                  const dayCount = key === ROLLOVER_KEY ? credited[key] : counts[key];
                   const met = monthly
                     ? pace[key].onTrack
-                    : counts[key] >= goals[key];
+                    : dayCount >= goals[key];
                   return (
                     <tr key={key}>
                       <td className="td">
@@ -408,7 +461,7 @@ export default async function DailyKpiPage({
                             <div className="text-xs font-normal text-muted">
                               {monthly
                                 ? `${pace[key].pct}% of the monthly goal`
-                                : `${progressPct(counts[key], goals[key])}% of goal`}
+                                : `${progressPct(dayCount, goals[key])}% of goal`}
                             </div>
                           </div>
                         </div>

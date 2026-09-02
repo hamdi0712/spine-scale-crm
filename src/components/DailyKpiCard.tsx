@@ -81,6 +81,7 @@ export default function DailyKpiCard({
   yesterday,
   isToday,
   pace,
+  carryIn,
 }: {
   metric: DailyKpiKey;
   // Today's count and today's goal for a daily metric; month to date and the
@@ -93,6 +94,12 @@ export default function DailyKpiCard({
   // Present on a monthly metric and absent on a daily one, which is what the
   // card branches on.
   pace?: MonthlyPace;
+  // Surplus banked from the day before, on the one metric that rolls its
+  // leftover forward (ROLLOVER_KEY in src/lib/dailyKpi.ts). `count` already
+  // includes it — this says how much of it was banked rather than qualified
+  // today, so the screen-reader label can tell the two apart. Nothing is drawn
+  // from it: the card looks the same either way.
+  carryIn?: number;
 }) {
   const hue = DAILY_KPI_HUES[metric];
   const pct = progressPct(count, goal);
@@ -128,7 +135,9 @@ export default function DailyKpiCard({
           label={
             pace
               ? `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal} this month, ${pct}% of goal`
-              : `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal}, ${pct}% of goal`
+              : `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal}, ${pct}% of goal${
+                  carryIn ? `, including ${carryIn} carried over` : ""
+                }`
           }
         >
           <span
