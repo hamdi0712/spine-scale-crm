@@ -12,13 +12,18 @@
 // a goal changes what today is measured against and never what happened.
 
 import { revalidatePath } from "next/cache";
+import { parseDayKey } from "@/lib/dailyChecklist";
 import {
   DAILY_KPI_KEYS,
   DailyKpiGoals,
   DailyKpiKey,
+  isSkippable,
   readGoal,
 } from "@/lib/dailyKpi";
-import { saveDailyKpiGoals as write } from "@/lib/dailyKpiStore";
+import {
+  saveDailyKpiGoals as write,
+  toggleDailyKpiSkip as writeSkip,
+} from "@/lib/dailyKpiStore";
 
 export async function saveDailyKpiGoals(formData: FormData): Promise<void> {
   // One field per metric, named for the metric rather than for its timeframe —
@@ -29,6 +34,27 @@ export async function saveDailyKpiGoals(formData: FormData): Promise<void> {
   ) as Record<DailyKpiKey, number>;
 
   await write(goals satisfies DailyKpiGoals);
+
+  revalidatePath("/daily-kpi");
+}
+
+// "Skip for today", and the way back off it.
+//
+// Both arguments are bound at render time by the form, so the day being marked
+// is the day that was on screen rather than whatever "today" has become by the
+// time the request lands — the same reason the checklist's toggle binds its
+// day (src/lib/actions/dailyChecklist.ts).
+//
+// The metric is checked against SKIPPABLE_KPI_KEYS rather than trusted: this
+// is a form field, and a skip on a metric the page never offers would lift a
+// count to a goal nobody chose to forgive.
+export async function toggleDailyKpiSkip(
+  dayKey: string,
+  metric: string,
+): Promise<void> {
+  if (!isSkippable(metric as DailyKpiKey)) return;
+  const day = parseDayKey(dayKey, new Date());
+  await writeSkip(day, metric as DailyKpiKey);
 
   revalidatePath("/daily-kpi");
 }

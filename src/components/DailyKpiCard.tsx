@@ -32,6 +32,7 @@ import {
   MonthlyPace,
   progressPct,
 } from "@/lib/dailyKpi";
+import SkipDayButton from "@/components/SkipDayButton";
 
 // Tabler at the sidebar's 1.75 stroke, the same four glyphs the dashboard uses
 // for the same four ideas — a clinic qualified, a message sent, a reply, a call
@@ -81,7 +82,8 @@ export default function DailyKpiCard({
   yesterday,
   isToday,
   pace,
-  carryIn,
+  skipped = false,
+  skip,
 }: {
   metric: DailyKpiKey;
   // Today's count and today's goal for a daily metric; month to date and the
@@ -94,15 +96,19 @@ export default function DailyKpiCard({
   // Present on a monthly metric and absent on a daily one, which is what the
   // card branches on.
   pace?: MonthlyPace;
-  // Surplus banked from the day before, on the one metric that rolls its
-  // leftover forward (ROLLOVER_KEY in src/lib/dailyKpi.ts). `count` already
-  // includes it — this says how much of it was banked rather than qualified
-  // today, so the screen-reader label can tell the two apart. Nothing is drawn
-  // from it: the card looks the same either way.
-  carryIn?: number;
+  // The day has been declared fulfilled for this metric (model DailyKpiSkip),
+  // so the ring and the percentage read 100 whatever `count` says. `count`
+  // itself stays the real number and a tag says where the 100 came from — a
+  // card that quietly showed the goal instead would be the one place on this
+  // page that lies about what happened.
+  skipped?: boolean;
+  // Bound at render time to this day and this metric, and present only on a
+  // metric that can be skipped on a day that can still be edited. Absent, no
+  // button is drawn.
+  skip?: () => Promise<void>;
 }) {
   const hue = DAILY_KPI_HUES[metric];
-  const pct = progressPct(count, goal);
+  const pct = skipped ? 100 : progressPct(count, goal);
   const delta = count - yesterday;
 
   return (
@@ -113,8 +119,17 @@ export default function DailyKpiCard({
           {/* The sidebar's own type: 14px, regular weight, no extra tracking.
               A label here is a name for a number, exactly as a nav item is a
               name for a page, and it should not be set louder than one. */}
-          <div className="truncate text-sm font-normal leading-tight text-muted">
-            {DAILY_KPI_LABELS[metric]}
+          <div className="flex items-center gap-1.5">
+            <div className="truncate text-sm font-normal leading-tight text-muted">
+              {DAILY_KPI_LABELS[metric]}
+            </div>
+            {/* Where the 100% came from. The same muted pill the rest of the
+                page uses for a fact that is not a status. */}
+            {skipped && (
+              <span className="chip-stat h-[18px] px-2 text-[10px]">
+                Skipped
+              </span>
+            )}
           </div>
           <div className="num mt-1 flex items-baseline gap-1 leading-none">
             <span className="text-[22px] font-semibold tracking-tight">
@@ -135,9 +150,9 @@ export default function DailyKpiCard({
           label={
             pace
               ? `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal} this month, ${pct}% of goal`
-              : `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal}, ${pct}% of goal${
-                  carryIn ? `, including ${carryIn} carried over` : ""
-                }`
+              : skipped
+                ? `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal}, skipped for this day and counted as 100% of goal`
+                : `${DAILY_KPI_LABELS[metric]}: ${count} of ${goal}, ${pct}% of goal`
           }
         >
           <span
@@ -163,20 +178,36 @@ export default function DailyKpiCard({
           On pace for {pace.projected}/{pace.goal} this month
         </div>
       ) : (
-        <div
-          className={`mt-2.5 flex items-center gap-1 text-xs font-normal ${
-            delta > 0 ? "text-ok" : delta < 0 ? "text-bad" : "text-muted"
-          }`}
-        >
-          {delta !== 0 && (
-            <Icon
-              name={delta > 0 ? "arrowUp" : "arrowDown"}
-              className="h-3.5 w-3.5"
+        /* The delta is the day's real movement and stays that way when the day
+           is skipped: the override forgives the goal, it does not rewrite what
+           happened. The skip control sits at the end of the same line rather
+           than on one of its own — the row of cards is one line of content
+           tall and a second row would break it. */
+        <div className="mt-2.5 flex items-center gap-2">
+          <div
+            className={`flex min-w-0 flex-1 items-center gap-1 text-xs font-normal ${
+              delta > 0 ? "text-ok" : delta < 0 ? "text-bad" : "text-muted"
+            }`}
+          >
+            {delta !== 0 && (
+              <Icon
+                name={delta > 0 ? "arrowUp" : "arrowDown"}
+                className="h-3.5 w-3.5"
+              />
+            )}
+            <span className="truncate">
+              {delta === 0
+                ? `Level with ${isToday ? "yesterday" : "the day before"}`
+                : `${Math.abs(delta)} vs ${isToday ? "yesterday" : "the day before"}`}
+            </span>
+          </div>
+          {skip && (
+            <SkipDayButton
+              skipped={skipped}
+              label={DAILY_KPI_LABELS[metric]}
+              toggle={skip}
             />
           )}
-          {delta === 0
-            ? `Level with ${isToday ? "yesterday" : "the day before"}`
-            : `${Math.abs(delta)} vs ${isToday ? "yesterday" : "the day before"}`}
         </div>
       )}
     </div>
