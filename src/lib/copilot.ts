@@ -124,14 +124,15 @@ export const COPILOT_SYSTEM_PROMPT = [
   "- Activities — the task board (To do / In progress / Done) and the fixed daily checklist with the day's live counts beside it.",
   "- Daily KPI — the four daily goals, the day's score against them, and the streak.",
   "- Discovery — scraped clinics waiting to be scored, each promoted into the pipeline or rejected with its reasoning kept.",
-  "- Pipeline — leads being worked, each with an ICP scorecard, enrichment evidence, a five-step outreach sequence, calls and notes. The sequence itself is readable: every message written to a lead and whether it was sent, on one lead with getLeadOutreachLog and across the pipeline by tier with getOutreachFunnelSummary.",
+  "- Pipeline — leads being worked, each with an ICP scorecard, enrichment evidence, a five-step outreach sequence, calls and notes. Any lead can be found by name with searchLeads. The sequence itself is readable: every message written to a lead and whether it was sent, on one lead with getLeadOutreachLog and across the pipeline by tier with getOutreachFunnelSummary.",
   "- Clients — signed clients, their onboarding wizard, delivery checklist, invoices and health status.",
   "- Reporting — weekly KPIs per client.",
   "- Ad Hub — the creative work: research notes, personas, desires and benefits, concepts, and the creatives under them with their compliance checks and performance logs.",
   "- Library — saved copy templates.",
   "- Settings — the API keys, the enrichment chain and its actors, and the business context page.",
   "You have a lookup for each of those areas. Between them they are everything you can see; there is nothing else.",
-  "Two things worth knowing you can now reach, because they answer the questions that used to need a dozen lookups: the full outreach history of one lead, message by message including what the prospect wrote back (getLeadOutreachLog), and where leads are dropping out of the five-step sequence over a period, broken down by tier (getOutreachFunnelSummary).",
+  "Three things worth knowing you can now reach, because they answer the questions that used to need a dozen lookups: any lead found by name, however deep in the pipeline it sits (searchLeads), the full outreach history of one lead, message by message including what the prospect wrote back (getLeadOutreachLog), and where leads are dropping out of the five-step sequence over a period, broken down by tier (getOutreachFunnelSummary).",
+  "On finding leads: getPipelineLeads returns only the first 60 and cannot page past them, so it is a view of the pipeline and not a way to look one lead up. You are not stuck with that partial list. When a question names a clinic or a contact, call searchLeads with part of the name — it searches every lead in the pipeline and returns the stage, tier, connection and acceptance status and outreach step for each match, so a named lead is never something you cannot see. Never answer that a clinic is not in the pipeline on the strength of it being absent from getPipelineLeads; search for it by name first.",
   "",
   "WHERE YOUR FACTS COME FROM",
   "You have no knowledge of this agency's records except what the lookup functions return. Every number, name, date and status in your answer must have come back from a lookup you actually called in this conversation. If you have not looked it up, you do not know it — say so and call the lookup.",
@@ -227,7 +228,7 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
     function: {
       name: "getPipelineLeads",
       description:
-        "List the leads in the pipeline — clinic name, stage, ICP tier and score, estimated value, next follow-up date. Use for any question about the pipeline as a whole, about a group of leads, or to find a lead's id before calling getLeadDetail. Filter by tier or stage when the question names one. Archived leads (converted or closed out) are never included.",
+        "List the leads in the pipeline — clinic name, stage, ICP tier and score, estimated value, next follow-up date. Use for any question about the pipeline as a whole, about a group of leads, or to find a lead's id before calling getLeadDetail. Filter by tier or stage when the question names one. Archived leads (converted or closed out) are never included. Only the first 60 matching leads come back and there is no way to ask for the rest: when the question names a particular clinic or contact, call searchLeads instead — it searches the whole pipeline by name and will find a lead this list does not reach.",
       parameters: {
         type: "object",
         properties: {
@@ -250,9 +251,28 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
   {
     type: "function",
     function: {
+      name: "searchLeads",
+      description:
+        "Find a lead by name. Takes part of a clinic name or a contact name, matched case-insensitively anywhere in the name, and returns the leads it matches with their stage, ICP tier and score, whether the connection request was sent and accepted, whether they replied, and how far through the five-step outreach sequence they actually got. This is how you reach a lead getPipelineLeads did not show you: that lookup returns only the first 60 leads and has no way to page further, so any lead outside that batch can be found here and nowhere else. Use it whenever a question names a clinic or a person — it is faster than getPipelineLeads and it does not miss. Returns at most 20; narrow the query if it says it was capped. Archived leads are not included.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Part of the clinic name or the contact name. A distinctive fragment is enough — \"ridge\" finds \"Ridgeway Spine & Posture\". At least 2 characters.",
+          },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "getLeadDetail",
       description:
-        "Everything on one lead: contact details, the full ICP scorecard with every category, gap and disqualifier and what each scored, the enrichment evidence gathered about the clinic, its logged calls and its notes. Use when a question is about one specific lead. Get the id from getPipelineLeads first.",
+        "Everything on one lead: contact details, the full ICP scorecard with every category, gap and disqualifier and what each scored, the enrichment evidence gathered about the clinic, its logged calls and its notes. Use when a question is about one specific lead. Get the id from searchLeads when you know the clinic's name, or from getPipelineLeads.",
       parameters: {
         type: "object",
         properties: {

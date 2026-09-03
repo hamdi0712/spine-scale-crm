@@ -2241,6 +2241,145 @@ export async function getOutreachFunnelSummary(args: {
   };
 }
 
+// ─── 25. Finding a lead by name ────────────────────────────────────────────
+
+// Twenty. getPipelineLeads returns sixty because it is a view of the pipeline
+// and sixty leads is a pipeline; this is an answer to "which one is Ridgeway",
+// and twenty hits means the query was too vague rather than that twenty
+// clinics are wanted. A cap that bites says so, so the model narrows instead
+// of stating a total it was not given.
+const LEAD_SEARCH_MAX = 20;
+
+// One character matches most of the pipeline, which is not a search — it is
+// getPipelineLeads with extra steps and a worse cap.
+const LEAD_SEARCH_MIN_CHARS = 2;
+
+// Where a lead has actually got to in the five-step sequence.
+//
+// Read off the messages that were marked sent, not off the ones that were
+// written: a draft nobody sent is not a step taken, which is the same
+// distinction getLeadOutreachLog draws and for the same reason. The furthest
+// step reached is the answer rather than the most recent one, because steps
+// can be marked out of order and "got as far as the audit offer" is what the
+// question means.
+function furthestStepSent(
+  messages: { step: string; sentAt: Date | null }[],
+): { step: OutreachStep; index: number } | null {
+  let best: { step: OutreachStep; index: number } | null = null;
+  for (const m of messages) {
+    if (m.sentAt === null) continue;
+    if (!isOutreachStep(m.step)) continue;
+    const index = OUTREACH_STEPS.indexOf(m.step);
+    if (!best || index > best.index) best = { step: m.step, index };
+  }
+  return best;
+}
+
+/**
+ * Leads whose clinic name or contact name contains the query, matched
+ * case-insensitively on a partial word.
+ *
+ * This exists because getPipelineLeads is a view and not an index. It returns
+ * the sixty most recently touched leads and there is no page two, so a lead
+ * that has sat untouched behind sixty busier ones was, until this lookup,
+ * simply unreachable — the model could not answer a question about it and had
+ * no way to know that was why. A question that names a clinic is now answered
+ * by naming it back at the database.
+ *
+ * Matching is done in JavaScript rather than in the query on purpose. SQLite's
+ * LIKE folds case for ASCII and not for anything else, so a clinic with an
+ * accent in its name would match or not depending on which letter was typed;
+ * lowercasing both sides here matches the same way every time. It is the same
+ * shape getPipelineLeads already uses for tier, which is likewise computed
+ * rather than stored.
+ *
+ * The outreach marks come back on every row — request sent, accepted, replied,
+ * and how far through the sequence the lead actually got. They are the first
+ * thing asked after "which lead is this", and carrying them here turns the
+ * common two-call pattern (find the lead, then open its outreach log) into
+ * one. getLeadOutreachLog is still the lookup for the messages themselves.
+ */
+export async function searchLeads(args: { query?: string }): Promise<unknown> {
+  const query = (args.query ?? "").trim();
+  if (query.length < LEAD_SEARCH_MIN_CHARS) {
+    return {
+      searched: false,
+      message: `searchLeads needs at least ${LEAD_SEARCH_MIN_CHARS} characters to search on — part of a clinic name or a contact name. For the pipeline as a whole, or to filter by tier or stage, call getPipelineLeads.`,
+    };
+  }
+
+  const needle = query.toLowerCase();
+
+  // Archived leads are out, the same ones getPipelineLeads leaves out and for
+  // the same reason: they are converted or closed out, and a search that
+  // surfaced them would answer "who are we working" with clinics nobody is.
+  const leads = await prisma.lead.findMany({
+    where: { archived: false },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      // Only what a step needs. The messages themselves are getLeadOutreachLog's
+      // to return; this is here to say how far along the lead is.
+      outreach: { select: { step: true, sentAt: true } },
+    },
+  });
+
+  const matching = leads.filter(
+    (lead) =>
+      lead.clinicName.toLowerCase().includes(needle) ||
+      (lead.contactName?.toLowerCase().includes(needle) ?? false),
+  );
+
+  return {
+    searched: true,
+    query,
+    matchedOn: "Clinic name or contact name, partial and case-insensitive.",
+    ...listMeta(
+      Math.min(matching.length, LEAD_SEARCH_MAX),
+      matching.length,
+      LEAD_SEARCH_MAX,
+    ),
+    ...(matching.length === 0
+      ? {
+          note: `Nothing in the pipeline matches "${query}". It may be archived, it may still be a discovery candidate (getDiscoveryCandidates), or it may be spelled differently — try a shorter fragment of the name.`,
+        }
+      : {}),
+    leads: matching.slice(0, LEAD_SEARCH_MAX).map((lead) => {
+      const tierNow = leadTier(lead);
+      const furthest = furthestStepSent(lead.outreach);
+      return {
+        id: lead.id,
+        clinicName: lead.clinicName,
+        contactName: lead.contactName,
+        location: lead.location,
+        stage: stageLabel(lead.stage),
+        icpTier: tierLabel(tierNow),
+        icpScore:
+          lead.icpScoredAt === null
+            ? null
+            : `${scoreIcp(lead).total} of ${ICP_MAX_SCORE}`,
+        // The sequence's gates, the same four instants getLeadOutreachLog
+        // reports under `marks`. Acceptance is readable here so the common
+        // follow-up question does not need a second call.
+        connectionRequestSentAt: iso(lead.connectionRequestSentAt),
+        connectionAcceptedAt: iso(lead.connectionAcceptedAt),
+        connectionAccepted: lead.connectionAcceptedAt !== null,
+        repliedAt: iso(lead.repliedAt),
+        // Where the lead actually got to. Null is "nothing marked sent yet",
+        // which is not the same as nothing written — the drafts are in
+        // getLeadOutreachLog.
+        outreachStepReached: furthest
+          ? `${OUTREACH_STEP_LABELS[furthest.step]} (step ${furthest.index + 1} of ${OUTREACH_STEPS.length})`
+          : null,
+        outreachStepsSent: lead.outreach.filter((m) => m.sentAt !== null).length,
+        nextFollowUp: iso(lead.nextFollowUp),
+        updatedAt: iso(lead.updatedAt),
+      };
+    }),
+    reminder:
+      "Reading only. Open the lead's own page in Pipeline to change anything on it.",
+  };
+}
+
 // ─── The dispatcher ────────────────────────────────────────────────────────
 //
 // The allow-list, and the only place a tool name becomes a call. A name that
@@ -2250,6 +2389,7 @@ export async function getOutreachFunnelSummary(args: {
 
 const LOOKUPS = {
   getPipelineLeads,
+  searchLeads,
   getLeadDetail,
   getDiscoveryQueueStatus,
   getClientHealthSummary,
@@ -2327,6 +2467,17 @@ export async function runCopilotTool(
         data: await getPipelineLeads({
           tier: typeof args.tier === "string" ? args.tier : undefined,
           stage: typeof args.stage === "string" ? args.stage : undefined,
+        }),
+      };
+    case "searchLeads":
+      // `name` and `q` accepted alongside `query`: it is a search box, and a
+      // model reaching for one reaches for whichever of those it thought of.
+      // The empty case is answered by the lookup rather than rejected here, so
+      // the model gets a sentence telling it what to send instead of an error.
+      return {
+        ok: true,
+        data: await searchLeads({
+          query: str(args.query) ?? str(args.name) ?? str(args.q),
         }),
       };
     case "getLeadDetail":
