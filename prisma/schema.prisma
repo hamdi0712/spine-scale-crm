@@ -226,7 +226,11 @@ model Lead {
   phone        String?
   email        String?
   leadSource   String?
-  stage        String    @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST
+  // NO_CONTACT is a holding status rather than a stage of the pipeline — no
+  // way to reach anybody yet, worth revisiting when there is. See
+  // LEAD_STAGES in src/lib/constants.ts, which is where the list is owned;
+  // this column is a plain string, so a stage added there needs no migration.
+  stage        String    @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST | NO_CONTACT
   // When the stage above last actually changed.
   //
   // Not updatedAt, which is what the date-based stage metrics used to read and
