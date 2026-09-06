@@ -1,52 +1,48 @@
 "use client";
 
-// The dashboard's page title: one greeting out of a set, picked for the day.
+// The dashboard's page title: one greeting out of the set that fits the moment.
 //
-// Which greeting is right depends on the clock and the calendar in front of the
+// A fresh pick on every load. The page is force-dynamic, so the server runs
+// again on every visit and refresh and rolls a new greeting each time — which
+// is the behaviour: a morning of refreshes should read as a morning of
+// different morning greetings, not one line repeated. (The quotation below it
+// is the opposite and deliberately so — that one is chosen once a day and held.)
+//
+// Which greetings fit depends on the clock and the calendar in front of the
 // person reading it, and only the browser knows those — the server could be in
-// any zone. Rather than render a dash and pop the title in on mount (the
-// pattern the live clocks use, which would be jarring on a 32px heading), this
-// renders the server's reading first and re-reads it from the browser after
-// hydration. The two agree on the first render, so hydration is clean, and any
-// correction lands before the page is settled.
-//
-// The pick is pseudo-random rather than random: it is seeded off the day, so
-// the greeting is the same all day and different tomorrow. A greeting that
-// reshuffled on every navigation would be a flicker on the largest text on the
-// page, and one that never changed is the fixed line this replaced.
+// any zone. So the server's pick is rendered first and the browser checks it
+// after hydration: if it is a greeting this moment could have produced, it
+// stands, and if it is not — a server on the other side of the world saying
+// "Good evening" over somebody's coffee — the browser rolls its own from the
+// right bucket. The first render is the server's either way, so hydration is
+// clean, and the heading only ever changes when it was actually wrong.
 
 import { useEffect, useState } from "react";
-import { daySeed, greetingFor } from "@/lib/greeting";
+import { greetingFits, greetingFor } from "@/lib/greeting";
 
 // Single-user app — the one person it greets is the one person who logs in.
 const NAME = "Hamdi";
 
-export default function Greeting({
-  serverHour,
-  serverWeekday,
-  serverSeed,
-}: {
-  serverHour: number;
-  serverWeekday: number;
-  serverSeed: number;
-}) {
-  const [clock, setClock] = useState({
-    hour: serverHour,
-    weekday: serverWeekday,
-    seed: serverSeed,
-  });
+export default function Greeting({ serverGreeting }: { serverGreeting: string }) {
+  const [greeting, setGreeting] = useState(serverGreeting);
+
   useEffect(() => {
     const now = new Date();
-    setClock({
-      hour: now.getHours(),
-      weekday: now.getDay(),
-      seed: daySeed(now),
-    });
-  }, []);
+    const hour = now.getHours();
+    const weekday = now.getDay();
+    setGreeting((current) =>
+      greetingFits(current, hour, weekday)
+        ? current
+        : greetingFor(hour, weekday),
+    );
+    // Keyed on the server's pick so a client-side navigation back to the
+    // dashboard — a new render, a new greeting — is re-checked rather than
+    // left holding the last one this effect approved.
+  }, [serverGreeting]);
 
   return (
     <h1 className="display text-[32px] font-semibold">
-      {greetingFor(clock.hour, clock.weekday, clock.seed)}, {NAME}{" "}
+      {greeting}, {NAME}{" "}
       <span role="img" aria-label="waving hand">
         👋
       </span>

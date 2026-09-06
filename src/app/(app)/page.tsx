@@ -28,7 +28,7 @@ import BusinessHoursPanel, {
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
 import ClientHealthList, { HealthRow } from "@/components/ClientHealthList";
-import { daySeed } from "@/lib/greeting";
+import { greetingFor } from "@/lib/greeting";
 import Greeting from "@/components/Greeting";
 import Icon from "@/components/Icons";
 import KpiCard, { Kpi, KpiTone } from "@/components/KpiCard";
@@ -252,11 +252,21 @@ export default async function DashboardPage() {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        {/* min-w-0 so the quote below can wrap: a flex item's automatic minimum
+            size is its content, so without this a long motivational line sets
+            this column's width and runs the header off the side of the page
+            rather than breaking. The basis is the width the column asks for
+            before it gives up the row — narrower than that and the actions
+            beside it wrap to their own line instead of squeezing the quote into
+            a column three words wide — and max-w keeps a wrapped quote to a
+            readable measure on a wide screen rather than one very long line. */}
+        <div className="min-w-0 flex-1 basis-80 sm:max-w-2xl">
+          {/* Rolled here, on the server, on every request — the page is
+              force-dynamic, so this is a new greeting on every load and
+              refresh. The browser only overrides it if the server's clock put
+              it in the wrong part of the day. */}
           <Greeting
-            serverHour={now.getHours()}
-            serverWeekday={now.getDay()}
-            serverSeed={daySeed(now)}
+            serverGreeting={greetingFor(now.getHours(), now.getDay())}
           />
           {/* Suspended on its own, because the first load of a new day pays
               for a model call and the rest of the dashboard should not wait

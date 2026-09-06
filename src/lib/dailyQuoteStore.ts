@@ -15,7 +15,10 @@
 // cached one, the one just fetched, or one of the fallbacks.
 
 import { prisma } from "@/lib/prisma";
-import { dayKey as toDayKey } from "@/lib/dailyChecklist";
+import {
+  dayKey as toDayKey,
+  toChecklistDay,
+} from "@/lib/dailyChecklist";
 import {
   DAILY_GOAL_KEYS,
   allGoalsMet,
@@ -46,6 +49,21 @@ const MAX_QUOTE_TOKENS = 200;
 // moment it gives up. A dashboard should not sit on a spinner for a quotation.
 const QUOTE_TIMEOUT_MS = 12_000;
 
+// Above the transport's default of zero, and this is the whole reason the
+// quote rotates.
+//
+// At temperature 0 the model is a function of its prompt, and the prompt for a
+// Tuesday and the prompt for a Wednesday differ by one word when the numbers
+// underneath have not moved — so it returned the same famous line morning
+// after morning, each one duly cached under its own day. The cache was doing
+// exactly what it was told; there was simply nothing new to cache. This, plus
+// the list of recent quotations in the prompt, is what makes tomorrow's answer
+// a different one.
+const QUOTE_TEMPERATURE = 1;
+
+// How many days back the "do not repeat these" list reaches.
+const RECENT_QUOTE_DAYS = 30;
+
 const WEEKDAYS = [
   "Sunday",
   "Monday",
@@ -59,24 +77,62 @@ const WEEKDAYS = [
 export interface DailyQuoteResult extends DailyQuoteText {
   // Whether this is the model's line for today or one of the hardcoded ones.
   // Nothing is drawn differently for it — the dashboard shows a quote either
-  // way — but it is the difference the copilot and anybody debugging want.
-  source: "model" | "fallback";
+  // way — but it is the difference the copilot and anybody debugging want, and
+  // the line carries it into the markup as a data attribute so "is today's
+  // quote real or is it the fallback again" is a question you can answer by
+  // looking rather than by reading the server log.
+  source: DailyQuoteSource;
+  // The day it is filed under, "2026-09-06" — the cache key itself. In the
+  // markup beside the source, because the other half of a stuck quote is a day
+  // key that is not moving, and this makes that visible too.
+  day: string;
+  // When the cached row was written, for a quote that came from the cache.
+  // Absent for a fallback, which is never stored, and for a quote generated on
+  // this very request.
+  cachedAt?: Date;
 }
 
+// "model" is a line this app asked a model for and stored under today. "cached"
+// is that same line read back later the same day — the ordinary case, and the
+// one that proves the cache is holding rather than the generator repeating.
+// "fallback" is one of the hardcoded quotations, shown because there was no key,
+// no answer, or no answer anything could read.
+export type DailyQuoteSource = "model" | "cached" | "fallback";
+
 export async function loadDailyQuote(now: Date): Promise<DailyQuoteResult> {
-  const day = toUtcDay(now);
-  const key = toDayKey(day);
+  // The calendar day the person reading the dashboard is having, which is the
+  // server's own — the same reading the checklist and the activities page file
+  // a day under (toChecklistDay). Deliberately not toUtcDay: read in UTC, "the
+  // day" rolls over at 8am for anyone east of Greenwich, so a quote billed as
+  // daily would change in the middle of a working morning and hold through the
+  // evening and the night that followed. The KPI numbers below stay on their
+  // own UTC bucketing, because they are the same numbers the /daily-kpi page
+  // shows and the two must agree.
+  const key = toDayKey(toChecklistDay(now));
+  const kpiDay = toUtcDay(now);
 
   const cached = await prisma.dailyQuote.findUnique({ where: { id: key } });
   if (cached) {
-    return { text: cached.text, author: cached.author, source: "model" };
+    return {
+      text: cached.text,
+      author: cached.author,
+      source: "cached",
+      day: key,
+      cachedAt: cached.createdAt,
+    };
   }
 
-  const fallback = { ...fallbackDailyQuote(key), source: "fallback" as const };
+  const fallback = {
+    ...fallbackDailyQuote(key),
+    source: "fallback" as const,
+    day: key,
+  };
+
+  const recent = await recentQuotes(key);
 
   let context: DailyQuoteContext;
   try {
-    context = await buildContext(day);
+    context = await buildContext(kpiDay, recent);
   } catch {
     // The situation could not be read, so there is nothing specific to ask
     // about — and a generic question would get the generic answer the fallback
@@ -89,6 +145,7 @@ export async function loadDailyQuote(now: Date): Promise<DailyQuoteResult> {
     user: buildDailyQuotePrompt(context),
     maxTokens: MAX_QUOTE_TOKENS,
     timeoutMs: QUOTE_TIMEOUT_MS,
+    temperature: QUOTE_TEMPERATURE,
   });
   if (!reply.ok) return fallback;
 
@@ -109,14 +166,38 @@ export async function loadDailyQuote(now: Date): Promise<DailyQuoteResult> {
     // The line itself is already in hand.
   }
 
-  return { ...quote, source: "model" };
+  return { ...quote, source: "model", day: key };
+}
+
+// The quotations behind today, newest first, for the "do not repeat these"
+// block in the prompt. A read that fails comes back empty rather than throwing:
+// a missing list makes tomorrow's line likelier to repeat, which is worth less
+// than the line itself.
+//
+// The ids are day keys in ISO order, so "the days before today" is a string
+// comparison and the newest is the largest — no dates parsed to sort them.
+async function recentQuotes(today: string): Promise<string[]> {
+  try {
+    const rows = await prisma.dailyQuote.findMany({
+      where: { id: { lt: today } },
+      orderBy: { id: "desc" },
+      take: RECENT_QUOTE_DAYS,
+      select: { text: true },
+    });
+    return rows.map((r) => r.text);
+  } catch {
+    return [];
+  }
 }
 
 // The day as the model is told it: the score against the daily goals, the
 // streak, and how the fortnight behind today has been going. Read off the same
 // Daily KPI pass the /daily-kpi page uses, so the line and the page it is
 // about are talking about one set of numbers.
-async function buildContext(day: Date): Promise<DailyQuoteContext> {
+async function buildContext(
+  day: Date,
+  recent: string[],
+): Promise<DailyQuoteContext> {
   const [goals, days] = await Promise.all([
     loadDailyKpiGoals(),
     loadDailyKpiRange(
@@ -145,5 +226,6 @@ async function buildContext(day: Date): Promise<DailyQuoteContext> {
     goalsTotal: DAILY_GOAL_KEYS.length,
     streak,
     trend: readTrend(daysHit, past.length),
+    recent,
   };
 }
