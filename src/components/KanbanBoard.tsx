@@ -37,6 +37,18 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
 
   const stageOf = (l: KanbanLead) => moved[l.id] ?? l.stage;
 
+  // The board's columns: the active pipeline, plus No Contact on the end only
+  // when something is actually sitting in it. An empty holding column on every
+  // board would be a column of nothing to drag to — and hiding it outright
+  // would be somewhere leads could go and not come back from, since the board
+  // is where a stage is changed by dragging. So it appears with its first
+  // card and goes away with its last. It reads `moved` through stageOf like
+  // the columns do, so a card dropped into it brings the column with it.
+  const columns = LEAD_STAGES.filter(
+    (stage) =>
+      stage !== "NO_CONTACT" || leads.some((l) => stageOf(l) === "NO_CONTACT"),
+  );
+
   function handleDrop(stage: LeadStage) {
     if (!dragId) return;
     const id = dragId;
@@ -51,7 +63,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-1">
-      {LEAD_STAGES.map((stage) => {
+      {columns.map((stage) => {
         const column = leads.filter((l) => stageOf(l) === stage);
         const value = column.reduce((s, l) => s + (l.estValue ?? 0), 0);
         return (

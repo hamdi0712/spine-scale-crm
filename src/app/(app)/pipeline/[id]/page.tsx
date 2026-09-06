@@ -7,6 +7,7 @@ import {
   convertLeadToClient,
   deleteLead,
   markConnectionRequestSent,
+  moveLeadStage,
   saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
@@ -70,6 +71,13 @@ export default async function LeadDetailPage({
   const addCall = addLeadCall.bind(null, lead.id);
   const convert = convertLeadToClient.bind(null, lead.id);
   const remove = deleteLead.bind(null, lead.id);
+  // The one-press way into the holding status, for the common case: the record
+  // has been read, there is no email and no LinkedIn on it, and it should stop
+  // appearing in the lists of clinics to work today. It goes through the same
+  // action the board's drag does, so it is an ordinary stage change with an
+  // ordinary stageChangedAt behind it — and the way back out is the stage
+  // select in the form below, like any other move.
+  const markNoContact = moveLeadStage.bind(null, lead.id, "NO_CONTACT");
   const saveScorecard = saveIcpScorecard.bind(null, lead.id);
   const markConnectionSent = markConnectionRequestSent.bind(null, lead.id);
   const clearConnectionSent = clearConnectionRequestSent.bind(null, lead.id);
@@ -174,6 +182,17 @@ export default async function LeadDetailPage({
               </button>
             </form>
           ) : null}
+          {/* Secondary, not destructive, and no confirmation: nothing is lost
+              by pressing it — the lead keeps every field it had and one stage
+              change puts it back. Hidden on a lead already in the status,
+              where it would be a button that does nothing. */}
+          {lead.stage !== "NO_CONTACT" && (
+            <form action={markNoContact}>
+              <button type="submit" className="btn">
+                No Contact
+              </button>
+            </form>
+          )}
           <ConfirmForm
             action={remove}
             message={`Delete lead "${lead.clinicName}" and its activity log?`}
@@ -380,7 +399,15 @@ export default async function LeadDetailPage({
                 <label className="field-label" htmlFor="stage">
                   Stage
                 </label>
+                {/* Keyed on the stage so that a stage changed from outside
+                    this form — the No Contact button above — resets it. An
+                    uncontrolled select takes its defaultValue at mount and
+                    ignores every render after, so without the key it would
+                    still be showing the old stage next to a badge showing the
+                    new one, and the next save of an unrelated field would
+                    quietly move the lead back. */}
                 <select
+                  key={lead.stage}
                   id="stage"
                   name="stage"
                   defaultValue={lead.stage}

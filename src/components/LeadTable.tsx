@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { IconBrandLinkedin, IconCheck } from "@tabler/icons-react";
-import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
+import {
+  ACTIVE_LEAD_STAGES,
+  LEAD_STAGES,
+  LEAD_STAGE_LABELS,
+  LeadStage,
+} from "@/lib/constants";
 import { deleteLeads, moveLeadsStage } from "@/lib/actions/leads";
 import { ICP_TIER_LABELS, ICP_TIER_ORDER, IcpTier } from "@/lib/icp";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
@@ -21,7 +26,11 @@ type SortKey =
 
 export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
   const [query, setQuery] = useState("");
-  const [stageFilter, setStageFilter] = useState<string>("ALL");
+  // "ACTIVE" rather than "ALL": the list opens on the clinics there is
+  // something to do about, which is every stage except the holding one. No
+  // Contact is one press away in the same select — kept out of the default
+  // view, not out of the table.
+  const [stageFilter, setStageFilter] = useState<string>("ACTIVE");
   const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
@@ -35,7 +44,11 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = leads.filter((l) => {
-      if (stageFilter !== "ALL" && l.stage !== stageFilter) return false;
+      if (stageFilter === "ACTIVE") {
+        if (!(ACTIVE_LEAD_STAGES as string[]).includes(l.stage)) return false;
+      } else if (stageFilter !== "ALL" && l.stage !== stageFilter) {
+        return false;
+      }
       if (tierFilter === "UNSCORED" && l.icpTier != null) return false;
       if (tierFilter !== "ALL" && tierFilter !== "UNSCORED" && l.icpTier !== tierFilter)
         return false;
@@ -174,6 +187,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
           onChange={(e) => setStageFilter(e.target.value)}
           className="field w-auto"
         >
+          <option value="ACTIVE">Active stages</option>
           <option value="ALL">All stages</option>
           {LEAD_STAGES.map((s) => (
             <option key={s} value={s}>

@@ -1,3 +1,17 @@
+// The pipeline in order, with the one stage that is not part of it on the end.
+//
+// No Contact is a holding status, not an outcome. A lead lands in it when
+// there is no way to reach anybody — no email, no LinkedIn, no phone — which
+// is a fact about what we know rather than a decision about the clinic. It is
+// deliberately not Lost: Lost means we pursued this one and it went nowhere,
+// and a lead nobody could write to has not been pursued at all. It is worth
+// coming back to the moment somebody finds a contact, and coming back is an
+// ordinary stage change — see ACTIVE_LEAD_STAGES for what it is kept out of.
+//
+// Last in the list because this order is the pipeline's own: the board draws
+// its columns in it and the table sorts on it, and a holding bucket belongs
+// after the stages a lead actually moves through rather than in the middle
+// of them.
 export const LEAD_STAGES = [
   "NEW",
   "CONTACTED",
@@ -6,6 +20,7 @@ export const LEAD_STAGES = [
   "NEGOTIATING",
   "WON",
   "LOST",
+  "NO_CONTACT",
 ] as const;
 
 export type LeadStage = (typeof LEAD_STAGES)[number];
@@ -18,6 +33,7 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   NEGOTIATING: "Negotiating",
   WON: "Won",
   LOST: "Lost",
+  NO_CONTACT: "No Contact",
 };
 
 // Short forms for tight spaces — chart legends, mostly, where "Discovery Call
@@ -30,7 +46,20 @@ export const LEAD_STAGE_SHORT_LABELS: Record<LeadStage, string> = {
   NEGOTIATING: "Negotiating",
   WON: "Won",
   LOST: "Lost",
+  // Already two short words, so the short form is the long one.
+  NO_CONTACT: "No Contact",
 };
+
+// The pipeline as it is looked at by default: every stage except the holding
+// one. This is what the board draws columns for and what the table's stage
+// filter opens on, so a lead with no way to reach it stops taking up room in
+// the views used to decide what to do today — without being archived, deleted,
+// or filed as Lost. Both views can still be pointed at it: the table has "No
+// Contact" in its stage filter, and the board brings the column back as soon
+// as there is anything in it.
+export const ACTIVE_LEAD_STAGES: LeadStage[] = LEAD_STAGES.filter(
+  (s) => s !== "NO_CONTACT",
+);
 
 // Stages that mean a message went out: Contacted itself, and everything the
 // pipeline only reaches by passing through it. This is what "Messages Sent"
@@ -40,7 +69,9 @@ export const LEAD_STAGE_SHORT_LABELS: Record<LeadStage, string> = {
 // Lost is deliberately not in the list. A lead can be marked Lost straight
 // from New — disqualified before anybody wrote to it — and nothing on the
 // record says which of the two happened, so counting it would inflate the
-// number with clinics that were never messaged.
+// number with clinics that were never messaged. No Contact is out for the same
+// reason and more plainly still: it is the status for a lead nobody could
+// write to.
 export const CONTACTED_STAGES: LeadStage[] = [
   "CONTACTED",
   "DISCOVERY",
@@ -49,7 +80,9 @@ export const CONTACTED_STAGES: LeadStage[] = [
   "WON",
 ];
 
-// Stages that count toward open pipeline value.
+// Stages that count toward open pipeline value. No Contact is not among them:
+// a lead with no way to reach it is not value in play, and counting it would
+// put money on the dashboard that nobody can work towards today.
 export const OPEN_STAGES: LeadStage[] = [
   "NEW",
   "CONTACTED",

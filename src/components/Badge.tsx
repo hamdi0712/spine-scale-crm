@@ -113,6 +113,11 @@ export function SecondLookBadge({
   );
 }
 
+// No Contact is neutral, and that is the point of it. Red is Lost — a clinic
+// we pursued and did not win — and painting a lead red for having no email on
+// it would say we tried and failed at something nobody has tried yet. Grey is
+// the same reading the rejected discovery candidate gets: not a fault, just
+// not moving.
 const STAGE_TONES: Record<string, Tone> = {
   NEW: "blue",
   CONTACTED: "purple",
@@ -121,6 +126,7 @@ const STAGE_TONES: Record<string, Tone> = {
   NEGOTIATING: "amber",
   WON: "green",
   LOST: "red",
+  NO_CONTACT: "neutral",
 };
 
 export function StageBadge({ stage }: { stage: string }) {
