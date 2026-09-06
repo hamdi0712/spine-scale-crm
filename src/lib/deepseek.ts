@@ -76,10 +76,16 @@ export async function deepSeekJson({
   user,
   maxTokens = MAX_OUTPUT_TOKENS,
   timeoutMs,
+  temperature,
 }: {
   system: string;
   user: string;
   maxTokens?: number;
+  // Above the default zero, for the one caller that wants a different answer
+  // to the same question on two different days rather than the same one twice.
+  // Everything that scores or extracts leaves this alone — see the note on
+  // temperature in postChat.
+  temperature?: number;
   // A tighter budget than the default, for a caller that is rendering rather
   // than answering a press. The dashboard's daily quote passes one: a line of
   // decoration is not worth a minute of a page load, and it has a fallback to
@@ -99,6 +105,7 @@ export async function deepSeekJson({
       // worked around. Anyone rewriting those prompts needs to keep it.
       response_format: { type: "json_object" },
       max_tokens: maxTokens,
+      ...(temperature === undefined ? {} : { temperature }),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
@@ -314,7 +321,11 @@ async function postChat(
         // Off, it is the plain completion this file has always made.
         thinking: { type: "disabled" },
         // Scoring the same evidence twice should not give two answers, and
-        // asking the copilot the same question twice should not either.
+        // asking the copilot the same question twice should not either. The
+        // default, then — but a default rather than a fixed value, because a
+        // caller that wants variety (the dashboard's daily quote, which asks a
+        // near-identical question every morning and needs a different answer to
+        // it) overrides it through the spread below.
         temperature: 0,
         ...body,
       }),

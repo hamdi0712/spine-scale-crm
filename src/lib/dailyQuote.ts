@@ -27,6 +27,12 @@ export interface DailyQuoteContext {
   // rather than a table of numbers the model would have to read the mood out
   // of itself.
   trend: DailyQuoteTrend;
+  // The quotations already shown on the days behind today, newest first. The
+  // model is handed them and told not to repeat one: a temperature above zero
+  // makes a different answer possible, and this is what makes it likely, since
+  // a near-identical day would otherwise pull the same famous line back out
+  // every morning.
+  recent: string[];
 }
 
 export type DailyQuoteTrend = "quiet" | "steady" | "building" | "strong";
@@ -58,6 +64,11 @@ const TREND_SENTENCES: Record<DailyQuoteTrend, string> = {
 
 // ─── The prompt ────────────────────────────────────────────────────────────
 
+// The hard cap on the quotation's length, in words. Stated here because the
+// prompt below quotes it and parseDailyQuote enforces it, and those two must
+// not be able to drift apart.
+export const MAX_QUOTE_WORDS = 20;
+
 export const DAILY_QUOTE_SYSTEM_PROMPT = [
   "You pick one short quotation to put at the top of a working dashboard, under the greeting. One person reads it: the operator of a small marketing agency that works with chiropractic and spine clinics. They are doing daily prospecting and outreach work and tracking it against daily goals.",
   "",
@@ -65,7 +76,9 @@ export const DAILY_QUOTE_SYSTEM_PROMPT = [
   "- A real quotation from a real source: a historical figure, a philosopher (Greek philosophy, Stoicism and the rest), a religious text (the Quran, the Bible, the Dhammapada, and so on), or a well-known modern figure. Attribute it accurately.",
   "- It must fit the situation described below specifically. A quote about patience through a lean stretch is right for a quiet fortnight and wrong for a strong one; a quote about not being satisfied with a good run is right for a streak and wrong for a flat Monday.",
   "- Never invent a quotation and never attribute a real one to the wrong person. If you are not certain of the wording or the source, pick something you are certain of.",
-  "- 20 words maximum, and shorter is better. It sits on one line.",
+  "- If a list of recent quotations is given below, pick something different from every one of them. A new day gets a new line — that is the whole point of asking daily.",
+  "- Range widely across sources and centuries rather than returning to the same handful of famous lines.",
+  `- ${MAX_QUOTE_WORDS} words maximum, and shorter is better. It is one sentence on the dashboard, not a paragraph.`,
   "- Plain and grounded. No emoji, no hashtags, no exclamation marks, no coaching-slogan register, no addressing the reader by name.",
   "",
   "REPLY FORMAT",
@@ -84,6 +97,13 @@ export function buildDailyQuotePrompt(context: DailyQuoteContext): string {
       : "- Current streak: none — the run of goal-hitting days is broken or has not started.",
     `- Recent activity: ${TREND_SENTENCES[context.trend]}`,
     "",
+    ...(context.recent.length > 0
+      ? [
+          "ALREADY USED — DO NOT REPEAT ANY OF THESE",
+          ...context.recent.map((q) => `- ${q}`),
+          "",
+        ]
+      : []),
     "Pick the one quotation that fits this particular day. Reply as json.",
   ].join("\n");
 }
@@ -95,10 +115,67 @@ export interface DailyQuoteText {
   author: string;
 }
 
-// A ceiling on both fields. The prompt asks for one line; this is what stops a
-// model that ignored it from putting a paragraph on the dashboard.
+// A ceiling on both fields. The prompt asks for one short line; this is what
+// stops a model that ignored it from putting a paragraph on the dashboard.
+//
+// The word count is the real cap and it is enforced here, when the quote is
+// generated, rather than left to the line to hide: CSS that clips or ellipses
+// an overflow still has to decide where, and it decides mid-word. capQuote
+// cuts at a sentence — see below — so what is stored is already a whole
+// thought and the line only has to wrap it.
+//
+// The character ceiling behind the word one, for the pathological case of
+// twenty very long words. Also a truncation rather than a rejection.
 const MAX_QUOTE_CHARS = 200;
 const MAX_AUTHOR_CHARS = 80;
+
+function words(text: string): string[] {
+  return text.split(/\s+/).filter(Boolean);
+}
+
+// A quotation cut to MAX_QUOTE_WORDS at a boundary that leaves a whole
+// thought behind.
+//
+// Whole sentences first: as many complete ones as fit, which is the cut nobody
+// can see was made. Failing that — a single sentence longer than the cap — the
+// last clause boundary (a comma, a semicolon, a dash) inside the budget, and
+// failing that a plain word boundary, both closed with an ellipsis so the line
+// does not read as a quotation that simply stops.
+export function capQuote(text: string): string {
+  const trimmed = text.trim();
+  if (words(trimmed).length <= MAX_QUOTE_WORDS && trimmed.length <= MAX_QUOTE_CHARS) {
+    return trimmed;
+  }
+
+  // Sentences, with their terminators kept on the end of each.
+  const sentences = trimmed.match(/[^.!?…]+[.!?…]*\s*/g) ?? [trimmed];
+  let kept = "";
+  for (const sentence of sentences) {
+    const candidate = (kept + sentence).trimEnd();
+    if (
+      words(candidate).length > MAX_QUOTE_WORDS ||
+      candidate.length > MAX_QUOTE_CHARS
+    ) {
+      break;
+    }
+    kept = kept + sentence;
+  }
+  kept = kept.trim();
+  if (kept !== "") return kept;
+
+  // No whole sentence fits. Take the words that do, then step back to the last
+  // clause boundary in them if there is one.
+  let head = words(trimmed).slice(0, MAX_QUOTE_WORDS).join(" ");
+  while (head.length > MAX_QUOTE_CHARS - 1) {
+    const cut = head.lastIndexOf(" ");
+    if (cut <= 0) break;
+    head = head.slice(0, cut);
+  }
+  const clause = head.search(/[,;:—–][^,;:—–]*$/);
+  if (clause > 0) head = head.slice(0, clause);
+  // Whatever punctuation the cut landed on is not the quotation's own.
+  return `${head.replace(/[\s,;:—–-]+$/, "")}…`;
+}
 
 // The model's JSON, or null if it is not the object that was asked for. Null
 // rather than a throw: the caller has a fallback for exactly this, and a
@@ -120,10 +197,13 @@ export function parseDailyQuote(content: string): DailyQuoteText | null {
   const text = obj.quote.trim().replace(/^["“”']+|["“”']+$/g, "").trim();
   const author = obj.author.trim().replace(/^[—–-]\s*/, "").trim();
   if (text === "" || author === "") return null;
-  if (text.length > MAX_QUOTE_CHARS || author.length > MAX_AUTHOR_CHARS) {
-    return null;
-  }
-  return { text, author };
+  // The quote is cut to fit rather than thrown away: a good quotation that ran
+  // three words long is still the right line for the day, and rejecting it
+  // spends the day on a generic fallback instead. The author is a name and has
+  // no sentence boundary to cut at, so an implausibly long one is still read as
+  // a malformed answer.
+  if (author.length > MAX_AUTHOR_CHARS) return null;
+  return { text: capQuote(text), author };
 }
 
 // ─── The fallback ──────────────────────────────────────────────────────────
@@ -168,7 +248,8 @@ export const FALLBACK_DAILY_QUOTES: DailyQuoteText[] = [
 ];
 
 // Which fallback, for a given day. Seeded off the day so it is stable through
-// the day and different tomorrow, the same way the greeting beside it is.
+// the day and different tomorrow — the same rule the generated quote follows,
+// and the opposite of the greeting above it, which re-rolls on every load.
 export function fallbackDailyQuote(dayKey: string): DailyQuoteText {
   let hash = 0;
   for (const ch of dayKey) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
