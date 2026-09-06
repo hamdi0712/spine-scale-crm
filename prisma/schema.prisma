@@ -1028,6 +1028,41 @@ model DailyKpiSettings {
   updatedAt DateTime @updatedAt
 }
 
+// A day the operator has declared fulfilled for one daily KPI, whatever the
+// records say.
+//
+// The one stored fact on the Daily KPI page. Everything else there is counted
+// off records that carry the instant they happened, and that is what makes a
+// past day show what it actually had — but "this day does not count against
+// me" is not a fact about the records, it is a judgement about the day, so
+// there is nowhere to derive it from and it has to be written down. Same
+// shape of thing as Client.healthOverride: an explicit override that sits on
+// top of a computation rather than inside it.
+//
+// Presence is the flag. A row means skipped and no row means not skipped, so
+// un-skipping is a delete and there is no third state to reason about.
+//
+// `metric` is one of DAILY_KPI_KEYS in src/lib/dailyKpi.ts, stored as the
+// metric's key. Only the daily pair can be skipped and today only
+// "qualifiedLeads" is offered (SKIPPABLE_KPI_KEYS), but the column is a metric
+// rather than a boolean so opening another one later is a one-line change here
+// and no migration at all.
+//
+// The date is a day at midnight UTC, the same reading of a day the counts are
+// filed under (toUtcDay in src/lib/dailyKpi.ts).
+model DailyKpiSkip {
+  id     String   @id @default(cuid())
+  date   DateTime
+  metric String
+
+  createdAt DateTime @default(now())
+
+  // One row per metric per day. Two tabs skipping the same day both write and
+  // the second is a no-op rather than a duplicate.
+  @@unique([date, metric])
+  @@index([date])
+}
+
 // ─── Copilot conversations ─────────────────────────────────────────────────
 //
 // A saved chat with Iman, the copilot on /copilot.

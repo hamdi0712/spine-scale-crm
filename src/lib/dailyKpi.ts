@@ -337,80 +337,76 @@ export function streakLength(
   return streak;
 }
 
-// ─── Surplus rollover (Qualified Leads only) ───────────────────────────────
+// ─── Skipped days (manual override) ────────────────────────────────────────
 
-// Qualified Leads is the one metric whose surplus banks.
+// A day can be declared fulfilled for one daily metric, whatever that day's
+// count actually was.
 //
-// The other three do not, and deliberately. A message sent is an action taken
-// on a day and cannot be taken on a later one retroactively; the monthly pair
-// already spreads over a month, which is its own kind of averaging. Qualifying
-// is the odd one out — it comes in lumps, because a good discovery session
-// surfaces a dozen clinics at once and the next morning has nothing left to
-// score. Holding a lumpy input to a flat daily line punishes the exact
-// behaviour it is meant to encourage, so the leftover is banked instead.
-export const ROLLOVER_KEY: DailyKpiKey = "qualifiedLeads";
+// Everything else on this page is derived — counted off records that carry the
+// instant they happened — and a skip deliberately is not. "Today does not
+// count against me" is a judgement about the day rather than a fact about the
+// records, so it is written down and read back (model DailyKpiSkip in
+// prisma/schema.prisma), the same way Client.healthOverride sits on top of the
+// health computation rather than inside it.
+//
+// Qualifying is the one that needs it: it arrives in lumps, because a good
+// discovery session surfaces a dozen clinics at once and the next morning has
+// nothing left to score. The list is a list rather than a constant so opening
+// another metric later is one line here.
+export const SKIPPABLE_KPI_KEYS: DailyKpiKey[] = ["qualifiedLeads"];
 
-export function hasRollover(key: DailyKpiKey): boolean {
-  return key === ROLLOVER_KEY;
+export function isSkippable(key: DailyKpiKey): boolean {
+  return SKIPPABLE_KPI_KEYS.includes(key);
 }
 
-// One day in the carry-forward ledger.
-//
-// `raw` is what actually happened that day and is what the trend chart and the
-// breakdown table's day columns keep showing — the ledger is a way of scoring
-// the days, not a rewriting of them. Everything that judges a day against the
-// goal reads `credited` (or `progress`, which is `credited` capped at it).
-export interface RolloverDay {
-  day: Date;
-  raw: number; // what was actually qualified that day
-  carryIn: number; // surplus arriving from the day before
-  credited: number; // raw + carryIn
-  progress: number; // credited, capped at the goal — what the ring reads
-  carryOut: number; // surplus leaving for the next day
+// Which metrics are skipped on one day. A set rather than a flag per metric,
+// because presence is the whole state: in it is skipped, out of it is not.
+export type DailyKpiSkips = Set<DailyKpiKey>;
+
+// The days' skips keyed by the day's timestamp, which is how the page looks a
+// day up everywhere else.
+export type DailyKpiSkipsByDay = Map<number, DailyKpiSkips>;
+
+export function skipsOn(
+  skips: DailyKpiSkipsByDay,
+  day: Date,
+): DailyKpiSkips {
+  return skips.get(day.getTime()) ?? new Set();
 }
 
-// Walk the days in order, banking each day's leftover into the next.
+// One day's counts as the *scoring* side reads them: a skipped metric is
+// lifted to its goal, so it is exactly met and no more.
 //
-// Computed on read rather than stored, which is the same choice the rest of
-// this page already makes: nothing here is a stored daily total, so a ledger
-// row would be the one number on the page that could disagree with the records
-// behind it — and it would go stale the moment the goal changed. Walking the
-// counts costs one pass over a window the page has already fetched.
-//
-// The carry starts at zero at the first day given: the window is where
-// tracking starts, and there is no surplus behind it to inherit.
-//
-// A goal of zero is "nothing asked for" — every day is met and nothing banks,
-// because a surplus over no goal at all is not a quantity worth carrying.
-export function rolloverLedger(
-  days: DailyKpiDay[],
-  goal: number,
-): RolloverDay[] {
-  const ledger: RolloverDay[] = [];
-  let carryIn = 0;
-  for (const d of days) {
-    const raw = d.counts[ROLLOVER_KEY];
-    const credited = raw + carryIn;
-    const progress = goal <= 0 ? credited : Math.min(credited, goal);
-    const carryOut = goal <= 0 ? 0 : Math.max(0, credited - goal);
-    ledger.push({ day: d.day, raw, carryIn, credited, progress, carryOut });
-    carryIn = carryOut;
+// Doing it here, once, is what keeps the override out of everything
+// downstream — the ring, the score, the streak and the breakdown's "% of goal"
+// all go on asking their own question of a DailyKpiCounts and get the skip
+// without knowing it exists. What must stay honest — the trend chart, the
+// breakdown's day columns — simply reads the raw counts instead, and the page
+// keeps both in hand.
+export function scoredCounts(
+  counts: DailyKpiCounts,
+  goals: DailyKpiGoals,
+  skips: DailyKpiSkips,
+): DailyKpiCounts {
+  if (skips.size === 0) return counts;
+  // Walked over the metric list rather than over the set, so the keys are the
+  // typed four rather than whatever a Set iterator hands back.
+  const scored = { ...counts };
+  for (const key of DAILY_KPI_KEYS) {
+    if (skips.has(key)) scored[key] = Math.max(counts[key], goals[key]);
   }
-  return ledger;
+  return scored;
 }
 
-// The same days with Qualified Leads swapped for its credited value, so
-// everything that already scores a day off `DailyKpiCounts` — the score, the
-// streak — gets the rollover without knowing it exists. Every other metric is
-// passed through untouched.
-export function creditedDays(
+// The same window of days with each day's skips applied, for the streak.
+export function scoredDays(
   days: DailyKpiDay[],
-  goal: number,
+  goals: DailyKpiGoals,
+  skips: DailyKpiSkipsByDay,
 ): DailyKpiDay[] {
-  const ledger = rolloverLedger(days, goal);
-  return days.map((d, i) => ({
+  return days.map((d) => ({
     day: d.day,
-    counts: { ...d.counts, [ROLLOVER_KEY]: ledger[i].credited },
+    counts: scoredCounts(d.counts, goals, skipsOn(skips, d.day)),
   }));
 }
 

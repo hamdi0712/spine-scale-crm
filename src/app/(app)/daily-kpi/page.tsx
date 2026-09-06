@@ -15,23 +15,28 @@ import {
   MonthlyPace,
   allGoalsMet,
   averageFor,
-  creditedDays,
   dailyScore,
   emptyCounts,
   isMonthly,
+  isSkippable,
   monthStart,
   monthlyPace,
   pctChange,
   progressPct,
-  ROLLOVER_KEY,
-  rolloverLedger,
   scoreNote,
+  scoredCounts,
+  scoredDays,
+  skipsOn,
   streakLength,
   sumCounts,
   toUtcDay,
 } from "@/lib/dailyKpi";
-import { loadDailyKpiGoals, loadDailyKpiRange } from "@/lib/dailyKpiStore";
-import { saveDailyKpiGoals } from "@/lib/actions/dailyKpi";
+import {
+  loadDailyKpiGoals,
+  loadDailyKpiRange,
+  loadDailyKpiSkips,
+} from "@/lib/dailyKpiStore";
+import { saveDailyKpiGoals, toggleDailyKpiSkip } from "@/lib/actions/dailyKpi";
 import { fmtDate } from "@/lib/format";
 import DailyKpiCard, { KpiMark } from "@/components/DailyKpiCard";
 import DailyKpiGoalsForm from "@/components/DailyKpiGoalsForm";
@@ -83,6 +88,13 @@ export default async function DailyKpiPage({
 
   const goals = await loadDailyKpiGoals();
   const history = await loadDailyKpiRange(addDays(day, -(HISTORY_DAYS - 1)), day);
+  // The one stored thing on this page: the days the operator has declared
+  // fulfilled for a metric regardless of the count (model DailyKpiSkip). Read
+  // over the same window the counts are, because the streak walks all of it.
+  const skips = await loadDailyKpiSkips(
+    addDays(day, -(HISTORY_DAYS - 1)),
+    day,
+  );
 
   const byDay = new Map(history.map((d) => [d.day.getTime(), d]));
   const on = (d: Date): DailyKpiDay =>
@@ -91,39 +103,22 @@ export default async function DailyKpiPage({
   const counts = on(day).counts;
   const yesterday = on(addDays(day, -1)).counts;
 
-  // ─── Qualified Leads' surplus rollover ───────────────────────────────────
+  // ─── Skipped days ────────────────────────────────────────────────────────
   //
-  // Qualified Leads banks its leftover: a day that overshoots the goal carries
-  // the surplus into the next day, and the next day is credited with it before
-  // it is scored (src/lib/dailyKpi.ts). Qualifying arrives in lumps — one good
-  // discovery session surfaces a dozen clinics and the morning after has none
-  // left to score — and a flat daily line would mark down the day after the
-  // work rather than the day the work was skipped.
+  // A skip is an explicit override, not a computation: it says "this day does
+  // not count against me for Qualified Leads", and the scoring side reads the
+  // metric as exactly met on that day whatever the records hold. Same shape as
+  // the client health override — stored, deliberate, and undone as easily as
+  // it was set.
   //
-  // The ledger is walked over the same history the rest of the page reads,
-  // oldest first, so the carry arriving at the viewed day is the one the days
-  // behind it actually produced. It is computed here and stored nowhere: a
-  // stored carry would be the one number on this page that could disagree with
-  // the records behind it, and it would go stale the moment the goal changed.
-  //
-  // Only what *judges* a day reads it — the card's ring, the score, the
-  // streak. The trend chart and the breakdown table's day columns stay on the
-  // raw counts below, because those two exist to show the real day-to-day
-  // pattern, and a banked day drawn as activity would hide the very lumpiness
-  // this rollover exists to forgive.
-  const creditedHistory = creditedDays(history, goals.qualifiedLeads);
-  const creditedByDay = new Map(
-    creditedHistory.map((d) => [d.day.getTime(), d]),
-  );
-  const onCredited = (d: Date): DailyKpiDay =>
-    creditedByDay.get(d.getTime()) ?? { day: d, counts: emptyCounts() };
-
-  const credited = onCredited(day).counts;
-  const creditedYesterday = onCredited(addDays(day, -1)).counts;
-  // The viewed day's row of the ledger, for the card's banked line.
-  const ledgerToday = rolloverLedger(history, goals.qualifiedLeads).find(
-    (r) => r.day.getTime() === day.getTime(),
-  );
+  // Only what *judges* a day reads the scored counts — the card's ring and
+  // percentage, the score, the streak, and the breakdown's "% of goal" and its
+  // tint. The trend chart and the breakdown's day columns stay on the raw
+  // counts below: the visual history is a record of what happened, and a
+  // skipped day drawn as activity would be a number nobody earned.
+  const skippedToday = skipsOn(skips, day);
+  const scored = scoredCounts(counts, goals, skippedToday);
+  const scoredHistory = scoredDays(history, goals, skips);
 
   // ─── Trend ───────────────────────────────────────────────────────────────
 
@@ -158,13 +153,13 @@ export default async function DailyKpiPage({
 
   // ─── Score and streak ────────────────────────────────────────────────────
 
-  // Scored and streaked off the credited counts, so Qualified Leads' banked
-  // surplus counts the same way here as it does on its card. Every other
-  // metric passes through creditedDays untouched.
-  const score = dailyScore(credited, goals);
+  // Scored and streaked off the scored counts, so a skipped day counts the
+  // same way here as it does on its card. A day with nothing skipped passes
+  // through untouched, which is every day until somebody presses the button.
+  const score = dailyScore(scored, goals);
   const note = scoreNote(score);
-  const streak = streakLength(creditedHistory, goals);
-  const metToday = allGoalsMet(credited, goals);
+  const streak = streakLength(scoredHistory, goals);
+  const metToday = allGoalsMet(scored, goals);
 
   // ─── Weekly summary ──────────────────────────────────────────────────────
   //
@@ -248,24 +243,27 @@ export default async function DailyKpiPage({
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {DAILY_KPI_KEYS.map((key) => {
           const monthly = isMonthly(key);
+          // The button is offered on the day being looked at, and a past day
+          // is not one of those: this page is a record of days that have
+          // happened, and the same rule that makes a past checklist read-only
+          // makes a past day's skip read-only too. The tag still shows, so a
+          // day skipped last week says so when you go back to it.
+          const canSkip = !monthly && isSkippable(key) && isToday;
           return (
             <DailyKpiCard
               key={key}
               metric={key}
-              count={
-                monthly
-                  ? monthToDate[key]
-                  : key === ROLLOVER_KEY
-                    ? credited[key]
-                    : counts[key]
-              }
+              count={monthly ? monthToDate[key] : counts[key]}
               goal={goals[key]}
-              yesterday={
-                key === ROLLOVER_KEY ? creditedYesterday[key] : yesterday[key]
-              }
+              yesterday={yesterday[key]}
               isToday={isToday}
               pace={monthly ? pace[key] : undefined}
-              carryIn={key === ROLLOVER_KEY ? ledgerToday?.carryIn : undefined}
+              skipped={skippedToday.has(key)}
+              skip={
+                canSkip
+                  ? toggleDailyKpiSkip.bind(null, toDayKey(day), key)
+                  : undefined
+              }
             />
           );
         })}
@@ -441,8 +439,9 @@ export default async function DailyKpiPage({
                   const monthly = isMonthly(key);
                   // The day columns stay raw (below), but whether the goal was
                   // met is the same question the card and the streak answer,
-                  // and Qualified Leads answers it off its credited value.
-                  const dayCount = key === ROLLOVER_KEY ? credited[key] : counts[key];
+                  // and a skipped day answers it as met.
+                  const skipped = skippedToday.has(key);
+                  const dayCount = scored[key];
                   const met = monthly
                     ? pace[key].onTrack
                     : dayCount >= goals[key];
@@ -458,10 +457,19 @@ export default async function DailyKpiPage({
                             <div className="truncate text-sm font-normal">
                               {DAILY_KPI_LABELS[key]}
                             </div>
-                            <div className="text-xs font-normal text-muted">
-                              {monthly
-                                ? `${pace[key].pct}% of the monthly goal`
-                                : `${progressPct(dayCount, goals[key])}% of goal`}
+                            <div className="flex items-center gap-1.5 text-xs font-normal text-muted">
+                              <span>
+                                {monthly
+                                  ? `${pace[key].pct}% of the monthly goal`
+                                  : `${progressPct(dayCount, goals[key])}% of goal`}
+                              </span>
+                              {/* Where that 100% came from, said in the same
+                                  muted pill the card wears. */}
+                              {skipped && (
+                                <span className="chip-stat h-[18px] px-2 text-[10px]">
+                                  Skipped
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>

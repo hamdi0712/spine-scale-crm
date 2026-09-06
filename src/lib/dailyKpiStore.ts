@@ -24,7 +24,10 @@ import {
   DailyKpiGoals,
   dailyKpiGoalsRow,
   DailyKpiKey,
+  DailyKpiSkips,
+  DailyKpiSkipsByDay,
   emptyCounts,
+  isSkippable,
   monthStart,
   readDailyKpiGoals,
   sumCounts,
@@ -224,4 +227,62 @@ export async function loadDailyKpiCounts(day: Date): Promise<DailyKpiCounts> {
 export async function loadMonthToDate(day: Date): Promise<DailyKpiCounts> {
   const days = await loadDailyKpiRange(monthStart(day), day);
   return sumCounts(days.map((d) => d.counts));
+}
+
+// ─── Skipped days ──────────────────────────────────────────────────────────
+//
+// The one stored thing on this page: a day the operator has declared fulfilled
+// for a metric, whatever that day's count was (model DailyKpiSkip in
+// prisma/schema.prisma). Presence is the flag, so a read is "which rows exist
+// in this window" and nothing has to be defaulted.
+
+// Every skip in a window, keyed by the day's timestamp — the same key the page
+// looks a day up by everywhere else.
+//
+// One query over the same range the counts are read from, rather than a lookup
+// per day: the page already walks ninety days for the streak.
+export async function loadDailyKpiSkips(
+  from: Date,
+  through: Date,
+): Promise<DailyKpiSkipsByDay> {
+  const start = toUtcDay(from);
+  const end = addDays(toUtcDay(through), 1); // exclusive
+  const rows = await prisma.dailyKpiSkip.findMany({
+    where: { date: { gte: start, lt: end } },
+    select: { date: true, metric: true },
+  });
+
+  const skips: DailyKpiSkipsByDay = new Map();
+  for (const row of rows) {
+    // A row written for a metric that is no longer skippable — or by a build
+    // that spelled one differently — is ignored rather than trusted into a
+    // count that would then be lifted to a goal it never met.
+    if (!isSkippable(row.metric as DailyKpiKey)) continue;
+    const key = toUtcDay(row.date).getTime();
+    const set: DailyKpiSkips = skips.get(key) ?? new Set();
+    set.add(row.metric as DailyKpiKey);
+    skips.set(key, set);
+  }
+  return skips;
+}
+
+// Flip one day's skip for one metric, and say which way it went.
+//
+// A delete rather than a stored `false`, so "not skipped" has exactly one
+// representation and un-skipping leaves no trace to reason about later.
+export async function toggleDailyKpiSkip(
+  day: Date,
+  metric: DailyKpiKey,
+): Promise<boolean> {
+  const date = toUtcDay(day);
+  const existing = await prisma.dailyKpiSkip.findUnique({
+    where: { date_metric: { date, metric } },
+    select: { id: true },
+  });
+  if (existing) {
+    await prisma.dailyKpiSkip.delete({ where: { id: existing.id } });
+    return false;
+  }
+  await prisma.dailyKpiSkip.create({ data: { date, metric } });
+  return true;
 }
