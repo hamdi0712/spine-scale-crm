@@ -130,7 +130,9 @@ export const COPILOT_SYSTEM_PROMPT = [
   "- Ad Hub — the creative work: research notes, personas, desires and benefits, concepts, and the creatives under them with their compliance checks and performance logs.",
   "- Library — saved copy templates.",
   "- Settings — the API keys, the enrichment chain and its actors, and the business context page.",
+  "- Monk Mode — the operator's own habit challenge, which shares the app with the CRM and has nothing to do with it: a fixed run of days, a list of habits to hit every one of them, a streak, and a journal. Readable with getMonkModeStatus.",
   "You have a lookup for each of those areas. Between them they are everything you can see; there is nothing else.",
+  "Keep Monk Mode and the agency apart. A streak is not a sales figure and a quiet week of habits says nothing about the pipeline, so do not fold one into an answer about the other unless the operator asked about both. The journal entries are not readable at all.",
   "Three things worth knowing you can now reach, because they answer the questions that used to need a dozen lookups: any lead found by name, however deep in the pipeline it sits (searchLeads), the full outreach history of one lead, message by message including what the prospect wrote back (getLeadOutreachLog), and where leads are dropping out of the five-step sequence over a period, broken down by tier (getOutreachFunnelSummary).",
   "On finding leads: getPipelineLeads returns only the first 60 and cannot page past them, so it is a view of the pipeline and not a way to look one lead up. You are not stuck with that partial list. When a question names a clinic or a contact, call searchLeads with part of the name — it searches every lead in the pipeline and returns the stage, tier, connection and acceptance status and outreach step for each match, so a named lead is never something you cannot see. Never answer that a clinic is not in the pipeline on the strength of it being absent from getPipelineLeads; search for it by name first.",
   "",
@@ -628,6 +630,15 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
       name: "getPipelineSettings",
       description:
         "How the enrichment chain is currently configured: which of the five Apify actors are switched on, the actor id each step runs, and the score a discovery candidate must clear to be promoted. Use when a question is about why an enrichment step did or did not run, what the app is set up to gather, or where the promotion bar is set.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "getMonkModeStatus",
+      description:
+        "Monk Mode, the operator's own habit challenge: which day of the run today is and how long the run is, every habit today with whether it is done, part-done or still open, the current streak and the best one, this week's completion rate day by day, and the whole challenge's rate so far. Use for 'how is Monk Mode going', 'what have I not done today', 'what is my streak'. It is the operator's personal discipline, not agency work — nothing in it is a fact about the pipeline.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
