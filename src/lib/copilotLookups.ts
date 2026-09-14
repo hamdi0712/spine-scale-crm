@@ -127,6 +127,24 @@ import {
   toChecklistDay,
 } from "@/lib/dailyChecklist";
 import { readDayRows } from "@/lib/dailyChecklistStore";
+import {
+  activeHabits,
+  loadChallenge,
+  loadHabits,
+  loadProgress,
+} from "@/lib/monkModeStore";
+import {
+  challengeDays,
+  challengeProgress,
+  dayIsComplete,
+  daysSoFar,
+  indexProgress,
+  monkPerfectDays,
+  monkStreaks,
+  monkTally,
+  monkWeekBars,
+  readMonkDay,
+} from "@/lib/monkMode";
 import { computeDailyBonus } from "@/lib/dailyBonus";
 import {
   DAILY_KPI_BLURBS,
@@ -2380,6 +2398,126 @@ export async function searchLeads(args: { query?: string }): Promise<unknown> {
   };
 }
 
+// ─── 26. Monk Mode ─────────────────────────────────────────────────────────
+//
+// The one lookup that is not about the CRM. Monk Mode is the operator's own
+// discipline challenge — habits, a streak and a run of days — and it shares
+// this app with the pipeline without sharing anything else. Nothing here
+// reads a lead, a client or a number off the funnel, and nothing in the
+// funnel lookups reads a habit.
+//
+// It reads through the same rules the pages do (src/lib/monkMode.ts) rather
+// than counting rows itself, so the day the copilot reports and the day the
+// banner shows are the same day by construction. loadChallenge and loadHabits
+// seed on first use, which is the one write anywhere behind this file — it is
+// the challenge row and the default habit list coming into being, the same
+// thing opening the page for the first time does, and it happens once ever.
+// Asking about a day writes nothing: completions have no row to seed, absence
+// already means zero.
+export async function getMonkModeStatus(): Promise<unknown> {
+  const now = new Date();
+  const today = toChecklistDay(now);
+
+  const [challenge, allHabits] = await Promise.all([
+    loadChallenge(now),
+    loadHabits(),
+  ]);
+  const habits = activeHabits(allHabits);
+  const shape = challengeProgress(challenge, now);
+
+  // One window covering the challenge and the calendar week today sits in —
+  // the week can start before the challenge does, and on the last day it can
+  // run past the end.
+  const days = challengeDays(challenge);
+  const monday = addDays(today, -((today.getUTCDay() + 6) % 7));
+  const from = new Date(Math.min(days[0].getTime(), monday.getTime()));
+  const to = new Date(
+    Math.max(days[days.length - 1].getTime(), addDays(monday, 6).getTime()),
+  );
+  const progress = indexProgress(await loadProgress(from, to));
+
+  const todayRows = readMonkDay(habits, progress, today, now);
+  const streaks = monkStreaks(challenge, habits, progress, now);
+  const tally = monkTally(challenge, habits, progress, now);
+  const lived = daysSoFar(challenge, now);
+
+  // The week's rate, weighted the way a day's own completion is: every habit
+  // the week has asked for so far against every one that was done. A straight
+  // average of seven daily percentages would let a quiet Monday and a perfect
+  // Tuesday cancel out regardless of how much each day actually asked.
+  let weekDone = 0;
+  let weekTarget = 0;
+  const week = monkWeekBars(challenge, habits, progress, now)
+    .map((bar, i) => ({ bar, day: addDays(monday, i) }))
+    // A day the challenge does not cover, and a day that has not happened
+    // yet, are both nothing to report rather than a zero to average in.
+    .filter(({ bar }) => bar.inChallenge && !bar.future)
+    .map(({ bar, day }) => {
+      for (const row of readMonkDay(habits, progress, day, now)) {
+        weekDone += row.done;
+        weekTarget += row.target;
+      }
+      return { day: bar.label, date: bar.key, completionPct: bar.pct };
+    });
+
+  return {
+    howItWorks:
+      "Monk Mode is the operator's personal habit challenge — a fixed run of days with a list of habits to hit every one of them. It is not part of the CRM: nothing in it touches leads, clients or the funnel, so do not read a quiet week here as a quiet week in the pipeline, or the other way round.",
+    challenge: {
+      day: shape.day,
+      totalDays: shape.total,
+      reads: `Day ${shape.day} of ${shape.total}`,
+      started: shape.started,
+      finished: shape.finished,
+      startDate: dayKey(shape.start),
+      endDate: dayKey(shape.end),
+      daysLived: lived.length,
+    },
+    today: {
+      date: dayKey(today),
+      habitsTotal: habits.length,
+      habitsComplete: todayRows.filter((r) => r.status === "complete").length,
+      // Still open rather than missed: today is not over, and an untouched
+      // habit at nine in the morning is work available, not work failed.
+      habits: todayRows.map((r) => ({
+        habit: r.habit.name,
+        done: r.done,
+        target: r.target,
+        status: r.status,
+      })),
+      statusMeans:
+        "complete — the habit hit its full target for the day. partial — some of it was done. pending — nothing yet, and the day is still running, so it is not a miss. missed only ever appears on a day that is over.",
+      allDone: habits.length > 0 && dayIsComplete(todayRows),
+    },
+    streak: {
+      currentDays: streaks.current,
+      bestDays: streaks.best,
+      means:
+        "Consecutive days on which every active habit hit its full target. Today counts once it is complete and is skipped until then, so an unfinished today never breaks the run behind it.",
+      perfectDaysSoFar: monkPerfectDays(habits, progress, lived, now),
+    },
+    thisWeek: {
+      // Monday-first, the same week the app's own bars draw.
+      weekStart: dayKey(monday),
+      completionPct: weekTarget === 0 ? null : Math.round((weekDone / weekTarget) * 100),
+      means:
+        "Every habit this week has asked for so far against every one that was done, weighted by target rather than averaged across days. Null when the week has no challenge days behind it yet.",
+      days: week,
+    },
+    overall: {
+      completionPct: tally.pct,
+      completed: tally.completed,
+      inProgress: tally.inProgress,
+      missed: tally.missed,
+      pendingToday: tally.pending,
+      means:
+        "Habit-days across the challenge so far. The percentage is completed as a share of the ones that are settled — today's untouched habits are counted separately and kept out of it.",
+    },
+    reminder:
+      "Reading only. Habits are ticked off on the Monk Mode page, and the habit list and the challenge length are edited in its own Settings.",
+  };
+}
+
 // ─── The dispatcher ────────────────────────────────────────────────────────
 //
 // The allow-list, and the only place a tool name becomes a call. A name that
@@ -2413,6 +2551,7 @@ const LOOKUPS = {
   getDailyKpiStatus,
   getLeadOutreachLog,
   getOutreachFunnelSummary,
+  getMonkModeStatus,
 } as const;
 
 export type CopilotToolName = keyof typeof LOOKUPS;
@@ -2602,6 +2741,8 @@ export async function runCopilotTool(
         ok: true,
         data: await getOutreachFunnelSummary({ days: num(args.days) }),
       };
+    case "getMonkModeStatus":
+      return { ok: true, data: await getMonkModeStatus() };
   }
 }
 
