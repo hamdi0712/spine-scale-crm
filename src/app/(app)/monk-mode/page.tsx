@@ -32,7 +32,7 @@
 // It shares the app shell, the sidebar and the design tokens, and nothing else.
 
 import Link from "next/link";
-import { IconTrophy } from "@tabler/icons-react";
+import { IconCalendarMonth, IconCrownFilled, IconNotebook } from "@tabler/icons-react";
 import {
   activeHabits,
   loadChallenge,
@@ -49,7 +49,6 @@ import {
   indexProgress,
   monkCelebration,
   monkMonth,
-  monkMonthEarnedTrophy,
   monkPerfectDays,
   monkStreakRow,
   monkStreaks,
@@ -60,13 +59,13 @@ import {
 import { greetingFor } from "@/lib/greeting";
 import Greeting from "@/components/Greeting";
 import MonkCelebrate from "@/components/MonkCelebrate";
-import { MonkGlowMark } from "@/components/MonkBadge";
 import MonkCalendarGrid from "@/components/MonkCalendarGrid";
 import MonkDonut from "@/components/MonkDonut";
 import MonkHabitGrid from "@/components/MonkHabitGrid";
 import MonkHeader from "@/components/MonkHeader";
 import MonkHero from "@/components/MonkHero";
 import MonkNote from "@/components/MonkNote";
+import MonkStatBadge from "@/components/MonkStatBadge";
 import MonkStreakPanel from "@/components/MonkStreakPanel";
 
 export const dynamic = "force-dynamic";
@@ -164,7 +163,7 @@ export default async function MonkModePage() {
         now={now}
       />
 
-      <section className="card mt-4 px-4 py-3.5">
+      <section className="card mt-3.5 px-4 py-3">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="display text-base font-semibold">
             Your {active.length}{" "}
@@ -189,9 +188,14 @@ export default async function MonkModePage() {
           tallest one's: each is a short reading, and the row is what makes
           them comparable. This replaced a main column and a rail, which could
           not be the same height as each other and so never were. */}
-      <div className="mt-4 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3.5 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <section className="card flex flex-col p-5">
-          <h2 className="display mb-4 shrink-0 text-base font-semibold">
+          {/* Every panel in the row is headed by its own mark now. Filled
+              rather than outlined: at sixteen pixels beside a heading a
+              stroked glyph reads as grey noise, and a solid one reads as an
+              icon. */}
+          <h2 className="display mb-4 flex shrink-0 items-center gap-2 text-base font-semibold">
+            <IconCrownFilled size={16} className="text-warn" aria-hidden />
             Overall Progress
           </h2>
           <MonkDonut tally={tally} />
@@ -212,7 +216,15 @@ export default async function MonkModePage() {
 
         <section className="card flex flex-col p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="display text-base font-semibold">{month.label}</h2>
+            <h2 className="display flex items-center gap-2 text-base font-semibold">
+              <IconCalendarMonth
+                size={16}
+                stroke={2}
+                className="text-accent"
+                aria-hidden
+              />
+              {month.label}
+            </h2>
             <Link
               href="/monk-mode/calendar"
               className="text-xs font-medium text-accent hover:underline"
@@ -221,26 +233,32 @@ export default async function MonkModePage() {
             </Link>
           </div>
           <MonkCalendarGrid month={month} />
-          <p className="num mt-auto flex items-center gap-2 border-t border-line/60 pt-3 text-xs text-muted">
-            {/* The trophy appears once the month is genuinely going well —
-                four days in and four fifths of them complete. A high bar on
-                purpose: a trophy that turns up on day two for two good days is
-                a trophy that means nothing by day ten. */}
-            {monkMonthEarnedTrophy(monthComplete, monthCells.length) && (
-              <MonkGlowMark tone="gold" className="h-5 w-5 shrink-0">
-                <IconTrophy size={11} stroke={2} aria-hidden />
-              </MonkGlowMark>
-            )}
-            <span>
-              {monthComplete} of {monthCells.length}{" "}
-              {monthCells.length === 1 ? "day" : "days"} complete
-            </span>
-          </p>
+          {/* The same strip Overall Progress closes with, so the two panels
+              end on one object rather than on a caption and a badge. The
+              trophy is unconditional here: the strip is the month's result and
+              a result needs a mark, where a bare count beside an empty slot
+              read as something failing to appear. */}
+          <div className="mt-auto pt-3">
+            <MonkStatBadge icon="trophy" tone="gold">
+              <span className="num font-medium text-ink">
+                {monthComplete} of {monthCells.length}
+              </span>{" "}
+              {monthCells.length === 1 ? "day" : "days"} complete this month
+            </MonkStatBadge>
+          </div>
         </section>
 
         <section className="card flex flex-col p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="display text-base font-semibold">Today&rsquo;s Note</h2>
+            <h2 className="display flex items-center gap-2 text-base font-semibold">
+              <IconNotebook
+                size={16}
+                stroke={2}
+                className="text-ai"
+                aria-hidden
+              />
+              Today&rsquo;s Note
+            </h2>
             <Link
               href="/monk-mode/journal"
               className="text-xs font-medium text-accent hover:underline"

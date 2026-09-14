@@ -194,18 +194,29 @@ export function monkIconKey(value: string | null | undefined): string {
 // draw the Tabler glyph they always did. That is the fallback and it is not a
 // degraded state: the artwork is decoration over a UI that was complete
 // without it.
-export const MONK_HABIT_ART: Record<string, string> = {
-  ban: "no-porn",
-  mosque: "salah",
-  book: "quran",
-  droplet: "skincare",
-  meditation: "meditation",
-  laptop: "business",
-  dumbbell: "exercise",
+// `bottom: null` is a habit with an icon but no illustration. Daily Salah is
+// the one: it is the only multi-target habit, so its card carries five check
+// dots and a count where the others carry a single word, and a painting behind
+// that is one thing too many in a hundred and fifty pixels.
+export interface MonkHabitArt {
+  icon: string;
+  bottom: string | null;
+}
+
+export const MONK_HABIT_ART: Record<string, MonkHabitArt> = {
+  ban: { icon: "no-porn", bottom: "no-porn" },
+  mosque: { icon: "salah", bottom: null },
+  book: { icon: "quran", bottom: "quran" },
+  droplet: { icon: "skincare", bottom: "skincare" },
+  meditation: { icon: "meditation", bottom: "meditation" },
+  laptop: { icon: "business", bottom: "business" },
+  dumbbell: { icon: "exercise", bottom: "exercise" },
 };
 
-// The artwork slug for a habit's icon, or null where there is none.
-export function monkHabitArt(icon: string | null | undefined): string | null {
+// The artwork for a habit's icon, or null where there is none.
+export function monkHabitArt(
+  icon: string | null | undefined,
+): MonkHabitArt | null {
   return MONK_HABIT_ART[monkIconKey(icon)] ?? null;
 }
 
@@ -224,6 +235,10 @@ export function monkHabitArt(icon: string | null | undefined): string | null {
 export interface MonkAccent {
   key: string;
   label: string;
+  // The colour variable itself, as `var(--c-…)`. The card's tint and glow are
+  // composed with an alpha at the call site — `rgb(${token} / 0.16)` — which a
+  // finished colour cannot be.
+  token: string;
   // The glyph and any figure drawn in the habit's own colour.
   text: string;
   // The disc behind the glyph.
@@ -246,6 +261,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-accent/10",
     border: "border-accent/30",
     fill: "bg-accent/5",
+    token: "var(--c-accent)",
     varRef: "rgb(var(--c-accent))",
   },
   {
@@ -255,6 +271,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-teal/10",
     border: "border-teal/30",
     fill: "bg-teal/5",
+    token: "var(--c-teal)",
     varRef: "rgb(var(--c-teal))",
   },
   {
@@ -264,6 +281,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-indigo/10",
     border: "border-indigo/30",
     fill: "bg-indigo/5",
+    token: "var(--c-indigo)",
     varRef: "rgb(var(--c-indigo))",
   },
   {
@@ -273,6 +291,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-purple/10",
     border: "border-purple/30",
     fill: "bg-purple/5",
+    token: "var(--c-purple)",
     varRef: "rgb(var(--c-purple))",
   },
   {
@@ -282,6 +301,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-pink/10",
     border: "border-pink/30",
     fill: "bg-pink/5",
+    token: "var(--c-pink)",
     varRef: "rgb(var(--c-pink))",
   },
   {
@@ -291,6 +311,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-ok/10",
     border: "border-ok/30",
     fill: "bg-ok/5",
+    token: "var(--c-ok)",
     varRef: "rgb(var(--c-ok))",
   },
   {
@@ -300,6 +321,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-warn/10",
     border: "border-warn/30",
     fill: "bg-warn/5",
+    token: "var(--c-warn)",
     varRef: "rgb(var(--c-warn))",
   },
   {
@@ -309,6 +331,7 @@ export const MONK_ACCENTS: MonkAccent[] = [
     soft: "bg-bad/10",
     border: "border-bad/30",
     fill: "bg-bad/5",
+    token: "var(--c-bad)",
     varRef: "rgb(var(--c-bad))",
   },
 ];
@@ -339,19 +362,20 @@ export interface MonkHabitSeed {
 
 export const DEFAULT_MONK_HABITS: MonkHabitSeed[] = [
   {
-    name: "No Porn",
+    name: "Hold Seed",
     description: "Keep your mind clean.",
     icon: "ban",
     accent: "bad",
     dailyTarget: 1,
   },
   {
-    name: "Salah 5 Times",
+    name: "Daily Salah",
     description: "Closer to Allah.",
     icon: "mosque",
     accent: "teal",
     // The reason MonkModeCompletion stores a number.
     dailyTarget: 5,
+    // The one habit drawn without an illustration — see MONK_HABIT_ART.
   },
   {
     name: "Read Quran",
@@ -368,21 +392,21 @@ export const DEFAULT_MONK_HABITS: MonkHabitSeed[] = [
     dailyTarget: 1,
   },
   {
-    name: "10 Min Meditation",
+    name: "Meditation",
     description: "Calmer mind. Better decisions.",
     icon: "meditation",
     accent: "indigo",
     dailyTarget: 1,
   },
   {
-    name: "Work On Business",
+    name: "Deep Work",
     description: "Build the future you want.",
     icon: "laptop",
     accent: "warn",
     dailyTarget: 1,
   },
   {
-    name: "30 Minute Exercise",
+    name: "Exercise",
     description: "Stronger body. Sharper mind.",
     icon: "dumbbell",
     accent: "ok",
@@ -623,13 +647,62 @@ export function monkStreaks(
 // been completed. `decided` is passed because a percentage with nothing behind
 // it is not a low score — it is a challenge that started this morning, and
 // "rough start" would be the wrong thing to tell somebody on day one.
-export function monkProgressNote(pct: number, decided: number): string {
-  if (decided === 0) return "Day one. The only rep that counts is the next one.";
-  if (pct < 25) return "Rough patch. One clean day resets the whole thing.";
-  if (pct < 50) return "Keep going. Small steps, big changes — the run is still yours.";
-  if (pct < 75) return "Past halfway. This is the part where it starts to hold.";
-  if (pct < 90) return "Strong run. Protect it — the last stretch is the test.";
-  return "Locked in. This is what discipline actually looks like.";
+// The line and the mark that goes with it. The icon is part of the band rather
+// than picked at the call site: "rough patch" and "locked in" want different
+// marks, and a component choosing one would be guessing at a meaning this
+// function already knows.
+export interface MonkProgressNote {
+  text: string;
+  // A key into the small set drawn in MonkStatBadge.
+  icon: MonkNoteIcon;
+}
+
+export type MonkNoteIcon =
+  | "sparkles"
+  | "seeding"
+  | "star"
+  | "flame"
+  | "shield"
+  | "trophy";
+
+export function monkProgressNote(
+  pct: number,
+  decided: number,
+): MonkProgressNote {
+  if (decided === 0) {
+    return {
+      text: "Day one. The only rep that counts is the next one.",
+      icon: "sparkles",
+    };
+  }
+  if (pct < 25) {
+    return {
+      text: "Rough patch. One clean day resets the whole thing.",
+      icon: "seeding",
+    };
+  }
+  if (pct < 50) {
+    return {
+      text: "Keep going. Small steps, big changes — the run is still yours.",
+      icon: "star",
+    };
+  }
+  if (pct < 75) {
+    return {
+      text: "Past halfway. This is the part where it starts to hold.",
+      icon: "flame",
+    };
+  }
+  if (pct < 90) {
+    return {
+      text: "Strong run. Protect it — the last stretch is the test.",
+      icon: "shield",
+    };
+  }
+  return {
+    text: "Locked in. This is what discipline actually looks like.",
+    icon: "trophy",
+  };
 }
 
 // The pill beside the Streak heading. Four tiers, and the tiers are days
@@ -649,11 +722,15 @@ export type MonkBadgeTone = "gold" | "green" | "blue" | "muted";
 
 export const MONK_STREAK_MILESTONES = [3, 7, 14, 21, 30, 60, 100];
 
+// Gold at every tier, and the mark is what moves rather than the colour: a
+// star while the run is being built, a trophy once it is a result. The pill was
+// blue then green then gold, which made the low tiers read as a different kind
+// of object rather than as the same badge earlier in its life.
 export function monkStreakTier(streak: number): MonkStreakTier {
   if (streak >= 14) return { label: "Unstoppable", tone: "gold", trophy: true };
   if (streak >= 7) return { label: "On fire", tone: "gold", trophy: true };
-  if (streak >= 3) return { label: "Building", tone: "green", trophy: false };
-  return { label: "Keep going", tone: "blue", trophy: false };
+  if (streak >= 3) return { label: "Building", tone: "gold", trophy: false };
+  return { label: "Keep going", tone: "gold", trophy: false };
 }
 
 // Whether the month's line has earned a trophy beside it. A high bar and a
