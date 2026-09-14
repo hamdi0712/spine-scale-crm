@@ -17,11 +17,13 @@ import MonkStatBadge from "@/components/MonkStatBadge";
 //
 // Three things make it, and each is a specific correction:
 //
-//   The bevel. A radial gradient in user space, banded across the ring's own
-//   thickness — deep at the inner edge, bright a third of the way out, easing
-//   back at the rim. That is what reads as a tube catching light rather than
-//   as a band of flat colour, and it is why the ramp below carries three
-//   values per state instead of one.
+//   The bevel, and it is faceted rather than rounded. A radial gradient in
+//   user space banded across the ring's own thickness, but with every stop
+//   doubled so the colour steps rather than blends: three flat planes meeting
+//   at two hard creases. A smooth ramp across the same three values reads as a
+//   cylinder — a piece of tube — and what this wants to be is a strip of
+//   something flat, bent along its length. The creases are the whole
+//   difference, and they only exist if nothing interpolates across them.
 //
 //   Rounded ends, which is why this is no longer a Recharts pie. Its
 //   cornerRadius rounds each sector's four corners, and on a sector narrower
@@ -79,6 +81,23 @@ const OUTER = 49;
 // band's midline and its width is the band's thickness.
 const RADIUS = (INNER + OUTER) / 2;
 const THICKNESS = OUTER - INNER;
+
+// Where the creases fall across the ring's thickness, as fractions from the
+// inner edge.
+//
+// The first is the fold itself and it sits at the middle: two planes of equal
+// width, one turned away from the light and one towards it, is what makes the
+// band read as a flat strip bent along its length. Three bands of similar
+// width — which is where this started — read as three concentric rings
+// instead, because nothing about them says which is the near face and which
+// is the far one.
+//
+// The second is much closer to the rim and is doing a different job: a narrow
+// chamfer so the outer edge turns away rather than running to the very edge at
+// full brightness, which would make the strip look like it was glowing rather
+// than lit.
+const FACET_FOLD = 0.5;
+const FACET_RIM = 0.88;
 
 // An offset along the gradient's radius, given a position across the ring's
 // thickness. `0` is the inner edge, `1` the rim.
@@ -195,9 +214,16 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
                 cy={CENTRE}
                 r={OUTER}
               >
+                {/* Doubled stops: each pair sits at one offset, closing one
+                    plane and opening the next in a different colour, so the
+                    boundary is a crease and nothing interpolates across it.
+                    The inner face turned away from the light, the outer face
+                    turned towards it, and a narrow chamfer at the rim. */}
                 <stop offset={acrossRing(0)} stopColor={seg.shade.deep} />
-                <stop offset={acrossRing(0.32)} stopColor={seg.shade.base} />
-                <stop offset={acrossRing(0.66)} stopColor={seg.shade.lit} />
+                <stop offset={acrossRing(FACET_FOLD)} stopColor={seg.shade.deep} />
+                <stop offset={acrossRing(FACET_FOLD)} stopColor={seg.shade.lit} />
+                <stop offset={acrossRing(FACET_RIM)} stopColor={seg.shade.lit} />
+                <stop offset={acrossRing(FACET_RIM)} stopColor={seg.shade.base} />
                 <stop offset={acrossRing(1)} stopColor={seg.shade.base} />
               </radialGradient>
             ))}
