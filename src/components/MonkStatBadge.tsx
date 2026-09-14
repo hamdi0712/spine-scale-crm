@@ -62,10 +62,16 @@ export default function MonkStatBadge({
       }}
     >
       <span
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] ${t.text}`}
+        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] border ${t.text}`}
         style={{
           background: `rgb(${t.token} / 0.16)`,
-          boxShadow: `0 0 12px -2px rgb(${t.token} / 0.45)`,
+          borderColor: `rgb(${t.token} / 0.4)`,
+          // Two shadows and one of them is inset. The outer one is the light
+          // the tile throws onto the strip behind it; the inset one runs the
+          // glow back along the inside of its own border, which is what gives
+          // the tile an edge you can see rather than a soft square that fades
+          // into the panel it sits on.
+          boxShadow: `0 0 12px -2px rgb(${t.token} / 0.45), inset 0 0 8px -1px rgb(${t.token} / 0.55)`,
         }}
       >
         <Glyph size={14} aria-hidden />
