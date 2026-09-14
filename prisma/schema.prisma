@@ -1155,3 +1155,140 @@ model DailyQuote {
 
   createdAt DateTime @default(now())
 }
+
+// ─── Monk Mode ──────────────────────────────────────────────────────────────
+//
+// A 21-day personal discipline tracker, and the one part of this schema that
+// has nothing to do with the agency. No lead, no client, no money — the five
+// tables below never join to anything above them, and nothing above them ever
+// reads one. It shares the app because it shares the person, not because it
+// shares the data, and keeping that line clean is what lets the whole feature
+// be lifted out later without touching the CRM.
+//
+// Days are stored the way every other date-only column here is: midnight UTC,
+// via toChecklistDay. The day-keyed tables (the note and the quote cache) use
+// the "2026-09-14" string as their primary key, which is what DailyQuote
+// already does — ISO keys sort as strings, so "the days before today" is a
+// comparison rather than a parse.
+
+// The challenge itself: when it started and how long it runs.
+//
+// One at a time, and "the most recent one" is the active one — read through
+// loadChallenge in src/lib/monkModeStore.ts, which creates today's if none
+// exists. A table rather than a settings blob because starting a second
+// twenty-one days after the first is the obvious next thing somebody wants,
+// and rows that stay behind are the history of having done it.
+model MonkModeChallenge {
+  id String @id @default(cuid())
+
+  // Midnight UTC on the first day. Day 1 is this date, not the day after it.
+  startDate    DateTime
+  durationDays Int      @default(21)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startDate])
+}
+
+// One non-negotiable.
+//
+// Editable from /monk-mode/settings, unlike DailyChecklistEntry's fixed
+// routine — the daily checklist is the shape of a working day and this is a
+// personal list, so this one is data and that one is a constant.
+model MonkModeHabit {
+  id String @id @default(cuid())
+
+  name String
+  // The line under the name on the card. Optional: a habit called "30 Minute
+  // Exercise" does not need explaining, and an empty subtitle is better than a
+  // restatement of the name.
+  description String?
+
+  // A key into MONK_ICONS in src/lib/monkMode.ts, not a glyph name from any
+  // icon package. Stored as this app's own key so the icon set underneath can
+  // be swapped without rewriting rows, and an unknown key falls back rather
+  // than crashing a card.
+  icon String @default("target")
+  // A key into MONK_ACCENTS, likewise — a semantic token name, never a hex.
+  // The palette is the app's own and follows light and dark with it.
+  accent String @default("accent")
+
+  // How many of this habit make a complete day. Most are 1; "Salah 5 Times" is
+  // the reason this is a number rather than a boolean.
+  dailyTarget Int @default(1)
+
+  sortOrder Int @default(0)
+  // Retired rather than deleted: the completions behind a habit are a record
+  // of days that actually happened, and dropping the habit would drop them.
+  // An inactive habit leaves the grid and stops counting against a day, and
+  // its history stays readable.
+  active Boolean @default(true)
+
+  completions MonkModeCompletion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+// How much of one habit was done on one day.
+//
+// Progress rather than a tick, because the target is a number: 3 of 5 prayers
+// is a real state the card draws and the donut counts as in progress, and a
+// boolean could not hold it. A day with no row is a day with no progress —
+// nothing is seeded ahead of time, so an untouched future day and an untouched
+// past day are the same absence and the reading (see monkMode.ts) is what
+// tells them apart.
+model MonkModeCompletion {
+  id String @id @default(cuid())
+
+  habitId String
+  habit   MonkModeHabit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  date     DateTime
+  progress Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One row per habit per day is the invariant, and the database holds it —
+  // two tabs tapping the same card both upsert and the second settles.
+  @@unique([habitId, date])
+  @@index([date])
+}
+
+// One journal note per day.
+//
+// Keyed by the day itself, so there is exactly one and no uniqueness rule to
+// enforce separately. Editable while the day is today and a read-only record
+// once it has passed, which is the rule the daily checklist already follows —
+// enforced in the action, not here, because a column cannot know what day it
+// is being written on.
+model MonkModeNote {
+  // "2026-09-14".
+  id String @id
+
+  content String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// The Monk Mode quote cache — the same table as DailyQuote, kept separate on
+// purpose.
+//
+// Same mechanism, same once-a-day key, same graceful fallback; a different
+// question asked of the model. The dashboard's line is about a day of
+// prospecting and this one is about a day of discipline, and sharing a cache
+// would mean whichever page was opened first that morning decided which of the
+// two questions got asked.
+model MonkModeQuote {
+  id String @id
+
+  text   String
+  author String
+
+  createdAt DateTime @default(now())
+}

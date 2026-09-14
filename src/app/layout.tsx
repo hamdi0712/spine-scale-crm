@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, IBM_Plex_Mono } from "next/font/google";
+import { Caveat, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
@@ -16,6 +16,17 @@ const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-mono",
+});
+
+// One handwritten face, for one thing: the sticker on Monk Mode's daily note.
+// It is deliberately not available as a general option — a second lettering
+// style loose in a CRM is how a design system stops being one — and it is
+// loaded here rather than in the feature because next/font wants to hoist the
+// declaration and put the preload in <head>.
+const caveat = Caveat({
+  subsets: ["latin"],
+  weight: ["600", "700"],
+  variable: "--font-hand",
 });
 
 export const metadata: Metadata = {
@@ -52,7 +63,7 @@ export default function RootLayout({
             visitor never sees a white flash on load. See lib/theme.ts. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body className={`${inter.variable} ${plexMono.variable} font-sans`}>{children}</body>
+      <body className={`${inter.variable} ${plexMono.variable} ${caveat.variable} font-sans`}>{children}</body>
     </html>
   );
 }

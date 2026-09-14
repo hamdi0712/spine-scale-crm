@@ -724,6 +724,63 @@ again.
     thing inside Ad Hub rather than another Library category.
 - **Library** — markdown notes in five fixed categories. Starts empty by
   design; it fills up with real material as you write it.
+- **Monk Mode** — a 21-day personal discipline tracker, and the one section of
+  the app that is not about the agency. Nothing in it joins to a lead, a client
+  or a number off the funnel; it shares the shell, the sidebar and the design
+  tokens and nothing else, so the whole feature is five tables
+  (`MonkMode*` in the schema) that can be lifted out without touching the CRM.
+  - **It fits one screen.** Three bands — the banner, the habits as one row of
+    cards, and four panels of equal height — and nothing below the fold on a
+    laptop. The four views of the challenge (Today, Calendar, Journal,
+    Progress) plus Habits are a segmented control in the header rather than a
+    panel of links.
+  - **The challenge** is one row — a start date and a length, 21 days by
+    default. The most recent one is the active one, so going again is a new
+    row rather than an edit, and the run you just finished stays on the record.
+  - **Seven non-negotiables** arrive seeded and are then yours: add, edit,
+    reorder, retire or delete them under **Monk Mode → Habits**. A habit has a
+    daily target, which is why *Salah 5 Times* draws five check dots and
+    everything else draws one. Retiring keeps the history; deleting does not,
+    and says so at the button.
+  - **A day is logged on the day.** Tapping a card advances it and wraps back
+    to zero at its target; past days are read-only records, enforced in the
+    server action and not just hidden in the UI — the same rule the daily
+    checklist follows. The journal note works the same way: one per day,
+    editable until the day ends.
+  - **Today's untouched habits are not failures.** The donut counts completed,
+    in progress and missed across every habit-day of the challenge so far and
+    leaves today's untouched ones out of the percentage, so the number does not
+    open at zero every morning and climb back by bedtime.
+  - **The banner quote** is generated once a day by DeepSeek from the day you
+    are actually having — which day of the challenge, what the streak is doing,
+    whether yesterday held — and cached under that day, with hardcoded
+    quotations behind it. Same mechanism as the main dashboard's line, its own
+    cache and its own question, so the two never share an answer. With no
+    DeepSeek key set it simply shows a fallback and nothing else changes.
+  - **The encouraging half** is deliberately small and rule-driven: a crown
+    pill on the banner, a streak tier that reads Keep going → Building → On
+    fire → Unstoppable, a trophy once a record or a month is worth the word, a
+    line under the donut chosen by completion band, and a handwritten sticker
+    on the note. The wording and the thresholds all live together in
+    `src/lib/monkMode.ts` so the tone can be read and changed in one place, and
+    every colour resolves through the existing tokens — the gold is `--c-warn`,
+    the amber the rest of the CRM already uses.
+  - **Confetti fires once per occasion, not per render.** Completing the day,
+    hitting a streak milestone and finishing the challenge each produce a
+    *key*; the browser remembers the keys it has fired, so a burst does not
+    replay on every refresh for the rest of the day. It honours
+    `prefers-reduced-motion` and the library is loaded on demand.
+  - **The artwork** lives in `public/` — `monk-hero-bg.png` behind the banner,
+    `monk-forest-strip.png` along the foot of the streak card,
+    `monk-corner-mountain.png` as the mark on a completed habit, and an
+    `habit-icon-*` / `habit-bottom-*` pair per habit. Every one is drawn
+    through `next/image`: the sources are 1500px PNGs of up to 1.8MB and the
+    habits panel puts seven on screen at once, so the optimizer is what makes
+    the page loadable. They are keyed off each habit's **icon**, not its name,
+    so renaming a habit keeps its painting and a new habit that picks the
+    mosque gets the salah artwork for free; a habit whose icon has no painting
+    draws its Tabler glyph as before. The banner keeps a gradient underneath
+    its photograph, so a missing file is never a broken image.
 
 ## Deploying to Vercel + hosted Postgres (later)
 
