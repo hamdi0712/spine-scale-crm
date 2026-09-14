@@ -53,7 +53,7 @@ export default function MonkHero({
   const cells = monkChallengeCells(challenge, habits, progress, now);
 
   return (
-    <section className="monk-hero flex flex-wrap items-end gap-x-8 gap-y-5 px-6 py-4">
+    <section className="monk-hero flex flex-wrap items-end gap-x-8 gap-y-5 px-6 py-5">
       {/* Layer one: the photograph and its scrim, behind everything. The two
           content columns below carry `relative` so they paint over it — an
           absolutely positioned layer otherwise sits above static siblings
@@ -61,17 +61,11 @@ export default function MonkHero({
       <MonkHeroArt />
 
       <div className="relative min-w-0 flex-1 basis-80">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h2 className="display text-[27px] font-semibold leading-none text-white">
-            {shape.total} Day Challenge
-          </h2>
-          {/* The one badge on the page that names the feature rather than a
-              state. Its gold is the app's --c-warn, and it is given the glow
-              because on a photograph a bordered pill needs something to lift
-              it off the picture — the same reason the tiles on the business
-              hours widget are built the way they are. The tone classes are
-              mixed for a light card, so the fill and lettering are overridden
-              here for the one place a pill sits on a dark ground. */}
+        {/* The badge sits above the title rather than beside it. Inline it
+            was competing with a 27px heading for the same line and reading as
+            a suffix to it; stacked, it is a label on the thing underneath —
+            and the banner has the height for it now. */}
+        <div>
           <MonkBadge
             label="Monk Mode"
             tone="gold"
@@ -79,6 +73,9 @@ export default function MonkHero({
             icon={<IconCrown size={12} stroke={2} aria-hidden />}
             className="!border-warn/45 !bg-warn/20 !text-[#F7CE7E]"
           />
+          <h2 className="display mt-2.5 text-[27px] font-semibold leading-none text-white">
+            {shape.total} Day Challenge
+          </h2>
         </div>
 
         {/* The day counter and the range on one line, the counter carrying the

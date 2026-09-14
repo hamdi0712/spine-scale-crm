@@ -17,13 +17,6 @@
 
 import Image from "next/image";
 
-// Transparent at the top, solid through the middle, and mostly gone again at
-// the foot. Shared by the card illustrations and the treeline, because both
-// have a line of text sitting along the bottom edge they must not compete
-// with, and the two should fade identically.
-const MASK_BOTH_ENDS =
-  "linear-gradient(to top, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0.12) 18%, black 40%, black 66%, transparent 100%)";
-
 // The picture behind the banner.
 //
 // A layer rather than a CSS background, which buys two things. The optimizer
@@ -75,27 +68,26 @@ export function MonkHeroArt() {
 // value disappears.
 export function MonkHabitBottomArt({ slug }: { slug: string }) {
   return (
+    // Full strength, small, and sitting in the bottom-right corner — a painted
+    // object on the card rather than a wash behind it. It was a masked,
+    // 20%-opacity layer across the whole foot of the card, which made every
+    // illustration read as a smudge and, worse, put the habit's status on top
+    // of it. The text has moved up under the title (see MonkHabitGrid) and the
+    // picture has moved into the space that left, so the two no longer share a
+    // pixel and neither has to be faded out of the other's way.
+    //
+    // object-contain, because these are landscape paintings going into a
+    // roughly square corner: cover would crop the subject out of most of them.
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-[64%] opacity-[0.2] dark:opacity-[0.28]"
-      style={{
-        // Faded at both ends, not just the top. The habit's status — "Done", or
-        // the row of dots and the count — sits along the very bottom of the
-        // card, which is exactly where a bottom-anchored painting is densest;
-        // the first pass put a mosque behind five check dots and you could not
-        // read either. So the mask opens below the name, holds through the
-        // middle where the picture is actually seen, and closes again before
-        // the status line.
-        maskImage: MASK_BOTH_ENDS,
-        WebkitMaskImage: MASK_BOTH_ENDS,
-      }}
+      className="pointer-events-none absolute -bottom-1.5 -right-1.5 h-[68px] w-[84px]"
     >
       <Image
         src={`/habit-bottom-${slug}.png`}
         alt=""
         fill
-        sizes="200px"
-        className="object-cover object-bottom"
+        sizes="120px"
+        className="object-contain object-bottom-right"
       />
     </div>
   );
@@ -143,15 +135,31 @@ export function MonkHabitIconArt({
 // panel stands on, and "best streak: 5 days" has to win over it every time.
 export function MonkForestStrip() {
   return (
+    // Raised off the foot of the card to sit directly on the rule above the
+    // two figures, rather than behind them. That is the whole change: held
+    // under "best streak" it had to be faded to a haze to keep the numbers
+    // readable, and a haze is not a treeline. Standing in the empty band
+    // between the day dots and the rule it is over nothing, so it can be drawn
+    // at something like full strength and actually be a picture.
+    //
+    // object-bottom so the trees stand on the cut rather than floating above
+    // it, and the mask only fades the top, where the sky meets the card.
     <div
       aria-hidden
-      // Lower than the habit illustrations. Those fade out under a one-word
-      // status; this one sits under two figures somebody is reading, and at
-      // matching strength it put a visible haze behind "10 of 13".
-      className="pointer-events-none absolute inset-x-0 bottom-0 h-[92px] opacity-[0.13] dark:opacity-[0.22]"
+      // Anchored to the bottom of its own container rather than to a guessed
+      // offset from the card. The container is the slack between the day dots
+      // and the two figures (see MonkStreakPanel), so bottom-0 here *is* the
+      // rule above them — no arithmetic, and nothing to re-derive when a row
+      // is added. The negative insets bleed it back out through the card's
+      // padding so the ridgeline runs the full width.
+      className="pointer-events-none absolute -left-5 -right-5 bottom-0 h-[116px] opacity-90"
       style={{
-        maskImage: MASK_BOTH_ENDS,
-        WebkitMaskImage: MASK_BOTH_ENDS,
+        // Only the top quarter fades. The first pass dissolved nearly half the
+        // image and left a pale band rather than a ridgeline — there is
+        // nothing underneath it to protect, so it can be nearly all there.
+        maskImage: "linear-gradient(to top, black 0%, black 74%, transparent 100%)",
+        WebkitMaskImage:
+          "linear-gradient(to top, black 0%, black 74%, transparent 100%)",
       }}
     >
       <Image
@@ -160,34 +168,6 @@ export function MonkForestStrip() {
         fill
         sizes="340px"
         className="object-cover object-bottom"
-      />
-    </div>
-  );
-}
-
-// The watermark in the corner of a completed habit card.
-//
-// Only on the completed ones, which is what stops it being wallpaper. The
-// habit illustration is already fading out of the bottom of every card; adding
-// a second picture to all seven would be two paintings competing in a hundred
-// and fifty pixels. On a card that is finished it is a small mark that the day
-// went well there — texture, at an opacity low enough that you notice it
-// without being able to say what it is.
-export function MonkCornerMountain() {
-  return (
-    <div
-      aria-hidden
-      // Sat over the illustration's own corner and vanished at first. It is
-      // lifted clear of the status line and drawn a little stronger, so it
-      // reads as a mark in the corner rather than as nothing at all.
-      className="pointer-events-none absolute bottom-[26px] right-0 h-[46px] w-[46px] opacity-[0.22] dark:opacity-[0.3]"
-    >
-      <Image
-        src="/monk-corner-mountain.png"
-        alt=""
-        fill
-        sizes="52px"
-        className="object-contain object-bottom"
       />
     </div>
   );
