@@ -12,7 +12,7 @@
 // for. A streak alone says nothing about whether a run of zero is a bad week
 // or a first morning; "3 of 12 perfect" does.
 
-import { IconFlame, IconTrophy } from "@tabler/icons-react";
+import { IconFlame, IconStarFilled, IconTrophyFilled } from "@tabler/icons-react";
 import { MonkDayCell, MonkStreaks, monkStreakTier } from "@/lib/monkMode";
 import { MonkForestStrip } from "@/components/MonkArt";
 import MonkBadge from "@/components/MonkBadge";
@@ -36,12 +36,6 @@ export default function MonkStreakPanel({
   const tier = monkStreakTier(streaks.current);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* The treeline along the foot of the card. The card is .card, which
-          already clips to its own radius, so the strip needs no shape of its
-          own — but the two figures below sit over it, so they carry `relative`
-          and the strip is held well back. */}
-      <MonkForestStrip />
-
       <div className="flex items-center gap-2">
         <IconFlame
           size={17}
@@ -50,22 +44,30 @@ export default function MonkStreakPanel({
           aria-hidden
         />
         <h2 className="display text-base font-semibold">Streak</h2>
+        {/* Pushed to the far corner: this is the card's status, and a status
+            belongs at the edge rather than trailing the heading like a
+            subtitle. Gold at every tier now, with the mark carrying the
+            difference — a star while the run is being built, a trophy once it
+            is a result. */}
         <MonkBadge
           label={tier.label}
           tone={tier.tone}
-          // The glow is kept for the tiers that are a result. "Keep going" is
-          // encouragement, and lighting it up would congratulate somebody for
-          // not having a streak.
-          glow={tier.trophy}
+          glow
           icon={
             tier.trophy ? (
-              <IconTrophy size={11} stroke={2} aria-hidden />
-            ) : undefined
+              <IconTrophyFilled size={11} aria-hidden />
+            ) : (
+              <IconStarFilled size={11} aria-hidden />
+            )
           }
+          className="ml-auto"
         />
       </div>
 
-      <div className="mt-4 flex items-baseline gap-2">
+      {/* items-center, not items-baseline. Sitting on the baseline, "days in a
+          row" hung off the foot of a forty-pixel numeral and read as a
+          footnote to it; centred, the two are one phrase. */}
+      <div className="mt-3.5 flex items-center gap-2">
         <span
           className={`num text-[40px] font-semibold leading-none tracking-tight ${
             live ? "text-ink" : "text-muted"
@@ -82,11 +84,20 @@ export default function MonkStreakPanel({
           than weekday: this row is about the challenge's own clock, and D1–D7
           is how the banner counts.
 
-          Centred in whatever height the row of panels settles on, rather than
-          pinned under the streak with the slack falling below it — this panel
-          is the shortest of the four and the gap was showing. */}
-      <div className="flex flex-1 items-center">
-        <div className="flex w-full items-start justify-between gap-1 py-4">
+          Pulled up under the counter rather than centred in the card's spare
+          height. The dots belong to the number — they are the last seven days
+          of the run it is counting — and floating them in the middle of the
+          panel made them read as a separate thing. The slack goes below them
+          instead, which is where the treeline now stands. */}
+      {/* The dots, and under them the slack the treeline stands in. One
+          container for both: it takes whatever height the row of panels
+          settles on, the dots sit at its top, and the ridgeline is anchored to
+          its bottom — which is exactly the rule above the two figures. The
+          strip used to be positioned against the card with a hand-computed
+          offset, and it was twenty pixels of card padding wrong, sitting over
+          "best streak" where the image is dark enough to show it. */}
+      <div className="relative mt-3 flex-1">
+        <div className="flex w-full items-start justify-between gap-1">
         {row.map((cell) => (
           <div key={cell.key} className="flex flex-col items-center gap-1.5">
             <CheckDot filled={cell.complete} missed={cell.past} size={20} />
@@ -100,6 +111,7 @@ export default function MonkStreakPanel({
           </div>
         ))}
         </div>
+        <MonkForestStrip />
       </div>
 
       <dl className="relative space-y-2 border-t border-line/60 pt-3">
@@ -111,12 +123,7 @@ export default function MonkStreakPanel({
           // status, and it only appears once there is a record worth the word.
           icon={
             streaks.best >= 3 ? (
-              <IconTrophy
-                size={12}
-                stroke={2}
-                className="text-warn"
-                aria-hidden
-              />
+              <IconTrophyFilled size={12} className="text-warn" aria-hidden />
             ) : undefined
           }
         />

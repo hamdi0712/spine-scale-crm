@@ -69,7 +69,12 @@ export default function MonkNote({
             Handwritten and tilted because a sticker that is set in the UI face
             and squared up to the grid is not a sticker, it is a label. */}
         <span
-          className="monk-sticker flex shrink-0 items-center gap-1 whitespace-nowrap text-warn"
+          // Lavender rather than the badge gold. It is the one handwritten
+          // thing on the page and it should read as a note somebody stuck
+          // there, not as another status pill — and the violet is the app's
+          // own --c-ai. The dark value is lifted to the brighter end of that
+          // pair, because the mixed-for-paper violet goes muddy on a dark card.
+          className="monk-sticker flex shrink-0 items-center gap-1 whitespace-nowrap text-ai dark:text-[#C9B6FF]"
           title="Editable today only — past days are kept as they were left"
           aria-hidden
         >

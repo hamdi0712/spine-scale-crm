@@ -29,11 +29,7 @@
 // this is the half of that rule the person can see.
 
 import { MonkHabitDay, monkAccent, monkHabitArt } from "@/lib/monkMode";
-import {
-  MonkCornerMountain,
-  MonkHabitBottomArt,
-  MonkHabitIconArt,
-} from "@/components/MonkArt";
+import { MonkHabitBottomArt, MonkHabitIconArt } from "@/components/MonkArt";
 import { bumpMonkHabit, setMonkHabitProgress } from "@/lib/actions/monkMode";
 import MonkIcon from "@/components/MonkIcon";
 import Icon from "@/components/Icons";
@@ -97,37 +93,34 @@ function HabitCard({
   const accent = monkAccent(row.habit.accent);
   const complete = row.status === "complete";
   const multi = row.target > 1;
-  // The painted set, or null for a habit whose icon has none — see
-  // MONK_HABIT_ART. Null is the ordinary case for anything the person added
-  // themselves, and it falls back to the glyph this card was built around.
   const art = monkHabitArt(row.habit.icon);
 
   return (
-    // A div rather than a form, because a multi-target card's dot row holds
-    // forms of its own and a form cannot contain another one.
+    // The card wears the habit's own colour now — a tint rising from the
+    // bottom-right where the illustration sits, a rim in the same hue, and a
+    // glow under it. The icon was the only thing carrying the accent before,
+    // which left a painted illustration sitting on a plain grey card with
+    // nothing between them; giving the card the glyph's colour is what lets
+    // the two read as one object.
     //
-    // overflow-hidden so the illustration in the foot is cut by the card's own
-    // radius instead of squaring off its corners.
+    // Composed inline because every value is an alpha over the accent's own
+    // variable, and there are eight accents — as utilities that is eight
+    // near-identical class sets, and as a style it is one.
     <div
-      className={`monk-tile relative flex flex-col overflow-hidden rounded-[16px] border p-3.5 ${
-        // The settle runs on the render where the card first has its tick,
-        // which is the frame after the tap that completed it. A reload with
-        // five habits already done replays five of them at once, and that
-        // reads as the page arriving rather than as five things happening —
-        // which is the trade for keeping this a CSS animation on a
-        // server-rendered card instead of client state tracking every habit.
-        complete
-          ? "monk-settle border-ok/40 bg-ok/[0.06]"
-          : row.status === "missed"
-            ? "border-line bg-surface opacity-75"
-            : "border-line bg-surface"
-      }`}
+      className="monk-tile relative flex min-h-[128px] flex-col overflow-hidden rounded-[16px] border p-3.5"
+      style={{
+        backgroundImage: `radial-gradient(120% 110% at 82% 108%, rgb(${accent.token} / ${
+          complete ? 0.22 : 0.13
+        }), transparent 62%)`,
+        borderColor: `rgb(${accent.token} / ${complete ? 0.45 : 0.24})`,
+        boxShadow: `0 0 0 1px rgb(${accent.token} / 0.06), 0 10px 26px -14px rgb(${accent.token} / ${
+          complete ? 0.75 : 0.45
+        })`,
+      }}
     >
-      {/* The pictures, behind everything. Both are masked to nothing well
-          before they reach the habit's name; the corner mark is only on a card
-          that is finished, so it stays a reward rather than wallpaper. */}
-      {art && <MonkHabitBottomArt slug={art} />}
-      {complete && <MonkCornerMountain />}
+      {/* Bottom-right, at full strength. The text above it has been lifted
+          clear, so nothing has to be faded out of anything else's way. */}
+      {art?.bottom && <MonkHabitBottomArt slug={art.bottom} />}
 
       <form
         action={bumpMonkHabit.bind(null, row.habit.id, day)}
@@ -145,23 +138,17 @@ function HabitCard({
           className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
         >
           <span className="relative inline-flex">
-            {/* The painted icon brings its own ground, so it does not also get
-                the tinted accent square — a painting inside a coloured tile
-                reads as a sticker stuck on a swatch. A habit falling back to a
-                glyph keeps the tile, which is what the tile was always for. */}
             <span
               className={`flex h-10 w-10 items-center justify-center rounded-[12px] ${
                 art ? "" : `${accent.soft} ${accent.text}`
               }`}
             >
               {art ? (
-                <MonkHabitIconArt slug={art} />
+                <MonkHabitIconArt slug={art.icon} />
               ) : (
                 <MonkIcon name={row.habit.icon} size={20} />
               )}
             </span>
-            {/* The tick sits over the glyph rather than beside it, so a
-                finished card is read from the one place the eye already went. */}
             {complete && (
               <span
                 className="monk-pop monk-glow absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-surface bg-ok text-white"
@@ -177,9 +164,11 @@ function HabitCard({
         </button>
       </form>
 
-      {/* Pushed to the bottom so the progress row of every card in the grid
-          lines up, whether its name took one line or two. */}
-      <div className="relative mt-auto pt-3">
+      {/* Directly under the title rather than pushed to the foot of the card.
+          The status and the name are one thought — "Exercise: not yet" — and
+          separating them by fifty pixels of empty card made the reader do the
+          pairing twice. It also frees the bottom corner for the painting. */}
+      <div className="relative mt-1.5">
         {multi ? (
           <DotRow row={row} day={day} readOnly={readOnly} />
         ) : (

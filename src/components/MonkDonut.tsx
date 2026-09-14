@@ -3,6 +3,7 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import useTheme from "@/components/useTheme";
 import { MonkTally, monkProgressNote } from "@/lib/monkMode";
+import MonkStatBadge from "@/components/MonkStatBadge";
 
 // Overall progress: every habit-day of the challenge so far, split three ways,
 // with the completion percentage in the middle.
@@ -26,6 +27,7 @@ const RAMP = {
 
 export default function MonkDonut({ tally }: { tally: MonkTally }) {
   const ramp = useTheme() === "dark" ? RAMP.dark : RAMP.light;
+  const note = monkProgressNote(tally.pct, tally.decided);
 
   const slices = [
     { key: "completed", label: "Completed", value: tally.completed, fill: ramp.complete },
@@ -37,6 +39,13 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
   // a bug, so the first morning of a challenge — nothing decided yet — is
   // drawn as a full muted ring with honest zeroes beside it.
   const empty = tally.decided === 0;
+  // The glow takes the colour of the largest slice — the chart's own summary,
+  // rather than a fixed accent that would say "going well" through a bad week.
+  const glow = empty
+    ? ramp.missed
+    : tally.completed >= tally.missed
+      ? ramp.complete
+      : ramp.missed;
   const drawn = empty
     ? [{ key: "empty", label: "", value: 1, fill: ramp.missed }]
     : slices;
@@ -52,7 +61,18 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
     // out of the bottom of the card. As a flex child of a column card this
     // takes what is actually left.
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative mx-auto my-auto h-[118px] w-[118px]">
+      <div className="relative mx-auto my-auto h-[104px] w-[104px]">
+        {/* The glow, behind the ring and sized to it. A wide blurred disc in
+            whichever colour is winning, which is what gives a thin ring
+            something to sit in — at nine pixels of stroke the chart had no
+            presence of its own left. Blur rather than a box-shadow because the
+            ring is an SVG arc, not a box, and a shadow would trace the square
+            around it. */}
+        <div
+          aria-hidden
+          className="absolute inset-[12px] rounded-full blur-[16px]"
+          style={{ background: glow, opacity: 0.55 }}
+        />
         <div className="donut-glass" aria-hidden />
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -60,8 +80,8 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
               data={drawn}
               dataKey="value"
               nameKey="label"
-              innerRadius={41}
-              outerRadius={57}
+              innerRadius={40}
+              outerRadius={48}
               startAngle={90}
               endAngle={-270}
               paddingAngle={0}
@@ -85,15 +105,6 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
         </div>
       </div>
 
-      {/* The line under the counts. It replaced a footnote explaining what
-          "in progress" meant — which the legend above it already says — with
-          the one thing a percentage cannot say for itself: whether it is worth
-          feeling good about. The wording is in monkProgressNote, with the rest
-          of the feature's voice. */}
-      <p className="mt-3 shrink-0 text-pretty text-[11px] leading-relaxed text-muted">
-        {monkProgressNote(tally.pct, tally.decided)}
-      </p>
-
       <ul className="mt-3 shrink-0 space-y-2 border-t border-line/60 pt-3">
         {slices.map((slice) => (
           <li key={slice.key} className="flex items-center gap-2.5">
@@ -111,6 +122,17 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
           </li>
         ))}
       </ul>
+
+      {/* The line, at the foot of the card and in its own strip. It is the one
+          thing here a percentage cannot say for itself — whether the number is
+          worth feeling good about — and it carries a mark chosen by the same
+          band that chose the words (monkProgressNote), so a bad patch and a
+          finished run do not get the same encouraging star. */}
+      <div className="mt-3 shrink-0">
+        <MonkStatBadge icon={note.icon} tone="blue">
+          {note.text}
+        </MonkStatBadge>
+      </div>
     </div>
   );
 }
