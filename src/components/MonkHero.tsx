@@ -29,6 +29,7 @@ import {
   monkChallengeCells,
   monkDateRange,
 } from "@/lib/monkMode";
+import { MonkHeroArt } from "@/components/MonkArt";
 import MonkBadge from "@/components/MonkBadge";
 import MonkQuoteLine, { MonkQuoteLineFallback } from "@/components/MonkQuoteLine";
 
@@ -52,8 +53,14 @@ export default function MonkHero({
   const cells = monkChallengeCells(challenge, habits, progress, now);
 
   return (
-    <section className="monk-hero flex flex-wrap items-end gap-x-8 gap-y-5 px-6 py-[18px]">
-      <div className="min-w-0 flex-1 basis-80">
+    <section className="monk-hero flex flex-wrap items-end gap-x-8 gap-y-5 px-6 py-4">
+      {/* Layer one: the photograph and its scrim, behind everything. The two
+          content columns below carry `relative` so they paint over it — an
+          absolutely positioned layer otherwise sits above static siblings
+          however early it appears in the markup. */}
+      <MonkHeroArt />
+
+      <div className="relative min-w-0 flex-1 basis-80">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h2 className="display text-[27px] font-semibold leading-none text-white">
             {shape.total} Day Challenge
@@ -101,7 +108,7 @@ export default function MonkHero({
       {/* The quotation. Right-aligned on a wide banner and under the counter on
           a narrow one — left-aligned when it wraps, because a right-ragged
           three-line quotation is harder to read than the alignment is worth. */}
-      <div className="min-w-0 basis-72 sm:max-w-xs sm:text-right">
+      <div className="relative min-w-0 basis-72 sm:max-w-xs sm:text-right">
         <Suspense fallback={<MonkQuoteLineFallback />}>
           <MonkQuoteLine
             challenge={challenge}

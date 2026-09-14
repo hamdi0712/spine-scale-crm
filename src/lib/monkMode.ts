@@ -177,6 +177,38 @@ export function monkIconKey(value: string | null | undefined): string {
   return value && ICON_KEYS.has(value) ? value : "target";
 }
 
+// ─── The artwork ───────────────────────────────────────────────────────────
+//
+// Seven habits arrived with painted artwork: an icon and a wider illustration
+// each, in public/ as habit-icon-<slug>.png and habit-bottom-<slug>.png.
+//
+// They are keyed off the habit's icon key rather than its name, and that is
+// the whole design decision here. The name is free text somebody edits — "No
+// Porn" becomes "Stay Clean" one evening and a map keyed on the name loses its
+// picture — while the icon is an enum picked from a fixed dropdown. Keying on
+// the icon also means artwork follows intent rather than identity: a new habit
+// called "Jummah" that picks the mosque gets the salah painting without
+// anybody wiring it up.
+//
+// Habits whose icon has no painting — every one of the other eighteen — simply
+// draw the Tabler glyph they always did. That is the fallback and it is not a
+// degraded state: the artwork is decoration over a UI that was complete
+// without it.
+export const MONK_HABIT_ART: Record<string, string> = {
+  ban: "no-porn",
+  mosque: "salah",
+  book: "quran",
+  droplet: "skincare",
+  meditation: "meditation",
+  laptop: "business",
+  dumbbell: "exercise",
+};
+
+// The artwork slug for a habit's icon, or null where there is none.
+export function monkHabitArt(icon: string | null | undefined): string | null {
+  return MONK_HABIT_ART[monkIconKey(icon)] ?? null;
+}
+
 // ─── The palette ───────────────────────────────────────────────────────────
 //
 // Semantic tokens, never hexes: every accent below resolves through the app's

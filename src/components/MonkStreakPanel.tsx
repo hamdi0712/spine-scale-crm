@@ -14,6 +14,7 @@
 
 import { IconFlame, IconTrophy } from "@tabler/icons-react";
 import { MonkDayCell, MonkStreaks, monkStreakTier } from "@/lib/monkMode";
+import { MonkForestStrip } from "@/components/MonkArt";
 import MonkBadge from "@/components/MonkBadge";
 import { CheckDot } from "@/components/MonkHabitGrid";
 
@@ -35,6 +36,12 @@ export default function MonkStreakPanel({
   const tier = monkStreakTier(streaks.current);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* The treeline along the foot of the card. The card is .card, which
+          already clips to its own radius, so the strip needs no shape of its
+          own — but the two figures below sit over it, so they carry `relative`
+          and the strip is held well back. */}
+      <MonkForestStrip />
+
       <div className="flex items-center gap-2">
         <IconFlame
           size={17}
@@ -95,7 +102,7 @@ export default function MonkStreakPanel({
         </div>
       </div>
 
-      <dl className="space-y-2 border-t border-line/60 pt-3">
+      <dl className="relative space-y-2 border-t border-line/60 pt-3">
         <Stat
           label="Best streak"
           value={`${streaks.best} days`}

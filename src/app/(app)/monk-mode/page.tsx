@@ -164,7 +164,7 @@ export default async function MonkModePage() {
         now={now}
       />
 
-      <section className="card mt-4 p-4">
+      <section className="card mt-4 px-4 py-3.5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="display text-base font-semibold">
             Your {active.length}{" "}
@@ -197,7 +197,11 @@ export default async function MonkModePage() {
           <MonkDonut tally={tally} />
         </section>
 
-        <section className="card flex flex-col p-5">
+        {/* `relative` is load-bearing: the treeline inside is absolutely
+            positioned and .card is overflow-hidden but position: static, so
+            without this the strip escapes the card and lays itself across the
+            full width of the page — which is exactly what it did. */}
+        <section className="card relative flex flex-col p-5">
           <MonkStreakPanel
             streaks={streaks}
             row={streakRow}

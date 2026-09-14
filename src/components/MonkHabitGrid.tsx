@@ -28,7 +28,12 @@
 // disabled. The action refuses the write as well (src/lib/actions/monkMode.ts);
 // this is the half of that rule the person can see.
 
-import { MonkHabitDay, monkAccent } from "@/lib/monkMode";
+import { MonkHabitDay, monkAccent, monkHabitArt } from "@/lib/monkMode";
+import {
+  MonkCornerMountain,
+  MonkHabitBottomArt,
+  MonkHabitIconArt,
+} from "@/components/MonkArt";
 import { bumpMonkHabit, setMonkHabitProgress } from "@/lib/actions/monkMode";
 import MonkIcon from "@/components/MonkIcon";
 import Icon from "@/components/Icons";
@@ -92,12 +97,19 @@ function HabitCard({
   const accent = monkAccent(row.habit.accent);
   const complete = row.status === "complete";
   const multi = row.target > 1;
+  // The painted set, or null for a habit whose icon has none — see
+  // MONK_HABIT_ART. Null is the ordinary case for anything the person added
+  // themselves, and it falls back to the glyph this card was built around.
+  const art = monkHabitArt(row.habit.icon);
 
   return (
     // A div rather than a form, because a multi-target card's dot row holds
     // forms of its own and a form cannot contain another one.
+    //
+    // overflow-hidden so the illustration in the foot is cut by the card's own
+    // radius instead of squaring off its corners.
     <div
-      className={`monk-tile relative flex flex-col rounded-[16px] border p-3.5 ${
+      className={`monk-tile relative flex flex-col overflow-hidden rounded-[16px] border p-3.5 ${
         // The settle runs on the render where the card first has its tick,
         // which is the frame after the tap that completed it. A reload with
         // five habits already done replays five of them at once, and that
@@ -111,7 +123,16 @@ function HabitCard({
             : "border-line bg-surface"
       }`}
     >
-      <form action={bumpMonkHabit.bind(null, row.habit.id, day)}>
+      {/* The pictures, behind everything. Both are masked to nothing well
+          before they reach the habit's name; the corner mark is only on a card
+          that is finished, so it stays a reward rather than wallpaper. */}
+      {art && <MonkHabitBottomArt slug={art} />}
+      {complete && <MonkCornerMountain />}
+
+      <form
+        action={bumpMonkHabit.bind(null, row.habit.id, day)}
+        className="relative"
+      >
         <button
           type="submit"
           disabled={readOnly}
@@ -124,10 +145,20 @@ function HabitCard({
           className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
         >
           <span className="relative inline-flex">
+            {/* The painted icon brings its own ground, so it does not also get
+                the tinted accent square — a painting inside a coloured tile
+                reads as a sticker stuck on a swatch. A habit falling back to a
+                glyph keeps the tile, which is what the tile was always for. */}
             <span
-              className={`flex h-10 w-10 items-center justify-center rounded-[12px] ${accent.soft} ${accent.text}`}
+              className={`flex h-10 w-10 items-center justify-center rounded-[12px] ${
+                art ? "" : `${accent.soft} ${accent.text}`
+              }`}
             >
-              <MonkIcon name={row.habit.icon} size={20} />
+              {art ? (
+                <MonkHabitIconArt slug={art} />
+              ) : (
+                <MonkIcon name={row.habit.icon} size={20} />
+              )}
             </span>
             {/* The tick sits over the glyph rather than beside it, so a
                 finished card is read from the one place the eye already went. */}
@@ -148,7 +179,7 @@ function HabitCard({
 
       {/* Pushed to the bottom so the progress row of every card in the grid
           lines up, whether its name took one line or two. */}
-      <div className="mt-auto pt-3">
+      <div className="relative mt-auto pt-3">
         {multi ? (
           <DotRow row={row} day={day} readOnly={readOnly} />
         ) : (

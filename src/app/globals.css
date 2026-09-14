@@ -1139,40 +1139,32 @@ tbody tr {
    a quotation over it. It is dark in light mode and dark in dark mode, on
    purpose and identically — a picture is not a token.
 
-   The photograph is the top layer of the background and the gradient beneath
-   it is not decoration on top of it, it is the fallback: if
-   /monk-mode-hero.png is missing, the browser drops that layer and the scrim
-   below it stands on its own as a dawn-coloured field, with the same lettering
-   still legible over it. Nothing has to detect the 404 for that to work.
-
-   The dark linear-gradient over the image is what makes the white type
-   readable whichever of the two grounds is showing — an image that is bright
-   at the horizon, or the flat field behind it. */
+   The photograph itself is not here. It is an element — MonkHeroArt, in
+   src/components/MonkArt.tsx — so that next/image can resize a 1.5MB source
+   down to what the banner actually draws, and so the scrim that makes the
+   white lettering readable can sit between the picture and the content. What
+   is left here is the dawn field the picture sits on, which doubles as the
+   fallback: a missing or slow file leaves a banner that still looks
+   deliberate, and nothing has to detect that to happen. */
 .monk-hero {
   position: relative;
   overflow: hidden;
   border-radius: 26px;
+  /* The ground under the photograph, not decoration over it. The picture is
+     an element now (MonkHeroArt) rather than a background layer, so that the
+     optimizer can resize a 1.5MB PNG — and what stays here is the dawn field
+     it used to sit on. If the file is slow, missing or renamed, the banner is
+     still a deliberate-looking object with legible white lettering rather
+     than a black rectangle, which is worth the two gradients it costs. */
   background-image:
-    linear-gradient(
-      100deg,
-      rgba(6, 12, 28, 0.92) 0%,
-      rgba(6, 12, 28, 0.72) 38%,
-      rgba(6, 12, 28, 0.3) 68%,
-      rgba(6, 12, 28, 0.55) 100%
-    ),
-    url("/monk-mode-hero.png"),
     radial-gradient(
       120% 120% at 78% 8%,
       rgba(243, 158, 94, 0.55),
       rgba(243, 158, 94, 0) 55%
     ),
     linear-gradient(168deg, #2a3358 0%, #1b2340 45%, #0a1024 100%);
-  background-size: cover, cover, cover, cover;
-  background-position:
-    center,
-    center 38%,
-    center,
-    center;
+  background-size: cover;
+  background-position: center;
   background-repeat: no-repeat;
   border: 1px solid rgba(150, 170, 215, 0.22);
   box-shadow:

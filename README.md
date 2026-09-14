@@ -770,9 +770,17 @@ again.
     *key*; the browser remembers the keys it has fired, so a burst does not
     replay on every refresh for the rest of the day. It honours
     `prefers-reduced-motion` and the library is loaded on demand.
-  - **The banner image** is `public/monk-mode-hero.png`, and it is optional:
-    `.monk-hero` in `globals.css` layers it over a gradient that stands on its
-    own if the file is missing, so the banner is never a broken image.
+  - **The artwork** lives in `public/` — `monk-hero-bg.png` behind the banner,
+    `monk-forest-strip.png` along the foot of the streak card,
+    `monk-corner-mountain.png` as the mark on a completed habit, and an
+    `habit-icon-*` / `habit-bottom-*` pair per habit. Every one is drawn
+    through `next/image`: the sources are 1500px PNGs of up to 1.8MB and the
+    habits panel puts seven on screen at once, so the optimizer is what makes
+    the page loadable. They are keyed off each habit's **icon**, not its name,
+    so renaming a habit keeps its painting and a new habit that picks the
+    mosque gets the salah artwork for free; a habit whose icon has no painting
+    draws its Tabler glyph as before. The banner keeps a gradient underneath
+    its photograph, so a missing file is never a broken image.
 
 ## Deploying to Vercel + hosted Postgres (later)
 
