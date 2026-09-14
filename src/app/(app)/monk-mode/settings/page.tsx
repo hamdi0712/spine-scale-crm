@@ -6,8 +6,6 @@
 // this changes what one person's twenty-one days consist of. It is part of the
 // feature, not part of the app's configuration, and it lives with the feature.
 
-import Link from "next/link";
-import { IconChevronLeft } from "@tabler/icons-react";
 import { loadChallenge, loadHabits } from "@/lib/monkModeStore";
 import {
   MAX_DURATION_DAYS,
@@ -22,6 +20,7 @@ import {
   updateMonkChallenge,
 } from "@/lib/actions/monkMode";
 import MonkHabitSettings from "@/components/MonkHabitSettings";
+import MonkHeader from "@/components/MonkHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -34,21 +33,18 @@ export default async function MonkSettingsPage() {
   const shape = challengeProgress(challenge, now);
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6">
-        <Link
-          href="/monk-mode"
-          className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
-        >
-          <IconChevronLeft size={14} stroke={1.75} aria-hidden />
-          Back to Monk Mode
-        </Link>
-        <h1 className="display text-[32px] font-semibold">Monk Mode settings</h1>
-        <p className="mt-1.5 text-sm text-muted">
-          Your habits, and the dates the challenge runs between
-        </p>
-      </div>
+    <div className="max-w-5xl">
+      {/* No "back to Monk Mode" link: the segmented nav in the header is the
+          way back, and it is the way to the other three views as well. */}
+      <MonkHeader
+        title={<h1 className="display text-[32px] font-semibold">Habits</h1>}
+        subtitle="Your non-negotiables, and the dates the challenge runs between"
+      />
 
+      {/* The header runs the page's width so the nav sits beside the title;
+          everything under it is a form, and a form field a thousand pixels
+          wide is harder to use than one at a readable measure, not easier. */}
+      <div className="max-w-3xl">
       <section className="card mb-6 p-6">
         <h2 className="display text-xl font-semibold">The challenge</h2>
         <p className="num mt-0.5 text-xs text-muted">
@@ -142,6 +138,7 @@ export default async function MonkSettingsPage() {
       )}
 
       <MonkHabitSettings habits={habits} />
+      </div>
     </div>
   );
 }

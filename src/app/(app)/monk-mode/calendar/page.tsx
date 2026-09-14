@@ -31,6 +31,7 @@ import {
 import MonkCalendarGrid, {
   MonkCalendarLegend,
 } from "@/components/MonkCalendarGrid";
+import MonkHeader from "@/components/MonkHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -60,14 +61,16 @@ export default async function MonkCalendarPage({
   const tally = monkTally(challenge, active, progress, now);
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6">
-        <h1 className="display text-[32px] font-semibold">Calendar</h1>
-        <p className="num mt-1.5 text-sm text-muted">
-          {monkDateRange(shape.start, shape.end)} · day {shape.day} of{" "}
-          {shape.total} · {tally.pct}% of habit-days completed
-        </p>
-      </div>
+    <div className="max-w-5xl">
+      <MonkHeader
+        title={<h1 className="display text-[32px] font-semibold">Calendar</h1>}
+        subtitle={
+          <span className="num">
+            {monkDateRange(shape.start, shape.end)} · day {shape.day} of{" "}
+            {shape.total} · {tally.pct}% of habit-days completed
+          </span>
+        }
+      />
 
       <section className="card p-6">
         <div className="mb-5 flex items-center justify-between gap-3">

@@ -516,6 +516,21 @@ export function monkTally(
   };
 }
 
+// Days on which every active habit hit its target — the streak's own test,
+// applied to the whole run rather than to a consecutive tail of it. The figure
+// a bare streak of zero needs beside it: a run of zero on day twelve with nine
+// perfect days behind it is a different week from a run of zero with none.
+export function monkPerfectDays(
+  habits: MonkHabit[],
+  progress: MonkProgressMap,
+  days: Date[],
+  today: Date,
+): number {
+  return days.filter((day) =>
+    dayIsComplete(readMonkDay(habits, progress, day, today)),
+  ).length;
+}
+
 // ─── Streaks ───────────────────────────────────────────────────────────────
 
 export interface MonkStreaks {
@@ -596,6 +611,21 @@ function cellFor(
     past: toChecklistDay(day).getTime() <= t,
     isToday: toChecklistDay(day).getTime() === t,
   };
+}
+
+// Every day of the challenge as a cell, in order — what the banner draws its
+// row of day ticks from. The whole challenge rather than a window, because the
+// banner's tick row is the challenge: twenty-one marks, one per day, and the
+// point of it is that you can see the shape of the whole run at once.
+export function monkChallengeCells(
+  challenge: MonkChallenge,
+  habits: MonkHabit[],
+  progress: MonkProgressMap,
+  today: Date,
+): MonkDayCell[] {
+  return challengeDays(challenge).map((day, i) =>
+    cellFor(challenge, habits, progress, day, today, `D${i + 1}`),
+  );
 }
 
 // The last N days of the challenge up to and including today, for the dot row

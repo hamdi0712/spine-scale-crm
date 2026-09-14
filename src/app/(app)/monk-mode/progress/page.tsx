@@ -21,13 +21,17 @@ import {
   indexProgress,
   monkAccent,
   monkDateRange,
+  monkPerfectDays,
   monkStreaks,
   monkTally,
+  monkWeekBars,
   progressOn,
   statusFor,
 } from "@/lib/monkMode";
 import MonkDonut from "@/components/MonkDonut";
+import MonkHeader from "@/components/MonkHeader";
 import MonkIcon from "@/components/MonkIcon";
+import MonkWeekBars from "@/components/MonkWeekBars";
 
 export const dynamic = "force-dynamic";
 
@@ -47,27 +51,33 @@ export default async function MonkProgressPage() {
   const tally = monkTally(challenge, active, progress, now);
   const streaks = monkStreaks(challenge, active, progress, now);
   const lived = daysSoFar(challenge, now);
+  // The week's bars were a panel on the dashboard until they were the third
+  // reading of the same seven days on one screen. Here they are the point:
+  // this page is where the challenge is read at more than a glance.
+  const week = monkWeekBars(challenge, active, progress, now);
 
   const perHabit = active.map((habit) =>
     readHabitRun(habit, progress, lived, now),
   );
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6">
-        <h1 className="display text-[32px] font-semibold">Progress</h1>
-        <p className="num mt-1.5 text-sm text-muted">
-          {monkDateRange(shape.start, shape.end)} · day {shape.day} of{" "}
-          {shape.total}
-        </p>
-      </div>
+    <div className="max-w-5xl">
+      <MonkHeader
+        title={<h1 className="display text-[32px] font-semibold">Progress</h1>}
+        subtitle={
+          <span className="num">
+            {monkDateRange(shape.start, shape.end)} · day {shape.day} of{" "}
+            {shape.total}
+          </span>
+        }
+      />
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <section className="card p-5">
-          <h2 className="display mb-4 text-xl font-semibold">Overall</h2>
+        <section className="card flex flex-col p-5">
+          <h2 className="display mb-4 shrink-0 text-xl font-semibold">Overall</h2>
           <MonkDonut tally={tally} />
         </section>
-        <section className="card p-5">
+        <section className="card flex flex-col p-5">
           <h2 className="display mb-4 text-xl font-semibold">The run</h2>
           <dl className="space-y-3">
             <Stat label="Current streak" value={`${streaks.current} days`} />
@@ -75,9 +85,13 @@ export default async function MonkProgressPage() {
             <Stat label="Days lived" value={`${lived.length} of ${shape.total}`} />
             <Stat
               label="Perfect days"
-              value={`${perfectDays(active, progress, lived, now)} of ${lived.length}`}
+              value={`${monkPerfectDays(active, progress, lived, now)} of ${lived.length}`}
             />
           </dl>
+          <div className="mt-auto border-t border-line/60 pt-4">
+            <h3 className="mb-4 text-sm font-semibold">This week</h3>
+            <MonkWeekBars bars={week} />
+          </div>
         </section>
       </div>
 
@@ -152,25 +166,10 @@ function readHabitRun(
   };
 }
 
-function perfectDays(
-  habits: MonkHabit[],
-  progress: MonkProgressMap,
-  lived: Date[],
-  now: Date,
-): number {
-  return lived.filter(
-    (day) =>
-      habits.length > 0 &&
-      habits.every(
-        (h) => progressOn(progress, day, h.id) >= h.dailyTarget,
-      ),
-  ).length;
-}
-
 function HabitRunRow({ row }: { row: HabitRun }) {
   const accent = monkAccent(row.habit.accent);
   return (
-    <li className="border-b border-line/60 px-6 py-4 last:border-b-0">
+    <li className="border-b border-line/60 px-6 py-3.5 last:border-b-0">
       <div className="flex items-center gap-3">
         <span
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${accent.soft} ${accent.text}`}
@@ -182,16 +181,16 @@ function HabitRunRow({ row }: { row: HabitRun }) {
         </span>
         <span className="num shrink-0 text-sm font-semibold">{row.pct}%</span>
       </div>
-      {/* One bar in the habit's own colour rather than a second donut. The
-          counts beneath it are what the donut's three slices would have said,
-          in fewer pixels. */}
+      {/* The bar is green, not the habit's own colour. The accent says which
+          habit this is — it is on the glyph, where identity belongs — and
+          green says how much of it got done. Drawn in the accent, a habit
+          whose colour happens to be red reported an excellent fortnight in
+          alarm red, which is the two colour systems fighting that the habit
+          cards were rebuilt to stop. */}
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-wash">
         <div
-          className="h-full rounded-full"
-          style={{
-            width: `${row.pct}%`,
-            backgroundColor: accent.varRef,
-          }}
+          className="h-full rounded-full bg-ok"
+          style={{ width: `${row.pct}%` }}
         />
       </div>
       <div className="num mt-2 flex flex-wrap gap-x-4 text-[11px] text-muted">

@@ -130,71 +130,73 @@ function HabitRow({
 }) {
   const accent = monkAccent(habit.accent);
   return (
-    <li className="border-b border-line/60 last:border-b-0">
-      <div className="flex items-center gap-3 px-6 py-3">
-        <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${accent.soft} ${accent.text}`}
-        >
-          <MonkIcon name={habit.icon} size={18} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">
-            {habit.name}
+    // Relative, because the reorder arrows are positioned over the row rather
+    // than living inside it. They are buttons, and a button inside a
+    // <summary> toggles the disclosure as well as submitting — so they sit
+    // outside the <details> entirely and are placed back where they belong.
+    <li className="relative border-b border-line/60 last:border-b-0">
+      <details className="group">
+        {/* The row is the summary. It used to be a row with an "Edit" link on
+            a second line beneath it, which spent a line of the list per habit
+            saying the word "Edit" — the row opens now, and the chevron says
+            so. */}
+        <summary className="flex cursor-pointer list-none items-center gap-3 py-3 pl-6 pr-[104px] hover:bg-wash/50 [&::-webkit-details-marker]:hidden">
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${accent.soft} ${accent.text}`}
+          >
+            <MonkIcon name={habit.icon} size={18} />
           </span>
-          {habit.description && (
-            <span className="mt-0.5 block truncate text-xs text-muted">
-              {habit.description}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">
+              {habit.name}
+            </span>
+            {habit.description && (
+              <span className="mt-0.5 block truncate text-xs text-muted">
+                {habit.description}
+              </span>
+            )}
+          </span>
+          {habit.dailyTarget > 1 && (
+            <span className="chip-stat num shrink-0">
+              {habit.dailyTarget}× a day
             </span>
           )}
-        </span>
-        {habit.dailyTarget > 1 && (
-          <span className="chip-stat num shrink-0">
-            {habit.dailyTarget}× a day
-          </span>
-        )}
-
-        {/* Reordering, as two one-press forms. The disabled ends stay in place
-            rather than disappearing, so the row of controls does not change
-            width as you move a habit up the list. */}
-        <div className="flex shrink-0 items-center">
-          <MoveButton id={habit.id} direction="up" disabled={first} />
-          <MoveButton id={habit.id} direction="down" disabled={last} />
-        </div>
-      </div>
-
-      {/* The editor. Closed by default — this page is read far more often than
-          it is written to, and seven open forms is not a list. */}
-      <details className="group px-6 pb-3">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-accent">
           <Icon
             name="chevronRight"
-            className="h-3.5 w-3.5 transition-transform group-open:rotate-90"
+            className="h-4 w-4 shrink-0 text-muted transition-transform group-open:rotate-90"
           />
-          Edit
         </summary>
-        <form action={updateMonkHabit.bind(null, habit.id)} className="mt-3">
-          <HabitFields habit={habit} />
-          <button type="submit" className="btn mt-4 h-[38px] px-4 text-xs">
-            Save changes
-          </button>
-        </form>
-        {/* Retiring and deleting sit outside the edit form rather than inside
-            it. They are forms of their own — a form cannot contain another one
-            — and they are not edits: one takes the habit off the grid and the
-            other takes it off the record. */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <form action={setMonkHabitActive.bind(null, habit.id, false)}>
-            <button
-              type="submit"
-              className="btn-ghost h-[38px] px-4 text-xs"
-              title="Takes it off the grid and out of the scoring, and keeps every day it was done"
-            >
-              Retire
+
+        <div className="px-6 pb-4 pt-1">
+          <form action={updateMonkHabit.bind(null, habit.id)}>
+            <HabitFields habit={habit} />
+            <button type="submit" className="btn mt-4 h-[38px] px-4 text-xs">
+              Save changes
             </button>
           </form>
-          <DeleteButton id={habit.id} />
+          {/* Retiring and deleting sit outside the edit form rather than
+              inside it. They are forms of their own — a form cannot contain
+              another one — and they are not edits: one takes the habit off the
+              grid and the other takes it off the record. */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <form action={setMonkHabitActive.bind(null, habit.id, false)}>
+              <button
+                type="submit"
+                className="btn-ghost h-[38px] px-4 text-xs"
+                title="Takes it off the grid and out of the scoring, and keeps every day it was done"
+              >
+                Retire
+              </button>
+            </form>
+            <DeleteButton id={habit.id} />
+          </div>
         </div>
       </details>
+
+      <div className="absolute right-5 top-3 flex items-center">
+        <MoveButton id={habit.id} direction="up" disabled={first} />
+        <MoveButton id={habit.id} direction="down" disabled={last} />
+      </div>
     </li>
   );
 }

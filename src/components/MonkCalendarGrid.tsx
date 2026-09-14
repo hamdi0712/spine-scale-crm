@@ -32,7 +32,10 @@ export default function MonkCalendarGrid({
   // column's width: at full size the columns are a hundred pixels wide and a
   // stretched day reads as a pill, which is a different object from the dots
   // and rings the rest of the feature marks a day with.
-  const cellClass = full ? "h-10 w-10 text-sm" : "h-8 w-8 text-xs";
+  // The compact size is deliberately small. Six rows of it are the tallest
+  // thing in the dashboard's row of four panels, and every pixel it gives back
+  // is a pixel the page keeps above the fold.
+  const cellClass = full ? "h-10 w-10 text-sm" : "h-7 w-7 text-[11px]";
 
   return (
     <div>

@@ -729,6 +729,11 @@ again.
   or a number off the funnel; it shares the shell, the sidebar and the design
   tokens and nothing else, so the whole feature is five tables
   (`MonkMode*` in the schema) that can be lifted out without touching the CRM.
+  - **It fits one screen.** Three bands — the banner, the habits as one row of
+    cards, and four panels of equal height — and nothing below the fold on a
+    laptop. The four views of the challenge (Today, Calendar, Journal,
+    Progress) plus Habits are a segmented control in the header rather than a
+    panel of links.
   - **The challenge** is one row — a start date and a length, 21 days by
     default. The most recent one is the active one, so going again is a new
     row rather than an edit, and the run you just finished stays on the record.

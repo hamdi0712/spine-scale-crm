@@ -16,11 +16,17 @@ export default function MonkNote({
   content,
   readOnly = false,
   rows = 4,
+  // Fill the card rather than sitting at a fixed number of rows. On the
+  // dashboard this panel stands in a row of four that share a height, and a
+  // textarea that stops short of the card's foot leaves a band of empty
+  // surface under it — `rows` becomes the minimum and the box takes the rest.
+  grow = false,
 }: {
   day: string;
   content: string | null;
   readOnly?: boolean;
   rows?: number;
+  grow?: boolean;
 }) {
   if (readOnly) {
     return content ? (
@@ -37,22 +43,25 @@ export default function MonkNote({
   }
 
   return (
-    <form action={saveMonkNote.bind(null, day)}>
+    <form
+      action={saveMonkNote.bind(null, day)}
+      className={grow ? "flex flex-1 flex-col" : undefined}
+    >
       <textarea
         name="content"
         rows={rows}
         defaultValue={content ?? ""}
         placeholder="How was your day?"
-        className="field resize-y leading-relaxed"
+        className={`field leading-relaxed ${
+          grow ? "min-h-0 flex-1 resize-none" : "resize-y"
+        }`}
       />
       <div className="mt-3 flex items-center justify-between gap-3">
-        <button type="submit" className="btn h-[38px] px-4 text-xs">
+        <button type="submit" className="btn h-[36px] px-3.5 text-xs">
           <Icon name="check" className="h-3.5 w-3.5" />
-          Save note
+          Save
         </button>
-        <span className="text-[11px] text-muted">
-          Editable today only
-        </span>
+        <span className="text-[11px] text-muted">Editable today only</span>
       </div>
     </form>
   );

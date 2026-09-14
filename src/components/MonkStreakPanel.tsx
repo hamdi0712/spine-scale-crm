@@ -1,10 +1,16 @@
-// The streak: the run of days on which every habit hit its target, the best
-// run so far, and the last seven days as a row of dots.
+// The run: the current streak, the last seven days as dots, and the two
+// figures that put the streak in context.
 //
-// "Every habit" is the whole of the definition and it is deliberately strict —
-// a streak that survived a missed habit would be a streak of having mostly
-// shown up, which is a different and much easier thing to keep. Today is
-// counted once it is complete and never counted against: see monkStreaks.
+// A streak is the number people actually check, so it is the largest thing on
+// the panel. "Every habit hit its target" is the whole of the definition and
+// it is deliberately strict — a streak that survived a missed habit would be a
+// streak of having mostly shown up, which is a different and much easier thing
+// to keep. Today is counted once it is complete and never counted against: see
+// monkStreaks.
+//
+// The two stats under the rule are what the panel used to need a second card
+// for. A streak alone says nothing about whether a run of zero is a bad week
+// or a first morning; "3 of 12 perfect" does.
 
 import { IconFlame } from "@tabler/icons-react";
 import { MonkDayCell, MonkStreaks } from "@/lib/monkMode";
@@ -13,58 +19,54 @@ import { CheckDot } from "@/components/MonkHabitGrid";
 export default function MonkStreakPanel({
   streaks,
   row,
+  perfectDays,
+  daysLived,
 }: {
   streaks: MonkStreaks;
   row: MonkDayCell[];
+  perfectDays: number;
+  daysLived: number;
 }) {
+  const live = streaks.current > 0;
   return (
-    <div>
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2">
         <IconFlame
-          size={18}
+          size={17}
           stroke={1.75}
-          className={streaks.current > 0 ? "text-warn" : "text-muted"}
+          className={live ? "text-warn" : "text-muted"}
           aria-hidden
         />
-        <h2 className="display text-xl font-semibold">Streak</h2>
+        <h2 className="display text-base font-semibold">Streak</h2>
       </div>
 
-      <div className="mt-4 flex items-end justify-between gap-4">
-        {/* The current run, with a rule at its left edge in the same warn hue
-            as the flame — the figure is the loudest thing in the panel and the
-            rule is what marks it as the one being reported. */}
-        <div
-          className={`border-l-2 pl-3 ${
-            streaks.current > 0 ? "border-warn" : "border-line"
+      <div className="mt-4 flex items-baseline gap-2">
+        <span
+          className={`num text-[40px] font-semibold leading-none tracking-tight ${
+            live ? "text-ink" : "text-muted"
           }`}
         >
-          <div className="num text-[30px] font-semibold leading-none tracking-tight">
-            {streaks.current}{" "}
-            <span className="text-[15px] font-medium">
-              {streaks.current === 1 ? "day" : "days"}
-            </span>
-          </div>
-          <div className="mt-1.5 text-xs text-muted">Current streak</div>
-        </div>
-        <div className="text-right">
-          <div className="text-xs text-muted">Best streak</div>
-          <div className="num mt-1 text-[15px] font-semibold">
-            {streaks.best} {streaks.best === 1 ? "day" : "days"}
-          </div>
-        </div>
+          {streaks.current}
+        </span>
+        <span className="text-sm text-muted">
+          {streaks.current === 1 ? "day" : "days"} in a row
+        </span>
       </div>
 
-      {/* The last seven days of the challenge, labelled by their day number
-          rather than by weekday: this row is about the challenge's own clock,
-          and D1–D7 is how the banner counts. A day still to come is drawn as an
-          open ring, the same mark as a day that was missed — the difference is
-          in the label under it and in the fact that one of them is today. */}
-      <div className="mt-5 flex items-start justify-between gap-1 border-t border-line/60 pt-4">
+      {/* The last seven days of the challenge, labelled by day number rather
+          than weekday: this row is about the challenge's own clock, and D1–D7
+          is how the banner counts.
+
+          Centred in whatever height the row of panels settles on, rather than
+          pinned under the streak with the slack falling below it — this panel
+          is the shortest of the four and the gap was showing. */}
+      <div className="flex flex-1 items-center">
+        <div className="flex w-full items-start justify-between gap-1 py-4">
         {row.map((cell) => (
           <div key={cell.key} className="flex flex-col items-center gap-1.5">
-            <CheckDot filled={cell.complete} missed={cell.past} size={22} />
+            <CheckDot filled={cell.complete} missed={cell.past} size={20} />
             <span
-              className={`num text-[11px] ${
+              className={`num text-[10px] ${
                 cell.isToday ? "font-semibold text-ink" : "text-muted"
               }`}
             >
@@ -72,7 +74,22 @@ export default function MonkStreakPanel({
             </span>
           </div>
         ))}
+        </div>
       </div>
+
+      <dl className="space-y-2 border-t border-line/60 pt-3">
+        <Stat label="Best streak" value={`${streaks.best} days`} />
+        <Stat label="Perfect days" value={`${perfectDays} of ${daysLived}`} />
+      </dl>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="num text-xs font-medium">{value}</dd>
     </div>
   );
 }

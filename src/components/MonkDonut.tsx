@@ -42,8 +42,17 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
     : slices;
 
   return (
-    <div className="flex items-center gap-5">
-      <div className="relative h-[124px] w-[124px] shrink-0">
+    // The ring over its legend rather than beside it. The panel is one of four
+    // in a row now, and at a quarter of the page a ring and three labelled
+    // counts side by side leaves neither enough room — stacked, the ring gets
+    // the width it wants and the counts read as a table under it.
+    // flex-1 rather than h-full: h-full resolves against the card's whole
+    // height, heading included, so the ring and its legend together came to
+    // more than the space left under the heading and the last legend row fell
+    // out of the bottom of the card. As a flex child of a column card this
+    // takes what is actually left.
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative mx-auto my-auto h-[118px] w-[118px]">
         <div className="donut-glass" aria-hidden />
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -51,8 +60,8 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
               data={drawn}
               dataKey="value"
               nameKey="label"
-              innerRadius={42}
-              outerRadius={60}
+              innerRadius={41}
+              outerRadius={57}
               startAngle={90}
               endAngle={-270}
               paddingAngle={0}
@@ -67,16 +76,16 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <div className="num text-[20px] font-semibold leading-none tracking-tight">
+          <div className="num text-[22px] font-semibold leading-none tracking-tight">
             {tally.pct}%
           </div>
           <div className="num mt-1 text-[11px] text-muted">
-            {tally.completed} / {tally.decided || 0}
+            {tally.completed} / {tally.decided}
           </div>
         </div>
       </div>
 
-      <ul className="min-w-0 flex-1 space-y-2.5">
+      <ul className="mt-4 shrink-0 space-y-2 border-t border-line/60 pt-3">
         {slices.map((slice) => (
           <li key={slice.key} className="flex items-center gap-2.5">
             <span

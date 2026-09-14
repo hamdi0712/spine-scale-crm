@@ -25,6 +25,7 @@ import {
 } from "@/lib/monkMode";
 import { parseDayKey } from "@/lib/dailyChecklist";
 import { fmtDate } from "@/lib/format";
+import MonkHeader from "@/components/MonkHeader";
 import MonkNote from "@/components/MonkNote";
 import MonkTodayList from "@/components/MonkTodayList";
 
@@ -56,13 +57,11 @@ export default async function MonkJournalPage({
   const n = dayNumber(challenge, day);
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6">
-        <h1 className="display text-[32px] font-semibold">Journal</h1>
-        <p className="mt-1.5 text-sm text-muted">
-          One note a day, written on the day. Past days stay as they were left.
-        </p>
-      </div>
+    <div className="max-w-5xl">
+      <MonkHeader
+        title={<h1 className="display text-[32px] font-semibold">Journal</h1>}
+        subtitle="One note a day, written on the day. Past days stay as they were left."
+      />
 
       <section className="card p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">

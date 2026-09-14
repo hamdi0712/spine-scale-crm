@@ -27,11 +27,13 @@ export default function MonkWeekBars({ bars }: { bars: MonkWeekBar[] }) {
             </span>
             {/* A fixed-height track with the fill grown from the bottom, so
                 seven bars share one baseline and the row reads as a week
-                rather than as seven independent boxes. */}
-            <div className="flex h-[72px] w-full items-end overflow-hidden rounded-[8px] bg-wash">
+                rather than as seven independent boxes. Capped in width: at a
+                seventh of a wide card an uncapped track is a slab, and a slab
+                does not read as a bar in a chart. */}
+            <div className="mx-auto flex h-[72px] w-full max-w-[26px] items-end overflow-hidden rounded-[6px] bg-wash">
               {!blank && (
                 <div
-                  className={`w-full rounded-[8px] transition-[height] ${
+                  className={`w-full rounded-[6px] transition-[height] ${
                     bar.pct >= 100 ? "bg-ok" : "bg-ok/55"
                   }`}
                   // A completed day fills the track; a day with nothing on it

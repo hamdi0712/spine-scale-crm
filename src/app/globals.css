@@ -1193,25 +1193,49 @@ tbody tr {
   background-image: linear-gradient(to right, #6ba1ff, #3fd1c8);
 }
 
-/* A habit card. The app's .card with a hover lift and a press that actually
-   depresses — every one of these is a button you tap several times a day, and
-   it should feel like one. Colour is not here: each card carries its own
-   accent as utilities from MONK_ACCENTS. */
-.monk-card {
+/* The non-negotiables row. One column per habit, so the list is one row —
+   see MonkHabitGrid for why that is the panel's design rather than a count
+   that happened to fit. The count arrives as --monk-cols from the component,
+   because it is data and a stylesheet cannot know it.
+
+   Below the breakpoint the row stops being a row: seven cards across a narrow
+   page are seven slivers, so it falls back to as many columns as fit at a
+   readable width and wraps, reaching one column on a phone on its own. The
+   breakpoint is the viewport rather than the container because the sidebar is
+   a fixed width at every size, so the two differ by a constant. */
+.monk-habit-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(var(--monk-cols, 7), minmax(0, 1fr));
+}
+/* The two ways out of one row: too many habits for any width, and too little
+   width for these habits. Same fallback, so they are written once. */
+.monk-habit-wrap {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+}
+@media (max-width: 1100px) {
+  .monk-habit-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 148px), 1fr));
+  }
+}
+
+/* A habit card. A hover lift and a press that actually depresses — every one
+   of these is a button you tap several times a day, and it should feel like
+   one. Colour is not here: each card carries its own accent and its own
+   completion state as utilities from MONK_ACCENTS. */
+.monk-tile {
+  box-shadow: var(--shadow-card);
   transition:
     transform var(--motion) var(--motion-ease),
     box-shadow var(--motion) var(--motion-ease),
     border-color var(--motion) var(--motion-ease),
     background-color var(--motion) var(--motion-ease);
 }
-.monk-card:hover:not(:disabled) {
+.monk-tile:hover:has(button:not(:disabled)) {
   transform: translateY(-1px);
   box-shadow: var(--shadow-card-hover);
 }
-.monk-card:active:not(:disabled) {
+.monk-tile:active:has(button:not(:disabled)) {
   transform: translateY(0);
   box-shadow: var(--shadow-card);
-}
-.monk-card:disabled {
-  cursor: default;
 }
