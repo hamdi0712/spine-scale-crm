@@ -573,6 +573,118 @@ export function monkStreaks(
   return { current, best: Math.max(best, current) };
 }
 
+// ─── What the panels say back ──────────────────────────────────────────────
+//
+// The encouraging half of the feature: a line under the donut, a badge beside
+// the streak, and the rule for when something is worth a confetti burst. All
+// pure, all here rather than spelled out in the components, because these are
+// the feature's tone of voice and it should be possible to read the whole of
+// it in one place and change it in one place.
+//
+// The register is the one the quotations are held to: plain, grounded, no
+// exclamation stacking, nothing that reads as a fitness app shouting. A line
+// that congratulates somebody for a bad week is worse than no line, so the
+// bands below say different things rather than the same thing at different
+// volumes.
+
+// The line under Overall Progress, chosen by how much of the run has actually
+// been completed. `decided` is passed because a percentage with nothing behind
+// it is not a low score — it is a challenge that started this morning, and
+// "rough start" would be the wrong thing to tell somebody on day one.
+export function monkProgressNote(pct: number, decided: number): string {
+  if (decided === 0) return "Day one. The only rep that counts is the next one.";
+  if (pct < 25) return "Rough patch. One clean day resets the whole thing.";
+  if (pct < 50) return "Keep going. Small steps, big changes — the run is still yours.";
+  if (pct < 75) return "Past halfway. This is the part where it starts to hold.";
+  if (pct < 90) return "Strong run. Protect it — the last stretch is the test.";
+  return "Locked in. This is what discipline actually looks like.";
+}
+
+// The pill beside the Streak heading. Four tiers, and the tiers are days
+// rather than percentages because a streak is a count — three days is three
+// days whether the challenge is twenty-one or ninety.
+export interface MonkStreakTier {
+  label: string;
+  // Which pill treatment to draw it in. See MONK_BADGE_TONES in
+  // src/components/MonkBadge.tsx — the words live here, the colour lives there.
+  tone: MonkBadgeTone;
+  // Whether this tier has earned the trophy. Below it the pill is
+  // encouragement; at and above it, it is a result.
+  trophy: boolean;
+}
+
+export type MonkBadgeTone = "gold" | "green" | "blue" | "muted";
+
+export const MONK_STREAK_MILESTONES = [3, 7, 14, 21, 30, 60, 100];
+
+export function monkStreakTier(streak: number): MonkStreakTier {
+  if (streak >= 14) return { label: "Unstoppable", tone: "gold", trophy: true };
+  if (streak >= 7) return { label: "On fire", tone: "gold", trophy: true };
+  if (streak >= 3) return { label: "Building", tone: "green", trophy: false };
+  return { label: "Keep going", tone: "blue", trophy: false };
+}
+
+// Whether the month's line has earned a trophy beside it. A high bar and a
+// floor under it: two complete days out of two is a perfect month that is two
+// days old, and a trophy for it would make the trophy mean nothing.
+export function monkMonthEarnedTrophy(
+  complete: number,
+  lived: number,
+): boolean {
+  return lived >= 4 && complete / lived >= 0.75;
+}
+
+// What, if anything, is worth celebrating right now — and the key that stops
+// it being celebrated twice.
+//
+// The key is the whole mechanism. The page is server-rendered and re-renders
+// on every tick of a habit, so "the day is complete" is true on that render
+// and on every render after it; a burst fired on the condition alone would go
+// off again on every refresh for the rest of the day. The key names the
+// occasion rather than the state — this day's completion, this streak length —
+// and the browser remembers the keys it has already fired (MonkCelebrate).
+export interface MonkCelebration {
+  key: string;
+  // "day" is every habit done today; "streak" is a streak length off
+  // MONK_STREAK_MILESTONES; "finish" is the last day of the challenge, done.
+  kind: "day" | "streak" | "finish";
+  message: string;
+}
+
+export function monkCelebration({
+  today,
+  dayComplete,
+  streak,
+  isLastDay,
+}: {
+  today: Date;
+  dayComplete: boolean;
+  streak: number;
+  isLastDay: boolean;
+}): MonkCelebration | null {
+  const key = dayKey(toChecklistDay(today));
+  // Ordered by size, and only one fires: finishing the challenge on a day that
+  // also completed a streak milestone is one moment, not three bursts.
+  if (isLastDay && dayComplete) {
+    return {
+      key: `finish:${key}`,
+      kind: "finish",
+      message: "Challenge complete.",
+    };
+  }
+  if (dayComplete && MONK_STREAK_MILESTONES.includes(streak)) {
+    return {
+      key: `streak:${streak}:${key}`,
+      kind: "streak",
+      message: `${streak} days in a row.`,
+    };
+  }
+  if (dayComplete) {
+    return { key: `day:${key}`, kind: "day", message: "Every habit, done." };
+  }
+  return null;
+}
+
 // ─── The dot rows and the bars ─────────────────────────────────────────────
 
 export interface MonkDayCell {

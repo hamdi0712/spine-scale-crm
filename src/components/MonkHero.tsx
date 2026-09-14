@@ -19,6 +19,7 @@
 // should not wait behind a quotation.
 
 import { Suspense } from "react";
+import { IconCrown } from "@tabler/icons-react";
 import {
   ChallengeProgress,
   MonkChallenge,
@@ -28,6 +29,7 @@ import {
   monkChallengeCells,
   monkDateRange,
 } from "@/lib/monkMode";
+import MonkBadge from "@/components/MonkBadge";
 import MonkQuoteLine, { MonkQuoteLineFallback } from "@/components/MonkQuoteLine";
 
 // The longest challenge still drawn as individual days. Twenty-one ticks in a
@@ -52,13 +54,24 @@ export default function MonkHero({
   return (
     <section className="monk-hero flex flex-wrap items-end gap-x-8 gap-y-5 px-6 py-[18px]">
       <div className="min-w-0 flex-1 basis-80">
-        <div className="flex items-baseline gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h2 className="display text-[27px] font-semibold leading-none text-white">
             {shape.total} Day Challenge
           </h2>
-          <span className="text-[11px] font-medium tracking-[0.14em] text-white/45">
-            MONK MODE
-          </span>
+          {/* The one badge on the page that names the feature rather than a
+              state. Its gold is the app's --c-warn, and it is given the glow
+              because on a photograph a bordered pill needs something to lift
+              it off the picture — the same reason the tiles on the business
+              hours widget are built the way they are. The tone classes are
+              mixed for a light card, so the fill and lettering are overridden
+              here for the one place a pill sits on a dark ground. */}
+          <MonkBadge
+            label="Monk Mode"
+            tone="gold"
+            glow
+            icon={<IconCrown size={12} stroke={2} aria-hidden />}
+            className="!border-warn/45 !bg-warn/20 !text-[#F7CE7E]"
+          />
         </div>
 
         {/* The day counter and the range on one line, the counter carrying the
@@ -118,9 +131,12 @@ function DayTicks({ cells }: { cells: MonkDayCell[] }) {
         // floor is what a day still to come looks like, and it has to be
         // visible as an empty slot — the row's length is the challenge.
         const height = cell.complete ? "h-2.5" : "h-2";
+        // A completed tick gets the vertical highlight (.monk-tick-done) on
+        // top of its fill, so the days that went well have a little dimension
+        // against the bare ones beside them.
         let tone = "bg-white/25";
         if (cell.isToday) tone = "bg-white/40 ring-[1.5px] ring-white";
-        else if (cell.complete) tone = "bg-white/95";
+        else if (cell.complete) tone = "bg-white/95 monk-tick-done";
         else if (cell.past && cell.completion > 0) tone = "bg-white/60";
         else if (cell.past) tone = "bg-white/25";
         return (

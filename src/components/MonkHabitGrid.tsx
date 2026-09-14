@@ -98,8 +98,14 @@ function HabitCard({
     // forms of its own and a form cannot contain another one.
     <div
       className={`monk-tile relative flex flex-col rounded-[16px] border p-3.5 ${
+        // The settle runs on the render where the card first has its tick,
+        // which is the frame after the tap that completed it. A reload with
+        // five habits already done replays five of them at once, and that
+        // reads as the page arriving rather than as five things happening —
+        // which is the trade for keeping this a CSS animation on a
+        // server-rendered card instead of client state tracking every habit.
         complete
-          ? "border-ok/40 bg-ok/[0.06]"
+          ? "monk-settle border-ok/40 bg-ok/[0.06]"
           : row.status === "missed"
             ? "border-line bg-surface opacity-75"
             : "border-line bg-surface"
@@ -126,7 +132,10 @@ function HabitCard({
             {/* The tick sits over the glyph rather than beside it, so a
                 finished card is read from the one place the eye already went. */}
             {complete && (
-              <span className="absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-surface bg-ok text-white">
+              <span
+                className="monk-pop monk-glow absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full border-2 border-surface bg-ok text-white"
+                style={{ "--monk-glow": "var(--c-ok)" } as React.CSSProperties}
+              >
                 <Icon name="check" className="h-2.5 w-2.5" />
               </span>
             )}

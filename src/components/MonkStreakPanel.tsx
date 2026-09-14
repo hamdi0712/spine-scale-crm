@@ -12,8 +12,9 @@
 // for. A streak alone says nothing about whether a run of zero is a bad week
 // or a first morning; "3 of 12 perfect" does.
 
-import { IconFlame } from "@tabler/icons-react";
-import { MonkDayCell, MonkStreaks } from "@/lib/monkMode";
+import { IconFlame, IconTrophy } from "@tabler/icons-react";
+import { MonkDayCell, MonkStreaks, monkStreakTier } from "@/lib/monkMode";
+import MonkBadge from "@/components/MonkBadge";
 import { CheckDot } from "@/components/MonkHabitGrid";
 
 export default function MonkStreakPanel({
@@ -28,6 +29,10 @@ export default function MonkStreakPanel({
   daysLived: number;
 }) {
   const live = streaks.current > 0;
+  // What the run has earned, as a word. Four tiers rather than a number
+  // repeated in a pill: the figure below already says how many days it is, and
+  // a badge that says "4" beside a "4" is not telling anybody anything.
+  const tier = monkStreakTier(streaks.current);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2">
@@ -38,6 +43,19 @@ export default function MonkStreakPanel({
           aria-hidden
         />
         <h2 className="display text-base font-semibold">Streak</h2>
+        <MonkBadge
+          label={tier.label}
+          tone={tier.tone}
+          // The glow is kept for the tiers that are a result. "Keep going" is
+          // encouragement, and lighting it up would congratulate somebody for
+          // not having a streak.
+          glow={tier.trophy}
+          icon={
+            tier.trophy ? (
+              <IconTrophy size={11} stroke={2} aria-hidden />
+            ) : undefined
+          }
+        />
       </div>
 
       <div className="mt-4 flex items-baseline gap-2">
@@ -78,18 +96,45 @@ export default function MonkStreakPanel({
       </div>
 
       <dl className="space-y-2 border-t border-line/60 pt-3">
-        <Stat label="Best streak" value={`${streaks.best} days`} />
+        <Stat
+          label="Best streak"
+          value={`${streaks.best} days`}
+          // The trophy marks the record rather than the current run — it is
+          // the one figure on the panel that is an achievement rather than a
+          // status, and it only appears once there is a record worth the word.
+          icon={
+            streaks.best >= 3 ? (
+              <IconTrophy
+                size={12}
+                stroke={2}
+                className="text-warn"
+                aria-hidden
+              />
+            ) : undefined
+          }
+        />
         <Stat label="Perfect days" value={`${perfectDays} of ${daysLived}`} />
       </dl>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: React.ReactNode;
+}) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="num text-xs font-medium">{value}</dd>
+      <dd className="num flex items-center gap-1.5 text-xs font-medium">
+        {icon}
+        {value}
+      </dd>
     </div>
   );
 }

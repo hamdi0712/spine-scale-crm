@@ -1189,9 +1189,7 @@ tbody tr {
 .monk-hero-track {
   background: rgba(255, 255, 255, 0.18);
 }
-.monk-hero-fill {
-  background-image: linear-gradient(to right, #6ba1ff, #3fd1c8);
-}
+
 
 /* The non-negotiables row. One column per habit, so the list is one row —
    see MonkHabitGrid for why that is the panel's design rather than a count
@@ -1238,4 +1236,119 @@ tbody tr {
 .monk-tile:active:has(button:not(:disabled)) {
   transform: translateY(0);
   box-shadow: var(--shadow-card);
+}
+
+/* ─── Monk Mode: the gamified layer ─────────────────────────────────────────
+   Badges, glows and the two small celebrations. Everything here resolves
+   through the app's own colour variables — the gold is --c-warn, which is the
+   amber the KPI page and every warning pill in the app already wear, not a new
+   hex introduced for a crown. So these follow light and dark with the rest of
+   it, and the feature has not quietly started a second palette.
+
+   The motion is all keyframe animation, which means the global
+   prefers-reduced-motion override further up already turns every bit of it off
+   for anybody who has asked for that. Nothing here needs its own opt-in. */
+
+/* One pill, four tones. Every badge in Monk Mode is this object — the crown on
+   the banner, the streak tier, the month's trophy — so a pill always means
+   "a status, stated" and never has to be recognised twice. The tone classes
+   live in the component (MONK_BADGE_TONES); this is the shape they fill. */
+.monk-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9999px;
+  border-width: 1px;
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* The glow behind a badge or an earned icon. A wide, very soft halo in the
+   thing's own colour plus a hairline of it — the same construction as the KPI
+   cards' marks, at a lower alpha, so it reads as light coming off the object
+   rather than as a second border around it.
+
+   --monk-glow is set by whoever uses it, always as a token triple. */
+.monk-glow {
+  box-shadow:
+    0 0 0 1px rgb(var(--monk-glow) / 0.14),
+    0 1px 10px rgb(var(--monk-glow) / 0.28);
+}
+
+/* The tick that lands on a habit card when it is completed. A short pop on
+   arrival: the badge does not exist in the markup until the habit is done, so
+   the animation runs exactly when it appears, which is the frame after the tap
+   that finished it. Overshoots slightly and settles, which is what makes it
+   read as a stamp rather than a fade. */
+@keyframes monk-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.monk-pop {
+  animation: monk-pop 240ms var(--motion-ease) both;
+}
+
+/* The whole card, when the tap that just landed completed it. Barely a nudge
+   — a card that leaps is a card that has to be waited for — and it runs once,
+   on the same frame as the tick's pop above. */
+@keyframes monk-settle {
+  0% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.025);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.monk-settle {
+  animation: monk-settle 260ms var(--motion-ease) both;
+}
+
+/* The sticker on the daily note: a handwritten line pinned at an angle in the
+   corner of the card, the way somebody would actually stick one there. The
+   rotation is on the element rather than the text so the little sparkle tips
+   with it, and it is unselectable and non-interactive because it is a
+   decoration sitting over a textarea — a cursor that turns into an I-beam over
+   a sticker is a cursor lying about what is underneath it. */
+.monk-sticker {
+  transform: rotate(-7deg);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* The banner's fallback progress bar, for a challenge too long to draw as
+   individual days. Gold into the app's own teal, rounded at both ends, with a
+   highlight along the top edge so the fill reads as a lit object on the dark
+   banner rather than a flat block of colour. */
+.monk-hero-fill {
+  background-image: linear-gradient(90deg, #f0b44a 0%, #6ba1ff 55%, #3fd1c8 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* A completed day's tick on the banner. The same idea at three pixels wide:
+   a vertical highlight so the filled ticks have a little dimension against the
+   bare ones beside them. */
+.monk-tick-done {
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(255, 255, 255, 0.7)
+  );
 }

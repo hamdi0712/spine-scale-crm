@@ -32,6 +32,7 @@
 // It shares the app shell, the sidebar and the design tokens, and nothing else.
 
 import Link from "next/link";
+import { IconTrophy } from "@tabler/icons-react";
 import {
   activeHabits,
   loadChallenge,
@@ -46,7 +47,9 @@ import {
   dayKey,
   daysSoFar,
   indexProgress,
+  monkCelebration,
   monkMonth,
+  monkMonthEarnedTrophy,
   monkPerfectDays,
   monkStreakRow,
   monkStreaks,
@@ -56,6 +59,8 @@ import {
 } from "@/lib/monkMode";
 import { greetingFor } from "@/lib/greeting";
 import Greeting from "@/components/Greeting";
+import MonkCelebrate from "@/components/MonkCelebrate";
+import { MonkGlowMark } from "@/components/MonkBadge";
 import MonkCalendarGrid from "@/components/MonkCalendarGrid";
 import MonkDonut from "@/components/MonkDonut";
 import MonkHabitGrid from "@/components/MonkHabitGrid";
@@ -113,9 +118,28 @@ export default async function MonkModePage() {
   const monthCells = month.cells.filter(
     (cell, i) => month.inMonth[i] && cell.dayNumber !== null && cell.past,
   );
+  const monthComplete = monthCells.filter((c) => c.complete).length;
+
+  // What, if anything, is worth a burst of confetti right now. The server
+  // decides *what happened* and names the occasion; the browser decides
+  // whether it has already celebrated that one. See MonkCelebrate for why the
+  // trigger cannot simply be the condition.
+  const celebration = monkCelebration({
+    today,
+    dayComplete: allDone,
+    streak: streaks.current,
+    isLastDay: shape.day === shape.total && shape.started,
+  });
 
   return (
     <div>
+      {/* Renders nothing. It reads the occasion above and fires once, in the
+          browser, the first time it sees a key it has not already fired. */}
+      <MonkCelebrate
+        occasion={celebration?.key ?? null}
+        kind={celebration?.kind ?? "day"}
+      />
+
       <MonkHeader
         title={
           // The same greeting the main dashboard uses, rolled on the server on
@@ -193,9 +217,20 @@ export default async function MonkModePage() {
             </Link>
           </div>
           <MonkCalendarGrid month={month} />
-          <p className="num mt-auto border-t border-line/60 pt-3 text-xs text-muted">
-            {monthCells.filter((c) => c.complete).length} of {monthCells.length}{" "}
-            {monthCells.length === 1 ? "day" : "days"} complete
+          <p className="num mt-auto flex items-center gap-2 border-t border-line/60 pt-3 text-xs text-muted">
+            {/* The trophy appears once the month is genuinely going well —
+                four days in and four fifths of them complete. A high bar on
+                purpose: a trophy that turns up on day two for two good days is
+                a trophy that means nothing by day ten. */}
+            {monkMonthEarnedTrophy(monthComplete, monthCells.length) && (
+              <MonkGlowMark tone="gold" className="h-5 w-5 shrink-0">
+                <IconTrophy size={11} stroke={2} aria-hidden />
+              </MonkGlowMark>
+            )}
+            <span>
+              {monthComplete} of {monthCells.length}{" "}
+              {monthCells.length === 1 ? "day" : "days"} complete
+            </span>
           </p>
         </section>
 

@@ -8,6 +8,7 @@
 // No client JavaScript: one form, one server action, and the saved note comes
 // back as the textarea's value on the next render.
 
+import { IconSparkles } from "@tabler/icons-react";
 import { saveMonkNote } from "@/lib/actions/monkMode";
 import Icon from "@/components/Icons";
 
@@ -61,7 +62,22 @@ export default function MonkNote({
           <Icon name="check" className="h-3.5 w-3.5" />
           Save
         </button>
-        <span className="text-[11px] text-muted">Editable today only</span>
+        {/* The sticker, and the line it replaced. "Editable today only" was
+            the rule stated as a warning; the rule has not changed and it is
+            still enforced in the action, but on the card it is now the title
+            attribute of something that says the encouraging half out loud.
+            Handwritten and tilted because a sticker that is set in the UI face
+            and squared up to the grid is not a sticker, it is a label. */}
+        <span
+          className="monk-sticker flex shrink-0 items-center gap-1 whitespace-nowrap text-warn"
+          title="Editable today only — past days are kept as they were left"
+          aria-hidden
+        >
+          <IconSparkles size={12} stroke={2} className="shrink-0" />
+          <span className="font-hand text-[15px] font-bold leading-none">
+            Better Than Yesterday
+          </span>
+        </span>
       </div>
     </form>
   );

@@ -2,7 +2,7 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
 import useTheme from "@/components/useTheme";
-import { MonkTally } from "@/lib/monkMode";
+import { MonkTally, monkProgressNote } from "@/lib/monkMode";
 
 // Overall progress: every habit-day of the challenge so far, split three ways,
 // with the completion percentage in the middle.
@@ -85,7 +85,16 @@ export default function MonkDonut({ tally }: { tally: MonkTally }) {
         </div>
       </div>
 
-      <ul className="mt-4 shrink-0 space-y-2 border-t border-line/60 pt-3">
+      {/* The line under the counts. It replaced a footnote explaining what
+          "in progress" meant — which the legend above it already says — with
+          the one thing a percentage cannot say for itself: whether it is worth
+          feeling good about. The wording is in monkProgressNote, with the rest
+          of the feature's voice. */}
+      <p className="mt-3 shrink-0 text-pretty text-[11px] leading-relaxed text-muted">
+        {monkProgressNote(tally.pct, tally.decided)}
+      </p>
+
+      <ul className="mt-3 shrink-0 space-y-2 border-t border-line/60 pt-3">
         {slices.map((slice) => (
           <li key={slice.key} className="flex items-center gap-2.5">
             <span

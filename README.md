@@ -757,6 +757,19 @@ again.
     quotations behind it. Same mechanism as the main dashboard's line, its own
     cache and its own question, so the two never share an answer. With no
     DeepSeek key set it simply shows a fallback and nothing else changes.
+  - **The encouraging half** is deliberately small and rule-driven: a crown
+    pill on the banner, a streak tier that reads Keep going → Building → On
+    fire → Unstoppable, a trophy once a record or a month is worth the word, a
+    line under the donut chosen by completion band, and a handwritten sticker
+    on the note. The wording and the thresholds all live together in
+    `src/lib/monkMode.ts` so the tone can be read and changed in one place, and
+    every colour resolves through the existing tokens — the gold is `--c-warn`,
+    the amber the rest of the CRM already uses.
+  - **Confetti fires once per occasion, not per render.** Completing the day,
+    hitting a streak milestone and finishing the challenge each produce a
+    *key*; the browser remembers the keys it has fired, so a burst does not
+    replay on every refresh for the rest of the day. It honours
+    `prefers-reduced-motion` and the library is loaded on demand.
   - **The banner image** is `public/monk-mode-hero.png`, and it is optional:
     `.monk-hero` in `globals.css` layers it over a gradient that stands on its
     own if the file is missing, so the banner is never a broken image.

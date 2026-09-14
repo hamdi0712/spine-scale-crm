@@ -81,6 +81,10 @@ const config: Config = {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
         num: ["var(--font-sans)", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+        // The handwritten face. One consumer — the sticker on Monk Mode's
+        // daily note — and the cursive fallbacks are there because a sticker
+        // that loses its font should still not be set in Inter.
+        hand: ["var(--font-hand)", "ui-rounded", "cursive"],
       },
     },
   },
