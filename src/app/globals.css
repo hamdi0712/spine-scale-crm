@@ -1131,3 +1131,87 @@ tbody tr {
 .thinking-dot {
   animation: motion-thinking-dot 1.1s var(--motion-ease) infinite;
 }
+
+/* ─── Monk Mode ─────────────────────────────────────────────────────────────
+   The challenge banner, and the one dark surface in the feature. It earns the
+   same exception .hero-navy does: everything else on the page is a card about
+   the day you are having, and this is a photograph of a mountain at dawn with
+   a quotation over it. It is dark in light mode and dark in dark mode, on
+   purpose and identically — a picture is not a token.
+
+   The photograph is the top layer of the background and the gradient beneath
+   it is not decoration on top of it, it is the fallback: if
+   /monk-mode-hero.png is missing, the browser drops that layer and the scrim
+   below it stands on its own as a dawn-coloured field, with the same lettering
+   still legible over it. Nothing has to detect the 404 for that to work.
+
+   The dark linear-gradient over the image is what makes the white type
+   readable whichever of the two grounds is showing — an image that is bright
+   at the horizon, or the flat field behind it. */
+.monk-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 26px;
+  background-image:
+    linear-gradient(
+      100deg,
+      rgba(6, 12, 28, 0.92) 0%,
+      rgba(6, 12, 28, 0.72) 38%,
+      rgba(6, 12, 28, 0.3) 68%,
+      rgba(6, 12, 28, 0.55) 100%
+    ),
+    url("/monk-mode-hero.png"),
+    radial-gradient(
+      120% 120% at 78% 8%,
+      rgba(243, 158, 94, 0.55),
+      rgba(243, 158, 94, 0) 55%
+    ),
+    linear-gradient(168deg, #2a3358 0%, #1b2340 45%, #0a1024 100%);
+  background-size: cover, cover, cover, cover;
+  background-position:
+    center,
+    center 38%,
+    center,
+    center;
+  background-repeat: no-repeat;
+  border: 1px solid rgba(150, 170, 215, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(214, 226, 255, 0.2),
+    inset 0 -1px 0 rgba(3, 8, 22, 0.5),
+    0 1px 2px rgba(7, 16, 40, 0.2),
+    0 16px 40px rgba(7, 16, 40, 0.26);
+}
+
+/* The bar under the day counter, on the banner's own dark ground. A track in
+   white at low alpha rather than a token fill, for the same reason the
+   lettering on it is white: the surface below it is a photograph in both
+   themes, so the tokens that follow the theme would be wrong in one of them. */
+.monk-hero-track {
+  background: rgba(255, 255, 255, 0.18);
+}
+.monk-hero-fill {
+  background-image: linear-gradient(to right, #6ba1ff, #3fd1c8);
+}
+
+/* A habit card. The app's .card with a hover lift and a press that actually
+   depresses — every one of these is a button you tap several times a day, and
+   it should feel like one. Colour is not here: each card carries its own
+   accent as utilities from MONK_ACCENTS. */
+.monk-card {
+  transition:
+    transform var(--motion) var(--motion-ease),
+    box-shadow var(--motion) var(--motion-ease),
+    border-color var(--motion) var(--motion-ease),
+    background-color var(--motion) var(--motion-ease);
+}
+.monk-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card-hover);
+}
+.monk-card:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-card);
+}
+.monk-card:disabled {
+  cursor: default;
+}

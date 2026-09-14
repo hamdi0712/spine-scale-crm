@@ -724,6 +724,37 @@ again.
     thing inside Ad Hub rather than another Library category.
 - **Library** — markdown notes in five fixed categories. Starts empty by
   design; it fills up with real material as you write it.
+- **Monk Mode** — a 21-day personal discipline tracker, and the one section of
+  the app that is not about the agency. Nothing in it joins to a lead, a client
+  or a number off the funnel; it shares the shell, the sidebar and the design
+  tokens and nothing else, so the whole feature is five tables
+  (`MonkMode*` in the schema) that can be lifted out without touching the CRM.
+  - **The challenge** is one row — a start date and a length, 21 days by
+    default. The most recent one is the active one, so going again is a new
+    row rather than an edit, and the run you just finished stays on the record.
+  - **Seven non-negotiables** arrive seeded and are then yours: add, edit,
+    reorder, retire or delete them under **Monk Mode → Habits**. A habit has a
+    daily target, which is why *Salah 5 Times* draws five check dots and
+    everything else draws one. Retiring keeps the history; deleting does not,
+    and says so at the button.
+  - **A day is logged on the day.** Tapping a card advances it and wraps back
+    to zero at its target; past days are read-only records, enforced in the
+    server action and not just hidden in the UI — the same rule the daily
+    checklist follows. The journal note works the same way: one per day,
+    editable until the day ends.
+  - **Today's untouched habits are not failures.** The donut counts completed,
+    in progress and missed across every habit-day of the challenge so far and
+    leaves today's untouched ones out of the percentage, so the number does not
+    open at zero every morning and climb back by bedtime.
+  - **The banner quote** is generated once a day by DeepSeek from the day you
+    are actually having — which day of the challenge, what the streak is doing,
+    whether yesterday held — and cached under that day, with hardcoded
+    quotations behind it. Same mechanism as the main dashboard's line, its own
+    cache and its own question, so the two never share an answer. With no
+    DeepSeek key set it simply shows a fallback and nothing else changes.
+  - **The banner image** is `public/monk-mode-hero.png`, and it is optional:
+    `.monk-hero` in `globals.css` layers it over a gradient that stands on its
+    own if the file is missing, so the banner is never a broken image.
 
 ## Deploying to Vercel + hosted Postgres (later)
 

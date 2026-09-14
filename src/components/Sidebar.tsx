@@ -10,6 +10,7 @@ import {
   IconChecklist,
   IconGitBranch,
   IconLayoutDashboard,
+  IconMoonStars,
   IconRadar2,
   IconSend,
   IconSettings,
@@ -81,6 +82,17 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/daily-kpi", label: "Daily KPI", Glyph: IconTargetArrow },
       { href: "/library", label: "Library", Glyph: IconBook },
     ],
+  },
+  {
+    // Monk Mode, alone under its own heading, and that is the point of the
+    // heading. The three groups above are the agency's work — the funnel, the
+    // day, what feeds the funnel — and this is the one item in the sidebar
+    // that is not about the business at all. Folding it into Operations would
+    // say it was another piece of the day's admin; a group of its own says
+    // what it is. Last, because it is the one thing here nobody opens in
+    // order to do their job.
+    label: "Personal",
+    items: [{ href: "/monk-mode", label: "Monk Mode", Glyph: IconMoonStars }],
   },
 ];
 
