@@ -24,9 +24,11 @@
 // No client JavaScript. Every control is a form posting to a server action, so
 // the grid works exactly as well before hydration as after it.
 //
-// A past day is a record, so its cards are drawn in the same states and
-// disabled. The action refuses the write as well (src/lib/actions/monkMode.ts);
-// this is the half of that rule the person can see.
+// A past day is not a record here: its cards are live, and tapping one writes
+// that day's completion rather than today's — the day is bound into every
+// action below, so a card can only ever write the day it was drawn for. The
+// page says which day that is (MonkDayBar). `readOnly` remains for the one
+// case nothing can be written to, a day that has not started yet.
 
 import { MonkHabitDay, monkAccent, monkHabitArt } from "@/lib/monkMode";
 import { MonkHabitBottomArt, MonkHabitIconArt } from "@/components/MonkArt";

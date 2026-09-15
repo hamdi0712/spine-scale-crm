@@ -22,6 +22,14 @@
 //   · A footnote under the donut explaining what "in progress" means, which is
 //     what the legend under the donut is for.
 //
+// The page holds a day rather than assuming today. ?date= opens one — which is
+// where the journal's "Log habits" link and the day arrows lead — and the
+// habit cards and the note both write to it. Everything else on the page
+// (the banner, the donut, the streak) still reads from the real today, because
+// those are readings of the whole run and not of the day you happen to have
+// open. Backfilling a day therefore moves them all on the next render: they
+// are derived from the completion rows every time, never stored.
+//
 // One pass over the database and one set of rules. The page loads the
 // challenge, the habits and every completion inside the window, then hands
 // that one reading to each panel (src/lib/monkMode.ts). No panel queries for
@@ -56,10 +64,13 @@ import {
   readMonkDay,
   toChecklistDay,
 } from "@/lib/monkMode";
+import { parseDayKey } from "@/lib/dailyChecklist";
+import { fmtDate } from "@/lib/format";
 import { greetingFor } from "@/lib/greeting";
 import Greeting from "@/components/Greeting";
 import MonkCelebrate from "@/components/MonkCelebrate";
 import MonkCalendarGrid from "@/components/MonkCalendarGrid";
+import MonkDayBar from "@/components/MonkDayBar";
 import MonkDonut from "@/components/MonkDonut";
 import MonkHabitGrid from "@/components/MonkHabitGrid";
 import MonkHeader from "@/components/MonkHeader";
@@ -70,9 +81,20 @@ import MonkStreakPanel from "@/components/MonkStreakPanel";
 
 export const dynamic = "force-dynamic";
 
-export default async function MonkModePage() {
+export default async function MonkModePage({
+  searchParams,
+}: {
+  searchParams: { date?: string };
+}) {
   const now = new Date();
   const today = toChecklistDay(now);
+
+  // The day being logged. Today unless ?date= says otherwise, and never a day
+  // that has not started — the action refuses those, and a page that offered
+  // controls it knows will be ignored would be lying about what it does.
+  const asked = toChecklistDay(parseDayKey(searchParams.date, now));
+  const viewing = asked.getTime() > today.getTime() ? today : asked;
+  const isToday = viewing.getTime() === today.getTime();
 
   const [challenge, habits] = await Promise.all([
     loadChallenge(now),
@@ -83,25 +105,42 @@ export default async function MonkModePage() {
 
   // One window wide enough for every panel: the challenge itself, plus the
   // calendar month around today, which can reach outside it at either end.
+  // The calendar follows the day being viewed, so paging back into March
+  // shows March rather than leaving the month grid on a day nobody is looking
+  // at; the window has to cover today as well, because the streak and the
+  // donut are still read up to the real today whatever is open.
   const days = challengeDays(challenge);
   const monthStart = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1),
+    Date.UTC(viewing.getUTCFullYear(), viewing.getUTCMonth(), 1),
   );
   const from = new Date(
-    Math.min(days[0].getTime(), addDays(monthStart, -7).getTime()),
+    Math.min(
+      days[0].getTime(),
+      addDays(monthStart, -7).getTime(),
+      viewing.getTime(),
+    ),
   );
   const to = new Date(
-    Math.max(days[days.length - 1].getTime(), addDays(monthStart, 45).getTime()),
+    Math.max(
+      days[days.length - 1].getTime(),
+      addDays(monthStart, 45).getTime(),
+      today.getTime(),
+    ),
   );
 
   const [rows, note] = await Promise.all([
     loadProgress(from, to),
-    loadNote(today),
+    loadNote(viewing),
   ]);
   const progress = indexProgress(rows);
 
-  const todayKey = dayKey(today);
-  const todayRows = readMonkDay(active, progress, today, now);
+  const viewKey = dayKey(viewing);
+  const viewRows = readMonkDay(active, progress, viewing, now);
+  // Today's own reading, kept separate from the day on screen: the confetti
+  // and the header count are about today even while March is open.
+  const todayRows = isToday
+    ? viewRows
+    : readMonkDay(active, progress, today, now);
   const lived = daysSoFar(challenge, now);
   const tally = monkTally(challenge, active, progress, now);
   const streaks = monkStreaks(challenge, active, progress, now);
@@ -110,6 +149,11 @@ export default async function MonkModePage() {
 
   const doneToday = todayRows.filter((r) => r.status === "complete").length;
   const allDone = active.length > 0 && doneToday === active.length;
+
+  // The same two figures for the day actually on screen, which is what the
+  // habit panel scores.
+  const doneOnDay = viewRows.filter((r) => r.status === "complete").length;
+  const allDoneOnDay = active.length > 0 && doneOnDay === active.length;
 
   // The month's own tally, for the line under the calendar. Counted off the
   // same cells the grid is drawn from, so the figure and the squares can never
@@ -155,6 +199,10 @@ export default async function MonkModePage() {
         }
       />
 
+      {/* Which day the habits and the note below write to. On today it is a
+          pair of arrows; on any other day it says so in gold. */}
+      <MonkDayBar day={viewing} today={today} />
+
       <MonkHero
         challenge={challenge}
         habits={active}
@@ -175,13 +223,13 @@ export default async function MonkModePage() {
               list of seven non-negotiables has already worked out. */}
           {active.length > 0 && (
             <span
-              className={`num text-xs font-medium ${allDone ? "text-ok" : "text-muted"}`}
+              className={`num text-xs font-medium ${allDoneOnDay ? "text-ok" : "text-muted"}`}
             >
-              {doneToday} / {active.length} today
+              {doneOnDay} / {active.length} {isToday ? "today" : fmtDate(viewing)}
             </span>
           )}
         </div>
-        <MonkHabitGrid rows={todayRows} day={todayKey} />
+        <MonkHabitGrid rows={viewRows} day={viewKey} />
       </section>
 
       {/* Four panels of one height, and the height is theirs rather than the
@@ -257,7 +305,7 @@ export default async function MonkModePage() {
                 className="text-ai"
                 aria-hidden
               />
-              Today&rsquo;s Note
+              {isToday ? <>Today&rsquo;s Note</> : `Note · ${fmtDate(viewing)}`}
             </h2>
             <Link
               href="/monk-mode/journal"
@@ -266,7 +314,7 @@ export default async function MonkModePage() {
               Journal
             </Link>
           </div>
-          <MonkNote day={todayKey} content={note} rows={6} grow />
+          <MonkNote day={viewKey} content={note} rows={6} grow />
         </section>
       </div>
     </div>

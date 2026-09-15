@@ -1,9 +1,10 @@
 // The day's journal entry: a textarea and a save button, one note per day.
 //
-// Editable all day and a read-only record once the day has ended — the same
-// rule the daily checklist follows, and stated here in the copy as well as
-// enforced in the action (saveMonkNote). A past day with nothing written on it
-// says so rather than showing an empty box somebody might try to fill.
+// Editable on the day it is about and on any day after it — a note written up
+// the following evening is still that day's note, and the rule is enforced in
+// the action (saveMonkNote). Read-only is kept for the one case that is not a
+// day yet: a day in the future, which has nothing to say and nothing that
+// could be saved against it.
 //
 // No client JavaScript: one form, one server action, and the saved note comes
 // back as the textarea's value on the next render.
@@ -38,7 +39,7 @@ export default function MonkNote({
       </p>
     ) : (
       <p className="text-sm text-muted">
-        Nothing written on this day.
+        Nothing written on this day yet.
       </p>
     );
   }
@@ -62,12 +63,11 @@ export default function MonkNote({
           <Icon name="check" className="h-3.5 w-3.5" />
           Save
         </button>
-        {/* The sticker, and the line it replaced. "Editable today only" was
-            the rule stated as a warning; the rule has not changed and it is
-            still enforced in the action, but on the card it is now the title
-            attribute of something that says the encouraging half out loud.
-            Handwritten and tilted because a sticker that is set in the UI face
-            and squared up to the grid is not a sticker, it is a label. */}
+        {/* The sticker. It used to carry "Editable today only" as its title,
+            back when that was the rule; past days are writable now, so what is
+            left is the encouraging half it always said out loud. Handwritten
+            and tilted because a sticker that is set in the UI face and squared
+            up to the grid is not a sticker, it is a label. */}
         <span
           // Lavender rather than the badge gold. It is the one handwritten
           // thing on the page and it should read as a note somebody stuck
@@ -75,7 +75,7 @@ export default function MonkNote({
           // own --c-ai. The dark value is lifted to the brighter end of that
           // pair, because the mixed-for-paper violet goes muddy on a dark card.
           className="monk-sticker flex shrink-0 items-center gap-1 whitespace-nowrap text-ai dark:text-[#C9B6FF]"
-          title="Editable today only — past days are kept as they were left"
+          title="Better than yesterday"
           aria-hidden
         >
           <IconSparkles size={12} stroke={2} className="shrink-0" />
