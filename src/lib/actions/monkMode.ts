@@ -4,15 +4,24 @@
 // list, and the challenge itself.
 //
 // One rule runs through all of it and is enforced here rather than in a
-// column, because a column cannot know what day it is being written on: the
-// past is a record. Progress is logged on the day it happened and a note is
-// written on the day it is about. Both refuse a day that has already ended,
-// which is the same rule the daily checklist follows for the same reason — a
-// history you can go back and tidy up is not a history.
+// column, because a column cannot know what day it is being written on: a day
+// may be written to once it has begun, and not before. Today and every day
+// behind it are open; tomorrow is not, because logging an exercise you have
+// not done yet is not a record of anything.
+//
+// Monk Mode used to close a day at midnight, the way the daily checklist still
+// does. It does not any more. A habit tracker is not an audit log — the thing
+// it is for is the run, and a run broken by a day somebody genuinely did but
+// forgot to tap is a wrong number that the person cannot correct. So past days
+// are editable here, and only here: the daily checklist's own rule is
+// unchanged. Nothing downstream needs to know — the streak, the best streak
+// and the donut are all derived from the completion rows on every read
+// (src/lib/monkMode.ts), so backfilling a Tuesday re-derives the run that
+// Tuesday was breaking.
 //
 // The day being written is bound at render time by the form, so somebody who
-// left the page open over midnight is told the day has passed rather than
-// silently writing today's progress onto yesterday.
+// left the page open over midnight writes the day they were looking at rather
+// than having it silently become today.
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -34,13 +43,10 @@ function revalidateMonkMode() {
   revalidatePath("/monk-mode", "layout");
 }
 
-// Whether a day may still be written to. Today may; anything before it is
-// closed. A future day is closed too — logging tomorrow's exercise today is
-// not a record of anything.
+// Whether a day may be written to. Today and everything behind it may; a day
+// that has not started yet may not.
 function dayIsWritable(day: Date, now: Date): boolean {
-  return (
-    toChecklistDay(day).getTime() === toChecklistDay(now).getTime()
-  );
+  return toChecklistDay(day).getTime() <= toChecklistDay(now).getTime();
 }
 
 // ─── Progress ──────────────────────────────────────────────────────────────
@@ -115,8 +121,8 @@ export async function setMonkHabitProgress(
 
 // ─── The note ──────────────────────────────────────────────────────────────
 
-// The day's journal entry. Editable all day and closed once the day has ended
-// — the same "past days are historical records" rule as above.
+// The day's journal entry. Editable on the day and on any day after it — the
+// same "a day is open once it has begun" rule as above.
 //
 // An emptied note deletes its row rather than storing an empty string, so
 // "days with something written on them" stays a question the journal can

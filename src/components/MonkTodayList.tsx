@@ -3,7 +3,8 @@
 //
 // Not a duplicate of the grid but the other way of reading it: the grid is
 // seven tiles you tap, and this is the day as a checklist you scan. Same
-// actions behind it, so a tick here and a tap up there are one write.
+// actions behind it, so a tick here and a tap up there are one write — and
+// the day is whichever day the page is holding, today or one behind it.
 
 import { MonkHabitDay } from "@/lib/monkMode";
 import { monkAccent } from "@/lib/monkMode";
@@ -37,7 +38,7 @@ export default function MonkTodayList({
                 disabled={readOnly}
                 title={
                   readOnly
-                    ? "A past day — not editable"
+                    ? "Not editable"
                     : complete
                       ? "Done — tap to clear"
                       : "Log one"

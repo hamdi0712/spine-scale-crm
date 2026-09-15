@@ -2,9 +2,15 @@
 // it.
 //
 // ?date= opens a day — which is what the calendar's squares link to. Today is
-// the default and the only day that can be edited; a past day shows what it
-// was left as, alongside the habits it recorded, because a note about a day
-// reads differently next to what actually happened on it.
+// the default, and any day up to it can be written: a note is editable
+// whenever the day it is about is open, not only on the day itself. A day
+// shows its habits alongside its note, because a note about a day reads
+// differently next to what actually happened on it — and those are tickable
+// here too, so a day you came back to can be corrected where you are reading
+// it rather than only on the dashboard.
+//
+// A day that has not started yet is the one exception: nothing is offered,
+// because the action would refuse it.
 
 import Link from "next/link";
 import {
@@ -25,6 +31,7 @@ import {
 } from "@/lib/monkMode";
 import { parseDayKey } from "@/lib/dailyChecklist";
 import { fmtDate } from "@/lib/format";
+import MonkDayBar from "@/components/MonkDayBar";
 import MonkHeader from "@/components/MonkHeader";
 import MonkNote from "@/components/MonkNote";
 import MonkTodayList from "@/components/MonkTodayList";
@@ -39,6 +46,7 @@ export default async function MonkJournalPage({
   const now = new Date();
   const day = toChecklistDay(parseDayKey(searchParams.date, now));
   const key = dayKey(day);
+  const today = toChecklistDay(now);
   const past = dayIsOver(day, now);
   // A day in the future is not writable either — the action refuses it, and
   // the page should not offer a box that will be ignored.
@@ -60,8 +68,12 @@ export default async function MonkJournalPage({
     <div className="max-w-5xl">
       <MonkHeader
         title={<h1 className="display text-[32px] font-semibold">Journal</h1>}
-        subtitle="One note a day, written on the day. Past days stay as they were left."
+        subtitle="One note a day. Open any day you have lived and write it up — the habits on it are tickable too."
       />
+
+      {/* Which day is open, and the way to another one. Says "Editing …" on
+          anything but today, the same indicator the dashboard carries. */}
+      {!future && <MonkDayBar day={day} today={today} basePath="/monk-mode/journal" />}
 
       <section className="card p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -76,21 +88,30 @@ export default async function MonkJournalPage({
         </div>
 
         <div className="mt-4">
-          <MonkNote
-            day={key}
-            content={note}
-            readOnly={past || future}
-            rows={6}
-          />
+          {/* Read-only on a future day only. A past day is open: the note
+              is about that day, and coming back to write it up an evening
+              late is the ordinary way a journal gets kept. */}
+          <MonkNote day={key} content={note} readOnly={future} rows={6} />
         </div>
 
-        {/* What the day actually did, under what was written about it. Read-only
-            here whatever day it is: this page is for the writing, and the
-            habits are logged on the dashboard. */}
+        {/* What the day actually did, under what was written about it — and
+            tickable, because the commonest reason to open a past day at all is
+            that something on it went unlogged. The rows write to this day, not
+            to today. */}
         {!future && dayRows.length > 0 && (
           <div className="mt-6 border-t border-line/60 pt-4">
-            <h3 className="mb-2 text-sm font-semibold">That day&rsquo;s habits</h3>
-            <MonkTodayList rows={dayRows} day={key} readOnly />
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
+              <h3 className="text-sm font-semibold">
+                {past ? <>That day&rsquo;s habits</> : <>Today&rsquo;s habits</>}
+              </h3>
+              <Link
+                href={past ? `/monk-mode?date=${key}` : "/monk-mode"}
+                className="text-xs font-medium text-accent hover:underline"
+              >
+                Open the cards
+              </Link>
+            </div>
+            <MonkTodayList rows={dayRows} day={key} />
           </div>
         )}
       </section>
