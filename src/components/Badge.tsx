@@ -23,6 +23,11 @@ import {
   Trend,
 } from "@/lib/health";
 import { ICP_TIER_ACTIONS, ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
+import {
+  APIFY_SEARCH_STATUS_MEANINGS,
+  ApifySearchStatus,
+  searchStatusLabel,
+} from "@/lib/apifySearchLog";
 import { IconSparkles } from "@tabler/icons-react";
 import Icon from "@/components/Icons";
 import {
@@ -433,5 +438,50 @@ export function FlaggedValue({ value, flag }: { value: string; flag: Flag }) {
       )}
       {value}
     </span>
+  );
+}
+
+// ─── Search usage ──────────────────────────────────────────────────────────
+
+// How worn a search is. The colours run the same way the queue's do and mean
+// the same thing they mean everywhere else here: blue for untouched work,
+// green while it is still paying, amber for a warning, neutral for something
+// that is done rather than broken. Red is not used — a search that has been
+// run fifty times is not a fault, it is a search to replace.
+const SEARCH_USAGE_TONES: Record<ApifySearchStatus, Tone> = {
+  NEW: "blue",
+  USED: "green",
+  SATURATING: "amber",
+  WELL_USED: "neutral",
+};
+
+// `manual` is drawn, not hidden: a status somebody set by hand and one read
+// off the count look identical otherwise, and the difference is the only
+// reason to trust either of them. The title says which, and says what the
+// count underneath actually is, so an override never conceals the number.
+export function SearchUsageBadge({
+  status,
+  manual,
+  runCount,
+}: {
+  status: ApifySearchStatus;
+  manual: boolean;
+  runCount?: number;
+}) {
+  const runs =
+    runCount == null
+      ? null
+      : `${runCount} run${runCount === 1 ? "" : "s"} logged`;
+  const title = manual
+    ? `Set by hand${runs ? ` — ${runs}. Clear the override to read the status off the count again.` : "."}`
+    : runs
+      ? `${APIFY_SEARCH_STATUS_MEANINGS[status]} ${runs}.`
+      : APIFY_SEARCH_STATUS_MEANINGS[status];
+  return (
+    <Pill
+      tone={SEARCH_USAGE_TONES[status]}
+      label={searchStatusLabel(status, manual)}
+      title={title}
+    />
   );
 }

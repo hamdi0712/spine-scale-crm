@@ -30,9 +30,17 @@ export default async function ApifyImportPage() {
             and duplicate checks as the CSV import
           </p>
         </div>
-        <Link href="/discovery/import" className="btn shrink-0">
-          Import a CSV
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {/* Every run from this screen is counted against its input JSON —
+              the history is where that count is read, and where a search that
+              has stopped paying says so. */}
+          <Link href="/discovery/search-history" className="btn">
+            Search history
+          </Link>
+          <Link href="/discovery/import" className="btn">
+            Import a CSV
+          </Link>
+        </div>
       </div>
       <DiscoveryImportWizard
         action={importDiscoveryCandidates}

@@ -14,7 +14,7 @@
 // clinic's own evidence and will wait for a person rather than being promoted
 // with a blank one.
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   CLINIC_HEADCOUNT_RANGES,
@@ -31,6 +31,9 @@ import {
   importClinicDiscoveryCandidates,
   runClinicDiscoverySearch,
 } from "@/lib/actions/clinicDiscovery";
+import { ApifySearchLogRow, searchStatus } from "@/lib/apifySearchLog";
+import { clinicKeywordStatuses } from "@/lib/actions/apifySearchLog";
+import { SearchUsageBadge } from "@/components/Badge";
 import { normalizeApifyId } from "@/lib/apifyId";
 import { MAX_BATCH_LABEL_LENGTH, defaultBatchLabel } from "@/lib/discoveryBatch";
 import { PipelineSettings, estimateSentence } from "@/lib/pipelineSettings";
@@ -39,6 +42,7 @@ export default function ClinicDiscoveryPanel({
   enabled,
   actorId,
   settings,
+  termStatuses,
 }: {
   // Whether the pathway is on at all, and the actor it would run — both read
   // from Pipeline Settings on the server. The panel says so rather than
@@ -48,6 +52,10 @@ export default function ClinicDiscoveryPanel({
   // Only for the cost estimate. Importing spends nothing; the chain these
   // describe runs later, at the queue.
   settings: PipelineSettings;
+  // How worn each of the default terms is, read on the server so the pills are
+  // there on first paint rather than appearing a moment later. Terms added
+  // here are looked up as they are added; a term with no row is New.
+  termStatuses: Record<string, ApifySearchLogRow>;
 }) {
   const [terms, setTerms] = useState<string[]>(DEFAULT_CLINIC_SEARCH_TERMS);
   const [newTerm, setNewTerm] = useState("");
@@ -58,6 +66,12 @@ export default function ClinicDiscoveryPanel({
   // this run only and saves nothing.
   const [actorOverride, setActorOverride] = useState("");
   const [batch, setBatch] = useState<string | null>(null);
+
+  // Keyed by the term exactly as it is typed — the lookup normalises on the
+  // server, so "Spinal Decompression" finds the row "spinal decompression"
+  // has been building up.
+  const [statuses, setStatuses] =
+    useState<Record<string, ApifySearchLogRow>>(termStatuses);
 
   const [result, setResult] = useState<ClinicSearchResult | null>(null);
   const [summary, setSummary] = useState<ClinicImportSummary | null>(null);
@@ -71,6 +85,22 @@ export default function ClinicDiscoveryPanel({
   const batchDefault = defaultBatchLabel(new Date(), actorInUse);
   const batchLabel = batch ?? batchDefault;
   const found = result?.ok ? result.clinics : [];
+
+  // Re-read the statuses for whatever terms are on screen. Called when the
+  // set changes and again after a run, because a run is what moves them: nine
+  // terms searched is nine counts one higher than they were a minute ago.
+  const refreshStatuses = useCallback(async (list: string[]) => {
+    try {
+      setStatuses(await clinicKeywordStatuses(list));
+    } catch {
+      // A pill that cannot be read is a pill that is not drawn. Nothing about
+      // the search depends on it.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshStatuses(terms);
+  }, [terms, refreshStatuses]);
 
   function addTerm() {
     const trimmed = newTerm.trim();
@@ -107,6 +137,8 @@ export default function ClinicDiscoveryPanel({
       );
     } finally {
       setRunning(false);
+      // Every term just ran, so every pill just moved.
+      void refreshStatuses(terms);
     }
   }
 
@@ -150,12 +182,25 @@ export default function ClinicDiscoveryPanel({
         </p>
         <div className="card p-6">
           <div className="flex flex-wrap gap-2">
-            {terms.map((term) => (
+            {terms.map((term) => {
+              const logged = statuses[term];
+              // No row means no runs, which is exactly what New means — so an
+              // unlogged term wears the same pill a logged-but-never-run one
+              // would, rather than wearing nothing.
+              const { status, manual } = searchStatus(
+                logged ?? { runCount: 0, manualStatusOverride: null },
+              );
+              return (
               <span
                 key={term}
-                className="inline-flex items-center gap-2 rounded-full border border-line/70 bg-wash/60 px-3 py-1 text-xs"
+                className="inline-flex items-center gap-2 rounded-full border border-line/70 bg-wash/60 py-1 pl-3 pr-2 text-xs"
               >
                 {term}
+                <SearchUsageBadge
+                  status={status}
+                  manual={manual}
+                  runCount={logged?.runCount ?? 0}
+                />
                 <button
                   type="button"
                   onClick={() => setTerms((prev) => prev.filter((t) => t !== term))}
@@ -165,7 +210,8 @@ export default function ClinicDiscoveryPanel({
                   ×
                 </button>
               </span>
-            ))}
+              );
+            })}
             {terms.length === 0 && (
               <p className="text-xs text-muted">
                 No terms — add at least one to run a search.

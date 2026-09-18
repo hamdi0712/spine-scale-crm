@@ -1292,3 +1292,51 @@ model MonkModeQuote {
 
   createdAt DateTime @default(now())
 }
+
+// One distinct search, and how often it has actually been run.
+//
+// Two pathways spend an actor run on a search — the Apify bulk import, whose
+// search is a block of input JSON, and Clinic-First, whose search is a single
+// keyword — and neither remembered anything between runs. This is the memory:
+// the search, normalised so that the same search typed twice is one row, a
+// count, and the two dates.
+//
+// It is deliberately not attached to what a run found. A count of runs is a
+// fact about the search; how many candidates came back is a fact about the
+// day, and mixing them would make "well used" mean two things. What was found
+// is already on DiscoveryCandidate.sourceQuery.
+//
+// manualStatusOverride is the one place a person outranks the count: a keyword
+// that was ground through for months before this table existed reads as New
+// otherwise. An override is held until it is cleared, and the count keeps
+// rising underneath it, so clearing it drops back to the truth.
+model ApifySearchLog {
+  id String @id @default(cuid())
+
+  // LINKEDIN_SEARCH or CLINIC_KEYWORD — see src/lib/apifySearchLog.ts.
+  type String
+
+  // The normalised search. For LinkedIn, the input JSON with its keys sorted
+  // at every depth and its whitespace gone, so re-indenting it is not a new
+  // search. For clinic-first, the term, trimmed and lowercased.
+  key String
+
+  runCount Int @default(0)
+
+  // NEW / USED / SATURATING / WELL_USED, or null for "read it off the count".
+  manualStatusOverride String?
+
+  // Null on a row added by hand for a search that has never been run through
+  // tracking — the status is the point of that row, and inventing a date it
+  // was run would be inventing a run.
+  firstRunAt DateTime?
+  lastRunAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One row per search per kind, and the database holds it: two tabs running
+  // the same keyword both upsert and the second settles on the first's row.
+  @@unique([type, key])
+  @@index([lastRunAt])
+}
