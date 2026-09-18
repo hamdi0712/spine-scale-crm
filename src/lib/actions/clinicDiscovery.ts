@@ -40,6 +40,7 @@ import {
 import { IMPORT_DEFAULT_STATUS, MAX_IMPORT_ROWS } from "@/lib/discoveryImport";
 import { defaultBatchLabel, readBatchLabel } from "@/lib/discoveryBatch";
 import { zoneFromLocation } from "@/lib/timezones";
+import { recordApifySearchRun } from "@/lib/actions/apifySearchLog";
 
 // How many results one run keeps in total, across every term. The import cap
 // again, and for the same reason: every row kept is a row the queue will spend
@@ -107,6 +108,12 @@ export async function runClinicDiscoverySearch(args: {
       perTerm.push({ term, found: 0, error: "Not run — the result cap was already reached." });
       continue;
     }
+    // One term, one run, one count — recorded here rather than around the
+    // whole loop, because a term skipped by the cap above was not run and a
+    // term whose actor fails below was. A term that fails still cost a call
+    // and still counts as having been tried.
+    await recordApifySearchRun({ type: "CLINIC_KEYWORD", raw: term });
+
     const result = await runApifySync({
       kind: "actor",
       id: actorId,

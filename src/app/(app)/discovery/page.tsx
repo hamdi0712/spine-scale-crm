@@ -146,6 +146,9 @@ export default async function DiscoveryPage({
               Rejected
               {rejected > 0 && <span className="num">({rejected})</span>}
             </Link>
+            <Link href="/discovery/search-history" className="btn">
+              Search history
+            </Link>
             <Link href="/discovery/import" className="btn">
               Import CSV
             </Link>

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { clinicDiscoverySettings } from "@/lib/actions/clinicDiscovery";
+import { clinicKeywordStatuses } from "@/lib/actions/apifySearchLog";
+import { DEFAULT_CLINIC_SEARCH_TERMS } from "@/lib/clinicDiscovery";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import ClinicDiscoveryPanel from "@/components/ClinicDiscoveryPanel";
 
@@ -18,9 +20,13 @@ export const dynamic = "force-dynamic";
 // What it produces is ordinary candidates, Pending, going through the same
 // queue as everything else.
 export default async function ClinicDiscoveryPage() {
-  const [clinic, settings] = await Promise.all([
+  const [clinic, settings, termStatuses] = await Promise.all([
     clinicDiscoverySettings(),
     loadPipelineSettings(),
+    // The panel starts on the default terms, so their usage is read here and
+    // drawn with the first paint. Anything typed into it afterwards is looked
+    // up by the panel itself.
+    clinicKeywordStatuses(DEFAULT_CLINIC_SEARCH_TERMS),
   ]);
 
   return (
@@ -38,9 +44,14 @@ export default async function ClinicDiscoveryPage() {
             enrichment chain, the same scoring, no person needed to start
           </p>
         </div>
-        <Link href="/discovery/import/apify" className="btn shrink-0">
-          Import from Apify
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Link href="/discovery/search-history" className="btn">
+            Search history
+          </Link>
+          <Link href="/discovery/import/apify" className="btn">
+            Import from Apify
+          </Link>
+        </div>
       </div>
 
       <div className="card mb-8 px-6 py-4">
@@ -59,6 +70,7 @@ export default async function ClinicDiscoveryPage() {
         enabled={clinic.enabled}
         actorId={clinic.actorId}
         settings={settings}
+        termStatuses={termStatuses}
       />
     </div>
   );

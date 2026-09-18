@@ -2,6 +2,7 @@
 
 import { isApifySourceKind, runApifySync } from "@/lib/apify";
 import { ApifyFetchResult } from "@/lib/discoveryImport";
+import { recordApifySearchRun } from "@/lib/actions/apifySearchLog";
 
 // Called straight from the import wizard, which awaits the result rather than
 // posting a form: the run's output has to come back to the browser to be
@@ -22,5 +23,13 @@ export async function fetchApifyDataset(args: {
   if (id.trim() === "") {
     return { ok: false, error: `Enter an ${kind} ID to run.` };
   }
+
+  // Counted before the run, not after: the search was used the moment it was
+  // sent, and a run that comes back empty or errors is exactly the kind of
+  // exhausted search this count exists to make visible. The input is
+  // canonicalised on the way in, so re-indenting the same JSON is the same
+  // search rather than a second one.
+  await recordApifySearchRun({ type: "LINKEDIN_SEARCH", raw: input });
+
   return runApifySync({ kind, id, input });
 }
