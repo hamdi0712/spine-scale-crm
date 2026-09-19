@@ -101,6 +101,48 @@ export const VARIANT_BLURBS: Record<FirstMessageVariant, string> = {
   C: "No-show follow-up",
 };
 
+// ─── Mechanisms ────────────────────────────────────────────────────────────
+
+// What a message tries to work by, stamped on the row when it is written.
+//
+// The sequence was built on one mechanism: a verified observation about the
+// clinic, and silence where the evidence could not carry one. Step 2 now has a
+// second, for the leads where it cannot — a question about how the practice
+// actually runs, which needs no presumed pain point to be true. Two mechanisms
+// means a comparison, and a comparison needs each message to say which it was
+// at the moment it was written rather than to be guessed at later from its
+// wording, which is the whole reason this is a stored column.
+//
+//   observation            — the evidence-led messages: every step's normal
+//                            output, and step 2's three variants.
+//   curiosity_process      — step 2's fallback, asking how follow-up after a
+//                            first visit is handled. Presumes no pain point.
+//   curiosity_pain_signal  — step 2's fallback where a soft signal does point at
+//                            no-shows or follow-up, asking how they catch one.
+export const MESSAGE_MECHANISMS = [
+  "observation",
+  "curiosity_process",
+  "curiosity_pain_signal",
+] as const;
+
+export type MessageMechanism = (typeof MESSAGE_MECHANISMS)[number];
+
+export function isMessageMechanism(value: unknown): value is MessageMechanism {
+  return (
+    typeof value === "string" &&
+    (MESSAGE_MECHANISMS as readonly string[]).includes(value)
+  );
+}
+
+// How each one is named on screen and in a Copilot answer. Short, because these
+// sit in a table column and beside a message, and because "curiosity opener,
+// process question" is the whole idea said once.
+export const MESSAGE_MECHANISM_LABELS: Record<MessageMechanism, string> = {
+  observation: "Observation-led",
+  curiosity_process: "Curiosity, process question",
+  curiosity_pain_signal: "Curiosity, soft pain signal",
+};
+
 // ─── Lengths ───────────────────────────────────────────────────────────────
 
 // LinkedIn's own ceiling on a connection note is 300 characters, and the
@@ -458,6 +500,66 @@ export function connectionNote({
   );
 }
 
+// ─── The curiosity openers ─────────────────────────────────────────────────
+
+// Step 2's fallback, in two shapes, and both of them fixed prose with one blank.
+//
+// They exist because the evidence-led first message has a real failure mode that
+// is not a bug: a clinic whose site says little, whose ads nobody looked for and
+// whose reviews are a number carries no verified pain observation, all three
+// variants come back null, and the step stays blank. Blank is honest, and it is
+// also the end of the sequence for that lead. A question about how the practice
+// runs needs no presumed pain point to be true, so it is askable where an
+// observation is not.
+//
+// What they are not is a softer version of the same message. Neither one names a
+// problem, neither describes the service, and the close is a choice between two
+// ordinary answers rather than a yes or no about an offer, because the reply this
+// is trying to earn is "it's the front desk, mostly" and not "sure, send it".
+
+// The primary. One true, specific detail about the practice anchors it, and
+// nothing about it presumes anything is wrong: the question is who handles
+// follow-up, which every practice answers one way or another.
+//
+// The detail is the only blank, and it is not optional. "For a practice running
+// a busy schedule" is the mail-merge version of this message, and a question
+// with nothing real in front of it is a cold-open survey.
+export function curiosityProcessNote({
+  address,
+  detail,
+}: {
+  // Already decided by salutation(), the same as every other step.
+  address: string;
+  // Something true and specific from this clinic's own gathered evidence: the
+  // service mix, an offering named on their site, the niche they work in.
+  detail: string;
+}): string | null {
+  const anchor = detail.trim().replace(/[.]+$/, "");
+  if (anchor === "") return null;
+  return stripEmDashes(
+    `Hey ${address}, thanks for connecting. Random question, for a practice running ${anchor}, is patient follow-up after the first visit something your front desk handles, or is it more ad hoc?`,
+  );
+}
+
+// The secondary, and only where something soft actually points at no-shows or
+// follow-up: a review mentioning scheduling, a booking flow with no visible
+// reminder. It asks how they catch a no-show rather than asserting that they do
+// not, which is the same hedge every absence in this sequence is held to.
+//
+// Not a default. Used without that signal it is a presumed pain point dressed as
+// a question, which is the thing the primary exists to avoid.
+export function curiosityPainSignalNote({
+  address,
+  clinicName,
+}: {
+  address: string;
+  clinicName: string;
+}): string {
+  return stripEmDashes(
+    `Hey ${address}, thanks for connecting. Curious how ${clinicName.trim()} normally catches it when a patient books but doesn't show, is that a front desk callback, or does it mostly go untracked?`,
+  );
+}
+
 // ─── Gating ────────────────────────────────────────────────────────────────
 
 // What has to be true before a step can be written. Every one of these is a
@@ -747,8 +849,14 @@ function connectionPrompt(ctx: SequenceContext): string {
 // tone. There is no warm generic fallback any more: the fallback used to open
 // by describing the service, which is the single most recognizable agency-spam
 // line there is, and a variant the evidence cannot support is now skipped
-// instead. Two true openers beat three where one is a form letter, and no
-// openers at all is a correct answer for a lead nobody has looked at properly.
+// instead. Two true openers beat three where one is a form letter.
+//
+// All three null is still a correct answer to this prompt, and it is no longer
+// where the step ends: a run that finds no verified observation falls through to
+// the curiosity opener below (buildFirstMessageFallbackPrompt), which asks how
+// the practice runs rather than asserting anything about it. That fallback is a
+// separate call on purpose, so this prompt is never given the option of reaching
+// for it while an observation was still available.
 function firstMessagePrompt(ctx: SequenceContext): string {
   const { address, honorific } = contextSalutation(ctx);
   const clinic = ctx.evidence.clinicName.trim();
@@ -809,6 +917,74 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     '  "c": "<version C>" | null,',
     '  "skipped": "<which variants you returned null for and what evidence each would have needed>" | null,',
     '  "evidence": "<the evidence each written variant was built on, quoted>" | null,',
+    '  "uncertainty": "<hedging used, or none>",',
+    '  "stage": "<the stage required before this step>"',
+    "}",
+  ].join("\n");
+}
+
+// ─── Step 2's fallback ─────────────────────────────────────────────────────
+
+// Asked only after the three variants all came back null, and asked as its own
+// call rather than as a fourth key on the first one. That is deliberate: a
+// prompt that offers a fallback in the same breath as the three observations is
+// a prompt that gets the fallback when an observation was available, and the
+// evidence-led message is the one worth having. This one is reached only once
+// the first call has already said, in its own answer, that it has nothing.
+//
+// Both messages are assembled in code (curiosityProcessNote,
+// curiosityPainSignalNote). What is asked for here is the two things only the
+// evidence can supply: the true specific detail the primary is anchored on, and
+// whether anything at all points at no-shows or follow-up.
+export function buildFirstMessageFallbackPrompt(ctx: SequenceContext): {
+  system: string;
+  user: string;
+} {
+  return { system: SYSTEM_PROMPT, user: firstMessageFallbackPrompt(ctx) };
+}
+
+function firstMessageFallbackPrompt(ctx: SequenceContext): string {
+  const clinic = ctx.evidence.clinicName.trim();
+  return [
+    `CLINIC: ${clinic}`,
+    "",
+    "EVIDENCE",
+    "Gathered by an automated enrichment run. This is everything you have.",
+    "",
+    evidenceBlock(ctx.evidence),
+    "",
+    "CONVERSATION SO FAR",
+    conversationBlock(ctx.priorMessages),
+    "",
+    "TASK",
+    "A first attempt at this step already decided the evidence will not support a verified pain observation, so no observation-led message is being written. What goes out instead is a curiosity question: no pain point presumed, nothing asserted about how this practice operates. You are asked for the two pieces only the evidence can supply, and the sentences are assembled by the app around them.",
+    "",
+    "The primary message reads:",
+    `  "Hey <name>, thanks for connecting. Random question, for a practice running <YOUR DETAIL>, is patient follow-up after the first visit something your front desk handles, or is it more ad hoc?"`,
+    "",
+    "DETAIL. One genuinely true, specific thing about this practice, read off the evidence above, phrased to read on from \"for a practice running\". Their service mix, a specific offering named on their own site, the niche they work in.",
+    "  Good: \"both spinal decompression and laser therapy under one roof\", \"a disc-focused practice alongside general chiropractic\", \"non-surgical disc care with an in-house imaging step\"",
+    "  Forbidden, and this is the whole risk of this message: generic filler. \"a busy practice\", \"a growing clinic\", \"a practice like yours\", \"a modern chiropractic office\" and every variant are null answers, not answers. If the evidence names nothing specific, return null for detail rather than writing one of those.",
+    "  Do not describe a problem, an absence or a weakness here. This clause states what they do and nothing else.",
+    "",
+    "PAIN SIGNAL. Separately: is there anything in the evidence, however soft, that points specifically at no-shows, missed calls or patient follow-up? A review mentioning scheduling or being hard to reach, a booking flow with no visible reminder or confirmation step, a phone number as the only way in.",
+    "  Where there is, quote or name it. Where there is not, return null. A guess here is worse than a null: the app uses it to send a different message, one that asks about no-shows, and asking a practice with no such signal how they catch no-shows is the presumed pain point this whole fallback exists to avoid.",
+    "  Do not state that a reminder or follow-up does not exist. Say what the public-facing flow does not appear to show.",
+    "",
+    "HARD RULES for this step:",
+    "  - Never describe your own service, here or anywhere.",
+    "  - Do not write either whole message. Return the detail clause and the signal, nothing else.",
+    "  - Both null is a correct and expected answer for a clinic whose evidence is genuinely empty. The step is then left unfilled rather than filled with something invented.",
+    "  - No square brackets. No em dashes.",
+    "",
+    INTERNAL_NOTE_SPEC,
+    "",
+    "REPLY FORMAT",
+    "A single JSON object, exactly these keys:",
+    "{",
+    '  "detail": "<the clause, reading on from “for a practice running”>" | null,',
+    '  "painSignal": "<the soft signal pointing at no-shows or follow-up, quoted>" | null,',
+    '  "evidence": "<what in the evidence you read the detail off, quoted>" | null,',
     '  "uncertainty": "<hedging used, or none>",',
     '  "stage": "<the stage required before this step>"',
     "}",
@@ -1045,6 +1221,52 @@ export function readFollowUpObservation(raw: unknown): string | null {
   return text;
 }
 
+// The detail clause the curiosity opener is anchored on.
+//
+// The one gate that matters on this message. Every other rule the fallback has
+// is about what it does not say; this is the rule about the only thing it does,
+// and a clause that is not specific makes the message a cold-open survey with a
+// friendly greeting on it. So the filler phrasings are rejected here rather than
+// merely forbidden in the prompt: "a busy practice" is precisely what a model
+// reaches for when the evidence gave it nothing, and this step is reached only
+// when the evidence already gave a model nothing once.
+export function readAnchorDetail(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+
+  let text = stripEmDashes(raw.replace(/\s+/g, " ").trim());
+  text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+  text = text.replace(/[.!,]+$/, "").trim();
+  // The template supplies "for a practice running", so a clause that repeats it
+  // is trimmed back to the part that is actually the detail.
+  text = text.replace(/^(?:for\s+)?a\s+(?:practice|clinic|office)\s+(?:that\s+is\s+|that's\s+)?(?:running|offering|doing)\s+/i, "").trim();
+
+  if (text.length < 8 || text.length > 140) return null;
+  if (/[[\]]/.test(text)) return null;
+  if (!/[a-z]/i.test(text)) return null;
+  // Filler, in the shapes it arrives in. Each of these is a sentence about
+  // practices in general wearing this practice's name.
+  if (
+    /^(?:a|an|the)?\s*(?:busy|growing|thriving|modern|established|successful|multi-?disciplinary|small|local|reputable|well-?reviewed)\b/i.test(
+      text,
+    )
+  ) {
+    return null;
+  }
+  if (/\b(?:like yours|similar to yours|your size|practices like|such as yours)\b/i.test(text)) {
+    return null;
+  }
+  // An absence is not a detail. This clause says what they do; the message is
+  // built to presume nothing is wrong, and a negative here breaks that.
+  if (
+    /\b(didn't see|did not see|couldn't find|could not find|no visible|doesn't (?:seem|appear|have)|does not (?:seem|appear|have)|missing|lack(?:s|ing)?|without)\b/i.test(
+      text,
+    )
+  ) {
+    return null;
+  }
+  return text;
+}
+
 // The two or three things the Loom note says it covers. Short noun phrases, and
 // held to being short: a "covered point" that arrives as a sentence is a claim
 // being smuggled into a message whose job is to hand over a link.
@@ -1157,6 +1379,32 @@ export function parseFirstMessageReply(raw: string): FirstMessageReply | null {
       B: readMessage(body.b, FIRST_MESSAGE_MAX_CHARS),
       C: readMessage(body.c, FIRST_MESSAGE_MAX_CHARS),
     },
+    note: readInternalNote(body),
+  };
+}
+
+// The fallback's answer: the detail the primary curiosity opener is anchored on,
+// and whether anything soft points at no-shows. Both null is a real answer and
+// means the step is left unfilled, which is the same thing all three variants
+// coming back null means one call earlier.
+export type FirstMessageFallbackReply = {
+  detail: string | null;
+  painSignal: string | null;
+  note: InternalNote;
+};
+
+export function parseFirstMessageFallbackReply(
+  raw: string,
+): FirstMessageFallbackReply | null {
+  const body = readObject(raw);
+  if (!body) return null;
+  return {
+    detail: readAnchorDetail(body.detail),
+    // Read as free text rather than validated into a shape: nothing is built
+    // from its wording, it only decides which of the two messages is written and
+    // it goes into the internal note so the person sending can judge the signal
+    // for themselves.
+    painSignal: readText(body.painSignal, 240),
     note: readInternalNote(body),
   };
 }

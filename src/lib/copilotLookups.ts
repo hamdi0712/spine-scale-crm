@@ -32,9 +32,13 @@
 
 import { prisma } from "@/lib/prisma";
 import {
+  MESSAGE_MECHANISMS,
+  MESSAGE_MECHANISM_LABELS,
+  MessageMechanism,
   OUTREACH_STEPS,
   OUTREACH_STEP_LABELS,
   OutreachStep,
+  isMessageMechanism,
   isOutreachStep,
 } from "@/lib/outreachSequence";
 import {
@@ -2090,6 +2094,11 @@ export async function getLeadOutreachLog(args: {
       sent: m.sentAt !== null,
       content: m.content,
       internalNote: m.internalNote,
+      // Which mechanism it was written by, where it was recorded. Null on rows
+      // written before the column existed, and on nothing since.
+      mechanism: isMessageMechanism(m.messageMechanism)
+        ? MESSAGE_MECHANISM_LABELS[m.messageMechanism]
+        : null,
     })),
     reminder:
       "You cannot send a message, mark one sent, or mark a reply. Those happen on the lead's own page in Pipeline.",
@@ -2183,6 +2192,61 @@ export async function getOutreachFunnelSummary(args: {
     bucket(funnelTier(message.lead)).steps[message.step]++;
   }
 
+  // ─── Reply rate by mechanism ─────────────────────────────────────────────
+  //
+  // The one question the mechanism column exists to answer: does a curiosity
+  // opener earn more replies than an observation-led one? Only the first message
+  // has more than one mechanism, so this reads that step and says so, rather than
+  // mixing in four steps that are observation-led by construction and diluting
+  // both numbers.
+  //
+  // Counted per lead, the same as everything else here, and a reply only counts
+  // where it landed after the message went out: a lead that had already replied
+  // before this opener was sent did not reply to it. Rows written before the
+  // column existed come back unlabelled and are reported as their own group
+  // rather than folded into either side.
+  const byMechanism = new Map<
+    MessageMechanism | "unlabelled",
+    { leads: number; replied: number }
+  >();
+  const mechanismSeen = new Set<string>();
+  for (const message of messages) {
+    if (message.step !== "FIRST_MESSAGE") continue;
+    if (message.sentAt === null) continue;
+    const key = isMessageMechanism(message.messageMechanism)
+      ? message.messageMechanism
+      : ("unlabelled" as const);
+    // One lead counts once per mechanism. A first message re-sent, or two
+    // variants marked sent in turn, is still one opener to one clinic.
+    const seen = `${message.leadId}:${key}`;
+    if (mechanismSeen.has(seen)) continue;
+    mechanismSeen.add(seen);
+    const row = byMechanism.get(key) ?? { leads: 0, replied: 0 };
+    row.leads++;
+    const replied = message.lead.repliedAt;
+    if (replied !== null && replied.getTime() >= message.sentAt.getTime()) {
+      row.replied++;
+    }
+    byMechanism.set(key, row);
+  }
+
+  const mechanismRows = [...MESSAGE_MECHANISMS, "unlabelled" as const]
+    .map((key) => {
+      const row = byMechanism.get(key) ?? { leads: 0, replied: 0 };
+      return {
+        mechanism:
+          key === "unlabelled"
+            ? "Unlabelled (written before the mechanism was recorded)"
+            : MESSAGE_MECHANISM_LABELS[key],
+        firstMessagesSent: row.leads,
+        replies: row.replied,
+        replyRatePercent: rate(row.replied, row.leads),
+      };
+    })
+    // A mechanism nothing was sent by is left out rather than reported as a row
+    // of zeros: three empty rows read as three things that failed.
+    .filter((row) => row.firstMessagesSent > 0);
+
   const shape = (tier: FunnelTier) => {
     const b = bucket(tier);
     return {
@@ -2251,6 +2315,18 @@ export async function getOutreachFunnelSummary(args: {
         totals.connectionsAccepted,
       ),
       connectionMessagesSent: totals.steps.CONNECTION,
+    },
+    // Deliberately not broken down by tier as well. The mechanisms exist to be
+    // compared with each other, and splitting a handful of first messages four
+    // ways before comparing them is how two replies becomes a 50% win.
+    replyRateByMechanism: {
+      ofWhat:
+        "First messages (step 2) marked sent in this window, counted per lead and grouped by the mechanism recorded when each was written. A reply counts where the lead's reply was marked at or after the message was sent.",
+      mechanisms: mechanismRows,
+      howToReadIt:
+        mechanismRows.length === 0
+          ? "No first message was marked sent in this window, so there is nothing to compare yet."
+          : "Observation-led is the sequence's normal output; the curiosity openers are what step 2 falls back to when the evidence will not carry a verified observation, so the two groups are not comparable samples of the same leads, they are different leads. A curiosity opener going to the thin-evidence leads and still replying at a similar rate is the interesting result. Say the counts alongside the rates: at these volumes a couple of replies moves a rate by tens of points, so do not call a winner off a handful.",
     },
     whyAStepMayBeMissing:
       "A step that lags the one before it is usually a gate rather than a decision: the first message waits on the connection being accepted and marked, the audit offer on a reply being marked, the Loom delivery on a link being pasted onto the lead. Unmarked is indistinguishable from undone here — if the gap looks wrong, that is the first thing to say.",

@@ -438,6 +438,24 @@ model OutreachMessage {
   // with it.
   internalNote String?
 
+  // Which mechanism this message tries to work by, stamped when it is
+  // generated: "observation" for the evidence-led messages this sequence was
+  // built on, "curiosity_process" and "curiosity_pain_signal" for the two
+  // curiosity openers step 2 falls back to when the evidence will not carry a
+  // verified observation. src/lib/outreachSequence.ts holds the list.
+  //
+  // Recorded rather than derived, because it is the thing being compared. The
+  // question this column exists to answer is whether a curiosity opener earns
+  // more replies than an observation-led one, and that is only answerable if
+  // each message says which it was at the moment it was written, rather than
+  // being guessed at later from its wording.
+  //
+  // Nullable, and null on every row written before this column existed: those
+  // messages were all observation-led by construction, but saying so here
+  // would be a backfill asserting something nobody recorded. The reporting
+  // counts them as unlabelled instead.
+  messageMechanism String?
+
   // When somebody marked this as the one they sent. Null on a draft, and null
   // on the two variants that were not chosen.
   sentAt DateTime?

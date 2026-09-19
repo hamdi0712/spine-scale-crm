@@ -610,7 +610,7 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
     function: {
       name: "getOutreachFunnelSummary",
       description:
-        "Outreach over a window, broken down by ICP tier: connection requests sent, connections accepted, the acceptance rate, and how many leads reached each of steps 2 to 5 (first message, audit offer, Loom delivery, follow-up). Use for 'how is outreach converting', 'why did only some of the accepted connections get a first message', 'is the A-tier work actually getting done' — anything about where leads are dropping out of the sequence, answered in one call instead of by opening leads one at a time. getOutreachFunnel is the dashboard's four headline numbers; this is the sequence itself, by tier.",
+        "Outreach over a window, broken down by ICP tier: connection requests sent, connections accepted, the acceptance rate, and how many leads reached each of steps 2 to 5 (first message, audit offer, Loom delivery, follow-up). It also breaks the first message's reply rate down by the mechanism each message was written by — observation-led, or one of the two curiosity openers step 2 falls back to when the evidence carries no verified observation — which is the call to make when asked whether the curiosity fallback is working. Use for 'how is outreach converting', 'why did only some of the accepted connections get a first message', 'is the A-tier work actually getting done' — anything about where leads are dropping out of the sequence, answered in one call instead of by opening leads one at a time. getOutreachFunnel is the dashboard's four headline numbers; this is the sequence itself, by tier.",
       parameters: {
         type: "object",
         properties: {
