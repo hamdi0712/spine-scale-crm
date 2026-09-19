@@ -31,6 +31,8 @@ import {
   SequenceState,
   VARIANT_BLURBS,
   FirstMessageVariant,
+  MESSAGE_MECHANISM_LABELS,
+  MessageMechanism,
   endsInQuestion,
   stepLock,
 } from "@/lib/outreachSequence";
@@ -67,6 +69,10 @@ type StepNote =
       written: number;
       // Which first-message variants the evidence could not support.
       skipped: readonly string[];
+      // Which mechanism the run wrote by. Only ever interesting on the first
+      // message, where a curiosity opener arriving in place of three
+      // observations is a different kind of message and worth saying so.
+      mechanism: MessageMechanism | null;
     };
 
 export default function OutreachSequencePanel({
@@ -181,6 +187,7 @@ function StepRow({
               basedOn: result.basedOn,
               written: result.written,
               skipped: result.skipped ?? [],
+              mechanism: result.mechanism ?? null,
             },
       );
     } catch {
@@ -320,6 +327,42 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
       </div>
     );
   }
+  // The curiosity fallback: one message, and not one of the three that were
+  // asked for. Said first and said plainly, because the difference between "here
+  // are your openers" and "the evidence would not carry an observation, so here
+  // is a question instead" is the thing somebody needs to know before they paste
+  // it, and it is not visible in the wording of the message itself.
+  const curiosity =
+    note.mechanism === "curiosity_process" ||
+    note.mechanism === "curiosity_pain_signal";
+  if (curiosity) {
+    return (
+      <div className="mt-2.5 rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
+        <p className="text-sm font-medium text-ink">
+          A curiosity opener, not an observation
+        </p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          Nothing in the evidence
+          {note.basedOn.length > 0 && (
+            <> — {note.basedOn.join(", ").toLowerCase()} — </>
+          )}
+          would carry a verified pain observation, so none of the three openers
+          was written. This asks{" "}
+          {note.mechanism === "curiosity_process"
+            ? "how follow-up after a first visit is handled, and presumes nothing is wrong with it"
+            : "how a no-show gets caught, on the back of a soft signal in the evidence pointing that way"}
+          . It names no problem and describes no service, so it is sendable as it
+          stands, but it is a different bet than an observation: the app records
+          which one it was so the reply rates can be compared later.
+        </p>
+        {note.evidence && (
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Read off: “{note.evidence}”
+          </p>
+        )}
+      </div>
+    );
+  }
   const short = step === "FIRST_MESSAGE" && note.written < 3;
   if (!note.evidence && note.basedOn.length === 0 && !short) return null;
   return (
@@ -414,6 +457,15 @@ function MessageCard({
           ) : (
             OUTREACH_STEP_LABELS[message.step]
           )}
+          {/* Only where it is not the sequence's usual mechanism. Labelling
+              every observation-led message "Observation-led" would be labelling
+              the whole panel, and the label exists to mark the exception. */}
+          {message.messageMechanism !== null &&
+            message.messageMechanism !== "observation" && (
+              <span className="ml-2 inline-flex h-[18px] items-center rounded-[6px] bg-warn-soft px-1.5 font-normal text-warn">
+                {MESSAGE_MECHANISM_LABELS[message.messageMechanism]}
+              </span>
+            )}
         </p>
         <p
           className={`num shrink-0 text-xs ${overLength ? "text-bad" : "text-muted"}`}

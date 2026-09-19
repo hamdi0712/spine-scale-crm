@@ -10,10 +10,12 @@
 // and the action, and this is what either one does with the answer.
 
 import {
+  MessageMechanism,
   OUTREACH_STEPS,
   OutreachDraft,
   OutreachStep,
   SequenceState,
+  isMessageMechanism,
   isOutreachStep,
 } from "@/lib/outreachSequence";
 
@@ -41,6 +43,12 @@ export type OutreachStepResult =
       // rather than merely counted, because "no advertising evidence, so no
       // option B" is an answer, and "two options" on its own is a puzzle.
       skipped?: readonly string[];
+      // Which mechanism the run actually wrote by. Worth saying on the panel
+      // rather than only in the database: a curiosity opener arriving where
+      // three observations were asked for is a different message than the one
+      // the button offered, and somebody about to paste it should be told that
+      // by the app rather than work it out from the wording.
+      mechanism?: MessageMechanism;
     }
   | { ok: false; error: string };
 
@@ -106,6 +114,10 @@ export interface OutreachMessageView {
   // The reviewer's note. Rendered under the message and never inside it, so it
   // cannot be copied into LinkedIn along with the draft.
   internalNote: string | null;
+  // Which mechanism this message was written by, as it was stamped at
+  // generation time. Null on rows written before the column existed, and shown
+  // as nothing rather than guessed at.
+  messageMechanism: MessageMechanism | null;
   sentAt: Date | null;
   createdAt: Date;
 }
@@ -120,13 +132,23 @@ export function toMessageViews(
     variant: string | null;
     content: string;
     internalNote: string | null;
+    messageMechanism: string | null;
     sentAt: Date | null;
     createdAt: Date;
   }[],
 ): OutreachMessageView[] {
   return rows
     .filter((row) => isOutreachStep(row.step))
-    .map((row) => ({ ...row, step: row.step as OutreachStep }));
+    .map((row) => ({
+      ...row,
+      step: row.step as OutreachStep,
+      // A mechanism this build does not know about is read as none, the same
+      // way an unknown step is dropped: a label nobody can categorise is worse
+      // than a blank.
+      messageMechanism: isMessageMechanism(row.messageMechanism)
+        ? row.messageMechanism
+        : null,
+    }));
 }
 
 // The messages for one step, newest generation first.

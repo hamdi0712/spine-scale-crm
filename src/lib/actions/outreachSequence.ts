@@ -29,18 +29,23 @@ import { deepSeekJson } from "@/lib/deepseek";
 import { assistEvidenceLabels, hasAssistEvidence } from "@/lib/icpAssist";
 import {
   FIRST_MESSAGE_VARIANTS,
+  MessageMechanism,
   OutreachStep,
   SEQUENCE_MAX_TOKENS,
   SequenceContext,
+  buildFirstMessageFallbackPrompt,
   buildStepPrompt,
   connectionNote,
   contextSalutation,
+  curiosityPainSignalNote,
+  curiosityProcessNote,
   followUpNote,
   formatInternalNote,
   isOutreachStep,
   loomDeliveryNote,
   parseAuditOfferReply,
   parseConnectionReply,
+  parseFirstMessageFallbackReply,
   parseFirstMessageReply,
   parseFollowUpReply,
   parseLoomDeliveryReply,
@@ -51,6 +56,13 @@ import {
   sequenceState,
   toDraft,
 } from "@/lib/outreachSequenceRead";
+
+// The mechanism every evidence-led message in this sequence is written by, named
+// once here so the five write paths below cannot drift from each other. It is
+// stamped on rows this app has always written as well as on the new ones: the
+// point of the column is a comparison, and a comparison needs both sides
+// labelled from the same moment onwards.
+const OBSERVATION: MessageMechanism = "observation";
 
 // Everything a prompt is written from, read in one query. The evidence, the
 // contact's first name, the Loom, and every message already drafted for this
@@ -159,6 +171,7 @@ export async function generateOutreachStep(
           observation: parsed.observation,
         }),
         internalNote: formatInternalNote(parsed.note),
+        messageMechanism: OBSERVATION,
       },
     });
     revalidatePath(`/pipeline/${leadId}`);
@@ -195,6 +208,7 @@ export async function generateOutreachStep(
         variant: null,
         content,
         internalNote: formatInternalNote(parsed.note),
+        messageMechanism: OBSERVATION,
       },
     });
     revalidatePath(`/pipeline/${leadId}`);
@@ -239,6 +253,7 @@ export async function generateOutreachStep(
         variant: null,
         content,
         internalNote: formatInternalNote(parsed.note),
+        messageMechanism: OBSERVATION,
       },
     });
     revalidatePath(`/pipeline/${leadId}`);
@@ -268,6 +283,7 @@ export async function generateOutreachStep(
         variant: null,
         content: parsed.message,
         internalNote: formatInternalNote(parsed.note),
+        messageMechanism: OBSERVATION,
       },
     });
     revalidatePath(`/pipeline/${leadId}`);
@@ -296,8 +312,13 @@ export async function generateOutreachStep(
   const written = FIRST_MESSAGE_VARIANTS.filter(
     (variant) => parsed.variants[variant] !== null,
   );
+  // None of the three: the evidence will not carry a verified pain observation.
+  // That used to end the step, and a blank step ends the sequence for that lead.
+  // A curiosity question needs no pain point to be true, so the run falls through
+  // to one rather than stopping — and only here, after the observation-led call
+  // has said in its own answer that it has nothing.
   if (written.length === 0) {
-    return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+    return await generateCuriosityFallback({ leadId, ctx, basedOn });
   }
 
   const note = formatInternalNote(parsed.note);
@@ -308,6 +329,7 @@ export async function generateOutreachStep(
       variant,
       content: parsed.variants[variant] as string,
       internalNote: note,
+      messageMechanism: OBSERVATION,
     })),
   });
   revalidatePath(`/pipeline/${leadId}`);
@@ -324,6 +346,121 @@ export async function generateOutreachStep(
       (variant) => parsed.variants[variant] === null,
     ),
     evidence: parsed.note.evidence,
+    mechanism: OBSERVATION,
+  };
+}
+
+// ─── Step 2's fallback ─────────────────────────────────────────────────────
+
+// The curiosity opener, written when the evidence-led call found nothing.
+//
+// A second model call, and the only place in this app where one step can cost
+// two. It is worth the call for what it avoids: a lead whose connection was
+// accepted, whose evidence is thin, and whose step 2 is therefore permanently
+// blank. What it is not allowed to do is turn thin evidence into an invented
+// detail, so both messages below are assembled in code from a blank the model
+// had to read off the evidence, and a run that cannot fill either blank leaves
+// the step unfilled exactly as before.
+//
+// Which of the two gets written is decided here rather than by the model. The
+// process question is the primary, because it presumes nothing at all; the
+// no-show question is only reached where something soft actually pointed that
+// way, and where the primary's detail was missing too.
+async function generateCuriosityFallback({
+  leadId,
+  ctx,
+  basedOn,
+}: {
+  leadId: string;
+  ctx: SequenceContext;
+  basedOn: string[];
+}): Promise<OutreachStepResult> {
+  const step: OutreachStep = "FIRST_MESSAGE";
+  const { system, user } = buildFirstMessageFallbackPrompt(ctx);
+  const reply = await deepSeekJson({
+    system,
+    user,
+    maxTokens: SEQUENCE_MAX_TOKENS,
+  });
+  // A failed fallback is reported as the step having written nothing rather than
+  // as an error. The observation-led call already succeeded and already answered
+  // "nothing specific enough to say", which is the true state of this lead; a red
+  // box about a second call the person never asked for would describe the app's
+  // plumbing instead.
+  if (!reply.ok) {
+    return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+  }
+
+  const parsed = parseFirstMessageFallbackReply(reply.content);
+  if (!parsed) {
+    return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+  }
+
+  const { address } = contextSalutation(ctx);
+  const process =
+    parsed.detail === null
+      ? null
+      : curiosityProcessNote({ address, detail: parsed.detail });
+
+  // The primary where there is a true detail to anchor it. Otherwise the no-show
+  // question, and only where a genuine soft signal pointed at no-shows or
+  // follow-up: without one it is a presumed pain point wearing a question mark,
+  // which is the thing this fallback exists to avoid.
+  const chosen: { content: string; mechanism: MessageMechanism } | null =
+    process !== null
+      ? { content: process, mechanism: "curiosity_process" }
+      : parsed.painSignal !== null
+        ? {
+            content: curiosityPainSignalNote({
+              address,
+              clinicName: ctx.evidence.clinicName,
+            }),
+            mechanism: "curiosity_pain_signal",
+          }
+        : null;
+
+  // Evidence empty enough that neither message can be grounded in anything real.
+  // The step stays unfilled, which is the answer it has always given.
+  if (chosen === null) {
+    return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+  }
+
+  await prisma.outreachMessage.create({
+    data: {
+      leadId,
+      step,
+      variant: null,
+      content: chosen.content,
+      internalNote: formatInternalNote({
+        ...parsed.note,
+        // The note says why this is a curiosity opener rather than one of the
+        // three observations, because that is the first question somebody reading
+        // it will have. The soft signal goes in where it decided the wording.
+        evidence: [
+          "No verified pain observation in the evidence, so this is the curiosity opener rather than an observation-led message.",
+          parsed.note.evidence,
+          chosen.mechanism === "curiosity_pain_signal" && parsed.painSignal
+            ? `Soft signal pointing at no-shows or follow-up: ${parsed.painSignal}`
+            : null,
+        ]
+          .filter((line): line is string => line !== null && line !== "")
+          .join(" "),
+      }),
+      messageMechanism: chosen.mechanism,
+    },
+  });
+  revalidatePath(`/pipeline/${leadId}`);
+  return {
+    ok: true,
+    step,
+    written: 1,
+    fromTemplate: false,
+    basedOn,
+    evidence: parsed.note.evidence,
+    // All three observation variants were skipped on the way here, which is what
+    // the panel says under a run that wrote one message instead of three.
+    skipped: FIRST_MESSAGE_VARIANTS,
+    mechanism: chosen.mechanism,
   };
 }
 
