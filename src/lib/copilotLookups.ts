@@ -2348,6 +2348,112 @@ const LEAD_SEARCH_MAX = 20;
 // getPipelineLeads with extra steps and a worse cap.
 const LEAD_SEARCH_MIN_CHARS = 2;
 
+// A status filter with no name behind it is a list rather than a search — "who
+// accepted and never heard from us again" wants every one of them, not the
+// twenty most recently touched — so it gets the pipeline's own ceiling.
+const LEAD_STATUS_LIST_MAX = LEADS_MAX;
+
+// ─── Where a lead stands on the connection ─────────────────────────────────
+//
+// The four answers to "has this one said yes yet", in the order they happen.
+// They are not stored anywhere: every one of them is read off the two marks on
+// the lead (request sent, request accepted) and, for the last, off whether a
+// first message was ever marked sent. That is deliberate — the marks are the
+// only record there is, and computing from them here means this filter and the
+// counts in getOutreachFunnelSummary can never disagree about what "accepted"
+// means.
+//
+// ACCEPTED_NO_MESSAGE is the one worth having. It is the gap between a
+// connection that was accepted and a first message that never went out — the
+// prospect said yes and then heard nothing — and it is invisible in every
+// other lookup: the funnel summary counts it (accepted minus first messages
+// sent) without being able to name a single lead in it, and a lead-by-lead
+// search can only find it by opening every lead in turn. It is a strict subset
+// of ACCEPTED, not a step beyond it.
+export const LEAD_CONNECTION_STATUSES = [
+  "not_sent",
+  "sent_no_reply",
+  "accepted",
+  "accepted_no_message",
+] as const;
+
+export type LeadConnectionStatus = (typeof LEAD_CONNECTION_STATUSES)[number];
+
+export const LEAD_CONNECTION_STATUS_LABELS: Record<
+  LeadConnectionStatus,
+  string
+> = {
+  not_sent: "Connection request not sent",
+  sent_no_reply: "Request sent, not accepted yet",
+  accepted: "Connection accepted",
+  accepted_no_message: "Accepted, no first message sent",
+};
+
+// What each filter actually selects, said plainly, because "accepted" and
+// "accepted_no_message" overlap and an answer that does not say which was
+// asked for is an answer about the wrong set of leads.
+export const LEAD_CONNECTION_STATUS_MEANINGS: Record<
+  LeadConnectionStatus,
+  string
+> = {
+  not_sent: "No connection request has been marked sent on the lead.",
+  sent_no_reply:
+    "The connection request was marked sent and the acceptance has not been marked. Unmarked is indistinguishable from unaccepted here.",
+  accepted:
+    "The connection was marked accepted, whatever happened afterwards — includes the leads a first message did go out to.",
+  accepted_no_message:
+    "The connection was marked accepted and no first message (step 2 of the sequence) has been marked sent. These are the leads that said yes and then heard nothing back.",
+};
+
+function isLeadConnectionStatus(value: unknown): value is LeadConnectionStatus {
+  return (
+    typeof value === "string" &&
+    (LEAD_CONNECTION_STATUSES as readonly string[]).includes(value)
+  );
+}
+
+type ConnectionShape = {
+  connectionRequestSentAt: Date | null;
+  connectionAcceptedAt: Date | null;
+  outreach: { step: string; sentAt: Date | null }[];
+};
+
+// The first message as the sequence counts it: marked sent, not merely
+// drafted. Same reading furthestStepSent takes, and the same one
+// getLeadOutreachLog reports — a draft sitting unsent is exactly the silence
+// this filter is looking for, not a message that answers it.
+function firstMessageSentAt(lead: ConnectionShape): Date | null {
+  let earliest: Date | null = null;
+  for (const m of lead.outreach) {
+    if (m.step !== "FIRST_MESSAGE" || m.sentAt === null) continue;
+    if (earliest === null || m.sentAt < earliest) earliest = m.sentAt;
+  }
+  return earliest;
+}
+
+// The one label that fits, narrowest first: a lead that accepted and went
+// silent is reported as that rather than as a plain acceptance, because that
+// is the thing about it worth knowing.
+function connectionStatusOf(lead: ConnectionShape): LeadConnectionStatus {
+  if (lead.connectionAcceptedAt !== null) {
+    return firstMessageSentAt(lead) === null ? "accepted_no_message" : "accepted";
+  }
+  return lead.connectionRequestSentAt === null ? "not_sent" : "sent_no_reply";
+}
+
+// Membership, which is not the same question as the label: "accepted" includes
+// the accepted-and-silent leads, so asking for it must return them.
+function matchesConnectionStatus(
+  lead: ConnectionShape,
+  status: LeadConnectionStatus,
+): boolean {
+  const actual = connectionStatusOf(lead);
+  if (status === "accepted") {
+    return actual === "accepted" || actual === "accepted_no_message";
+  }
+  return actual === status;
+}
+
 // Where a lead has actually got to in the five-step sequence.
 //
 // Read off the messages that were marked sent, not off the ones that were
@@ -2392,17 +2498,52 @@ function furthestStepSent(
  * thing asked after "which lead is this", and carrying them here turns the
  * common two-call pattern (find the lead, then open its outreach log) into
  * one. getLeadOutreachLog is still the lookup for the messages themselves.
+ *
+ * `connectionStatus` turns the same lookup into an index of the sequence's
+ * first gate. getOutreachFunnelSummary can say how many connections were
+ * accepted in a window and cannot name one of them; getPipelineLeads filters
+ * by stage and tier and knows nothing about acceptance. So the question that
+ * matters most — which leads accepted and then never got a first message —
+ * had no lookup behind it at all, and could only be answered by opening leads
+ * one at a time. It is a filter here rather than a lookup of its own because
+ * the row this would return is the row searchLeads already returns, and two
+ * functions returning the same lead differently is how they drift apart.
+ *
+ * With a status and no query the query requirement lifts: a filter that
+ * selects a set is not searching for a name, and demanding two characters of
+ * one would make the set unaskable. Either argument alone works, and both
+ * together narrow each other.
  */
-export async function searchLeads(args: { query?: string }): Promise<unknown> {
+export async function searchLeads(args: {
+  query?: string;
+  connectionStatus?: string;
+}): Promise<unknown> {
   const query = (args.query ?? "").trim();
-  if (query.length < LEAD_SEARCH_MIN_CHARS) {
+
+  const statusArg = (args.connectionStatus ?? "").trim();
+  if (statusArg !== "" && !isLeadConnectionStatus(statusArg)) {
     return {
       searched: false,
-      message: `searchLeads needs at least ${LEAD_SEARCH_MIN_CHARS} characters to search on — part of a clinic name or a contact name. For the pipeline as a whole, or to filter by tier or stage, call getPipelineLeads.`,
+      message: `"${statusArg}" is not a connection status. Use one of: ${LEAD_CONNECTION_STATUSES.join(", ")}.`,
+      statuses: LEAD_CONNECTION_STATUS_MEANINGS,
+    };
+  }
+  const status: LeadConnectionStatus | null = isLeadConnectionStatus(statusArg)
+    ? statusArg
+    : null;
+
+  if (query.length < LEAD_SEARCH_MIN_CHARS && status === null) {
+    return {
+      searched: false,
+      message: `searchLeads needs at least ${LEAD_SEARCH_MIN_CHARS} characters to search on — part of a clinic name or a contact name — or a connectionStatus to filter by. For the pipeline as a whole, or to filter by tier or stage, call getPipelineLeads.`,
+      statuses: LEAD_CONNECTION_STATUS_MEANINGS,
     };
   }
 
-  const needle = query.toLowerCase();
+  // A query too short to search on is dropped rather than refused when a
+  // status carries the request: the status is the question, and one stray
+  // character should not turn it into an error.
+  const needle = query.length >= LEAD_SEARCH_MIN_CHARS ? query.toLowerCase() : null;
 
   // Archived leads are out, the same ones getPipelineLeads leaves out and for
   // the same reason: they are converted or closed out, and a search that
@@ -2412,34 +2553,72 @@ export async function searchLeads(args: { query?: string }): Promise<unknown> {
     orderBy: { updatedAt: "desc" },
     include: {
       // Only what a step needs. The messages themselves are getLeadOutreachLog's
-      // to return; this is here to say how far along the lead is.
+      // to return; this is here to say how far along the lead is, and to tell a
+      // first message that went out from one that never did.
       outreach: { select: { step: true, sentAt: true } },
     },
   });
 
-  const matching = leads.filter(
-    (lead) =>
-      lead.clinicName.toLowerCase().includes(needle) ||
-      (lead.contactName?.toLowerCase().includes(needle) ?? false),
-  );
+  const matching = leads.filter((lead) => {
+    if (
+      needle !== null &&
+      !lead.clinicName.toLowerCase().includes(needle) &&
+      !(lead.contactName?.toLowerCase().includes(needle) ?? false)
+    ) {
+      return false;
+    }
+    return status === null || matchesConnectionStatus(lead, status);
+  });
+
+  // A status-only request is a list, so it gets the list's ceiling; a name is
+  // a search, and twenty hits on one means the fragment was too vague.
+  const cap = needle === null ? LEAD_STATUS_LIST_MAX : LEAD_SEARCH_MAX;
+
+  // Longest silence first when that is the question asked: the lead that
+  // accepted three weeks ago and heard nothing is the one to write to today,
+  // and burying it under whatever was edited most recently hides it. Every
+  // other request keeps the recency order the rest of the pipeline uses.
+  const ordered =
+    status === "accepted_no_message"
+      ? [...matching].sort(
+          (a, b) =>
+            (a.connectionAcceptedAt?.getTime() ?? 0) -
+            (b.connectionAcceptedAt?.getTime() ?? 0),
+        )
+      : matching;
+
+  const now = new Date();
 
   return {
     searched: true,
-    query,
-    matchedOn: "Clinic name or contact name, partial and case-insensitive.",
-    ...listMeta(
-      Math.min(matching.length, LEAD_SEARCH_MAX),
-      matching.length,
-      LEAD_SEARCH_MAX,
-    ),
-    ...(matching.length === 0
+    query: query === "" ? null : query,
+    matchedOn:
+      needle === null
+        ? "Connection status only — every lead in the pipeline with that status."
+        : "Clinic name or contact name, partial and case-insensitive.",
+    ...(status
       ? {
-          note: `Nothing in the pipeline matches "${query}". It may be archived, it may still be a discovery candidate (getDiscoveryCandidates), or it may be spelled differently — try a shorter fragment of the name.`,
+          connectionStatus: status,
+          connectionStatusMeans: LEAD_CONNECTION_STATUS_MEANINGS[status],
+          ...(status === "accepted_no_message"
+            ? { sortedBy: "Acceptance date, oldest first — longest silence at the top." }
+            : {}),
         }
       : {}),
-    leads: matching.slice(0, LEAD_SEARCH_MAX).map((lead) => {
+    ...listMeta(Math.min(ordered.length, cap), ordered.length, cap),
+    ...(ordered.length === 0
+      ? {
+          note:
+            needle === null
+              ? `No lead in the pipeline is ${LEAD_CONNECTION_STATUS_LABELS[status!].toLowerCase()}. That is an answer, not a miss — nothing is archived out of this except converted and closed-out leads.`
+              : `Nothing in the pipeline matches "${query}"${status ? ` with that connection status` : ""}. It may be archived, it may still be a discovery candidate (getDiscoveryCandidates), or it may be spelled differently — try a shorter fragment of the name.`,
+        }
+      : {}),
+    leads: ordered.slice(0, cap).map((lead) => {
       const tierNow = leadTier(lead);
       const furthest = furthestStepSent(lead.outreach);
+      const firstMessage = firstMessageSentAt(lead);
+      const statusNow = connectionStatusOf(lead);
       return {
         id: lead.id,
         clinicName: lead.clinicName,
@@ -2457,6 +2636,21 @@ export async function searchLeads(args: { query?: string }): Promise<unknown> {
         connectionRequestSentAt: iso(lead.connectionRequestSentAt),
         connectionAcceptedAt: iso(lead.connectionAcceptedAt),
         connectionAccepted: lead.connectionAcceptedAt !== null,
+        // The same label connectionStatus filters on, on every row whether one
+        // was asked for or not — it is the one-line answer to "where is this
+        // lead stuck", and it costs nothing to say.
+        connectionStatus: statusNow,
+        connectionStatusLabel: LEAD_CONNECTION_STATUS_LABELS[statusNow],
+        firstMessageSentAt: iso(firstMessage),
+        // How long the silence has run, for the leads that accepted and got
+        // nothing. Days rather than a date because "19 days" is the thing that
+        // makes somebody act on it.
+        daysSinceAccepted:
+          lead.connectionAcceptedAt === null
+            ? null
+            : Math.floor(
+                (now.getTime() - lead.connectionAcceptedAt.getTime()) / DAY_MS,
+              ),
         repliedAt: iso(lead.repliedAt),
         // Where the lead actually got to. Null is "nothing marked sent yet",
         // which is not the same as nothing written — the drafts are in
@@ -2693,6 +2887,10 @@ export async function runCopilotTool(
         ok: true,
         data: await searchLeads({
           query: str(args.query) ?? str(args.name) ?? str(args.q),
+          // `status` accepted alongside `connectionStatus` for the same
+          // reason: an invalid value is answered by the lookup with the list
+          // of valid ones, so nothing here needs to guard it.
+          connectionStatus: str(args.connectionStatus) ?? str(args.status),
         }),
       };
     case "getLeadDetail":
