@@ -64,6 +64,30 @@ import {
 // labelled from the same moment onwards.
 const OBSERVATION: MessageMechanism = "observation";
 
+// ─── Tracing step 2 (TEMPORARY) ────────────────────────────────────────────
+//
+// Step 2 has two model calls and four ways to end with nothing written, and
+// until now all four surfaced as the one sentence the panel has always shown:
+// "nothing specific enough to say". That is fine as an answer and useless as a
+// diagnosis, which is exactly the position a fallback that appears not to fire
+// leaves somebody in.
+//
+// So every branch of the step now appends a line saying what ran and what came
+// back. The lines go to the server log under a grep-able prefix and travel back
+// to the panel on the result, and they are for the person debugging rather than
+// for the person sending: no message text goes in them, only lengths, counts and
+// the reason a gate rejected something.
+//
+// Delete this block, the trace() calls, OutreachStepResult.debug and the panel's
+// DebugTrace together once the fallback is confirmed working on real leads.
+const TRACE_PREFIX = "[outreach:step2]";
+
+function trace(lines: string[], line: string): void {
+  lines.push(line);
+  // eslint-disable-next-line no-console
+  console.info(`${TRACE_PREFIX} ${line}`);
+}
+
 // Everything a prompt is written from, read in one query. The evidence, the
 // contact's first name, the Loom, and every message already drafted for this
 // lead — which is what lets a later step avoid repeating an earlier one.
@@ -297,8 +321,16 @@ export async function generateOutreachStep(
     };
   }
 
+  // TEMPORARY tracing, see the note on trace() above.
+  const debug: string[] = [];
+  trace(
+    debug,
+    `lead=${leadId} generateOutreachStep(FIRST_MESSAGE) ran the observation-led call, which answered ${reply.content.length} chars`,
+  );
+
   const parsed = parseFirstMessageReply(reply.content);
   if (!parsed) {
+    trace(debug, "parseFirstMessageReply: not a JSON object, so nothing was written");
     return {
       ok: false,
       error:
@@ -317,8 +349,12 @@ export async function generateOutreachStep(
   // A curiosity question needs no pain point to be true, so the run falls through
   // to one rather than stopping — and only here, after the observation-led call
   // has said in its own answer that it has nothing.
+  trace(
+    debug,
+    `parseFirstMessageReply: usable variants ${written.length === 0 ? "none" : written.join(", ")}`,
+  );
   if (written.length === 0) {
-    return await generateCuriosityFallback({ leadId, ctx, basedOn });
+    return await generateCuriosityFallback({ leadId, ctx, basedOn, debug });
   }
 
   const note = formatInternalNote(parsed.note);
@@ -347,6 +383,7 @@ export async function generateOutreachStep(
     ),
     evidence: parsed.note.evidence,
     mechanism: OBSERVATION,
+    debug,
   };
 }
 
@@ -370,31 +407,56 @@ async function generateCuriosityFallback({
   leadId,
   ctx,
   basedOn,
+  debug,
 }: {
   leadId: string;
   ctx: SequenceContext;
   basedOn: string[];
+  // TEMPORARY, see trace() above. Carried in rather than started here so the
+  // trace reads as one path through the step rather than two.
+  debug: string[];
 }): Promise<OutreachStepResult> {
   const step: OutreachStep = "FIRST_MESSAGE";
+  trace(debug, "no observation-led variant, so generateCuriosityFallback ran");
   const { system, user } = buildFirstMessageFallbackPrompt(ctx);
   const reply = await deepSeekJson({
     system,
     user,
     maxTokens: SEQUENCE_MAX_TOKENS,
   });
-  // A failed fallback is reported as the step having written nothing rather than
-  // as an error. The observation-led call already succeeded and already answered
-  // "nothing specific enough to say", which is the true state of this lead; a red
-  // box about a second call the person never asked for would describe the app's
-  // plumbing instead.
+  // A failed second call used to come back as the step having written nothing,
+  // which made a broken model call indistinguishable from a lead whose evidence
+  // is genuinely empty — the same yellow "nothing specific enough to say" for
+  // two completely different problems, and the reason this was so hard to see
+  // from the panel. It is its own error now, and it says which call failed.
   if (!reply.ok) {
-    return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+    trace(debug, `the fallback call itself failed: ${reply.error}`);
+    return {
+      ok: false,
+      error: `The three observation-led openers came back empty, and the curiosity fallback behind them could not be written either: ${reply.error}`,
+      debug,
+    };
   }
+  trace(debug, `the fallback call answered ${reply.content.length} chars`);
 
   const parsed = parseFirstMessageFallbackReply(reply.content);
   if (!parsed) {
-    return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+    trace(debug, "parseFirstMessageFallbackReply: not a JSON object");
+    return {
+      ok: false,
+      error:
+        "The curiosity fallback ran, but DeepSeek's answer to it was not a JSON object, so nothing was saved. Try again.",
+      debug,
+    };
   }
+  trace(
+    debug,
+    `parseFirstMessageFallbackReply: detail=${
+      parsed.detail === null
+        ? `none (${parsed.detailRejected ?? "the model returned nothing"})`
+        : `“${parsed.detail}”`
+    }, painSignal=${parsed.painSignal === null ? "none" : "present"}`,
+  );
 
   const { address } = contextSalutation(ctx);
   const process =
@@ -422,10 +484,21 @@ async function generateCuriosityFallback({
   // Evidence empty enough that neither message can be grounded in anything real.
   // The step stays unfilled, which is the answer it has always given.
   if (chosen === null) {
-    return { ok: true, step, written: 0, fromTemplate: false, basedOn };
+    trace(
+      debug,
+      "neither curiosity variant could be grounded, so the step was left unfilled",
+    );
+    return { ok: true, step, written: 0, fromTemplate: false, basedOn, debug };
   }
+  trace(debug, `writing one message, mechanism=${chosen.mechanism}`);
 
-  await prisma.outreachMessage.create({
+  // Wrapped, and wrapped here specifically: this is the first write in the app
+  // that sets messageMechanism, so a database that has not had the migration
+  // applied fails on exactly this statement and nowhere else. Unwrapped it
+  // throws out of the action and the panel reports it as the server being
+  // unreachable, which is the wrong thing to go and check.
+  try {
+    await prisma.outreachMessage.create({
     data: {
       leadId,
       step,
@@ -448,7 +521,17 @@ async function generateCuriosityFallback({
       }),
       messageMechanism: chosen.mechanism,
     },
-  });
+    });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    trace(debug, `the write failed: ${detail.slice(0, 300)}`);
+    return {
+      ok: false,
+      error:
+        "The curiosity opener was written but could not be saved. If the message mentions an unknown column, this database has not had the messageMechanism migration applied yet: run prisma migrate deploy.",
+      debug,
+    };
+  }
   revalidatePath(`/pipeline/${leadId}`);
   return {
     ok: true,
@@ -461,6 +544,7 @@ async function generateCuriosityFallback({
     // the panel says under a run that wrote one message instead of three.
     skipped: FIRST_MESSAGE_VARIANTS,
     mechanism: chosen.mechanism,
+    debug,
   };
 }
 
