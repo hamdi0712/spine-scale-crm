@@ -38,6 +38,12 @@ import { salutation, salutationNote } from "@/lib/outreachSequence";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES } from "@/lib/timezones";
 import { fmtDateTime, toDateInput } from "@/lib/format";
+import {
+  IconClockHour4,
+  IconSpeakerphone,
+  IconStar,
+  IconUsers,
+} from "@tabler/icons-react";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
@@ -45,6 +51,7 @@ import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
 import OutreachSequencePanel from "@/components/OutreachSequencePanel";
 import IcpScorecard from "@/components/IcpScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
+import StatChip from "@/components/StatChip";
 
 export const dynamic = "force-dynamic";
 
@@ -113,14 +120,22 @@ export default async function LeadDetailPage({
     lead.reviewCount !== null ||
     lead.websiteNotes !== null;
 
+  // The ads signal is free text from the actor, and it usually opens with the
+  // number that is the whole point of it — "1 active ad", "3 active ads". Split
+  // where it does, so the chip can set the figure in the page's own ink and
+  // leave the words around it muted like every other chip in the row; left
+  // whole where it does not, because a sentence with no count in it is still
+  // worth showing and is not worth guessing at.
+  const adsCount = /^(\d+)\s+(\S.*)$/.exec((lead.metaAdsSignal ?? "").trim());
+
   return (
     <div>
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
           <Link href="/pipeline" className="text-sm text-accent hover:underline">
             ← Pipeline
           </Link>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <h1 className="display text-[32px] font-semibold">{lead.clinicName}</h1>
             <StageBadge stage={lead.stage} />
             <IcpTierBadge tier={leadTier(lead)} />
@@ -130,41 +145,56 @@ export default async function LeadDetailPage({
               </span>
             )}
           </div>
-          {/* The last enrichment at a glance. The run's date leads, because it
-              is the one thing that says how much any of the rest is worth
-              today. The values in full are in the card below. */}
-          {(enriched || lead.enrichedAt) && (
-            <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-relaxed text-muted">
+          {/* The last enrichment at a glance, a chip per figure. The run's date
+              leads, because it is the one thing that says how much any of the
+              rest is worth today. The values in full are in the card below.
+
+              This was one muted sentence with middots in it, which read as a
+              caption and scanned as nothing: three numbers, none of them louder
+              than the punctuation between them. A box each, an icon to
+              recognise it by, and the figure in the page's ink. */}
+          {(enriched || lead.enrichedAt || lead.staffCountRaw !== null) && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               {lead.enrichedAt && (
-                <span
-                  className="num font-medium text-ink"
+                <StatChip
+                  icon={<IconClockHour4 size={14} stroke={1.75} />}
+                  prefix="Enriched"
+                  value={fmtRelative(lead.enrichedAt)}
                   title={`Last enrichment run ${fmtDateTime(lead.enrichedAt)}`}
-                >
-                  Enriched {fmtRelative(lead.enrichedAt)}
-                </span>
+                />
               )}
               {lead.metaAdsSignal && (
-                <>
-                  {lead.enrichedAt && <span aria-hidden>·</span>}
-                  <span className="max-w-[420px] truncate" title={lead.metaAdsSignal}>
-                    Ads: <span className="text-ink">{lead.metaAdsSignal}</span>
-                  </span>
-                </>
+                <StatChip
+                  icon={<IconSpeakerphone size={14} stroke={1.75} />}
+                  value={adsCount ? adsCount[1] : lead.metaAdsSignal}
+                  label={adsCount ? adsCount[2] : undefined}
+                  title={lead.metaAdsSignal}
+                  className="max-w-[320px]"
+                />
               )}
               {lead.reviewCount !== null && (
-                <>
-                  {(lead.enrichedAt || lead.metaAdsSignal) && (
-                    <span aria-hidden>·</span>
-                  )}
-                  <span className="num">
-                    Reviews: <span className="text-ink">{lead.reviewCount}</span>
-                  </span>
-                </>
+                <StatChip
+                  icon={<IconStar size={14} stroke={1.75} />}
+                  value={lead.reviewCount}
+                  label={lead.reviewCount === 1 ? "review" : "reviews"}
+                  title={
+                    lead.reviewsCheckedAt
+                      ? `Read ${fmtDateTime(lead.reviewsCheckedAt)}`
+                      : undefined
+                  }
+                />
               )}
-            </p>
+              {lead.staffCountRaw !== null && (
+                <StatChip
+                  icon={<IconUsers size={14} stroke={1.75} />}
+                  value={lead.staffCountRaw}
+                  label="on staff"
+                />
+              )}
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <LeadEnrichPanel
             run={runEnrichment}
             applySelection={applySelection}
@@ -207,20 +237,26 @@ export default async function LeadDetailPage({
         <section>
           <h2 className="display mb-4 text-xl font-semibold">Details</h2>
           <form action={update} className="card space-y-5 p-6">
-            <div>
-              <label className="field-label" htmlFor="clinicName">
-                Clinic name
-              </label>
-              <input
-                id="clinicName"
-                name="clinicName"
-                defaultValue={lead.clinicName}
-                required
-                className="field"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-              <div>
+            {/* Six columns, and each field takes the width its value needs
+                rather than the half the form used to hand out flat. A staff
+                count and a time zone in half-width boxes is a column of mostly
+                empty field, and the URLs that actually need the room were
+                getting the same half and truncating in it. Two columns on a
+                phone, where six would be four characters wide. */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-6">
+              <div className="col-span-2 sm:col-span-6">
+                <label className="field-label" htmlFor="clinicName">
+                  Clinic name
+                </label>
+                <input
+                  id="clinicName"
+                  name="clinicName"
+                  defaultValue={lead.clinicName}
+                  required
+                  className="field"
+                />
+              </div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="field-label" htmlFor="contactName">
                   Contact name
                 </label>
@@ -231,7 +267,7 @@ export default async function LeadDetailPage({
                   className="field"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="field-label" htmlFor="contactTitle">
                   Contact title
                 </label>
@@ -243,7 +279,7 @@ export default async function LeadDetailPage({
                   className="field"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-2">
                 <label className="field-label" htmlFor="leadSource">
                   Lead source
                 </label>
@@ -254,7 +290,7 @@ export default async function LeadDetailPage({
                   className="field"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-2">
                 <label className="field-label" htmlFor="phone">
                   Phone
                 </label>
@@ -265,7 +301,7 @@ export default async function LeadDetailPage({
                   className="field"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-2">
                 <label className="field-label" htmlFor="email">
                   Email
                 </label>
@@ -277,7 +313,7 @@ export default async function LeadDetailPage({
                   className="field"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="field-label" htmlFor="linkedinUrl">
                   LinkedIn URL
                 </label>
@@ -286,10 +322,10 @@ export default async function LeadDetailPage({
                   name="linkedinUrl"
                   defaultValue={lead.linkedinUrl ?? ""}
                   placeholder="Contact's profile"
-                  className="field"
+                  className="field truncate"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="field-label" htmlFor="companyLinkedinUrl">
                   Company LinkedIn URL
                 </label>
@@ -298,10 +334,10 @@ export default async function LeadDetailPage({
                   name="companyLinkedinUrl"
                   defaultValue={lead.companyLinkedinUrl ?? ""}
                   placeholder="Clinic's company page"
-                  className="field"
+                  className="field truncate"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="field-label" htmlFor="websiteUrl">
                   Website URL
                 </label>
@@ -310,10 +346,10 @@ export default async function LeadDetailPage({
                   name="websiteUrl"
                   defaultValue={lead.websiteUrl ?? ""}
                   placeholder="Crawled for website notes"
-                  className="field"
+                  className="field truncate"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="field-label" htmlFor="facebookUrl">
                   Facebook URL
                 </label>
@@ -322,10 +358,10 @@ export default async function LeadDetailPage({
                   name="facebookUrl"
                   defaultValue={lead.facebookUrl ?? ""}
                   placeholder="Page, for the ads library check"
-                  className="field"
+                  className="field truncate"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-4">
                 <label className="field-label" htmlFor="location">
                   Location
                 </label>
@@ -337,7 +373,7 @@ export default async function LeadDetailPage({
                   className="field"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-2">
                 <label className="field-label" htmlFor="timeZone">
                   Time zone
                 </label>
@@ -355,7 +391,7 @@ export default async function LeadDetailPage({
                   ))}
                 </select>
               </div>
-              <div>
+              <div className="col-span-1 sm:col-span-2">
                 <label className="field-label" htmlFor="staffCountRaw">
                   Staff count
                 </label>
@@ -369,7 +405,7 @@ export default async function LeadDetailPage({
                   className="field num"
                 />
               </div>
-              <div>
+              <div className="col-span-1 sm:col-span-2">
                 <label className="field-label" htmlFor="estValue">
                   Est. deal value ($/mo)
                 </label>
@@ -383,7 +419,7 @@ export default async function LeadDetailPage({
                   className="field num"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-2">
                 <label className="field-label" htmlFor="nextFollowUp">
                   Next follow-up
                 </label>
@@ -395,7 +431,7 @@ export default async function LeadDetailPage({
                   className="field num"
                 />
               </div>
-              <div>
+              <div className="col-span-2 sm:col-span-2">
                 <label className="field-label" htmlFor="stage">
                   Stage
                 </label>
@@ -553,39 +589,6 @@ export default async function LeadDetailPage({
             </div>
           </form>
 
-          {/* The five messages, in the order they happen. Its own section
-              rather than a control in the outreach row above: it is a sequence
-              with states in it, not a button, and it is the length of a card.
-
-              Outside the details form on purpose — every control in it acts on
-              its own the moment it is pressed, and nesting that in a form whose
-              own Save is somewhere above would make "did that save?" a fair
-              question about both. */}
-          <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
-            <h2 className="display text-xl font-semibold">Outreach sequence</h2>
-            <p className="text-xs text-muted">
-              Drafts to copy — nothing here is sent
-            </p>
-          </div>
-          <div className="card p-6">
-            <OutreachSequencePanel
-              messages={toMessageViews(lead.outreach)}
-              state={sequenceState(lead)}
-              actions={sequence}
-              acceptedLabel={
-                lead.connectionAcceptedAt
-                  ? `Accepted ${fmtRelative(lead.connectionAcceptedAt)}`
-                  : null
-              }
-              repliedLabel={
-                lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
-              }
-              salutationNote={salutationNote(
-                salutation(lead.contactName, lead.websiteNotes),
-              )}
-            />
-          </div>
-
           {/* Written only by “Enrich this lead”, and shown apart from the form
               above because it is not the same kind of fact: these are readings
               taken on a day, not fields somebody keeps up to date. */}
@@ -648,12 +651,18 @@ export default async function LeadDetailPage({
               Log
             </button>
           </form>
-          <div className="card mt-4">
-            {lead.notes.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted">
-                No activity yet. Notes are append-only and timestamped.
-              </p>
-            ) : (
+          {/* Empty, this is a line and a dashed rule — not a card. A lead with
+              no notes on it is the common case, and the panel used to answer
+              that by reserving a filled box the height of several notes that
+              were not there, which is a hole in the column beside the details
+              form. It grows into a card the moment there is something to
+              hold. */}
+          {lead.notes.length === 0 ? (
+            <p className="mt-3 rounded-[10px] border border-dashed border-line px-4 py-3.5 text-center text-xs leading-relaxed text-muted">
+              No activity yet. Notes are append-only and timestamped.
+            </p>
+          ) : (
+            <div className="card mt-4">
               <ul>
                 {lead.notes.map((note) => (
                   <li key={note.id} className="border-b border-line/60 px-5 py-4 last:border-b-0">
@@ -666,7 +675,47 @@ export default async function LeadDetailPage({
                   </li>
                 ))}
               </ul>
-            )}
+            </div>
+          )}
+
+          {/* The five messages, in the order they happen. Its own section
+              rather than a control in the outreach row above: it is a sequence
+              with states in it, not a button, and it is the length of a card.
+
+              In this column rather than under the details form: the form is
+              the long thing on this page and the sequence is the thing you came
+              to the page to work, so putting them side by side is what stops
+              the sequence starting a screen and a half down — and it is what
+              fills the space the activity log gave back by no longer reserving
+              a card for notes that are not there.
+
+              Outside the details form on purpose — every control in it acts on
+              its own the moment it is pressed, and nesting that in a form whose
+              own Save is somewhere above would make "did that save?" a fair
+              question about both. */}
+          <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
+            <h2 className="display text-xl font-semibold">Outreach sequence</h2>
+            <p className="text-xs text-muted">
+              Drafts to copy — nothing here is sent
+            </p>
+          </div>
+          <div className="card p-6">
+            <OutreachSequencePanel
+              messages={toMessageViews(lead.outreach)}
+              state={sequenceState(lead)}
+              actions={sequence}
+              acceptedLabel={
+                lead.connectionAcceptedAt
+                  ? `Accepted ${fmtRelative(lead.connectionAcceptedAt)}`
+                  : null
+              }
+              repliedLabel={
+                lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
+              }
+              salutationNote={salutationNote(
+                salutation(lead.contactName, lead.websiteNotes),
+              )}
+            />
           </div>
         </section>
       </div>
