@@ -49,8 +49,17 @@ export type OutreachStepResult =
       // the button offered, and somebody about to paste it should be told that
       // by the app rather than work it out from the wording.
       mechanism?: MessageMechanism;
+      // TEMPORARY, for tracing step 2's fallback on real leads. Each line names
+      // one thing that actually ran and what it returned, in order, so a step
+      // that comes back empty says where it went empty instead of leaving it to
+      // be inferred from the one sentence the panel has always shown. Written to
+      // the server log as well (see src/lib/actions/outreachSequence.ts) and
+      // rendered under the step's note where present. Remove both together.
+      debug?: string[];
     }
-  | { ok: false; error: string };
+  // The error carries the trace too: the most useful case to see a trace for is
+  // the one that failed. TEMPORARY, same as the field above.
+  | { ok: false; error: string; debug?: string[] };
 
 // ─── Rows in, rules out ────────────────────────────────────────────────────
 

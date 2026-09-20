@@ -1231,7 +1231,30 @@ export function readFollowUpObservation(raw: unknown): string | null {
 // reaches for when the evidence gave it nothing, and this step is reached only
 // when the evidence already gave a model nothing once.
 export function readAnchorDetail(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
+  const checked = inspectAnchorDetail(raw);
+  return checked.ok ? checked.detail : null;
+}
+
+// The same gate, saying which rule rejected the clause.
+//
+// TEMPORARY-ish, and useful beyond the debugging it was added for: "the detail
+// was rejected" and "the model returned no detail" are the same null to the
+// caller, and they are completely different findings when the step comes back
+// empty. The reason travels into the trace the action logs.
+export type AnchorDetailCheck =
+  | { ok: true; detail: string }
+  | { ok: false; reason: string };
+
+export function inspectAnchorDetail(raw: unknown): AnchorDetailCheck {
+  if (typeof raw !== "string") {
+    return {
+      ok: false,
+      reason:
+        raw === null
+          ? "the model returned null for detail"
+          : `detail was not a string (${typeof raw})`,
+    };
+  }
 
   let text = stripEmDashes(raw.replace(/\s+/g, " ").trim());
   text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
@@ -1240,31 +1263,42 @@ export function readAnchorDetail(raw: unknown): string | null {
   // is trimmed back to the part that is actually the detail.
   text = text.replace(/^(?:for\s+)?a\s+(?:practice|clinic|office)\s+(?:that\s+is\s+|that's\s+)?(?:running|offering|doing)\s+/i, "").trim();
 
-  if (text.length < 8 || text.length > 140) return null;
-  if (/[[\]]/.test(text)) return null;
-  if (!/[a-z]/i.test(text)) return null;
+  if (text.length < 8) {
+    return { ok: false, reason: `too short to be specific (${text.length} chars)` };
+  }
+  if (text.length > 140) {
+    return { ok: false, reason: `too long for the clause (${text.length} chars)` };
+  }
+  if (/[[\]]/.test(text)) {
+    return { ok: false, reason: "contains square brackets, so a placeholder was left unfilled" };
+  }
+  if (!/[a-z]/i.test(text)) return { ok: false, reason: "no letters in it" };
   // Filler, in the shapes it arrives in. Each of these is a sentence about
   // practices in general wearing this practice's name.
-  if (
-    /^(?:a|an|the)?\s*(?:busy|growing|thriving|modern|established|successful|multi-?disciplinary|small|local|reputable|well-?reviewed)\b/i.test(
-      text,
-    )
-  ) {
-    return null;
+  const filler = text.match(
+    /^(?:a|an|the)?\s*(busy|growing|thriving|modern|established|successful|multi-?disciplinary|small|local|reputable|well-?reviewed)\b/i,
+  );
+  if (filler) {
+    return { ok: false, reason: `opens with filler (“${filler[1]}”) rather than a specific detail` };
   }
-  if (/\b(?:like yours|similar to yours|your size|practices like|such as yours)\b/i.test(text)) {
-    return null;
+  const comparison = text.match(
+    /\b(like yours|similar to yours|your size|practices like|such as yours)\b/i,
+  );
+  if (comparison) {
+    return { ok: false, reason: `an unsupported comparison (“${comparison[1]}”)` };
   }
   // An absence is not a detail. This clause says what they do; the message is
   // built to presume nothing is wrong, and a negative here breaks that.
-  if (
-    /\b(didn't see|did not see|couldn't find|could not find|no visible|doesn't (?:seem|appear|have)|does not (?:seem|appear|have)|missing|lack(?:s|ing)?|without)\b/i.test(
-      text,
-    )
-  ) {
-    return null;
+  const absence = text.match(
+    /\b(didn't see|did not see|couldn't find|could not find|no visible|doesn't (?:seem|appear|have)|does not (?:seem|appear|have)|missing|lack(?:s|ing)?|without)\b/i,
+  );
+  if (absence) {
+    return {
+      ok: false,
+      reason: `describes an absence (“${absence[1]}”), and this clause has to say what they do`,
+    };
   }
-  return text;
+  return { ok: true, detail: text };
 }
 
 // The two or three things the Loom note says it covers. Short noun phrases, and
@@ -1391,6 +1425,10 @@ export type FirstMessageFallbackReply = {
   detail: string | null;
   painSignal: string | null;
   note: InternalNote;
+  // Why the detail was not usable, where it was not. Carried so the step can say
+  // "the model answered, and the clause it gave was filler" rather than reporting
+  // the same empty result an empty evidence block gives.
+  detailRejected: string | null;
 };
 
 export function parseFirstMessageFallbackReply(
@@ -1398,8 +1436,10 @@ export function parseFirstMessageFallbackReply(
 ): FirstMessageFallbackReply | null {
   const body = readObject(raw);
   if (!body) return null;
+  const detail = inspectAnchorDetail(body.detail);
   return {
-    detail: readAnchorDetail(body.detail),
+    detail: detail.ok ? detail.detail : null,
+    detailRejected: detail.ok ? null : detail.reason,
     // Read as free text rather than validated into a shape: nothing is built
     // from its wording, it only decides which of the two messages is written and
     // it goes into the internal note so the person sending can judge the signal

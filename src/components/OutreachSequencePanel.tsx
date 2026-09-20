@@ -56,7 +56,10 @@ export interface SequenceActions {
 
 // What a step is saying about its last run, held per step so generating step 3
 // does not clear the note under step 1.
-type StepNote =
+// TEMPORARY, paired with OutreachStepResult.debug: the lines the step logged
+// about what actually ran. Every shape of note carries them, because the ones
+// worth reading a trace for are the two that wrote nothing.
+type StepNote = { debug: string[] } & (
   | { kind: "error"; message: string }
   | { kind: "none"; basedOn: string[] }
   | {
@@ -73,7 +76,8 @@ type StepNote =
       // message, where a curiosity opener arriving in place of three
       // observations is a different kind of message and worth saying so.
       mechanism: MessageMechanism | null;
-    };
+    }
+);
 
 export default function OutreachSequencePanel({
   messages,
@@ -175,12 +179,16 @@ function StepRow({
     try {
       const result = await actions.generate(step);
       if (!result.ok) {
-        setNote({ kind: "error", message: result.error });
+        setNote({
+          kind: "error",
+          message: result.error,
+          debug: result.debug ?? [],
+        });
         return;
       }
       setNote(
         result.written === 0
-          ? { kind: "none", basedOn: result.basedOn }
+          ? { kind: "none", basedOn: result.basedOn, debug: result.debug ?? [] }
           : {
               kind: "evidence",
               evidence: result.evidence ?? null,
@@ -188,6 +196,7 @@ function StepRow({
               written: result.written,
               skipped: result.skipped ?? [],
               mechanism: result.mechanism ?? null,
+              debug: result.debug ?? [],
             },
       );
     } catch {
@@ -195,6 +204,7 @@ function StepRow({
         kind: "error",
         message:
           "The request could not be reached. Check the server is still up and try again.",
+        debug: [],
       });
     } finally {
       setRunning(false);
@@ -299,6 +309,7 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
         <p className="mt-0.5 text-xs leading-relaxed text-muted">
           {note.message}
         </p>
+        <DebugTrace lines={note.debug} />
       </div>
     );
   }
@@ -324,6 +335,7 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
           Crawling more of the site, or a look at it by hand, is what would
           change that.
         </p>
+        <DebugTrace lines={note.debug} />
       </div>
     );
   }
@@ -360,6 +372,7 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
             Read off: “{note.evidence}”
           </p>
         )}
+        <DebugTrace lines={note.debug} />
       </div>
     );
   }
@@ -389,6 +402,30 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
           .
         </p>
       )}
+      <DebugTrace lines={note.debug} />
+    </div>
+  );
+}
+
+// TEMPORARY. What the step actually did, in the order it did it, as the server
+// logged it. It is a debugging aid rather than part of the panel: monospaced,
+// muted, and rendered only when a trace came back, so removing the debug field
+// from the action removes this from the page without another edit. Nothing in a
+// line is message text, so there is nothing here to paste by accident.
+function DebugTrace({ lines }: { lines: string[] }) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="mt-2 rounded-[8px] border border-line/70 bg-surface/60 px-3 py-2">
+      <p className="text-[11px] font-medium tracking-[0.02em] text-muted">
+        Debug trace — temporary, also in the server log as [outreach:step2]
+      </p>
+      <ol className="mt-1 space-y-0.5">
+        {lines.map((line, i) => (
+          <li key={i} className="num text-[11px] leading-relaxed text-muted">
+            {i + 1}. {line}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
