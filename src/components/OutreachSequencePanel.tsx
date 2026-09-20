@@ -1,12 +1,21 @@
 "use client";
 
-// The outreach sequence — five steps down the page, in the order they happen.
+// The outreach sequence — five steps, one at a time, in the order they happen.
 //
 // It replaces the single "Generate outreach hook" button that used to sit in
 // the outreach row. That button drafted one line; this drafts the whole
 // sequence, one step at a time, and each step waits for the thing that has to
 // happen before it makes sense: a request accepted, a reply, a Loom recorded, a
 // follow-up date come round.
+//
+// The five steps were five stacked cards down the page, which meant the one
+// step you could actually act on was somewhere in the middle of four you could
+// not, and the panel was the length of the four locked reasons put together.
+// They are a stepper now: a row of tabs across the top, the active step's
+// content and only the active step's content below it, and the locked steps
+// collapsed into one tight "What's next" list at the foot — a line each, saying
+// what would unlock them. The content of a step is unchanged; what changed is
+// how much of the page a step you cannot use is allowed to take.
 //
 // What has not changed is the promise underneath. Nothing here sends anything.
 // Every message is text in a box for somebody to read, edit and copy, and every
@@ -20,19 +29,21 @@
 // as a side effect of drafting a message.
 
 import { useState, useTransition } from "react";
-import { IconCheck, IconLock } from "@tabler/icons-react";
+import { IconCheck, IconChevronRight, IconLock } from "@tabler/icons-react";
 import {
   CONTACT_NAME_PLACEHOLDER,
   CONNECTION_MAX_CHARS,
   OUTREACH_STEPS,
   OUTREACH_STEP_BLURBS,
   OUTREACH_STEP_LABELS,
+  OUTREACH_STEP_TAB_LABELS,
   OutreachStep,
   SequenceState,
   VARIANT_BLURBS,
   FirstMessageVariant,
   MESSAGE_MECHANISM_LABELS,
   MessageMechanism,
+  StepLock,
   endsInQuestion,
   stepLock,
 } from "@/lib/outreachSequence";
@@ -79,6 +90,15 @@ type StepNote = { debug: string[] } & (
     }
 );
 
+// One step as the stepper sees it: its gate, its drafts, and whether it is done.
+interface StepEntry {
+  step: OutreachStep;
+  index: number;
+  lock: StepLock;
+  messages: OutreachMessageView[];
+  sent: boolean;
+}
+
 export default function OutreachSequencePanel({
   messages,
   state,
@@ -103,6 +123,34 @@ export default function OutreachSequencePanel({
   const [notes, setNotes] = useState<Partial<Record<OutreachStep, StepNote>>>(
     {},
   );
+
+  const entries: StepEntry[] = OUTREACH_STEPS.map((step, index) => {
+    const stepMessages = currentMessages(messages, step);
+    return {
+      step,
+      index,
+      lock: stepLock(step, state),
+      messages: stepMessages,
+      sent: stepMessages.some((m) => m.sentAt !== null),
+    };
+  });
+  const open = entries.filter((e) => e.lock.unlocked);
+  const locked = entries.filter((e) => !e.lock.unlocked);
+
+  // Where the panel opens: the first step that is reachable and not yet sent,
+  // which is the one thing there is to do. Falling back to the last reachable
+  // step rather than the first, because on a sequence where everything has gone
+  // out the interesting end is the far one.
+  const [picked, setPicked] = useState<OutreachStep | null>(
+    () =>
+      (open.find((e) => !e.sent) ?? open[open.length - 1])?.step ?? null,
+  );
+  // A mark can be undone, and undoing one locks a step that may be the one on
+  // screen. Resolved on every render rather than in an effect: the tab simply
+  // moves to a step that still exists instead of rendering a panel for a step
+  // whose gate has closed behind it.
+  const active =
+    open.find((e) => e.step === picked) ?? open[open.length - 1] ?? null;
 
   return (
     <div className="w-full">
@@ -130,49 +178,168 @@ export default function OutreachSequencePanel({
         </p>
       </div>
 
-      <ol className="mt-4">
-        {OUTREACH_STEPS.map((step, i) => (
-          <StepRow
-            key={step}
-            step={step}
-            index={i}
-            last={i === OUTREACH_STEPS.length - 1}
-            lock={stepLock(step, state)}
-            messages={currentMessages(messages, step)}
-            note={notes[step]}
-            setNote={(note) => setNotes((prev) => ({ ...prev, [step]: note }))}
-            actions={actions}
+      {/* The stepper. All five steps are named, so the shape of the sequence is
+          visible from the first one — but only the reachable ones are buttons,
+          and a locked tab's reason is in the list at the foot rather than
+          behind a tab that would open onto nothing.
+
+          Scrolls sideways rather than wrapping: five tabs at a phone's width do
+          not fit, and a stepper that reflows into two rows stops reading as an
+          order. The negative margin lets it bleed to the card's own edge so the
+          last tab is visibly cut off rather than looking like the last step. */}
+      <div
+        role="tablist"
+        aria-label="Outreach steps"
+        className="-mx-6 mt-4 flex gap-1 overflow-x-auto border-b border-line px-6"
+      >
+        {entries.map((entry) => (
+          <StepTab
+            key={entry.step}
+            entry={entry}
+            active={active?.step === entry.step}
+            onSelect={() => setPicked(entry.step)}
           />
         ))}
-      </ol>
+      </div>
+
+      {active ? (
+        <StepPanel
+          key={active.step}
+          entry={active}
+          note={notes[active.step]}
+          setNote={(note) =>
+            setNotes((prev) => ({ ...prev, [active.step]: note }))
+          }
+          actions={actions}
+        />
+      ) : (
+        // Nothing is reachable at all, which is the state a lead sits in before
+        // it has been enriched. The reasons are all in the list below, so this
+        // says the one thing the list cannot.
+        <p className="mt-4 text-xs leading-relaxed text-muted">
+          No step is reachable yet. What each one is waiting for is below.
+        </p>
+      )}
+
+      {locked.length > 0 && <WhatsNext entries={locked} />}
+    </div>
+  );
+}
+
+// ─── The stepper ───────────────────────────────────────────────────────────
+
+// One tab: a status dot and a short name. The dot carries the state — a tick
+// where the step has gone out, the step's own number where it is reachable, a
+// padlock where it is not — so the row reads as progress rather than as five
+// equal links.
+function StepTab({
+  entry,
+  active,
+  onSelect,
+}: {
+  entry: StepEntry;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const locked = !entry.lock.unlocked;
+  const label = OUTREACH_STEP_TAB_LABELS[entry.step];
+  // A locked tab cannot be opened, so what would unlock it is the one thing it
+  // can say — on hover, with the same sentence the list at the foot carries.
+  const title = entry.lock.unlocked
+    ? OUTREACH_STEP_LABELS[entry.step]
+    : entry.lock.reason;
+
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      disabled={locked}
+      onClick={onSelect}
+      title={title}
+      className={`-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 pb-2.5 pt-1.5 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+        active
+          ? "border-accent text-ink"
+          : locked
+            ? "cursor-default border-transparent text-muted/70"
+            : "border-transparent text-muted hover:text-ink"
+      }`}
+    >
+      <span
+        aria-hidden
+        className={`num flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border text-[10px] ${
+          entry.sent
+            ? "border-ok/30 bg-ok-soft text-ok"
+            : active
+              ? "border-accent/40 bg-accent/15 text-accent"
+              : locked
+                ? "border-transparent bg-transparent text-muted/70"
+                : "border-line bg-wash text-muted"
+        }`}
+      >
+        {entry.sent ? (
+          <IconCheck size={11} stroke={2.5} />
+        ) : locked ? (
+          <IconLock size={11} stroke={1.75} />
+        ) : (
+          entry.index + 1
+        )}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+// The steps that are not reachable, one line each.
+//
+// These were full cards with a bordered reason box in each, stacked — four
+// screens of things you cannot do. The reason is the only content a locked step
+// has, so that is all this shows: a padlock, the step's name, and the sentence
+// naming what would unlock it, stacked tight.
+function WhatsNext({ entries }: { entries: StepEntry[] }) {
+  return (
+    <div className="mt-6">
+      <p className="field-label mb-2">What's next</p>
+      <ul className="space-y-1.5">
+        {entries.map((entry) => (
+          <li
+            key={entry.step}
+            className="flex items-start gap-2 rounded-[10px] border border-line/70 bg-wash/40 px-3 py-2"
+          >
+            <IconLock
+              size={13}
+              stroke={1.75}
+              aria-hidden
+              className="mt-0.5 shrink-0 text-muted"
+            />
+            <p className="text-xs leading-relaxed text-muted">
+              <span className="font-medium text-ink">
+                {OUTREACH_STEP_LABELS[entry.step]}
+              </span>
+              {!entry.lock.unlocked && <> — {entry.lock.reason}</>}
+            </p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
 // ─── One step ──────────────────────────────────────────────────────────────
 
-function StepRow({
-  step,
-  index,
-  last,
-  lock,
-  messages,
+function StepPanel({
+  entry,
   note,
   setNote,
   actions,
 }: {
-  step: OutreachStep;
-  index: number;
-  last: boolean;
-  lock: ReturnType<typeof stepLock>;
-  messages: OutreachMessageView[];
+  entry: StepEntry;
   note: StepNote | undefined;
   setNote: (note: StepNote) => void;
   actions: SequenceActions;
 }) {
   const [running, setRunning] = useState(false);
-  const locked = !lock.unlocked;
-  const sent = messages.some((m) => m.sentAt !== null);
+  const { step, messages } = entry;
 
   async function run() {
     setRunning(true);
@@ -212,89 +379,79 @@ function StepRow({
   }
 
   return (
-    <li className="relative flex gap-4 pb-6 last:pb-0">
-      {/* The spine of the timeline: a numbered disc per step, joined by a rule
-          that stops at the last one. A sent step's disc is the ok green the
-          rest of the app marks a done thing in. */}
-      <div className="flex shrink-0 flex-col items-center">
-        <span
-          className={`num flex h-7 w-7 items-center justify-center rounded-full border text-xs font-medium ${
-            sent
-              ? "border-ok/30 bg-ok-soft text-ok"
-              : locked
-                ? "border-line bg-wash text-muted"
-                : "border-accent/30 bg-accent/10 text-accent"
-          }`}
+    <div role="tabpanel" className="pt-4">
+      <p className="text-sm font-medium text-ink">
+        {OUTREACH_STEP_LABELS[step]}
+      </p>
+      <p className="mt-0.5 text-xs leading-relaxed text-muted">
+        {OUTREACH_STEP_BLURBS[step]}
+      </p>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <AiButton
+          onClick={() => void run()}
+          disabled={running}
+          title="Writes from this lead's enrichment evidence and whatever has already been drafted. Nothing is sent."
+          className="h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {sent ? <IconCheck size={14} stroke={2} aria-hidden /> : index + 1}
-        </span>
-        {!last && <span className="mt-1 w-px flex-1 bg-line" />}
+          {running
+            ? "Writing…"
+            : messages.length > 0
+              ? "Regenerate"
+              : step === "FIRST_MESSAGE"
+                ? "Generate the openers"
+                : "Generate"}
+        </AiButton>
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p
-            className={`text-sm font-medium ${locked ? "text-muted" : "text-ink"}`}
-          >
-            {OUTREACH_STEP_LABELS[step]}
-          </p>
+      {note && <Note note={note} step={step} />}
+
+      {/* One column, always. The three first-message options were a
+          three-column grid until the column each one got was narrow
+          enough to break its label over four lines and show four words
+          of the message — a choice between three things you cannot read
+          is not a choice. Stacked, each option is full width, and the
+          labels above them are what makes the list scannable. */}
+      {messages.length > 0 && (
+        <div className="mt-3 space-y-3">
+          {messages.map((message) => (
+            <MessageCard key={message.id} message={message} actions={actions} />
+          ))}
         </div>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted">
-          {OUTREACH_STEP_BLURBS[step]}
-        </p>
+      )}
+    </div>
+  );
+}
 
-        {locked ? (
-          <div className="mt-2.5 flex items-start gap-2 rounded-[10px] border border-line bg-wash/40 px-3.5 py-2.5">
-            <IconLock
-              size={14}
-              stroke={1.75}
-              aria-hidden
-              className="mt-0.5 shrink-0 text-muted"
-            />
-            <p className="text-xs leading-relaxed text-muted">{lock.reason}</p>
-          </div>
-        ) : (
-          <>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <AiButton
-                onClick={() => void run()}
-                disabled={running}
-                title="Writes from this lead's enrichment evidence and whatever has already been drafted. Nothing is sent."
-                className="h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {running
-                  ? "Writing…"
-                  : messages.length > 0
-                    ? "Regenerate"
-                    : step === "FIRST_MESSAGE"
-                      ? "Generate the openers"
-                      : "Generate"}
-              </AiButton>
-            </div>
+// ─── The collapsed aside ───────────────────────────────────────────────────
 
-            {note && <Note note={note} step={step} />}
-
-            {/* One column, always. The three first-message options were a
-                three-column grid until the column each one got was narrow
-                enough to break its label over four lines and show four words
-                of the message — a choice between three things you cannot read
-                is not a choice. Stacked, each option is full width, and the
-                labels above them are what makes the list scannable. */}
-            {messages.length > 0 && (
-              <div className="mt-3 space-y-3">
-                {messages.map((message) => (
-                  <MessageCard
-                    key={message.id}
-                    message={message}
-                    actions={actions}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
+// Anything about a draft that is not the draft: the evidence it was read off,
+// the trace of what ran. Closed by default and quiet when open, because the
+// thing on this page somebody is about to paste into a stranger's inbox is the
+// message, and a bordered block of reasoning under it competes with the message
+// for the eye every time the page loads.
+function Aside({
+  summary,
+  children,
+}: {
+  summary: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="group/aside mt-2">
+      <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium tracking-[0.02em] text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
+        <IconChevronRight
+          size={12}
+          stroke={2}
+          aria-hidden
+          className="shrink-0 transition-transform group-open/aside:rotate-90"
+        />
+        {summary}
+      </summary>
+      <div className="mt-1.5 pl-[13px] text-xs leading-relaxed text-muted">
+        {children}
       </div>
-    </li>
+    </details>
   );
 }
 
@@ -380,10 +537,9 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
   if (!note.evidence && note.basedOn.length === 0 && !short) return null;
   return (
     <div className="mt-2.5 text-xs leading-relaxed text-muted">
-      {note.evidence && <p>Read off: “{note.evidence}”</p>}
-      {note.basedOn.length > 0 && (
-        <p>Written from {note.basedOn.join(", ").toLowerCase()}.</p>
-      )}
+      {/* The shortfall is the one part of this that is not reasoning — it says
+          you got fewer options than you asked for, which is a fact about what is
+          on screen — so it stays out in the open while the evidence folds away. */}
       {short && (
         <p className="text-warn">
           {note.written === 1 ? "One option" : `${note.written} options`} rather
@@ -402,31 +558,37 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
           .
         </p>
       )}
+      {(note.evidence || note.basedOn.length > 0) && (
+        <Aside summary="What this was written from">
+          {note.evidence && <p>Read off: “{note.evidence}”</p>}
+          {note.basedOn.length > 0 && (
+            <p>Written from {note.basedOn.join(", ").toLowerCase()}.</p>
+          )}
+        </Aside>
+      )}
       <DebugTrace lines={note.debug} />
     </div>
   );
 }
 
 // TEMPORARY. What the step actually did, in the order it did it, as the server
-// logged it. It is a debugging aid rather than part of the panel: monospaced,
-// muted, and rendered only when a trace came back, so removing the debug field
-// from the action removes this from the page without another edit. Nothing in a
-// line is message text, so there is nothing here to paste by accident.
+// logged it. It is a debugging aid rather than part of the panel: folded away,
+// monospaced, muted, and rendered only when a trace came back, so removing the
+// debug field from the action removes this from the page without another edit.
+// Nothing in a line is message text, so there is nothing here to paste by
+// accident.
 function DebugTrace({ lines }: { lines: string[] }) {
   if (lines.length === 0) return null;
   return (
-    <div className="mt-2 rounded-[8px] border border-line/70 bg-surface/60 px-3 py-2">
-      <p className="text-[11px] font-medium tracking-[0.02em] text-muted">
-        Debug trace — temporary, also in the server log as [outreach:step2]
-      </p>
-      <ol className="mt-1 space-y-0.5">
+    <Aside summary="Debug trace — temporary, also in the server log as [outreach:step2]">
+      <ol className="space-y-0.5">
         {lines.map((line, i) => (
           <li key={i} className="num text-[11px] leading-relaxed text-muted">
             {i + 1}. {line}
           </li>
         ))}
       </ol>
-    </div>
+    </Aside>
   );
 }
 
@@ -586,15 +748,14 @@ function MessageCard({
         )}
       </div>
 
+      {/* Why the message reads the way it does — the evidence behind it and what
+          it deliberately does not claim. Folded away: it is longer than the
+          message it explains, and it is read once, when the message surprises
+          you, not every time the page opens. */}
       {message.internalNote && (
-        <div className="mt-2.5 rounded-[8px] border border-line/70 bg-surface/60 px-3 py-2">
-          <p className="text-[11px] font-medium tracking-[0.02em] text-muted">
-            Internal note — not part of the message
-          </p>
-          <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-muted">
-            {message.internalNote}
-          </p>
-        </div>
+        <Aside summary="Why this was written this way">
+          <p className="whitespace-pre-line">{message.internalNote}</p>
+        </Aside>
       )}
 
       {(text.includes(CONTACT_NAME_PLACEHOLDER) ||

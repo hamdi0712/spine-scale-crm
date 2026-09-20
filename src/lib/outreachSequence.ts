@@ -67,6 +67,18 @@ export const OUTREACH_STEP_LABELS: Record<OutreachStep, string> = {
   FOLLOW_UP: "Follow-up",
 };
 
+// The same five steps named short enough to sit in a tab. The stepper across
+// the top of the panel is one row of five on a phone as much as on a desktop,
+// and "Connection request" in a tab that narrow wraps onto three lines — so the
+// tab gets an abbreviation and the panel below it keeps the full label.
+export const OUTREACH_STEP_TAB_LABELS: Record<OutreachStep, string> = {
+  CONNECTION: "Connection",
+  FIRST_MESSAGE: "First msg",
+  AUDIT_OFFER: "Audit",
+  LOOM_DELIVERY: "Loom",
+  FOLLOW_UP: "Follow-up",
+};
+
 // What each step is for, in one line, shown under its title on the timeline.
 export const OUTREACH_STEP_BLURBS: Record<OutreachStep, string> = {
   CONNECTION:
