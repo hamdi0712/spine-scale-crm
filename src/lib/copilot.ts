@@ -124,7 +124,7 @@ export const COPILOT_SYSTEM_PROMPT = [
   "- Activities — the task board (To do / In progress / Done) and the fixed daily checklist with the day's live counts beside it.",
   "- Daily KPI — the four daily goals, the day's score against them, and the streak.",
   "- Discovery — scraped clinics waiting to be scored, each promoted into the pipeline or rejected with its reasoning kept.",
-  "- Pipeline — leads being worked, each with an ICP scorecard, enrichment evidence, a five-step outreach sequence, calls and notes. Any lead can be found by name with searchLeads. The sequence itself is readable: every message written to a lead and whether it was sent, on one lead with getLeadOutreachLog and across the pipeline by tier with getOutreachFunnelSummary.",
+  "- Pipeline — leads being worked, each with an ICP scorecard, enrichment evidence, a five-step outreach sequence, calls and notes. Any lead can be found by name with searchLeads, which also lists leads by where they stand on the connection — sent, accepted, or accepted and never messaged. The sequence itself is readable: every message written to a lead and whether it was sent, on one lead with getLeadOutreachLog and across the pipeline by tier with getOutreachFunnelSummary.",
   "- Clients — signed clients, their onboarding wizard, delivery checklist, invoices and health status.",
   "- Reporting — weekly KPIs per client.",
   "- Ad Hub — the creative work: research notes, personas, desires and benefits, concepts, and the creatives under them with their compliance checks and performance logs.",
@@ -133,8 +133,8 @@ export const COPILOT_SYSTEM_PROMPT = [
   "- Monk Mode — the operator's own habit challenge, which shares the app with the CRM and has nothing to do with it: a fixed run of days, a list of habits to hit every one of them, a streak, and a journal. Readable with getMonkModeStatus.",
   "You have a lookup for each of those areas. Between them they are everything you can see; there is nothing else.",
   "Keep Monk Mode and the agency apart. A streak is not a sales figure and a quiet week of habits says nothing about the pipeline, so do not fold one into an answer about the other unless the operator asked about both. The journal entries are not readable at all.",
-  "Three things worth knowing you can now reach, because they answer the questions that used to need a dozen lookups: any lead found by name, however deep in the pipeline it sits (searchLeads), the full outreach history of one lead, message by message including what the prospect wrote back (getLeadOutreachLog), and where leads are dropping out of the five-step sequence over a period, broken down by tier (getOutreachFunnelSummary).",
-  "On finding leads: getPipelineLeads returns only the first 60 and cannot page past them, so it is a view of the pipeline and not a way to look one lead up. You are not stuck with that partial list. When a question names a clinic or a contact, call searchLeads with part of the name — it searches every lead in the pipeline and returns the stage, tier, connection and acceptance status and outreach step for each match, so a named lead is never something you cannot see. Never answer that a clinic is not in the pipeline on the strength of it being absent from getPipelineLeads; search for it by name first.",
+  "Three things worth knowing you can now reach, because they answer the questions that used to need a dozen lookups: any lead found by name or by where it stands on the connection, however deep in the pipeline it sits (searchLeads), the full outreach history of one lead, message by message including what the prospect wrote back (getLeadOutreachLog), and where leads are dropping out of the five-step sequence over a period, broken down by tier (getOutreachFunnelSummary).",
+  "On finding leads: getPipelineLeads returns only the first 60 and cannot page past them, so it is a view of the pipeline and not a way to look one lead up. You are not stuck with that partial list. When a question names a clinic or a contact, call searchLeads with part of the name — it searches every lead in the pipeline and returns the stage, tier, connection and acceptance status and outreach step for each match, so a named lead is never something you cannot see. Never answer that a clinic is not in the pipeline on the strength of it being absent from getPipelineLeads; search for it by name first. searchLeads also takes a connectionStatus filter — not_sent, sent_no_reply, accepted, accepted_no_message — and it is the answer to every question about who is sitting at the connection gate. getOutreachFunnelSummary counts accepted connections and cannot name one; searchLeads with connectionStatus names them. accepted_no_message in particular is the leads that accepted and never got a first message, which is the gap worth raising unprompted. Never work around this by searching clinic by clinic, and never say the question cannot be answered.",
   "",
   "WHERE YOUR FACTS COME FROM",
   "You have no knowledge of this agency's records except what the lookup functions return. Every number, name, date and status in your answer must have come back from a lookup you actually called in this conversation. If you have not looked it up, you do not know it — say so and call the lookup.",
@@ -255,17 +255,28 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
     function: {
       name: "searchLeads",
       description:
-        "Find a lead by name. Takes part of a clinic name or a contact name, matched case-insensitively anywhere in the name, and returns the leads it matches with their stage, ICP tier and score, whether the connection request was sent and accepted, whether they replied, and how far through the five-step outreach sequence they actually got. This is how you reach a lead getPipelineLeads did not show you: that lookup returns only the first 60 leads and has no way to page further, so any lead outside that batch can be found here and nowhere else. Use it whenever a question names a clinic or a person — it is faster than getPipelineLeads and it does not miss. Returns at most 20; narrow the query if it says it was capped. Archived leads are not included.",
+        "Find a lead by name, or list every lead at a given point on the connection. Takes part of a clinic name or a contact name (matched case-insensitively anywhere in the name), a connectionStatus filter, or both, and returns the leads it matches with their stage, ICP tier and score, whether the connection request was sent and accepted, whether a first message went out, whether they replied, and how far through the five-step outreach sequence they actually got. This is how you reach a lead getPipelineLeads did not show you: that lookup returns only the first 60 leads and has no way to page further, so any lead outside that batch can be found here and nowhere else. Use it whenever a question names a clinic or a person — it is faster than getPipelineLeads and it does not miss. connectionStatus is how you name the leads getOutreachFunnelSummary can only count: pass accepted_no_message for the leads that accepted the connection and never got a first message — the ones that said yes and then heard nothing — and they come back oldest acceptance first, with the days of silence on each. A name search returns at most 20; a connectionStatus filter with no name returns up to 60. Archived leads are not included.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
             description:
-              "Part of the clinic name or the contact name. A distinctive fragment is enough — \"ridge\" finds \"Ridgeway Spine & Posture\". At least 2 characters.",
+              "Part of the clinic name or the contact name. A distinctive fragment is enough — \"ridge\" finds \"Ridgeway Spine & Posture\". At least 2 characters. Omit it to list purely by connectionStatus.",
+          },
+          connectionStatus: {
+            type: "string",
+            enum: [
+              "not_sent",
+              "sent_no_reply",
+              "accepted",
+              "accepted_no_message",
+            ],
+            description:
+              "Where the lead stands on the connection. not_sent — no connection request marked sent. sent_no_reply — request sent, acceptance not marked. accepted — accepted, whatever happened after, including the ones a first message did go out to. accepted_no_message — accepted and no first message marked sent, i.e. the leads that said yes and then heard nothing; this is the subset of accepted worth asking for when the question is about follow-through. Optional; combine with query to ask the question about one clinic.",
           },
         },
-        required: ["query"],
+        required: [],
       },
     },
   },
@@ -610,7 +621,7 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
     function: {
       name: "getOutreachFunnelSummary",
       description:
-        "Outreach over a window, broken down by ICP tier: connection requests sent, connections accepted, the acceptance rate, and how many leads reached each of steps 2 to 5 (first message, audit offer, Loom delivery, follow-up). It also breaks the first message's reply rate down by the mechanism each message was written by — observation-led, or one of the two curiosity openers step 2 falls back to when the evidence carries no verified observation — which is the call to make when asked whether the curiosity fallback is working. Use for 'how is outreach converting', 'why did only some of the accepted connections get a first message', 'is the A-tier work actually getting done' — anything about where leads are dropping out of the sequence, answered in one call instead of by opening leads one at a time. getOutreachFunnel is the dashboard's four headline numbers; this is the sequence itself, by tier.",
+        "Outreach over a window, broken down by ICP tier: connection requests sent, connections accepted, the acceptance rate, and how many leads reached each of steps 2 to 5 (first message, audit offer, Loom delivery, follow-up). It also breaks the first message's reply rate down by the mechanism each message was written by — observation-led, or one of the two curiosity openers step 2 falls back to when the evidence carries no verified observation — which is the call to make when asked whether the curiosity fallback is working. Use for 'how is outreach converting', 'why did only some of the accepted connections get a first message', 'is the A-tier work actually getting done' — anything about where leads are dropping out of the sequence, answered in one call instead of by opening leads one at a time. getOutreachFunnel is the dashboard's four headline numbers; this is the sequence itself, by tier. These are counts and not leads: when the answer needs the leads behind a number — which clinics accepted, which of them never got a first message — call searchLeads with connectionStatus.",
       parameters: {
         type: "object",
         properties: {
