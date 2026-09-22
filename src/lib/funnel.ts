@@ -18,6 +18,7 @@
 // The KPI card component is untouched: this changes what the four cards say,
 // not what they look like.
 
+import { CONTACTED_STAGES } from "@/lib/constants";
 import { IcpAnswers, leadTier } from "@/lib/icp";
 
 // ─── Windows ───────────────────────────────────────────────────────────────
@@ -43,28 +44,28 @@ export function daysAgo(now: Date, days: number): Date {
 // which is the number this card exists not to be.
 export interface QualifiedLeads {
   total: number;
-  // Not yet approached: no connection request has gone out. This is the
-  // actionable half of the number, which is why it leads the subtitle.
+  // Still at a pre-contact stage (e.g. New). This is the actionable half of
+  // the number, which is why it leads the subtitle.
   untouched: number;
-  // Approached, and past the New stage — the ones in play.
+  // At Contacted or beyond — the ones in play.
   contacted: number;
 }
 
 export function qualifiedLeads(
   leads: (IcpAnswers & {
     stage: string;
-    connectionRequestSentAt: Date | null;
   })[],
 ): QualifiedLeads {
   const qualified = leads.filter((lead) => {
     const tier = leadTier(lead);
     return tier === "A" || tier === "B";
   });
+  const contactedStages: readonly string[] = CONTACTED_STAGES;
   return {
     total: qualified.length,
-    untouched: qualified.filter((l) => l.connectionRequestSentAt === null)
+    untouched: qualified.filter((l) => !contactedStages.includes(l.stage))
       .length,
-    contacted: qualified.filter((l) => l.connectionRequestSentAt !== null)
+    contacted: qualified.filter((l) => contactedStages.includes(l.stage))
       .length,
   };
 }
