@@ -164,6 +164,50 @@ export const MESSAGE_MECHANISM_LABELS: Record<MessageMechanism, string> = {
   step2_bump: "Step 2 bump",
 };
 
+// The mechanisms a person may set by hand, which is every one except the bump.
+//
+// The bump is not a kind of opener, it is a kind of follow-up, and the step that
+// writes it is the only thing that should ever stamp it. So the select offered
+// beside a message holds these three and the comparison below counts these
+// three, and a step2_bump row stays exactly as the sequence wrote it.
+export const FIRST_MESSAGE_MECHANISMS = [
+  "observation",
+  "curiosity_process",
+  "curiosity_pain_signal",
+] as const satisfies readonly MessageMechanism[];
+
+export type FirstMessageMechanism = (typeof FIRST_MESSAGE_MECHANISMS)[number];
+
+export function isFirstMessageMechanism(
+  value: unknown,
+): value is FirstMessageMechanism {
+  return (
+    typeof value === "string" &&
+    (FIRST_MESSAGE_MECHANISMS as readonly string[]).includes(value)
+  );
+}
+
+// The two groups the reply rates are read in. The curiosity openers are one
+// group and not two: they are two wordings of the same bet, and split in half
+// at these volumes neither half says anything.
+export type MechanismGroup = "observation" | "curiosity";
+
+export function mechanismGroup(
+  mechanism: MessageMechanism | null,
+): MechanismGroup | null {
+  if (mechanism === "observation") return "observation";
+  if (mechanism === "curiosity_process" || mechanism === "curiosity_pain_signal") {
+    return "curiosity";
+  }
+  // step2_bump is a follow-up rather than an opener, and null is untagged.
+  return null;
+}
+
+// Below this many sends, a rate is a coin flip with a decimal point on it. The
+// summary still shows the numbers — they are the count of work done, which is
+// worth seeing — and says plainly not to read a winner into them.
+export const MECHANISM_SAMPLE_FLOOR = 50;
+
 // ─── Lengths ───────────────────────────────────────────────────────────────
 
 // LinkedIn's own ceiling on a connection note is 300 characters, and the

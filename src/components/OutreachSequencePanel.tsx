@@ -53,10 +53,14 @@ import {
   currentMessages,
 } from "@/lib/outreachSequenceRead";
 import AiButton from "@/components/AiButton";
+import MechanismPicker from "@/components/MechanismPicker";
 
 export interface SequenceActions {
   generate: (step: string) => Promise<OutreachStepResult>;
-  markSent: (messageId: string) => Promise<void>;
+  // The error the mark refused with, or null where it went through. The one
+  // thing it refuses is a first message with no opener type on it.
+  markSent: (messageId: string) => Promise<string | null>;
+  setMechanism: (messageId: string, mechanism: string) => Promise<void>;
   clearSent: (messageId: string) => Promise<void>;
   saveContent: (messageId: string, content: string) => Promise<void>;
   markAccepted: () => Promise<void>;
@@ -639,10 +643,20 @@ function MessageCard({
   const [text, setText] = useState(message.content);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
+  const [markError, setMarkError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const edited = text.trim() !== message.content.trim();
   const sent = message.sentAt !== null;
+  // The opener type is only a question on the first message: every other step
+  // has one mechanism by construction, and the follow-up's branches are stamped
+  // by the step that writes them.
+  const tagsOpener = message.step === "FIRST_MESSAGE";
+  const untagged =
+    tagsOpener &&
+    message.messageMechanism !== "observation" &&
+    message.messageMechanism !== "curiosity_process" &&
+    message.messageMechanism !== "curiosity_pain_signal";
   const isConnection = message.step === "CONNECTION";
   const overLength = isConnection && text.length > CONNECTION_MAX_CHARS;
   // Only the first message is held to it, and only once there is something to
@@ -767,17 +781,42 @@ function MessageCard({
         ) : (
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || untagged}
             onClick={() =>
-              startTransition(async () => actions.markSent(message.id))
+              startTransition(async () =>
+                setMarkError(await actions.markSent(message.id)),
+              )
             }
-            title="Records that you pasted this into LinkedIn yourself"
+            title={
+              untagged
+                ? "Pick the opener type first — it cannot be worked out later"
+                : "Records that you pasted this into LinkedIn yourself"
+            }
             className="btn h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
           >
             {pending ? "Marking…" : "Mark sent"}
           </button>
         )}
       </div>
+
+      {/* Which kind of opener this is, editable, and asked for before the mark
+          rather than after: the answer is free while somebody still remembers
+          writing it and unrecoverable a week later. A full-height select on its
+          own row, because .field fixes its own height and one sitting in the
+          34px button row above would sit a few pixels off everything in it. */}
+      {tagsOpener && (
+        <div className="mt-2.5">
+          <MechanismPicker
+            value={message.messageMechanism}
+            set={(mechanism) => actions.setMechanism(message.id, mechanism)}
+            hint="Needed before this can be marked sent."
+          />
+        </div>
+      )}
+
+      {markError && (
+        <p className="mt-2 text-xs leading-relaxed text-bad">{markError}</p>
+      )}
 
       {/* Why the message reads the way it does — the evidence behind it and what
           it deliberately does not claim. Folded away: it is longer than the

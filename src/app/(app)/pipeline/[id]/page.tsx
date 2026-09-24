@@ -21,6 +21,7 @@ import {
   markMessageSent,
   markReplied,
   saveMessageContent,
+  setMessageMechanism,
 } from "@/lib/actions/outreachSequence";
 import { suggestIcpScores } from "@/lib/actions/icpAssist";
 import { addLeadCall } from "@/lib/actions/calls";
@@ -97,6 +98,7 @@ export default async function LeadDetailPage({
   const sequence = {
     generate: generateOutreachStep.bind(null, lead.id),
     markSent: markMessageSent.bind(null, lead.id),
+    setMechanism: setMessageMechanism.bind(null, lead.id),
     clearSent: clearMessageSent.bind(null, lead.id),
     saveContent: saveMessageContent.bind(null, lead.id),
     markAccepted: markConnectionAccepted.bind(null, lead.id),

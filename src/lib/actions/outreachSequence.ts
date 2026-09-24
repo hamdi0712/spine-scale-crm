@@ -42,6 +42,7 @@ import {
   curiosityProcessNote,
   followUpBranch,
   followUpNote,
+  isFirstMessageMechanism,
   formatInternalNote,
   isGroundedIn,
   isOutreachStep,
@@ -757,12 +758,31 @@ export async function clearReplied(leadId: string) {
 // Marking one variant of the first message sent unmarks its siblings: three
 // alternatives are three ways of saying the same thing once, and two of them
 // marked sent would be a record of a conversation that did not happen.
-export async function markMessageSent(leadId: string, messageId: string) {
+export async function markMessageSent(
+  leadId: string,
+  messageId: string,
+): Promise<string | null> {
   const message = await prisma.outreachMessage.findFirst({
     where: { id: messageId, leadId },
-    select: { id: true, step: true, variant: true },
+    select: { id: true, step: true, variant: true, messageMechanism: true },
   });
-  if (!message) return;
+  if (!message) return "That message no longer exists.";
+
+  // The one thing the mark now insists on. Which kind of opener this was is
+  // only knowable while somebody still remembers writing it, and a first
+  // message marked sent with no mechanism is a row that can never join the
+  // comparison — there is no way back to it later except guessing from the
+  // wording, which is the thing the column exists to avoid. So it is asked for
+  // at the one moment the answer is free.
+  //
+  // Only the first message. Every other step has one mechanism by construction,
+  // and the follow-up's branches are stamped by the step that writes them.
+  if (
+    message.step === "FIRST_MESSAGE" &&
+    !isFirstMessageMechanism(message.messageMechanism)
+  ) {
+    return "Pick which kind of opener this is before marking it sent — observation or curiosity. It cannot be worked out later.";
+  }
 
   if (message.variant !== null) {
     await prisma.outreachMessage.updateMany({
@@ -774,6 +794,33 @@ export async function markMessageSent(leadId: string, messageId: string) {
   await prisma.outreachMessage.updateMany({
     where: { id: message.id, leadId },
     data: { sentAt: new Date() },
+  });
+  revalidatePath(`/pipeline/${leadId}`);
+  revalidatePath("/pipeline");
+  return null;
+}
+
+// Correcting the mechanism by hand.
+//
+// The model stamps one when it writes a message, and that stamp is a record of
+// what it was asked for rather than of what went out: a draft edited in the box
+// before it was pasted can easily have become the other kind, and only the
+// person who edited it knows. So the value is editable wherever a message is
+// marked sent, and this is the write behind that select.
+//
+// Three values, never step2_bump: that one belongs to the follow-up branch that
+// writes it and is not a kind of opener anybody chooses. The message id comes
+// from the browser, so it is matched against this lead's own rows, the same way
+// the mark-sent path does it.
+export async function setMessageMechanism(
+  leadId: string,
+  messageId: string,
+  mechanism: string,
+) {
+  if (!isFirstMessageMechanism(mechanism)) return;
+  await prisma.outreachMessage.updateMany({
+    where: { id: messageId, leadId },
+    data: { messageMechanism: mechanism },
   });
   revalidatePath(`/pipeline/${leadId}`);
   revalidatePath("/pipeline");
