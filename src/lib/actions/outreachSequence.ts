@@ -34,14 +34,18 @@ import {
   SEQUENCE_MAX_TOKENS,
   SequenceContext,
   buildFirstMessageFallbackPrompt,
+  buildStep2BumpPrompt,
   buildStepPrompt,
   connectionNote,
   contextSalutation,
   curiosityPainSignalNote,
   curiosityProcessNote,
+  followUpBranch,
   followUpNote,
   formatInternalNote,
+  isGroundedIn,
   isOutreachStep,
+  isRestatementOf,
   loomDeliveryNote,
   parseAuditOfferReply,
   parseConnectionReply,
@@ -49,6 +53,8 @@ import {
   parseFirstMessageReply,
   parseFollowUpReply,
   parseLoomDeliveryReply,
+  parseStep2BumpReply,
+  step2BumpNote,
   stepLock,
 } from "@/lib/outreachSequence";
 import {
@@ -63,6 +69,11 @@ import {
 // point of the column is a comparison, and a comparison needs both sides
 // labelled from the same moment onwards.
 const OBSERVATION: MessageMechanism = "observation";
+
+// The follow-up's third branch, named here for the same reason: it is written in
+// one place, but the panel and the reporting both read the label off the column
+// and a typo in it would quietly become its own category.
+const STEP2_BUMP: MessageMechanism = "step2_bump";
 
 // ─── Tracing step 2 (TEMPORARY) ────────────────────────────────────────────
 //
@@ -149,6 +160,14 @@ export async function generateOutreachStep(
     replyText: lead.replyText,
     priorMessages: lead.outreach.map(toDraft),
   };
+
+  // Step 5's third branch, taken before the evidence check below because it is
+  // the one message in this app that is not written from the evidence. It
+  // restates the step 2 message that went unanswered, so what it needs is that
+  // message, and a lead whose enrichment has since been cleared still has it.
+  if (step === "FOLLOW_UP" && followUpBranch(state) === "step2_bump") {
+    return await generateStep2Bump({ leadId, ctx, basedOn: assistEvidenceLabels(lead) });
+  }
 
   if (!hasAssistEvidence(lead)) {
     return {
@@ -545,6 +564,143 @@ async function generateCuriosityFallback({
     skipped: FIRST_MESSAGE_VARIANTS,
     mechanism: chosen.mechanism,
     debug,
+  };
+}
+
+// ─── Step 5's third branch ─────────────────────────────────────────────────
+
+// The step 2 bump, written for the leads the sequence used to abandon: the first
+// message went out, nobody answered, and every later step is gated on a reply
+// that never came.
+//
+// One call, and a narrow one. The model is given the message that was sent and
+// asked to say what it asked, shorter; everything else about the message is
+// fixed wording assembled by step2BumpNote. It is never given the evidence,
+// because a model holding the website notes will find something new to say and
+// something new is exactly what this message must not contain.
+//
+// Then the gate. A restatement that cannot be tied back to the sent message
+// fails the step rather than being sent, which is the same refusal the
+// connection request makes when the evidence is thin and the follow-up makes
+// when it has no second angle. The difference is that here it should never
+// happen: the model is being asked to summarise a paragraph it was handed, and a
+// failure means it wrote something else instead. That is worth failing on
+// loudly rather than papering over with "just checking in", which is the exact
+// message this app exists not to send.
+async function generateStep2Bump({
+  leadId,
+  ctx,
+  basedOn,
+}: {
+  leadId: string;
+  ctx: SequenceContext;
+  basedOn: string[];
+}): Promise<OutreachStepResult> {
+  const step: OutreachStep = "FOLLOW_UP";
+
+  // The step 2 message they were actually sent, whichever variant it was and
+  // whether it was observation-led or one of the curiosity openers. The newest
+  // sent one, because that is the one in the conversation: marking a variant
+  // sent unmarks its siblings, so in practice there is exactly one.
+  const sent = ctx.priorMessages
+    .filter((m) => m.step === "FIRST_MESSAGE" && m.sentAt !== null)
+    .sort((a, b) => (a.sentAt as Date).getTime() - (b.sentAt as Date).getTime());
+  const sentFirstMessage = sent[sent.length - 1]?.content.trim() ?? "";
+  if (sentFirstMessage === "") {
+    return {
+      ok: false,
+      error:
+        "This bump restates the first message, and there is no first message marked sent on this lead to restate. Mark the one that went out, above.",
+    };
+  }
+
+  const { system, user } = buildStep2BumpPrompt(ctx, sentFirstMessage);
+  const reply = await deepSeekJson({
+    system,
+    user,
+    maxTokens: SEQUENCE_MAX_TOKENS,
+  });
+  if (!reply.ok) {
+    return { ok: false, error: reply.error };
+  }
+
+  const parsed = parseStep2BumpReply(reply.content);
+  if (!parsed) {
+    return {
+      ok: false,
+      error:
+        "DeepSeek answered, but not in a shape that reads as a one-line restatement. Nothing has been saved — try again.",
+    };
+  }
+
+  // Not a zero-written result, which is what a step says when the evidence
+  // honestly carried nothing. There is nothing thin about the input here: the
+  // whole message was handed over. An empty answer to it is a failure, and it
+  // says so rather than quietly leaving the step blank.
+  if (parsed.restatement === null || parsed.groundedIn === null) {
+    return {
+      ok: false,
+      error:
+        "DeepSeek could not condense the sent first message into one usable clause, so nothing was written. A bump with a made-up short version is worse than no bump — try again, and if it keeps failing the first message may be worth re-reading by hand.",
+    };
+  }
+
+  if (
+    !isGroundedIn(parsed.groundedIn, sentFirstMessage) ||
+    !isRestatementOf(parsed.restatement, sentFirstMessage)
+  ) {
+    return {
+      ok: false,
+      error:
+        "The short version DeepSeek wrote could not be traced back to the message that was actually sent, so nothing was written. This step only ever restates what went out, and an untraceable restatement is an invented one.",
+    };
+  }
+
+  const content = step2BumpNote({
+    address: contextSalutation(ctx).address,
+    restatement: parsed.restatement,
+  });
+  if (content === null) {
+    return {
+      ok: false,
+      error:
+        "The restatement came back empty once trimmed, so nothing was written. Try again.",
+    };
+  }
+
+  await prisma.outreachMessage.create({
+    data: {
+      leadId,
+      step,
+      variant: null,
+      content,
+      internalNote: formatInternalNote({
+        ...parsed.note,
+        // The note leads with which branch of the follow-up this is, because it
+        // is the first question somebody reading it will have: this message
+        // makes no new observation on purpose, and that reads as a thin message
+        // unless the reason is said. The grounding quote goes in beside it so
+        // the restatement can be checked against the thread by eye.
+        evidence: [
+          "The first message went unanswered, so this is the step 2 bump rather than a new-angle follow-up: it restates what was already sent and adds nothing.",
+          `Condensed from the sent first message: “${parsed.groundedIn}”`,
+          parsed.note.evidence,
+        ]
+          .filter((line): line is string => line !== null && line !== "")
+          .join(" "),
+      }),
+      messageMechanism: STEP2_BUMP,
+    },
+  });
+  revalidatePath(`/pipeline/${leadId}`);
+  return {
+    ok: true,
+    step,
+    written: 1,
+    fromTemplate: false,
+    basedOn,
+    evidence: parsed.groundedIn,
+    mechanism: STEP2_BUMP,
   };
 }
 

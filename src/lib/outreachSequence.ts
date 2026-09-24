@@ -89,7 +89,7 @@ export const OUTREACH_STEP_BLURBS: Record<OutreachStep, string> = {
     "Two or three things worth flagging, written from what they actually wrote back, offering the walkthrough.",
   LOOM_DELIVERY: "The note the video goes out with, and the link exactly as stored.",
   FOLLOW_UP:
-    "One nudge, and only one, and on a different angle than the one already used.",
+    "One nudge, and only one: a different angle than the one already used, or a one-line restatement where step 2 went unanswered.",
 };
 
 // The first message is generated as up to three alternatives for a person to
@@ -131,10 +131,18 @@ export const VARIANT_BLURBS: Record<FirstMessageVariant, string> = {
 //                            first visit is handled. Presumes no pain point.
 //   curiosity_pain_signal  — step 2's fallback where a soft signal does point at
 //                            no-shows or follow-up, asking how they catch one.
+//   step2_bump             — step 5's third branch: the lead never answered step
+//                            2 at all, so the follow-up restates that message in
+//                            one clause instead of making a second observation.
+//                            Stamped for the same reason the others are — it is
+//                            a different bet than a new-angle follow-up, and the
+//                            two are only comparable if each row says which it
+//                            was when it was written.
 export const MESSAGE_MECHANISMS = [
   "observation",
   "curiosity_process",
   "curiosity_pain_signal",
+  "step2_bump",
 ] as const;
 
 export type MessageMechanism = (typeof MESSAGE_MECHANISMS)[number];
@@ -153,6 +161,7 @@ export const MESSAGE_MECHANISM_LABELS: Record<MessageMechanism, string> = {
   observation: "Observation-led",
   curiosity_process: "Curiosity, process question",
   curiosity_pain_signal: "Curiosity, soft pain signal",
+  step2_bump: "Step 2 bump",
 };
 
 // ─── Lengths ───────────────────────────────────────────────────────────────
@@ -172,6 +181,14 @@ const MESSAGE_MIN_CHARS = 40;
 // An audit offer is four sentences. The ceiling is there to stop a paragraph of
 // enthusiasm arriving where a calm offer was asked for.
 export const AUDIT_OFFER_MAX_CHARS = 700;
+
+// The step 2 bump's one blank: the restatement of what the unanswered message
+// asked. A clause, not a sentence, and this is the number that enforces it.
+//
+// Deliberately tight. "Short version:" promises a short version, and a model
+// given room for eighty words will write the first message again slightly
+// differently, which is a second pitch wearing a bump's clothes.
+export const BUMP_RESTATEMENT_MAX_CHARS = 90;
 
 // One message, three short ones, or one with a note attached. Comfortably over
 // what any of the three answers needs.
@@ -490,6 +507,41 @@ export function followUpNote({
   );
 }
 
+// The follow-up's other shape: the bump, and the only message in this app that
+// is allowed to be one.
+//
+// It exists for the leads the sequence used to drop on the floor. A first
+// message that went out and was never answered locks every later step — there is
+// no reply, so no audit offer, so no Loom — and the follow-up above has nothing
+// to work with either, because it is written to say something *new* and the
+// thing worth saying was already said in the message nobody read. So this one
+// does not try. It restates the message that went unanswered in a single clause
+// and gives them an easy way to end it.
+//
+// Everything that makes a bump insulting is what it adds: a fresh pitch, a
+// second observation, an asset nobody asked for, a new call to action. This adds
+// none of them. The clause is a condensed version of what was already sent, and
+// the close is an explicit out, which is the part that makes this sendable
+// rather than annoying.
+export function step2BumpNote({
+  address,
+  restatement,
+}: {
+  // Already decided by salutation(), the same as every other step. Where the
+  // lead has no usable contact name this is CONTACT_NAME_PLACEHOLDER, so the
+  // template reads "Hey [First Name]," and somebody fills it in before sending.
+  address: string;
+  // One clause condensing the core observation or question of the step 2
+  // message that actually went out. Never a new one.
+  restatement: string;
+}): string | null {
+  const clause = restatement.trim().replace(/[.]+$/, "");
+  if (clause === "") return null;
+  return stripEmDashes(
+    `Hey ${address}, bumping this in case it got buried. Short version: ${clause}. If you've already got it handled, just say so and I'll leave you alone.`,
+  );
+}
+
 // The connection request, assembled around the one observation the model
 // supplies.
 //
@@ -585,6 +637,78 @@ export interface SequenceState {
   nextFollowUp: Date | null;
   // Which steps already have a message marked sent.
   sentSteps: OutreachStep[];
+  // When the first message was marked sent, where it was. The step 2 bump runs
+  // off its own clock rather than off the lead's follow-up date, so this is the
+  // one mark whose *date* the gating reads and not merely its presence.
+  firstMessageSentAt: Date | null;
+}
+
+// How long a first message goes unanswered before it is worth bumping.
+//
+// Five days, and the number is here rather than inline because it is the whole
+// trigger for a branch of the sequence. Short enough that the message is still
+// in their inbox and still in their memory; long enough that somebody who was
+// simply busy last Thursday has had a weekend to get to it.
+export const STEP2_BUMP_AFTER_DAYS = 5;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Which of the follow-up's three branches this lead is in, or null for none.
+//
+// One step, three reasons to send it, and they need different messages — so the
+// branch is decided once, here, and both the gate below and the action that
+// writes the message read it from the same function rather than each working it
+// out from the marks.
+//
+//   step2_bump       — the first message went out and nothing came back: no
+//                      reply marked, and no audit offer or Loom sent. This lead
+//                      has heard one thing from us and answered none of it, so
+//                      the follow-up restates that one thing. When it is due is
+//                      step2BumpDue's question, not this one's.
+//   new_observation  — everything else the follow-up has always covered: they
+//                      replied, or the offer or the Loom went out, and then it
+//                      went quiet. A new angle is both possible and required.
+//
+// The one-follow-up rule sits *above* this and is checked in stepLock, not here,
+// which is what makes it apply to all three branches: a lead bumped at step 2
+// who later reaches the audit stage and goes quiet again has already had its
+// follow-up, and the sequence is finished for it either way.
+export type FollowUpBranch = "step2_bump" | "new_observation";
+
+export function followUpBranch(state: SequenceState): FollowUpBranch | null {
+  const first = state.sentSteps.includes("FIRST_MESSAGE");
+  const later =
+    state.sentSteps.includes("AUDIT_OFFER") ||
+    state.sentSteps.includes("LOOM_DELIVERY");
+
+  // Silence at step 2, and nothing since. Read before the other branch, because
+  // a lead in this state is exactly the lead the other branch cannot write for:
+  // there is no reply to work from and no second angle the first message did not
+  // already have the run of the evidence for.
+  if (first && !later && state.repliedAt === null) return "step2_bump";
+  return first || later ? "new_observation" : null;
+}
+
+// Whether the step 2 bump's own clock has run out: five days since the first
+// message was marked sent.
+//
+// Its own clock, and not the lead's next-follow-up date, because this branch
+// fires on a lead nobody has touched since step 2 and a date nobody set is the
+// normal state of such a lead. The date still counts where it exists — somebody
+// who set it for Tuesday meant Tuesday, and the pipeline is already chasing on
+// it — so either is enough.
+export function step2BumpDue(
+  state: SequenceState,
+  now: Date = new Date(),
+): boolean {
+  const byDate =
+    state.nextFollowUp !== null &&
+    state.nextFollowUp.getTime() <= now.getTime();
+  const byClock =
+    state.firstMessageSentAt !== null &&
+    now.getTime() - state.firstMessageSentAt.getTime() >=
+      STEP2_BUMP_AFTER_DAYS * DAY_MS;
+  return byDate || byClock;
 }
 
 export type StepLock =
@@ -654,22 +778,36 @@ export function stepLock(
     // Both are said in the reasons below and left to the person sending, who
     // read the thread.
     case "FOLLOW_UP": {
+      // First, and above all three branches: one follow-up per lead, whichever
+      // branch wrote it. A lead bumped at step 2 that later replies, takes the
+      // audit and goes quiet again does not get a second chase out of this app —
+      // it has had its one, and the next message is a conversation somebody
+      // starts by hand having read the thread.
       if (state.sentSteps.includes("FOLLOW_UP")) {
         return {
           unlocked: false,
           reason:
-            "One follow-up, and only one. That has been sent, so this sequence is finished. Anything after it is a conversation somebody starts by hand.",
+            "One follow-up, and only one, whichever branch wrote it. That has been sent, so this sequence is finished. Anything after it is a conversation somebody starts by hand.",
         };
       }
-      const opened =
-        state.sentSteps.includes("FIRST_MESSAGE") ||
-        state.sentSteps.includes("AUDIT_OFFER");
-      if (!opened) {
+      const branch = followUpBranch(state);
+      if (branch === null) {
         return {
           unlocked: false,
           reason:
             "Unlocks once the first message or the audit offer has been marked sent — there is nothing to follow up on before then.",
         };
+      }
+      // The step 2 bump keeps its own clock, so it does not wait on a
+      // follow-up date nobody set. Everything else is due when the lead's date
+      // is, exactly as before.
+      if (branch === "step2_bump") {
+        return step2BumpDue(state, now)
+          ? { unlocked: true }
+          : {
+              unlocked: false,
+              reason: `They have not answered the first message yet. This unlocks ${STEP2_BUMP_AFTER_DAYS} days after it was marked sent, or on the lead's follow-up date if one is set and comes round sooner.`,
+            };
       }
       if (state.nextFollowUp === null) {
         return {
@@ -1172,6 +1310,75 @@ function followUpPrompt(ctx: SequenceContext): string {
   ].join("\n");
 }
 
+// ─── Step 5's third branch: the step 2 bump ────────────────────────────────
+
+// The one call the bump costs, and the narrowest prompt in this module.
+//
+// Everywhere else the model is asked to read the evidence and find something.
+// Here it is asked to read one message that has already been sent and say what
+// it asked, shorter. The evidence block is not even given to it: the whole point
+// of this branch is that nothing new is introduced, and a model holding the
+// website notes will introduce something from them.
+//
+// The grounding quote is not decoration. The restatement is checked against the
+// sent message before anything is written (readBumpQuote and isGroundedIn
+// below), so a model that invents a generic "you mentioned wanting more
+// patients" fails the step instead of sending it. That is the same discipline
+// every other step is held to, applied to the one input this step has.
+export function buildStep2BumpPrompt(
+  ctx: SequenceContext,
+  // The step 2 message that actually went out, whole, exactly as stored. Which
+  // variant it was, or whether it was a curiosity opener rather than an
+  // observation, does not matter here: what matters is the words they were sent.
+  sentFirstMessage: string,
+): { system: string; user: string } {
+  const { address } = contextSalutation(ctx);
+  return {
+    system: SYSTEM_PROMPT,
+    user: [
+      `CLINIC: ${ctx.evidence.clinicName.trim()}`,
+      `ADDRESS THEM AS: ${address}`,
+      "",
+      "THE MESSAGE THEY DID NOT ANSWER",
+      "This went out and got no reply. It is the only thing you may work from. You are not given the research notes for this clinic, because nothing new goes into this message.",
+      "",
+      `"""\n${truncate(sentFirstMessage.trim(), FIRST_MESSAGE_MAX_CHARS)}\n"""`,
+      "",
+      "TASK",
+      "Condense the core observation or question of that message into one short clause. The sentences around it are fixed:",
+      "",
+      `  "Hey ${address}, bumping this in case it got buried. Short version: <YOUR CLAUSE>. If you've already got it handled, just say so and I'll leave you alone."`,
+      "",
+      `Write the clause. A clause, not a sentence: it reads on from the colon and it is under ${BUMP_RESTATEMENT_MAX_CHARS} characters.`,
+      '  Good: "whether anyone follows up after a first visit"',
+      '  Good: "the form-only booking step on your site"',
+      '  Bad: "I noticed that your website does not appear to have a visible booking flow." (a sentence, and it restates the whole message)',
+      "",
+      "HARD RULES for this step:",
+      "  - Nothing new. No observation the message above did not make, no question it did not ask, no detail it did not name. If it said two things, take the one it led with.",
+      "  - No pitch, no offer, no audit, no walkthrough, no video, no link, no calendar, no second call to action. The message above did not mention them and neither does this.",
+      "  - Do not rewrite their message into a better version of itself. You are saying what it asked, in fewer words.",
+      "  - Keep whatever hedging the original used. If it said \"didn't look like\", the clause does not say \"you don't have\".",
+      "  - No square brackets. No em dashes. No full stop at the end.",
+      "",
+      "GROUNDING",
+      'Return "groundedIn": a short phrase copied word for word out of the message above, the phrase your clause is condensing. It is checked against that message character by character, so copy it exactly and do not tidy it. If you cannot point at one, return null for both keys.',
+      "",
+      INTERNAL_NOTE_SPEC,
+      "",
+      "REPLY FORMAT",
+      "A single JSON object, exactly these keys:",
+      "{",
+      '  "restatement": "<the clause>" | null,',
+      '  "groundedIn": "<the phrase copied out of the sent message>" | null,',
+      '  "evidence": "<what in the sent message the clause condenses>" | null,',
+      '  "uncertainty": "<hedging carried over, or none>",',
+      '  "stage": "<the stage required before this step>"',
+      "}",
+    ].join("\n"),
+  };
+}
+
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
@@ -1231,6 +1438,142 @@ export function readFollowUpObservation(raw: unknown): string | null {
     return null;
   }
   return text;
+}
+
+// The clause the step 2 bump restates the unanswered message as.
+//
+// Shorter than every other reader here, and stricter about shape, because the
+// failure mode is not a fabricated fact — the grounding check below catches
+// those — it is length. A model asked for "the short version" of a paragraph
+// returns the paragraph, and a bump carrying the whole first message again is
+// the first message again.
+//
+// So: a clause. One of them, under the ceiling, with no sentence break in it and
+// no new pitch, asset or call to action smuggled on the end.
+export function readBumpRestatement(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+
+  let text = stripEmDashes(raw.replace(/\s+/g, " ").trim());
+  text = text.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+  // The template supplies the full stop.
+  text = text.replace(/[.!?]+$/, "").trim();
+
+  if (text.length < 10 || text.length > BUMP_RESTATEMENT_MAX_CHARS) return null;
+  if (/[[\]]/.test(text)) return null;
+  if (!/[a-z]/i.test(text)) return null;
+  // A sentence break left inside means this is two things, not a clause.
+  if (/[.!?]\s/.test(text)) return null;
+  // The things this branch exists not to reintroduce. The message it is bumping
+  // mentioned none of them, so neither does the bump.
+  //
+  // "Call" is matched as the offer and not as the word: "missed-call follow-up"
+  // is a phrase the first message genuinely uses, and rejecting the clause that
+  // restates it would fail the step over the thing it is supposed to say.
+  if (
+    /\b(audit|walkthrough|loom|video|calendar|demo|free)\b/i.test(text) ||
+    /\b(a|quick|short|brief|15|20|30)[- ]?(minute )?call\b/i.test(text) ||
+    /\b(book|hop on|jump on|set up|schedule) a\b/i.test(text)
+  ) {
+    return null;
+  }
+  // The bump language belongs in the fixed wording around the clause, once. A
+  // clause that also says it is a follow-up says it twice.
+  if (
+    /\b(just checking in|checking back in|circling back|following up|floating (?:this|it) back|got buried|bumping this|touching base)\b/i.test(
+      text,
+    )
+  ) {
+    return null;
+  }
+  return text;
+}
+
+// Words too ordinary to prove anything was read. An overlap of "the" and "your"
+// between a clause and a message is not grounding.
+const BUMP_STOPWORDS = new Set([
+  "that",
+  "this",
+  "with",
+  "from",
+  "your",
+  "you",
+  "they",
+  "have",
+  "what",
+  "when",
+  "where",
+  "which",
+  "about",
+  "after",
+  "before",
+  "there",
+  "their",
+  "would",
+  "could",
+  "into",
+  "over",
+  "been",
+  "were",
+  "than",
+  "then",
+  "them",
+  "some",
+  "most",
+  "more",
+  "much",
+  "very",
+  "just",
+  "like",
+  "also",
+  "only",
+  "does",
+  "doesn",
+  "didn",
+  "isn",
+  "clinic",
+  "practice",
+  "patients",
+  "patient",
+]);
+
+function significantWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((word) => word.length >= 4 && !BUMP_STOPWORDS.has(word));
+}
+
+// Whether the restatement is actually a restatement.
+//
+// Two tests, and both have to pass. The quote the model pointed at has to appear
+// in the sent message word for word, which is what stops "you mentioned wanting
+// more patients" being offered as a summary of a message that mentioned nothing
+// of the kind. And the clause itself has to share a real word with that message,
+// which is what stops a correct quote being attached to a clause about something
+// else entirely.
+//
+// Loose about punctuation and spacing on the first test, because a model
+// re-typing a phrase will straighten a curly apostrophe and nothing about that
+// is a fabrication. Strict about everything else: where this cannot be
+// established the step fails rather than sending a generic bump, which is the
+// same trade every other message in this app makes.
+export function isGroundedIn(quote: string, sentMessage: string): boolean {
+  const flatten = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const needle = flatten(quote);
+  const haystack = flatten(sentMessage);
+  return needle.length >= 8 && haystack.includes(needle);
+}
+
+export function isRestatementOf(clause: string, sentMessage: string): boolean {
+  const sent = new Set(significantWords(sentMessage));
+  return significantWords(clause).some((word) => sent.has(word));
 }
 
 // The detail clause the curiosity opener is anchored on.
@@ -1487,6 +1830,25 @@ export function parseFollowUpReply(raw: string): FollowUpReply | null {
   if (!body) return null;
   return {
     observation: readFollowUpObservation(body.observation),
+    note: readInternalNote(body),
+  };
+}
+
+// The bump's answer. Both keys null is a real answer and means the model could
+// not point at anything in the sent message, which fails the step rather than
+// writing a generic bump.
+export type Step2BumpReply = {
+  restatement: string | null;
+  groundedIn: string | null;
+  note: InternalNote;
+};
+
+export function parseStep2BumpReply(raw: string): Step2BumpReply | null {
+  const body = readObject(raw);
+  if (!body) return null;
+  return {
+    restatement: readBumpRestatement(body.restatement),
+    groundedIn: readText(body.groundedIn, 300),
     note: readInternalNote(body),
   };
 }

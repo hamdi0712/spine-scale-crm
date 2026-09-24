@@ -442,11 +442,14 @@ model OutreachMessage {
   // generated: "observation" for the evidence-led messages this sequence was
   // built on, "curiosity_process" and "curiosity_pain_signal" for the two
   // curiosity openers step 2 falls back to when the evidence will not carry a
-  // verified observation. src/lib/outreachSequence.ts holds the list.
+  // verified observation, and "step2_bump" for the follow-up branch that
+  // restates an unanswered first message rather than making a new observation.
+  // src/lib/outreachSequence.ts holds the list.
   //
   // Recorded rather than derived, because it is the thing being compared. The
-  // question this column exists to answer is whether a curiosity opener earns
-  // more replies than an observation-led one, and that is only answerable if
+  // questions this column exists to answer are whether a curiosity opener earns
+  // more replies than an observation-led one, and whether a step 2 bump earns
+  // more than a new-angle follow-up, and both are only answerable if
   // each message says which it was at the moment it was written, rather than
   // being guessed at later from its wording.
   //

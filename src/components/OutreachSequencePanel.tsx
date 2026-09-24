@@ -83,9 +83,11 @@ type StepNote = { debug: string[] } & (
       written: number;
       // Which first-message variants the evidence could not support.
       skipped: readonly string[];
-      // Which mechanism the run wrote by. Only ever interesting on the first
-      // message, where a curiosity opener arriving in place of three
-      // observations is a different kind of message and worth saying so.
+      // Which mechanism the run wrote by. Interesting on the two steps that
+      // have more than one: the first message, where a curiosity opener can
+      // arrive in place of three observations, and the follow-up, where a step 2
+      // bump can arrive in place of a new-angle one. Either way it is a
+      // different kind of message than the button offered, and worth saying so.
       mechanism: MessageMechanism | null;
     }
 );
@@ -527,6 +529,35 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
         {note.evidence && (
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Read off: “{note.evidence}”
+          </p>
+        )}
+        <DebugTrace lines={note.debug} />
+      </div>
+    );
+  }
+  // The step 2 bump, said the same way and for the same reason: this message
+  // makes no new observation on purpose, and without that said it reads as a
+  // thin follow-up rather than a deliberate one. Same card as the curiosity
+  // note above, because it is the same kind of thing — the branch that ran was
+  // not the branch the step usually runs.
+  if (note.mechanism === "step2_bump") {
+    return (
+      <div className="mt-2.5 rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
+        <p className="text-sm font-medium text-ink">
+          A bump, not a new observation
+        </p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          The first message went out and was never answered, so there is no
+          reply to build a second angle on. This restates what was already sent
+          in one line and gives them an easy way to end it. It adds no new
+          observation, no pitch and nothing about the audit, which is what makes
+          it sendable: the short version is checked against the message that
+          actually went out before it is written, so it cannot quietly become a
+          second opener.
+        </p>
+        {note.evidence && (
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Condensed from: “{note.evidence}”
           </p>
         )}
         <DebugTrace lines={note.debug} />

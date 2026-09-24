@@ -81,8 +81,8 @@ export function toDraft(row: {
   };
 }
 
-// The four gates, read off a lead and its messages. Everything stepLock needs
-// and nothing else.
+// The gates, read off a lead and its messages. Everything stepLock needs and
+// nothing else.
 export function sequenceState(lead: {
   websiteNotes: string | null;
   metaAdsSignal: string | null;
@@ -93,6 +93,15 @@ export function sequenceState(lead: {
   nextFollowUp: Date | null;
   outreach: { step: string; sentAt: Date | null }[];
 }): SequenceState {
+  // When the first message went out, where it did. The step 2 bump is due five
+  // days after that mark, so this branch of the follow-up needs the date and not
+  // only the fact. Earliest, not latest: a step regenerated and re-marked is the
+  // same conversation, and the clock started when they first heard from us.
+  const firstMessageSentAt = lead.outreach
+    .filter((m) => m.step === "FIRST_MESSAGE" && m.sentAt !== null)
+    .map((m) => m.sentAt as Date)
+    .sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+
   return {
     // The same test the scoring assist and the old hook used, inlined rather
     // than imported so this module stays free of anything server-only.
@@ -108,6 +117,7 @@ export function sequenceState(lead: {
       .filter((m) => m.sentAt !== null)
       .map((m) => m.step)
       .filter(isOutreachStep),
+    firstMessageSentAt,
   };
 }
 
