@@ -2194,58 +2194,71 @@ export async function getOutreachFunnelSummary(args: {
 
   // ─── Reply rate by mechanism ─────────────────────────────────────────────
   //
-  // The one question the mechanism column exists to answer: does a curiosity
-  // opener earn more replies than an observation-led one? Only the first message
-  // has more than one mechanism, so this reads that step and says so, rather than
-  // mixing in four steps that are observation-led by construction and diluting
-  // both numbers.
+  // The question the mechanism column exists to answer, asked once per step that
+  // has more than one mechanism to compare: does a curiosity opener earn more
+  // replies than an observation-led one, and does a step 2 bump earn more than a
+  // new-angle follow-up? Read per step rather than pooled, because the two
+  // questions are about different messages sent to different leads at different
+  // points, and one table mixing them answers neither.
   //
   // Counted per lead, the same as everything else here, and a reply only counts
   // where it landed after the message went out: a lead that had already replied
-  // before this opener was sent did not reply to it. Rows written before the
+  // before this message was sent did not reply to it. That rule is what makes
+  // the follow-up table readable at all — the audit-stage branches go to leads
+  // who replied once already, and counting that earlier reply would score the
+  // branch for something that happened before it ran. Rows written before the
   // column existed come back unlabelled and are reported as their own group
-  // rather than folded into either side.
-  const byMechanism = new Map<
-    MessageMechanism | "unlabelled",
-    { leads: number; replied: number }
-  >();
-  const mechanismSeen = new Set<string>();
-  for (const message of messages) {
-    if (message.step !== "FIRST_MESSAGE") continue;
-    if (message.sentAt === null) continue;
-    const key = isMessageMechanism(message.messageMechanism)
-      ? message.messageMechanism
-      : ("unlabelled" as const);
-    // One lead counts once per mechanism. A first message re-sent, or two
-    // variants marked sent in turn, is still one opener to one clinic.
-    const seen = `${message.leadId}:${key}`;
-    if (mechanismSeen.has(seen)) continue;
-    mechanismSeen.add(seen);
-    const row = byMechanism.get(key) ?? { leads: 0, replied: 0 };
-    row.leads++;
-    const replied = message.lead.repliedAt;
-    if (replied !== null && replied.getTime() >= message.sentAt.getTime()) {
-      row.replied++;
-    }
-    byMechanism.set(key, row);
-  }
-
-  const mechanismRows = [...MESSAGE_MECHANISMS, "unlabelled" as const]
-    .map((key) => {
+  // rather than folded into any side.
+  const mechanismBreakdown = (step: OutreachStep) => {
+    const byMechanism = new Map<
+      MessageMechanism | "unlabelled",
+      { leads: number; replied: number }
+    >();
+    const mechanismSeen = new Set<string>();
+    for (const message of messages) {
+      if (message.step !== step) continue;
+      if (message.sentAt === null) continue;
+      const key = isMessageMechanism(message.messageMechanism)
+        ? message.messageMechanism
+        : ("unlabelled" as const);
+      // One lead counts once per mechanism. A message re-sent, or two variants
+      // marked sent in turn, is still one message to one clinic.
+      const seen = `${message.leadId}:${key}`;
+      if (mechanismSeen.has(seen)) continue;
+      mechanismSeen.add(seen);
       const row = byMechanism.get(key) ?? { leads: 0, replied: 0 };
-      return {
-        mechanism:
-          key === "unlabelled"
-            ? "Unlabelled (written before the mechanism was recorded)"
-            : MESSAGE_MECHANISM_LABELS[key],
-        firstMessagesSent: row.leads,
-        replies: row.replied,
-        replyRatePercent: rate(row.replied, row.leads),
-      };
-    })
-    // A mechanism nothing was sent by is left out rather than reported as a row
-    // of zeros: three empty rows read as three things that failed.
-    .filter((row) => row.firstMessagesSent > 0);
+      row.leads++;
+      const replied = message.lead.repliedAt;
+      if (replied !== null && replied.getTime() >= message.sentAt.getTime()) {
+        row.replied++;
+      }
+      byMechanism.set(key, row);
+    }
+
+    return [...MESSAGE_MECHANISMS, "unlabelled" as const]
+      .map((key) => {
+        const row = byMechanism.get(key) ?? { leads: 0, replied: 0 };
+        return {
+          mechanism:
+            key === "unlabelled"
+              ? "Unlabelled (written before the mechanism was recorded)"
+              : MESSAGE_MECHANISM_LABELS[key],
+          messagesSent: row.leads,
+          replies: row.replied,
+          replyRatePercent: rate(row.replied, row.leads),
+        };
+      })
+      // A mechanism nothing was sent by is left out rather than reported as a
+      // row of zeros: three empty rows read as three things that failed.
+      .filter((row) => row.messagesSent > 0);
+  };
+
+  const mechanismRows = mechanismBreakdown("FIRST_MESSAGE").map(
+    ({ messagesSent, ...row }) => ({ ...row, firstMessagesSent: messagesSent }),
+  );
+  const followUpMechanismRows = mechanismBreakdown("FOLLOW_UP").map(
+    ({ messagesSent, ...row }) => ({ ...row, followUpsSent: messagesSent }),
+  );
 
   const shape = (tier: FunnelTier) => {
     const b = bucket(tier);
@@ -2327,6 +2340,17 @@ export async function getOutreachFunnelSummary(args: {
         mechanismRows.length === 0
           ? "No first message was marked sent in this window, so there is nothing to compare yet."
           : "Observation-led is the sequence's normal output; the curiosity openers are what step 2 falls back to when the evidence will not carry a verified observation, so the two groups are not comparable samples of the same leads, they are different leads. A curiosity opener going to the thin-evidence leads and still replying at a similar rate is the interesting result. Say the counts alongside the rates: at these volumes a couple of replies moves a rate by tens of points, so do not call a winner off a handful.",
+    },
+    // The same comparison for step 5, which has three branches now and therefore
+    // a question of its own.
+    replyRateByFollowUpBranch: {
+      ofWhat:
+        "Follow-ups (step 5) marked sent in this window, counted per lead and grouped by the mechanism recorded when each was written. A reply counts where the lead's reply was marked at or after the follow-up was sent, so a reply that came in before it is not credited to it.",
+      branches: followUpMechanismRows,
+      howToReadIt:
+        followUpMechanismRows.length === 0
+          ? "No follow-up was marked sent in this window, so there is nothing to compare yet."
+          : "The step 2 bump goes to leads who never answered the first message at all; the observation-led follow-ups go to leads who replied at least once and then went quiet. Those are not the same people, so a gap between the two rates is mostly a gap between two situations, and the bump's rate is the more interesting number on its own terms: before this branch existed those leads got nothing, so every reply in that row is one the sequence used to miss. One follow-up per lead, so each lead appears in exactly one of these rows. Say the counts alongside the rates.",
     },
     whyAStepMayBeMissing:
       "A step that lags the one before it is usually a gate rather than a decision: the first message waits on the connection being accepted and marked, the audit offer on a reply being marked, the Loom delivery on a link being pasted onto the lead. Unmarked is indistinguishable from undone here — if the gap looks wrong, that is the first thing to say.",
