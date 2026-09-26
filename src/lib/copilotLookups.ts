@@ -1027,7 +1027,7 @@ export async function getRecentActivity(): Promise<unknown> {
 
   return {
     now: iso(new Date()),
-    note: "The milestone log. It records six kinds of event — a lead converted, a report generated, a contract signed, an invoice paid, a health status changing, onboarding completing — and nothing else. Routine edits are deliberately not logged, so an absence here does not mean nothing happened.",
+    note: "The milestone log. It records seven kinds of event — a lead converted, a report generated, a contract signed, an invoice paid, a health status changing, onboarding completing, and a change you confirmed through this copilot — and nothing else. Routine edits are deliberately not logged, so an absence here does not mean nothing happened. A COPILOT_ACTION row is a change that was proposed here and confirmed by the operator; its summary says so in as many words. A proposal nobody confirmed changed nothing and is never in this log.",
     entriesReturned: entries.length,
     entries: entries.map((a) => ({
       kind: a.kind,

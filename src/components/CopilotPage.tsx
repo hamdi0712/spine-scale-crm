@@ -4,9 +4,15 @@
 //
 // This is the presentation the docked panel used to be. What it asks and what
 // it is allowed to know has not moved: every question still goes through
-// src/lib/actions/copilot.ts, which is the fixed lookup set, the read-only
-// posture and the fenced third-party text, unchanged. What is new around it is
-// the page and the saving — src/lib/actions/copilotChat.ts.
+// src/lib/actions/copilot.ts, which is the fixed lookup set and the fenced
+// third-party text, unchanged. What is new around it is the page and the saving
+// — src/lib/actions/copilotChat.ts.
+//
+// One turn in a thread can now carry a proposed action, drawn as a card under
+// the reply (CopilotActionCard). This component holds the view the server
+// composed and sends back its id on Confirm, and that is the whole of its part
+// in it: it cannot say what a proposal does, and there is no path from here that
+// changes a record without a stored proposal behind it.
 //
 // The one thing that changed in how a question is asked: the history replayed
 // to the model is now read on the server from the conversation's own rows
@@ -29,6 +35,7 @@ import {
 import { COPILOT_QUESTION_MAX_CHARS } from "@/lib/copilot";
 import { ConversationSummary, StoredMessage } from "@/lib/copilotChat";
 import Icon from "@/components/Icons";
+import CopilotActionCard from "@/components/CopilotActionCard";
 import ImanAvatar from "@/components/ImanAvatar";
 
 // The quick starts behind the sparkle. Each is a real question the lookups can
@@ -477,11 +484,15 @@ export default function CopilotPage({
             </div>
           </form>
           {/* Said here for the same reason the panel said it: a chat box in a
-              CRM looks like something you can tell to do things, and it is
-              worth being honest that you cannot. */}
+              CRM looks like something you can tell to do things. What it can do
+              now is ask — so the line says where the line is, because "it can
+              change things" and "it can change things once you have read the
+              card and clicked Confirm" are different products. */}
           <p className="px-2 pb-2 pt-2 text-center text-xs text-muted">
-            Iman reads your records to answer. It cannot change anything — no
-            edits, no messages, no scheduling.
+            Iman reads your records to answer. It can propose a change to a lead,
+            a candidate or the task board — nothing happens until you confirm it.
+            It cannot delete anything, touch clients or reporting, or send
+            messages.
           </p>
         </div>
       </div>
@@ -528,6 +539,15 @@ function MessageRow({ message }: { message: StoredMessage }) {
         <div className="prose-doc rounded-[16px] rounded-tl-[6px] border border-line bg-wash/50 px-4 py-3 text-sm [&>*:last-child]:mb-0">
           <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
+        {/* The proposal, where this turn made one. Under the reply rather than
+            inside it: the answer is prose and this is a control, and a bordered
+            card with its own label is how somebody can see at a glance that
+            Iman has stopped answering and started asking. */}
+        {message.proposal && (
+          <div className="mt-2">
+            <CopilotActionCard action={message.proposal} />
+          </div>
+        )}
         {message.toolsUsed.length > 0 && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted">Read</span>

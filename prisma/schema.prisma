@@ -217,6 +217,7 @@ model DiscoveryCandidate {
 
   @@index([status])
   @@index([batchLabel])
+  copilotActions CopilotAction[]
 }
 
 model Lead {
@@ -387,6 +388,7 @@ model Lead {
 
   icpScoredAt DateTime? // null = never scored; drives whether a tier badge shows
   icpNotes    String?
+  copilotActions CopilotAction[]
 }
 
 // One drafted message in a lead's outreach sequence.
@@ -1138,6 +1140,10 @@ model CopilotMessage {
   role      String // user | assistant | error
   content   String
   toolsUsed String   @default("")
+  // The action proposed in this turn, where one was. Nullable on every other
+  // turn, which is nearly all of them — a proposal is the exception, and the
+  // card is drawn from the row rather than from anything in `content`.
+  copilotActionId String?
   // The order the turns were said in. createdAt alone is not enough: a
   // question and its answer are saved in the same write and can land on the
   // same millisecond.
@@ -1360,4 +1366,73 @@ model ApifySearchLog {
   // the same keyword both upsert and the second settles on the first's row.
   @@unique([type, key])
   @@index([lastRunAt])
+}
+
+// An action Iman proposed, and what became of it.
+//
+// This table is the confirm-before-execute gate, and the reason it is a table
+// rather than a message the browser hands back. A proposal is composed on the
+// server, from a record the lookups actually read, and stored here; the page is
+// given its id and nothing else. Confirming sends that id back, the row is read
+// here, and the change is applied from what this row says — not from anything
+// the browser claims it said. So the worst a tampered page can do is confirm a
+// proposal this server itself wrote, which is the same authority every other
+// button in the app already has.
+//
+// The model never reaches this table. It can ask for a proposal (one tool,
+// which validates and writes a row with status PROPOSED and stops), and it has
+// no tool that confirms one. Execution happens in a server action a person's
+// click calls, and nowhere else.
+model CopilotAction {
+  id   String @id @default(cuid())
+  // COPILOT_ACTION_KINDS in src/lib/copilotActions.ts owns the list. A plain
+  // string like every other status column here, so adding a kind needs no
+  // migration.
+  kind String
+
+  // PROPOSED | CONFIRMED | CANCELLED | FAILED. One row moves through at most
+  // one of those transitions: a proposal is confirmed once, cancelled once, or
+  // left where it is.
+  status String @default("PROPOSED")
+
+  // The plain-language line the card shows and the feed repeats, composed on
+  // the server when the proposal is made. Stored rather than recomposed so the
+  // confirmation reads exactly as the thing that was agreed to.
+  summary String
+
+  // The reason the model gave, where the action takes one. Shown as text and
+  // never rendered as anything else.
+  reason String?
+
+  // Which record this touches. Exactly one of these is set — there is no
+  // proposal that affects two records, and no column here in which a second
+  // one could be put.
+  leadId      String?
+  lead        Lead?               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  candidateId String?
+  candidate   DiscoveryCandidate? @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  // The kind's own arguments as JSON — the stage to move to, the task's title
+  // and due date, the disqualifier to set. Read back through a validator, never
+  // spread into a query.
+  params String @default("{}")
+
+  // What the operator actually typed to bring this about, kept so the card and
+  // the audit trail can show what asked for it. Truncated; it is a receipt, not
+  // a transcript.
+  askedFor String?
+
+  // The conversation turn this was proposed in, so reopening a chat draws the
+  // card in its place with whatever became of it.
+  messageId String? @unique
+
+  createdAt  DateTime  @default(now())
+  decidedAt  DateTime?
+  // Set only when the change actually went through. A row with a null here
+  // changed nothing, whatever its status says.
+  executedAt DateTime?
+  // What went wrong, for a FAILED row.
+  error      String?
+
+  @@index([status, createdAt])
 }

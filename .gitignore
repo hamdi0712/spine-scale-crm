@@ -14,6 +14,9 @@ npm-debug.log*
 # databases a migration or build check creates alongside dev.db.
 prisma/*.db
 prisma/*.db-journal
+# the scratch database the tools/verify-* scripts are pointed at
+.verify.db
+.verify.db-journal
 
 # local env — real password lives here, never committed
 .env
