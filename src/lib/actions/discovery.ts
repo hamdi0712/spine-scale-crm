@@ -935,6 +935,44 @@ export async function requeueDiscoveryCandidate(id: string) {
   revalidatePath(`/discovery/${id}`);
 }
 
+// Rejecting one candidate by hand, with the reason written out.
+//
+// The queue already rejects candidates — a disqualifier or a total under the bar
+// and processDiscoveryCandidate writes exactly this — but only as the last step
+// of a scoring run. There was no way to reject one on a judgement the scoring
+// cannot make: that the clinic is not a clinic. Iman's audit lookup surfaces
+// those, so this is the write behind confirming one, and the Discovery page can
+// use it the same way whenever it grows the button.
+//
+// The same three columns the queue sets, in the same meanings: rejected, and why.
+// `disqualified` is left alone deliberately — that flag means Layer 1 of the
+// scorecard fired, which is a statement about a scored candidate, and this is a
+// rejection reached another way. A promoted candidate is left alone: its lead is
+// a real record by now, and rejecting the candidate behind it would say
+// something untrue about a lead somebody is working.
+export async function rejectDiscoveryCandidate(id: string, reason: string) {
+  const why = typeof reason === "string" ? reason.replace(/\s+/g, " ").trim() : "";
+  if (why === "") return;
+
+  const candidate = await prisma.discoveryCandidate.findUnique({
+    where: { id },
+    select: { promotedLeadId: true },
+  });
+  if (!candidate || candidate.promotedLeadId) return;
+
+  await prisma.discoveryCandidate.update({
+    where: { id },
+    data: {
+      status: "REJECTED",
+      disqualifiedReason: why,
+      processedAt: new Date(),
+    },
+  });
+  revalidatePath("/discovery");
+  revalidatePath("/discovery/rejected");
+  revalidatePath(`/discovery/${id}`);
+}
+
 // ─── Bulk actions from the discovery table ─────────────────────────────────
 //
 // Ids arriving from the browser are only ever matched against existing rows —

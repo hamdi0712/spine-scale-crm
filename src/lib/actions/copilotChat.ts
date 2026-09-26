@@ -23,7 +23,17 @@
 //
 // The stored receipt (which lookups ran) is never replayed. It is a caption
 // drawn under an answer; the model gets prose and nothing else, which is the
-// same rule as before — see sanitiseHistory in src/lib/copilot.ts.
+// same rule as before — see sanitiseHistory in src/lib/copilot.ts. A proposed
+// action is not replayed either, for a stronger version of the same reason: the
+// card is a thing the operator acts on, not a turn in the conversation, and a
+// model reading "you proposed this an hour ago" back out of its own history is a
+// model that will assume it went through.
+//
+// A proposal is attached to the assistant turn it was made in, so reopening a
+// conversation draws the card back where it was with whatever became of it —
+// confirmed, cancelled, or expired unconfirmed. Nothing here can execute one:
+// the only things that can are the two server actions in
+// src/lib/actions/copilotActions.ts, which a person's click calls.
 
 import { prisma } from "@/lib/prisma";
 import { askCopilot } from "@/lib/actions/copilot";
@@ -32,6 +42,7 @@ import {
   COPILOT_QUESTION_MAX_CHARS,
   CopilotTurn,
 } from "@/lib/copilot";
+import { readCopilotActionViews } from "@/lib/copilotActionStore";
 import {
   ConversationSummary,
   StoredConversation,
@@ -107,6 +118,8 @@ export async function askIman(
       position: from,
     },
   });
+  const proposal = result.ok ? (result.proposal ?? null) : null;
+
   const replyRow = await prisma.copilotMessage.create({
     data: {
       conversationId: conversation.id,
@@ -114,14 +127,25 @@ export async function askIman(
       content: stored.content,
       toolsUsed: encodeToolsUsed(stored.toolsUsed),
       position: from + 1,
+      copilotActionId: proposal?.id ?? null,
     },
   });
+
+  // The other half of the link, so the proposal knows its turn. Unique on the
+  // proposal side: one row belongs to one turn, and a second turn cannot claim
+  // a proposal that has already been drawn somewhere else.
+  if (proposal) {
+    await prisma.copilotAction.update({
+      where: { id: proposal.id },
+      data: { messageId: replyRow.id },
+    });
+  }
 
   return {
     conversationId: conversation.id,
     title: conversation.title,
     question: toStoredMessage(questionRow),
-    reply: toStoredMessage(replyRow),
+    reply: { ...toStoredMessage(replyRow), proposal },
     conversations: await listCopilotConversations(),
   };
 }
@@ -154,10 +178,26 @@ export async function loadCopilotConversation(
     },
   });
   if (!row) return null;
+
+  // The cards for the turns that proposed something, read in one query and
+  // freshly: a proposal drawn from yesterday's conversation has to show that it
+  // expired rather than offering a Confirm that will refuse.
+  const actions = await readCopilotActionViews(
+    row.messages
+      .map((message) => message.copilotActionId)
+      .filter((id): id is string => typeof id === "string" && id !== ""),
+  );
+
   return {
     id: row.id,
     title: row.title,
-    messages: row.messages.map(toStoredMessage),
+    messages: row.messages.map((message) => ({
+      ...toStoredMessage(message),
+      proposal:
+        message.copilotActionId === null
+          ? null
+          : (actions[message.copilotActionId] ?? null),
+    })),
   };
 }
 

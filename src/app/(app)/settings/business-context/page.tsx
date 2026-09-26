@@ -38,8 +38,9 @@ export default async function BusinessContextPage() {
           treated as your own standing instruction — it shapes how answers are
           written and which rules are followed, so a compliance line typed here
           applies to every reply. It is not sent anywhere else, and it changes
-          nothing about what the copilot can see: it still reads your records
-          through the same read-only lookups and still cannot edit anything.
+          nothing about what the copilot can reach: it still reads your records
+          through the same fixed lookups, and it still cannot change anything
+          without proposing it and having you confirm it.
           Leave the page empty and the copilot runs exactly as it did before.
         </p>
       </div>

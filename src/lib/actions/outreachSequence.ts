@@ -101,7 +101,7 @@ function trace(lines: string[], line: string): void {
 }
 
 // Everything a prompt is written from, read in one query. The evidence, the
-// contact's first name, the Loom, and every message already drafted for this
+// contact's name and job title, the Loom, and every message already drafted for this
 // lead — which is what lets a later step avoid repeating an earlier one.
 async function loadContext(leadId: string) {
   const lead = await prisma.lead.findUnique({
@@ -109,6 +109,7 @@ async function loadContext(leadId: string) {
     select: {
       clinicName: true,
       contactName: true,
+      contactTitle: true,
       websiteNotes: true,
       metaAdsSignal: true,
       reviewCount: true,
@@ -157,6 +158,7 @@ export async function generateOutreachStep(
       reviewCount: lead.reviewCount,
     },
     contactName: lead.contactName,
+    contactTitle: lead.contactTitle,
     loomUrl: lead.loomUrl,
     replyText: lead.replyText,
     priorMessages: lead.outreach.map(toDraft),

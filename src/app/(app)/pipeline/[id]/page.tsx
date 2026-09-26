@@ -715,7 +715,7 @@ export default async function LeadDetailPage({
                 lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
               }
               salutationNote={salutationNote(
-                salutation(lead.contactName, lead.websiteNotes),
+                salutation(lead.contactName, lead.contactTitle, lead.websiteNotes),
               )}
             />
           </div>

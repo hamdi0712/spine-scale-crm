@@ -32,6 +32,7 @@ import { useState, useTransition } from "react";
 import { IconCheck, IconChevronRight, IconLock } from "@tabler/icons-react";
 import {
   CONTACT_NAME_PLACEHOLDER,
+  CONTACT_LAST_NAME_PLACEHOLDER,
   CONNECTION_MAX_CHARS,
   OUTREACH_STEPS,
   OUTREACH_STEP_BLURBS,
@@ -121,7 +122,7 @@ export default function OutreachSequencePanel({
   acceptedLabel: string | null;
   repliedLabel: string | null;
   // How every message in the sequence greets this person, and what decided it.
-  // Worth stating up here: "Hi Dr. Mike" is the kind of thing you want to have
+  // Worth stating up here: "Hi Dr. Chen" is the kind of thing you want to have
   // agreed with before it is pasted into a stranger's inbox, not to discover in
   // the message. Editing the box still overrides it either way.
   salutationNote: string;
@@ -657,6 +658,15 @@ function MessageCard({
     message.messageMechanism !== "observation" &&
     message.messageMechanism !== "curiosity_process" &&
     message.messageMechanism !== "curiosity_pain_signal";
+  // Which bracketed blank, if any, the draft still carries. A lead with no
+  // contact name leaves the first-name one; a credentialed contact recorded
+  // without a surname leaves the surname one, because "Hi Dr." is not a
+  // greeting. Either way the fix is the same: type the name into the lead.
+  const nameBlank = text.includes(CONTACT_NAME_PLACEHOLDER)
+    ? CONTACT_NAME_PLACEHOLDER
+    : text.includes(CONTACT_LAST_NAME_PLACEHOLDER)
+      ? CONTACT_LAST_NAME_PLACEHOLDER
+      : null;
   const isConnection = message.step === "CONNECTION";
   const overLength = isConnection && text.length > CONNECTION_MAX_CHARS;
   // Only the first message is held to it, and only once there is something to
@@ -828,13 +838,10 @@ function MessageCard({
         </Aside>
       )}
 
-      {(text.includes(CONTACT_NAME_PLACEHOLDER) ||
-        copyFailed ||
-        edited ||
-        needsQuestion) && (
+      {(nameBlank !== null || copyFailed || edited || needsQuestion) && (
         <p className="mt-2 text-xs leading-relaxed text-muted">
-          {text.includes(CONTACT_NAME_PLACEHOLDER) &&
-            `Fill in ${CONTACT_NAME_PLACEHOLDER} — this lead has no contact name on it. `}
+          {nameBlank !== null &&
+            `Fill in ${nameBlank} — this lead has no contact name on it. `}
           {/* Reported rather than enforced: this used to be a rule that threw
               the whole option away, which cost a choice of three its third. */}
           {needsQuestion &&

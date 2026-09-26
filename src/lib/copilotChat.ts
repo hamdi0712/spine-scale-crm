@@ -10,6 +10,8 @@
 // something to draw under an answer, never a tool result to feed back in — the
 // same reason the browser was never allowed to send one.
 
+import { CopilotActionView } from "@/lib/copilotActions";
+
 // A saved turn as the page draws it. Same three roles the panel had, because
 // it is the same thread: an error is stored so that reopening a conversation
 // shows what it actually looked like.
@@ -18,6 +20,11 @@ export interface StoredMessage {
   role: "user" | "assistant" | "error";
   content: string;
   toolsUsed: string[];
+  // The action proposed in this turn, where one was, as the card draws it.
+  // Composed on the server from the stored proposal row — the page holds it to
+  // render and to send its id back on Confirm, and holds nothing else about it.
+  // Null on every other turn, which is nearly all of them.
+  proposal?: CopilotActionView | null;
 }
 
 // One row of the Chat History dropdown.
