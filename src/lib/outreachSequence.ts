@@ -22,14 +22,16 @@
 //   observation the connection request already made. That is the whole reason
 //   the drafts are a table rather than five columns.
 //
-//   First names, with a Dr. in front where one is owed. Every template
-//   addresses somebody by their first name, because that is how these are
-//   actually written, and a message opening "Hi Dr. Sarah Whitfield" reads as a
-//   mail merge. But this pipeline is full of chiropractors, and "Hi Mike" to
-//   somebody whose own clinic calls them Dr. Mike is its own kind of wrong — so
-//   the title is worked out from the data (salutation() below) and the answer is
-//   "Dr. Mike": the honorific with the first name, which is the register these
-//   practices actually use. It is decided once for the whole sequence, because
+//   First names, except for the doctors. Every template addresses somebody by
+//   name, and which name depends on who they are. A Practice Manager is called
+//   by their first name, because that is how these are actually written and
+//   "Hi Ms. Reyes" reads as a mail merge. But this pipeline is full of
+//   chiropractors, and "Hi Sarah" to somebody whose own clinic calls them
+//   Dr. Chen is its own kind of wrong — so where the data says this contact
+//   treats patients (credential letters after their name, or a clinical job
+//   title) the greeting is "Hi Dr. Chen": the honorific with the surname, which
+//   is the register these practices actually use. Worked out by salutation()
+//   below, off stored data, and decided once for the whole sequence, because
 //   code fills three of the five steps and only a model writes the other two.
 //
 // Pure. Nothing here touches the network or the database: the prompts and the
@@ -246,8 +248,13 @@ export const SEQUENCE_MAX_TOKENS = 1100;
 // typing in, and the person sending it is reading the box before they send.
 export const CONTACT_NAME_PLACEHOLDER = "[First Name]";
 
-// Honorifics and post-nominals that are not a first name, however the record
-// happens to be written. "Dr. Sarah Whitfield, DC" is Sarah.
+// What is left where a lead has no surname but is owed a Dr. — the same kind of
+// bracketed blank as the first-name one, because "Hi Dr." is worse than a gap
+// somebody fills in.
+export const CONTACT_LAST_NAME_PLACEHOLDER = "[Last Name]";
+
+// Honorifics that are not part of anybody's name, however the record happens to
+// be written. "Dr. Sarah Whitfield, DC" is Sarah Whitfield.
 const TITLES = /^(dr|dr\.|doctor|mr|mr\.|mrs|mrs\.|ms|ms\.|miss|prof|prof\.|professor)$/i;
 
 // The doctor titles specifically, as opposed to the plain courtesy ones. A
@@ -255,17 +262,80 @@ const TITLES = /^(dr|dr\.|doctor|mr|mr\.|mrs|mrs\.|ms|ms\.|miss|prof|prof\.|prof
 // here, not lumped in with them.
 const DOCTOR_TITLES = /^(dr|dr\.|doctor)$/i;
 
-// The letters after the comma that mean this person is addressed as Dr. in
-// their own field. DC is a chiropractor, DPT a physical therapist, DO and MD
-// physicians, DACNB and DACBSP the chiropractic board diplomates — all of them
-// people whose own clinic's website will say "Dr." in front of their name.
+// Every set of post-nominal letters this pipeline sees, whether or not the
+// person holding them is called Dr.
 //
-// Deliberately not a general credentials list: LMT, CMT, RN, ATC and the like
-// are real qualifications whose holders are not called Dr., and putting them in
+// This list exists for one job: getting the letters *out* of the name. A record
+// written "Sarah Chen, DC" and one written "Sarah Chen DC" are the same person,
+// and a surname of "DC" is the bug this constant is here to prevent. So it is
+// deliberately broad — LMT, RN and ATC belong in it even though their holders
+// are never addressed as Dr., because they are equally not surnames.
+//
+// Editable: add a credential the moment a lead turns up wearing one.
+export const CREDENTIAL_SUFFIXES = new Set([
+  // Chiropractic, and its board diplomates.
+  "dc", "dacnb", "dacbsp", "dabci", "ccsp", "ccep",
+  // Medicine, dentistry, podiatry, optometry.
+  "md", "do", "dds", "dmd", "dpm", "od", "mbbs",
+  // Therapy and rehab.
+  "dpt", "pt", "mpt", "otr", "ot", "atc", "lat",
+  // Nursing and mid-levels.
+  "np", "aprn", "fnp", "dnp", "pa", "pa-c", "rn", "bsn", "msn",
+  // Academic and the rest.
+  "phd", "edd", "ms", "msc", "ma", "mph", "mba", "bs", "ba", "cscs", "lmt", "cmt",
+]);
+
+// Generational suffixes. Not credentials, and stripped for the same reason:
+// "Michael Alvarez Jr" has the surname Alvarez.
+const GENERATIONAL_SUFFIXES = new Set(["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"]);
+
+// The subset of the letters above that mean this person is addressed as Dr. in
+// their own field. DC is a chiropractor, DPT a physical therapist, DO and MD
+// physicians, DDS a dentist, DACNB and DACBSP the chiropractic board diplomates
+// — all of them people whose own clinic's website will say "Dr." in front of
+// their name.
+//
+// Deliberately not the whole credentials list: LMT, CMT, RN, NP, PA and ATC are
+// real qualifications whose holders are not called Dr., and putting them in
 // here would be the exact mistake this feature exists to avoid, in the other
 // direction.
-const DOCTOR_CREDENTIALS =
-  /^(dc|dpt|pt,?\s*dpt|md|do|dacnb|dacbsp|dabci|dc,?\s*ccsp|ccsp|phd)$/i;
+//
+// Editable, and the narrower of the two lists on purpose.
+export const DOCTOR_CREDENTIALS = new Set([
+  "dc", "dacnb", "dacbsp", "dabci", "ccsp",
+  "md", "do", "dds", "dmd", "dpm", "od", "mbbs",
+  "dpt", "phd",
+]);
+
+// What a contactTitle has to say for this person to be a clinician rather than
+// somebody who runs the front of the practice.
+//
+// The distinction the whole feature turns on is Practice Manager against
+// Chiropractor: both are "the contact" on a lead, and only one of them is
+// called Dr. So this is a list of clinical roles, not of seniority. "Owner",
+// "Founder" and "CEO" are deliberately absent — a clinic's owner is as often
+// the spouse doing the books as the doctor treating patients — and an owner who
+// *is* a clinician says so in the same field ("Owner, DC"), which the credential
+// pass below catches.
+//
+// Editable. Matched as substrings against the lowercased title, so "chiropract"
+// covers chiropractor and chiropractic alike.
+export const CLINICAL_TITLE_KEYWORDS = [
+  "chiropract",
+  "physician",
+  "physiatrist",
+  "physical therapist",
+  "medical director",
+  "clinical director",
+  "doctor",
+  "surgeon",
+  "orthopedic",
+  "orthopaedic",
+  "neurologist",
+  "dentist",
+  "podiatrist",
+  "optometrist",
+];
 
 // A name for a regex, with everything the regex would read as syntax escaped.
 function escapeRegex(text: string): string {
@@ -273,69 +343,131 @@ function escapeRegex(text: string): string {
 }
 
 // Where the "Dr." came from, said in the words the panel shows under the
-// sequence — somebody about to paste "Hi Dr. Mike" into LinkedIn is entitled to
+// sequence — somebody about to paste "Hi Dr. Chen" into LinkedIn is entitled to
 // know what made this app decide that.
 export type HonorificSource =
   | "the contact name on this lead"
   | "the letters after their name"
+  | "the job title on this lead"
   | "how their own website refers to them"
   | null;
 
 export interface Salutation {
-  // What goes after "Hi" — "Dr. Mike", "Mike", or the placeholder.
+  // What goes after "Hi" — "Dr. Chen", "Sarah", or a placeholder.
   address: string;
-  // The bare first name, without the title.
+  // The bare first name, without the title. Still what an un-credentialed
+  // contact is called, and still the anchor for the website check.
   first: string;
+  // The surname, once the honorifics and the letters are off it. Null where the
+  // record carries nothing that reads as one.
+  last: string | null;
   honorific: "Dr." | null;
   source: HonorificSource;
 }
 
-// Cleaned name parts: the bit before the comma, split on spaces, titles kept
-// so the caller can look at them.
-function nameParts(contactName: string | null): string[] {
-  return (contactName ?? "")
-    .split(",")[0]
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter((part) => part !== "");
+// A stored contact name pulled apart: the honorifics somebody typed in front of
+// it, the words that are actually the name, and the letters trailing off the
+// end of it.
+//
+// Commas are not the rule here, they are one of the spellings. "Sarah Chen, DC"
+// and "Sarah Chen DC" are the same person written two ways, and both have to
+// come out as Sarah Chen with a DC beside it — so the tokens are split on
+// commas and spaces alike and the credentials are taken off the tail.
+//
+// Taken off the *tail* specifically, and never down to nothing: a suffix is
+// something that follows a name, so a lone contact recorded as "Do" keeps their
+// name and only "Chen DO" loses the DO.
+interface ParsedName {
+  titles: string[];
+  words: string[];
+  suffixes: string[];
 }
 
-// Anything after the first comma — "Dr. Sarah Whitfield, DC" gives ["DC"].
-function credentials(contactName: string | null): string[] {
-  const [, ...rest] = (contactName ?? "").split(",");
-  return rest.map((c) => c.replace(/\s+/g, " ").trim()).filter((c) => c !== "");
+function isSuffixToken(token: string): boolean {
+  const key = token.toLowerCase().replace(/[.']/g, "");
+  return (
+    CREDENTIAL_SUFFIXES.has(key) ||
+    GENERATIONAL_SUFFIXES.has(key) ||
+    GENERATIONAL_SUFFIXES.has(token.toLowerCase())
+  );
+}
+
+function suffixKey(token: string): string {
+  return token.toLowerCase().replace(/[.']/g, "");
+}
+
+function parseName(contactName: string | null): ParsedName {
+  const tokens = (contactName ?? "")
+    .split(/[,\s]+/)
+    .map((t) => t.trim())
+    .filter((t) => t !== "");
+
+  const titles = tokens.filter((t) => TITLES.test(t));
+  const rest = tokens.filter((t) => !TITLES.test(t));
+
+  let end = rest.length;
+  const suffixes: string[] = [];
+  while (end > 1 && isSuffixToken(rest[end - 1])) {
+    suffixes.unshift(suffixKey(rest[end - 1]));
+    end -= 1;
+  }
+
+  return { titles, words: rest.slice(0, end), suffixes };
 }
 
 // The first name, and only ever the first name.
 //
-// This is the one substitution every template makes and the one most likely to
-// be embarrassing, so it is done here rather than left to a model — a prompt
-// asking for a first name is a request, and this is the gate. A record holding
-// only a surname, only a title, or a company name in the contact field comes
+// This is the substitution every un-credentialed greeting makes and the one
+// most likely to be embarrassing, so it is done here rather than left to a
+// model — a prompt asking for a first name is a request, and this is the gate. A
+// record holding only a title, or a company name in the contact field, comes
 // back as the placeholder: a blank somebody fills in beats a greeting addressed
 // to "Whitfield Spine Center".
 export function firstName(contactName: string | null): string {
-  const parts = nameParts(contactName);
-  if (parts.length === 0) return CONTACT_NAME_PLACEHOLDER;
-
-  const first = parts.find((part) => !TITLES.test(part));
-  if (first === undefined) return CONTACT_NAME_PLACEHOLDER;
+  const { words } = parseName(contactName);
+  if (words.length === 0) return CONTACT_NAME_PLACEHOLDER;
 
   // A single token that is the whole name is as likely to be a surname as a
   // first name, and "Hi Whitfield" is worse than a blank. Two tokens or more
-  // and the first non-title one is a first name.
-  if (parts.length === 1 && first.length < 2) return CONTACT_NAME_PLACEHOLDER;
+  // and the first one is a first name.
+  if (words.length === 1 && words[0].length < 2) return CONTACT_NAME_PLACEHOLDER;
 
-  return first;
+  return words[0];
 }
 
-// The surname, where the record has one. Used only to look this person up in
-// their own website copy, never to address them — "Hi Dr. Whitfield" is not the
-// register any of these messages are written in.
-function lastName(contactName: string | null): string | null {
-  const named = nameParts(contactName).filter((part) => !TITLES.test(part));
-  return named.length >= 2 ? named[named.length - 1] : null;
+// The surname, once the honorifics and the credential letters are off the name.
+//
+// The last remaining word, which is the point of all the stripping above:
+// "Dr. Sarah Chen, DC" and "Sarah Chen DC" both give Chen, never DC and never
+// "Chen, DC". A single-word record gives that word — a lone "Whitfield" is far
+// likelier to be a surname than a first name, which is exactly why firstName()
+// refuses it and this does not.
+//
+// Used to address a credentialed provider ("Hi Dr. Chen") and to look this
+// person up in their own website copy.
+export function lastName(contactName: string | null): string | null {
+  const { words } = parseName(contactName);
+  return words.length === 0 ? null : words[words.length - 1];
+}
+
+// Whether a job title says this person treats patients.
+//
+// Two passes over the same field. The keyword list catches the role said in
+// words ("Chiropractor", "Medical Director"), and then the credential pass
+// catches the one said in letters, which is how an owner who is also the doctor
+// is usually recorded: "Owner, DC" is a clinician and a bare "Owner" is not.
+export function titleIsClinical(contactTitle: string | null): boolean {
+  const title = (contactTitle ?? "").toLowerCase().trim();
+  if (title === "") return false;
+
+  if (CLINICAL_TITLE_KEYWORDS.some((keyword) => title.includes(keyword))) {
+    return true;
+  }
+
+  return title
+    .split(/[^a-z-]+/)
+    .filter((word) => word !== "")
+    .some((word) => DOCTOR_CREDENTIALS.has(word));
 }
 
 // Whether this clinic's own crawled copy calls this person Dr.
@@ -374,50 +506,75 @@ function websiteCallsThemDoctor(
 
 // How to address this person, decided once and used by every step.
 //
-// Three signals, strongest first, and all three are read off stored data rather
+// Four signals, strongest first, and all four are read off stored data rather
 // than asked of a model: the title somebody typed into the contact field, the
-// letters after their name, and their own website's copy. A plain courtesy title
-// ("Mr. Alvarez") settles it the other way and stops the website check running,
-// because a record that says Mr. is a record somebody filled in on purpose.
+// letters after their name, the job title on the lead, and their own website's
+// copy. A plain courtesy title ("Mr. Alvarez") settles it the other way and
+// stops the later checks running, because a record that says Mr. is a record
+// somebody filled in on purpose.
+//
+// The answer it gives a clinician is "Dr. Chen", not "Dr. Sarah": surname with
+// the honorific is how these practices are actually written to, and "Dr. Sarah"
+// reads as a patient-facing nickname where "Hi Dr. Chen" reads as a colleague.
+// Everybody else is still addressed by first name, which is what a Practice
+// Manager should be called and what this pipeline did for everyone before.
 //
 // It is deliberately one decision rather than one per step. The model writes
-// steps 1 and 2 and code fills 3 to 5, and a sequence that opened "Hi Dr. Mike"
-// and followed up with "Hey Mike" would read as two people writing.
+// steps 1 and 2 and code fills 3 to 5, and a sequence that opened "Hi Dr. Chen"
+// and followed up with "Hey Sarah" would read as two people writing.
 export function salutation(
   contactName: string | null,
+  contactTitle: string | null,
   websiteNotes: string | null,
 ): Salutation {
   const first = firstName(contactName);
-  const parts = nameParts(contactName);
-  const titled = parts.filter((part) => TITLES.test(part));
+  const last = lastName(contactName);
+  const { titles, suffixes } = parseName(contactName);
 
-  const doctorTitle = titled.some((part) => DOCTOR_TITLES.test(part));
-  const courtesyTitle = titled.length > 0 && !doctorTitle;
-  const doctorCredential = credentials(contactName).some((c) =>
-    DOCTOR_CREDENTIALS.test(c),
-  );
+  const doctorTitle = titles.some((part) => DOCTOR_TITLES.test(part));
+  const courtesyTitle = titles.length > 0 && !doctorTitle;
+  const doctorCredential = suffixes.some((s) => DOCTOR_CREDENTIALS.has(s));
 
   const source: HonorificSource = doctorTitle
     ? "the contact name on this lead"
     : doctorCredential
       ? "the letters after their name"
-      : !courtesyTitle && websiteCallsThemDoctor(contactName, websiteNotes)
-        ? "how their own website refers to them"
-        : null;
+      : courtesyTitle
+        ? null
+        : titleIsClinical(contactTitle)
+          ? "the job title on this lead"
+          : websiteCallsThemDoctor(contactName, websiteNotes)
+            ? "how their own website refers to them"
+            : null;
 
   const honorific = source === null ? null : ("Dr." as const);
   return {
-    address: honorific === null ? first : `${honorific} ${first}`,
+    address:
+      honorific === null
+        ? first
+        : `${honorific} ${last ?? CONTACT_LAST_NAME_PLACEHOLDER}`,
     first,
+    last,
     honorific,
     source,
   };
 }
 
+// Whether the greeting came out as a blank rather than a name. Two blanks can
+// land there now — the first-name one, and the surname one a credentialed
+// contact with no surname on the record gets — and every caller that used to
+// test for the first cares about both.
+export function addressIsPlaceholder(s: Salutation): boolean {
+  return (
+    s.address.includes(CONTACT_NAME_PLACEHOLDER) ||
+    s.address.includes(CONTACT_LAST_NAME_PLACEHOLDER)
+  );
+}
+
 // One line for the panel, so the decision is visible before anything is pasted
 // into LinkedIn rather than discovered in the message.
 export function salutationNote(s: Salutation): string {
-  if (s.first === CONTACT_NAME_PLACEHOLDER) {
+  if (addressIsPlaceholder(s)) {
     return "No contact name on this lead — every message leaves a blank to fill in.";
   }
   return s.honorific === null
@@ -441,6 +598,9 @@ export interface OutreachDraft {
 export interface SequenceContext {
   evidence: IcpAssistEvidence;
   contactName: string | null;
+  // The job title as stored, which is the signal that tells a Chiropractor from
+  // a Practice Manager where the name itself carries no credential letters.
+  contactTitle: string | null;
   loomUrl: string | null;
   // Newest last, the order they were written in. Later steps are shown these so
   // they can avoid repeating an observation already made.
@@ -455,7 +615,11 @@ export interface SequenceContext {
 // The salutation for a whole context, so the templates and both prompts read it
 // from one place rather than each deciding for itself.
 export function contextSalutation(ctx: SequenceContext): Salutation {
-  return salutation(ctx.contactName, ctx.evidence.websiteNotes);
+  return salutation(
+    ctx.contactName,
+    ctx.contactTitle,
+    ctx.evidence.websiteNotes,
+  );
 }
 
 // ─── The house style ───────────────────────────────────────────────────────
@@ -597,7 +761,7 @@ export function connectionNote({
   clinicName,
   observation,
 }: {
-  // Already decided by salutation() — "Dr. Mike" or "Mike". The template does
+  // Already decided by salutation() — "Dr. Chen" or "Sarah". The template does
   // not work it out for itself, so every step greets the person the same way.
   address: string;
   clinicName: string;
@@ -1096,7 +1260,7 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     "  - Do not explain to them what your observation supposedly means for their clinic beyond the one line the template already carries.",
     honorific === null
       ? "  - No title in the greeting: nothing in the evidence says this person is a doctor."
-      : "  - Keep the Dr. in the greeting exactly as given. Do not move it to their surname.",
+      : "  - Keep the greeting exactly as given, Dr. and surname together. Do not swap in their first name and do not drop the Dr.",
     `  - Under ${FIRST_MESSAGE_MAX_CHARS} characters each. No square brackets. No em dashes.`,
     "",
     "Return null for any variant this clinic's evidence does not support, and say which in the internal note and why. A forced variant is a fabricated one, and this is the step where fabrication is most likely: do not describe a booking flow you did not see, do not describe an ad you were not shown, and do not describe equipment the evidence does not mention. All three null is a correct answer.",
@@ -1200,7 +1364,8 @@ function firstMessageFallbackPrompt(ctx: SequenceContext): string {
 // earns its place next to genuinely verified observations. Next to invented
 // ones it is just a better-dressed pitch.
 function auditOfferPrompt(ctx: SequenceContext): string {
-  const { address, first } = contextSalutation(ctx);
+  const salutationForStep = contextSalutation(ctx);
+  const { address } = salutationForStep;
   const clinic = ctx.evidence.clinicName.trim();
   const reply = (ctx.replyText ?? "").trim();
   return [
@@ -1252,7 +1417,7 @@ function auditOfferPrompt(ctx: SequenceContext): string {
     '  "stage": "<the stage required before this step>"',
     "}",
     "",
-    `The message addresses them as ${first === CONTACT_NAME_PLACEHOLDER ? "the placeholder above" : address} and nothing else.`,
+    `The message addresses them as ${addressIsPlaceholder(salutationForStep) ? "the placeholder above" : address} and nothing else.`,
   ].join("\n");
 }
 
