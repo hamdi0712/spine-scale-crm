@@ -51,7 +51,7 @@ export default async function LibraryPage({
         Playbooks and templates, written as you build them
       </p>
 
-      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[12rem_16rem_1fr] lg:divide-x lg:divide-y-0">
+      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[12rem_16rem_1fr] lg:divide-x lg:divide-y-0 max-md:grid-cols-1">
         {/* Categories */}
         <nav className="self-stretch py-1">
           {LIBRARY_CATEGORIES.map((c) => (

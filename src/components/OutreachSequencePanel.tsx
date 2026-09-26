@@ -197,7 +197,7 @@ export default function OutreachSequencePanel({
       <div
         role="tablist"
         aria-label="Outreach steps"
-        className="-mx-6 mt-4 flex gap-1 overflow-x-auto border-b border-line px-6"
+        className="-mx-6 mt-4 flex gap-1 overflow-x-auto border-b border-line px-6 max-md:-mx-4 max-md:px-4 max-md:scrollbar-none"
       >
         {entries.map((entry) => (
           <StepTab
@@ -755,7 +755,9 @@ function MessageCard({
           type="button"
           onClick={() => void copy()}
           disabled={text.trim() === ""}
-          className="btn h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          // Full width on a phone: copying the message is the whole point of
+          // this card there, and the thumb should not have to find it.
+          className="btn h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50 max-md:h-11 max-md:w-full max-md:justify-center max-md:text-sm"
         >
           {copied ? "Copied ✓" : "Copy"}
         </button>

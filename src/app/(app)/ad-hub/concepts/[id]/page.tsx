@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -97,7 +98,7 @@ export default async function ConceptDetailPage({
             · {awareness} · {stage.label}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <PageActions className="flex shrink-0 items-center gap-2">
           <Link
             href={`/ad-hub/concepts/${concept.id}/creatives/new`}
             className="btn-primary"
@@ -111,7 +112,7 @@ export default async function ConceptDetailPage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
       {/* ─── The four things a creative is judged against ─────────────── */}
@@ -147,7 +148,7 @@ export default async function ConceptDetailPage({
       {/* ─── Positioning, with the guidance that goes with each choice ── */}
       <section className="mt-8">
         <h2 className="display mb-4 text-xl font-semibold">Positioning</h2>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 max-md:grid-cols-1">
           <div className="card p-6">
             <p className="text-xs font-medium tracking-[0.02em] text-muted">
               Awareness level
@@ -171,12 +172,12 @@ export default async function ConceptDetailPage({
         </div>
       </section>
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5 max-md:grid-cols-1">
         {/* ─── Edit ────────────────────────────────────────────────────── */}
         <section className="lg:col-span-2">
           <h2 className="display mb-4 text-xl font-semibold">Concept details</h2>
           <form action={update} className="card space-y-5 p-6">
-            <div className="grid grid-cols-3 gap-x-4 gap-y-5">
+            <div className="m-form-stack grid grid-cols-3 gap-x-4 gap-y-5">
               <div className="col-span-2">
                 <label className="field-label" htmlFor="name">
                   Name

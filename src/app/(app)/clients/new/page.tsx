@@ -21,7 +21,7 @@ export default function NewClientPage() {
           </label>
           <input id="clinicName" name="clinicName" required className="field" />
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="field-label" htmlFor="contactName">
               Contact name

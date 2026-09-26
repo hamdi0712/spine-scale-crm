@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -114,7 +115,7 @@ export default async function DiscoveryCandidatePage({
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <PageActions className="flex shrink-0 items-center gap-2">
           {candidate.promotedLead ? (
             <Link
               href={`/pipeline/${candidate.promotedLead.id}`}
@@ -158,7 +159,7 @@ export default async function DiscoveryCandidatePage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
       {candidate.status === "FAILED" && candidate.failureReason && (
@@ -209,7 +210,7 @@ export default async function DiscoveryCandidatePage({
         </div>
       )}
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 lg:grid-cols-2 max-md:grid-cols-1">
         <section>
           <h2 className="display mb-4 text-xl font-semibold">Details</h2>
           <form action={update} className="card space-y-5 p-6">
@@ -225,7 +226,7 @@ export default async function DiscoveryCandidatePage({
                 className="field"
               />
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+            <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
               <div>
                 <label className="field-label" htmlFor="contactName">
                   Contact name

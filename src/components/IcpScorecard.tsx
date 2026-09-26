@@ -163,7 +163,7 @@ export default function IcpScorecard({
 
   return (
     <form action={action} className="card">
-      <div className="flex items-center justify-between gap-4 border-b border-line/60 px-6 py-4">
+      <div className="flex items-center justify-between gap-4 border-b border-line/60 px-6 py-4 max-md:flex-col max-md:items-start max-md:gap-2">
         <div>
           <h3 className="text-sm font-medium">Score</h3>
           <p className="mt-0.5 text-xs text-muted">
@@ -172,7 +172,7 @@ export default function IcpScorecard({
               : ICP_TIER_BANDS}
           </p>
         </div>
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3 max-md:flex-wrap max-md:gap-x-3 max-md:gap-y-1">
           <span className="flex shrink-0 items-baseline gap-1 whitespace-nowrap">
             <span
               className={`num text-2xl font-semibold tracking-[-0.02em] ${

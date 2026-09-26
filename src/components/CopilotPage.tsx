@@ -37,6 +37,8 @@ import { ConversationSummary, StoredMessage } from "@/lib/copilotChat";
 import Icon from "@/components/Icons";
 import CopilotActionCard from "@/components/CopilotActionCard";
 import ImanAvatar from "@/components/ImanAvatar";
+import Sheet from "@/components/Sheet";
+import { useIsPhone } from "@/components/useMediaQuery";
 
 // The quick starts behind the sparkle. Each is a real question the lookups can
 // answer, so the first thing anybody tries works; the subtitle says what it
@@ -241,12 +243,79 @@ export default function CopilotPage({
   }
 
   const empty = messages.length === 0 && !asking && !loading;
+  // On a phone the two dropdowns are bottom sheets instead — a 320px menu
+  // hung off a button is most of the screen anyway, and a sheet is where a
+  // thumb already is.
+  const phone = useIsPhone();
+
+  const historyList =
+    conversations.length === 0 ? (
+      <p className="px-3 py-4 text-center text-xs text-muted">
+        No saved conversations yet. The first question you ask saves
+        one.
+      </p>
+    ) : (
+      conversations.map((c) => (
+        <div
+          key={c.id}
+          className={`group flex items-center gap-1 rounded-[10px] ${
+            c.id === conversationId ? "bg-wash" : "hover:bg-wash/70"
+          }`}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => void openConversation(c.id)}
+            className="min-w-0 flex-1 px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          >
+            <span className="block truncate text-sm text-ink">
+              {c.title}
+            </span>
+            <span className="block text-xs text-muted">
+              {relativeDay(c.updatedAt)}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void remove(c)}
+            aria-label={`Delete ${c.title}`}
+            title="Delete conversation"
+            className="mr-1.5 rounded-[8px] p-1.5 text-muted hover:bg-bad-soft hover:text-bad focus:outline-none focus-visible:ring-2 focus-visible:ring-bad/40"
+          >
+            <IconTrash size={16} stroke={1.75} aria-hidden />
+          </button>
+        </div>
+      ))
+    );
+
+  const suggestionList = SUGGESTIONS.map((s) => (
+    <button
+      key={s.title}
+      type="button"
+      onClick={() => void ask(s.prompt)}
+      className="block w-full rounded-[10px] px-3 py-2.5 text-left hover:bg-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+    >
+      <span className="block text-sm font-medium text-ink">
+        {s.title}
+      </span>
+      <span className="mt-0.5 block text-xs text-muted">
+        {s.hint}
+      </span>
+    </button>
+  ));
 
   return (
     // The page is a column the height of the viewport inside the shell's
     // padding (py-10, so 5rem of it), because the thread scrolls and the input
     // is pinned under it rather than at the bottom of a growing document.
-    <div className="flex h-[calc(100vh-5rem)] flex-col">
+    //
+    // On a phone the column is the visible viewport less the top bar, the tab
+    // bar and the shell's padding, so the composer sits just above the tab
+    // bar. --vvh is the visual viewport's height, kept by MobileTabBar: when
+    // the keyboard opens it shrinks (and the tab bar steps aside, zeroing
+    // --tabbar-h), which is what keeps the input above the keyboard on iOS,
+    // where the interactive-widget viewport key is ignored.
+    <div className="flex h-[calc(100dvh-5rem)] flex-col max-md:-mb-4 max-md:h-[calc(var(--vvh,100dvh)-72px-var(--tabbar-h)-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
       <header className="flex items-center gap-3 border-b border-line/70 pb-4">
         <ImanAvatar size="sm" />
         <h1 className="display text-base font-semibold text-ink">Iman</h1>
@@ -268,7 +337,7 @@ export default function CopilotPage({
               className={`h-4 w-4 ${historyOpen ? "rotate-180" : ""}`}
             />
           </button>
-          {historyOpen && (
+          {historyOpen && !phone && (
             <>
               {/* Click-away. A transparent sheet under the menu and over
                   everything else is what closes it, so the next click goes to
@@ -284,44 +353,7 @@ export default function CopilotPage({
                 role="menu"
                 className="absolute left-0 top-full z-40 mt-1.5 max-h-[60vh] w-[320px] overflow-y-auto rounded-[14px] border border-line bg-surface p-1.5 shadow-[var(--shadow-card-hover)]"
               >
-                {conversations.length === 0 ? (
-                  <p className="px-3 py-4 text-center text-xs text-muted">
-                    No saved conversations yet. The first question you ask saves
-                    one.
-                  </p>
-                ) : (
-                  conversations.map((c) => (
-                    <div
-                      key={c.id}
-                      className={`group flex items-center gap-1 rounded-[10px] ${
-                        c.id === conversationId ? "bg-wash" : "hover:bg-wash/70"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => void openConversation(c.id)}
-                        className="min-w-0 flex-1 px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
-                      >
-                        <span className="block truncate text-sm text-ink">
-                          {c.title}
-                        </span>
-                        <span className="block text-xs text-muted">
-                          {relativeDay(c.updatedAt)}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void remove(c)}
-                        aria-label={`Delete ${c.title}`}
-                        title="Delete conversation"
-                        className="mr-1.5 rounded-[8px] p-1.5 text-muted hover:bg-bad-soft hover:text-bad focus:outline-none focus-visible:ring-2 focus-visible:ring-bad/40"
-                      >
-                        <IconTrash size={16} stroke={1.75} aria-hidden />
-                      </button>
-                    </div>
-                  ))
-                )}
+                {historyList}
               </div>
             </>
           )}
@@ -339,7 +371,7 @@ export default function CopilotPage({
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto py-6">
+      <div className="flex-1 overflow-y-auto overscroll-contain py-6 max-md:py-4">
         {empty ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
             <ImanAvatar size="hero" />
@@ -384,7 +416,7 @@ export default function CopilotPage({
           stays inside the shell's column and moves with the sidebar. */}
       <div className="sticky bottom-0 bg-bg pb-1 pt-2">
         <div className="relative mx-auto max-w-3xl">
-          {suggestionsOpen && (
+          {suggestionsOpen && !phone && (
             <>
               <button
                 type="button"
@@ -397,21 +429,7 @@ export default function CopilotPage({
                 <p className="px-3 pb-1.5 pt-2 text-[11px] font-medium tracking-[0.06em] text-muted/80">
                   SUGGESTED ACTIONS
                 </p>
-                {SUGGESTIONS.map((s) => (
-                  <button
-                    key={s.title}
-                    type="button"
-                    onClick={() => void ask(s.prompt)}
-                    className="block w-full rounded-[10px] px-3 py-2.5 text-left hover:bg-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
-                  >
-                    <span className="block text-sm font-medium text-ink">
-                      {s.title}
-                    </span>
-                    <span className="mt-0.5 block text-xs text-muted">
-                      {s.hint}
-                    </span>
-                  </button>
-                ))}
+                {suggestionList}
               </div>
             </>
           )}
@@ -440,6 +458,7 @@ export default function CopilotPage({
               rows={1}
               disabled={asking}
               placeholder="Ask Iman anything…"
+              enterKeyHint="send"
               aria-label="Ask Iman"
               className="block max-h-40 w-full resize-none border-0 bg-transparent p-0 text-sm text-ink outline-none placeholder:text-muted disabled:opacity-60"
             />
@@ -488,7 +507,7 @@ export default function CopilotPage({
               now is ask — so the line says where the line is, because "it can
               change things" and "it can change things once you have read the
               card and clicked Confirm" are different products. */}
-          <p className="px-2 pb-2 pt-2 text-center text-xs text-muted">
+          <p className="px-2 pb-2 pt-2 text-center text-xs text-muted max-md:pb-0 max-md:text-[11px] max-md:leading-snug">
             Iman reads your records to answer. It can propose a change to a lead,
             a candidate or the task board — nothing happens until you confirm it.
             It cannot delete anything, touch clients or reporting, or send
@@ -496,6 +515,23 @@ export default function CopilotPage({
           </p>
         </div>
       </div>
+
+      <Sheet
+        open={phone && historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        title="Chat history"
+      >
+        <div role="menu" className="-mx-2">
+          {historyList}
+        </div>
+      </Sheet>
+      <Sheet
+        open={phone && suggestionsOpen}
+        onClose={() => setSuggestionsOpen(false)}
+        title="Suggested actions"
+      >
+        <div className="-mx-2">{suggestionList}</div>
+      </Sheet>
     </div>
   );
 }

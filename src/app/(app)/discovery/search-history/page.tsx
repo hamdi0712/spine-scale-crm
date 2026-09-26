@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { listApifySearchLogs } from "@/lib/actions/apifySearchLog";
 import {
@@ -35,14 +36,14 @@ export default async function SearchHistoryPage() {
             that stopped paying is visible before it is run again
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 xl:shrink-0">
+        <PageActions className="flex flex-wrap gap-2 xl:shrink-0">
           <Link href="/discovery/import/clinic" className="btn">
             Clinic-first search
           </Link>
           <Link href="/discovery/import/apify" className="btn">
             Import from Apify
           </Link>
-        </div>
+        </PageActions>
       </div>
 
       <div className="card mb-8 px-6 py-4">

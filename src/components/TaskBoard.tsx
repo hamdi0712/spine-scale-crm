@@ -75,6 +75,12 @@ export default function TaskBoard({
     setOverStatus(null);
     // No-op drops still cost a write otherwise, and a card dropped back where
     // it came from should not restamp completedAt.
+    moveTo(id, status);
+  }
+
+  // Shared by a drop and by the status picker a touch screen gets on each
+  // card in place of dragging.
+  function moveTo(id: string, status: TaskStatus) {
     const task = tasks.find((t) => t.id === id);
     if (task && statusOf(task) === status) return;
     setMoved((m) => ({ ...m, [id]: status }));
@@ -127,7 +133,7 @@ export default function TaskBoard({
             setFormOpen(false);
             router.refresh();
           }}
-          className="card mb-6 max-w-xl space-y-5 p-6"
+          className="card mb-6 max-w-xl space-y-5 p-6 max-md:p-4"
         >
           <div>
             <label className="field-label" htmlFor="title">
@@ -146,7 +152,7 @@ export default function TaskBoard({
               className="field"
             />
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-5 max-md:grid-cols-1">
             <div>
               <label className="field-label" htmlFor="dueDate">
                 Due date
@@ -205,7 +211,8 @@ export default function TaskBoard({
         </form>
       )}
 
-      <div className="flex gap-4 overflow-x-auto pb-1">
+      {/* One full-width column per screen on a phone, snapping. */}
+      <div className="flex gap-4 overflow-x-auto pb-1 max-md:-mx-4 max-md:snap-x max-md:snap-mandatory max-md:gap-3 max-md:scroll-px-4 max-md:px-4 max-md:scrollbar-none">
         {TASK_STATUSES.map((status) => {
           const column = tasks.filter(
             (t) => statusOf(t) === status && !removed.has(t.id),
@@ -219,7 +226,7 @@ export default function TaskBoard({
               }}
               onDragLeave={() => setOverStatus(null)}
               onDrop={() => handleDrop(status)}
-              className={`flex min-h-[420px] w-72 shrink-0 flex-col rounded-2xl border ${
+              className={`flex min-h-[420px] w-72 shrink-0 flex-col rounded-2xl border max-md:min-h-[55dvh] max-md:w-[calc(100vw-2rem)] max-md:snap-start ${
                 overStatus === status
                   ? "border-accent/50 bg-accent/5"
                   : "border-line bg-panel"
@@ -266,7 +273,7 @@ export default function TaskBoard({
                           onClick={() => handleDelete(task)}
                           title="Delete task"
                           aria-label={`Delete ${task.title}`}
-                          className="-mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-muted opacity-0 transition hover:bg-bad-soft hover:text-bad focus-visible:opacity-100 group-hover:opacity-100"
+                          className="-mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-muted opacity-0 transition hover:bg-bad-soft hover:text-bad focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
                         >
                           <Icon name="trash" className="h-3.5 w-3.5" />
                         </button>
@@ -301,6 +308,23 @@ export default function TaskBoard({
                           {fmtDate(task.dueDate)}
                         </div>
                       )}
+                      {/* Touch screens only: the status as a native picker,
+                          the reliable stand-in for dragging the card. */}
+                      <label className="mt-2 hidden items-center gap-1.5 text-xs text-muted [@media(pointer:coarse)]:flex">
+                        <span className="shrink-0">Move to</span>
+                        <select
+                          value={statusOf(task)}
+                          onChange={(e) => moveTo(task.id, e.target.value as TaskStatus)}
+                          aria-label={`Move “${task.title}” to another column`}
+                          className="field h-9 min-w-0 flex-1 rounded-lg py-0 pl-2.5 text-xs"
+                        >
+                          {TASK_STATUSES.map((st) => (
+                            <option key={st} value={st}>
+                              {TASK_STATUS_LABELS[st]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                     </div>
                   );
                 })}

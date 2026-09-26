@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { importDiscoveryCandidates } from "@/lib/actions/discovery";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 export default async function ApifyImportPage() {
   return (
     <div className="max-w-4xl">
-      <div className="mb-6 flex items-end justify-between gap-4">
+      <div className="mb-6 flex items-end justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <Link
             href="/discovery"
@@ -30,7 +31,7 @@ export default async function ApifyImportPage() {
             and duplicate checks as the CSV import
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <PageActions className="flex shrink-0 flex-wrap gap-2">
           {/* Every run from this screen is counted against its input JSON —
               the history is where that count is read, and where a search that
               has stopped paying says so. */}
@@ -40,7 +41,7 @@ export default async function ApifyImportPage() {
           <Link href="/discovery/import" className="btn">
             Import a CSV
           </Link>
-        </div>
+        </PageActions>
       </div>
       <DiscoveryImportWizard
         action={importDiscoveryCandidates}

@@ -257,7 +257,7 @@ export default function ClinicDiscoveryPanel({
           The location every term is searched in, and the ceiling on what one
           run brings back
         </p>
-        <div className="card grid gap-5 p-6 sm:grid-cols-2">
+        <div className="card grid gap-5 p-6 sm:grid-cols-2 max-sm:grid-cols-1">
           <div>
             <label className="field-label" htmlFor="clinicLocation">
               Location
@@ -389,7 +389,7 @@ export default function ClinicDiscoveryPanel({
           {result.clinics.length > 0 && (
             <>
               <div className="card mb-4 overflow-x-auto">
-                <table className="w-full">
+                <table className="m-cards w-full">
                   <thead>
                     <tr>
                       <th className="th">Clinic</th>
@@ -402,21 +402,21 @@ export default function ClinicDiscoveryPanel({
                   <tbody>
                     {result.clinics.map((clinic, i) => (
                       <tr key={`${clinic.clinicName}-${i}`}>
-                        <td className="td font-medium">{clinic.clinicName}</td>
-                        <td className="td max-w-[220px] truncate text-muted">
+                        <td data-m="primary" className="td font-medium">{clinic.clinicName}</td>
+                        <td data-label="Website" className="td max-w-[220px] truncate text-muted">
                           {clinic.websiteUrl ?? (
                             <span className="text-muted/70">
                               Not found — enrichment will look
                             </span>
                           )}
                         </td>
-                        <td className="td text-muted">{clinic.location ?? "—"}</td>
-                        <td className="td text-muted">
+                        <td data-label="Location" className="td text-muted">{clinic.location ?? "—"}</td>
+                        <td data-label="Decision maker" className="td text-muted">
                           {clinic.contactName ?? (
                             <span className="text-muted/70">Not found</span>
                           )}
                         </td>
-                        <td className="td text-xs text-muted">
+                        <td data-label="Term" className="td text-xs text-muted">
                           {clinic.sourceQuery}
                         </td>
                       </tr>

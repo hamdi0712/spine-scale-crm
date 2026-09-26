@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -196,7 +197,7 @@ export default async function LeadDetailPage({
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <PageActions className="flex flex-wrap items-center gap-2">
           <LeadEnrichPanel
             run={runEnrichment}
             applySelection={applySelection}
@@ -232,10 +233,10 @@ export default async function LeadDetailPage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 lg:grid-cols-2 max-md:grid-cols-1">
         <section>
           <h2 className="display mb-4 text-xl font-semibold">Details</h2>
           <form action={update} className="card space-y-5 p-6">
@@ -245,7 +246,7 @@ export default async function LeadDetailPage({
                 empty field, and the URLs that actually need the room were
                 getting the same half and truncating in it. Two columns on a
                 phone, where six would be four characters wide. */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-6">
+            <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-6">
               <div className="col-span-2 sm:col-span-6">
                 <label className="field-label" htmlFor="clinicName">
                   Clinic name

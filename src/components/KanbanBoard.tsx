@@ -54,6 +54,12 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
     const id = dragId;
     setDragId(null);
     setOverStage(null);
+    moveTo(id, stage);
+  }
+
+  // The move itself, shared by a drop and by the stage menu a touch screen
+  // gets on each card instead of dragging.
+  function moveTo(id: string, stage: LeadStage) {
     setMoved((m) => ({ ...m, [id]: stage }));
     startTransition(async () => {
       await moveLeadStage(id, stage);
@@ -62,7 +68,9 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
   }
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-1">
+    // On a phone each column is a full-width panel and the row snaps from one
+    // stage to the next, so a stage is read a screen at a time.
+    <div className="flex gap-4 overflow-x-auto pb-1 max-md:-mx-4 max-md:snap-x max-md:snap-mandatory max-md:gap-3 max-md:scroll-px-4 max-md:px-4 max-md:scrollbar-none">
       {columns.map((stage) => {
         const column = leads.filter((l) => stageOf(l) === stage);
         const value = column.reduce((s, l) => s + (l.estValue ?? 0), 0);
@@ -75,7 +83,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
             }}
             onDragLeave={() => setOverStage(null)}
             onDrop={() => handleDrop(stage)}
-            className={`flex min-h-[420px] w-56 shrink-0 flex-col rounded-2xl border ${
+            className={`flex min-h-[420px] w-56 shrink-0 flex-col rounded-2xl border max-md:min-h-[55dvh] max-md:w-[calc(100vw-2rem)] max-md:snap-start ${
               overStage === stage
                 ? "border-accent/50 bg-accent/5"
                 : "border-line bg-panel"
@@ -120,6 +128,25 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                       {lead.contactName}
                     </div>
                   )}
+                  {/* Dragging is a mouse gesture. On a touch screen each card
+                      carries the stage as a native picker instead — the
+                      phone's own wheel or list, which is the one control a
+                      thumb can always operate. Not drawn at all for a mouse. */}
+                  <label className="mt-2 hidden items-center gap-1.5 text-xs text-muted [@media(pointer:coarse)]:flex">
+                    <span className="shrink-0">Move to</span>
+                    <select
+                      value={stageOf(lead)}
+                      onChange={(e) => moveTo(lead.id, e.target.value as LeadStage)}
+                      aria-label={`Move ${lead.clinicName} to another stage`}
+                      className="field h-9 min-w-0 flex-1 rounded-lg py-0 pl-2.5 text-xs"
+                    >
+                      {LEAD_STAGES.map((s) => (
+                        <option key={s} value={s}>
+                          {LEAD_STAGE_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   {lead.icpTier && (
                     <div className="mt-1.5">
                       <IcpTierBadge tier={lead.icpTier} />

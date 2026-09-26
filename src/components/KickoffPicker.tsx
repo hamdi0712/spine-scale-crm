@@ -63,7 +63,7 @@ export default function KickoffPicker({
         />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 max-sm:grid-cols-1">
         <TimeCard
           heading="Your local time"
           zone={undefined}

@@ -32,7 +32,7 @@ export default async function DesiresPage() {
         blurb="Mass desires and the benefits written against them — shared across every concept"
       />
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-3">
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-3 max-md:grid-cols-1">
         <section className="lg:col-span-1">
           <h2 className="display mb-4 text-xl font-semibold">New desire</h2>
           <form action={createDesire} className="card space-y-5 p-6">
@@ -166,7 +166,7 @@ export default async function DesiresPage() {
                             action={updateBenefit.bind(null, benefit.id)}
                             className="space-y-3"
                           >
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="m-form-stack grid grid-cols-2 gap-3">
                               <div>
                                 <label className="field-label">
                                   Product / feature name
@@ -229,7 +229,7 @@ export default async function DesiresPage() {
                         action={createBenefit.bind(null, desire.id)}
                         className="space-y-3 rounded-[10px] border border-dashed border-line p-4"
                       >
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="m-form-stack grid grid-cols-2 gap-3">
                           <div>
                             <label className="field-label">
                               Product / feature name

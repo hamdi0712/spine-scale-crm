@@ -64,7 +64,7 @@ export default async function ResearchPage({
         }
       />
 
-      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[13rem_16rem_1fr] lg:divide-x lg:divide-y-0">
+      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[13rem_16rem_1fr] lg:divide-x lg:divide-y-0 max-md:grid-cols-1">
         {/* Types */}
         <nav className="self-stretch py-1">
           {[ALL, ...RESEARCH_NOTE_TYPES].map((t) => (
@@ -229,7 +229,7 @@ function NoteForm({
 }) {
   return (
     <form action={action} className="flex h-full flex-col gap-5">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="m-form-stack grid grid-cols-3 gap-4">
         <div className="col-span-2">
           <label className="field-label" htmlFor="title">
             Title

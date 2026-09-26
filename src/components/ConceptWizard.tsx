@@ -470,7 +470,7 @@ export default function ConceptWizard({
           {/* ─── Step 5 — name it ─────────────────────────────────────── */}
           {step === 5 && (
             <>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="m-form-stack grid grid-cols-3 gap-4">
                 <div className="col-span-2">
                   <label className="field-label" htmlFor="wiz-name">
                     Concept name

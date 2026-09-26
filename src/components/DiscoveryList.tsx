@@ -65,6 +65,7 @@ import {
 } from "@/components/Badge";
 import Icon from "@/components/Icons";
 import { useDiscoverySelection } from "@/components/DiscoverySelection";
+import { useIsPhone } from "@/components/useMediaQuery";
 
 export interface DiscoveryRow {
   id: string;
@@ -105,6 +106,7 @@ const QUICK_TIERS: IcpTier[] = ["A", "B", "C"];
 
 export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
   const [view, setView] = useState<"cards" | "table">("cards");
+  const phone = useIsPhone();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [batchFilter, setBatchFilter] = useState<string>(BATCH_ALL);
@@ -290,20 +292,25 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3 max-md:gap-2">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search clinic, contact, source, location…"
-          className="field w-full max-w-xs"
+          enterKeyHint="search"
+          className="field w-full max-w-xs max-md:max-w-none"
         />
+        {/* The filters. On a phone they are one sideways-scrolling row of
+            pills under the search; from md up the wrapper is display:
+            contents and they sit in the wrapping row as they always have. */}
+        <div className="contents m-pill-row max-md:items-center max-md:gap-2">
         {/* w-auto sizes the box to its label, so the native chevron lands on
             top of the 14px px-3.5 padding rather than beside it. The extra
             right padding restores the breathing room full-width fields get. */}
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="field w-auto pr-9"
+          className="field m-pill w-auto pr-9"
         >
           <option value="ALL">All statuses</option>
           {DISCOVERY_STATUSES.map((s) => (
@@ -322,7 +329,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
             setPathwayFilter(e.target.value as DiscoverySourceKind | "ALL")
           }
           aria-label="Filter by discovery pathway"
-          className="field w-auto pr-9"
+          className="field m-pill w-auto pr-9"
         >
           <option value="ALL">Both pathways</option>
           {DISCOVERY_SOURCES.map((kind) => (
@@ -341,7 +348,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
             aria-label="Filter by source"
-            className="field w-auto max-w-[230px] pr-9"
+            className="field m-pill w-auto max-w-[230px] pr-9"
           >
             <option value={SOURCE_ALL}>All sources</option>
             {sources.map((s) => (
@@ -359,7 +366,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
             value={batchFilter}
             onChange={(e) => setBatchFilter(e.target.value)}
             aria-label="Filter by import batch"
-            className="field w-auto max-w-[230px]"
+            className="field m-pill w-auto max-w-[230px]"
           >
             <option value={BATCH_ALL}>All batches</option>
             {batches.map((b) => (
@@ -394,15 +401,18 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
             );
           })}
         </div>
+        </div>
         {/* Count and view travel together, so a filter that changes the count
             never leaves the toggle sitting somewhere new. */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-3 max-md:ml-0">
           <span className="num text-xs text-muted">
             {visible.length} candidate{visible.length === 1 ? "" : "s"}
           </span>
           {/* Cards first, because cards are what loads — a toggle whose second
               item is the default reads as though the first one were. */}
-          <div className="segment" role="group" aria-label="View">
+          {/* A phone always gets the cards; a nine-column table is not a
+              view of anything at 375px. */}
+          <div className="segment max-md:hidden" role="group" aria-label="View">
             <button
               type="button"
               aria-pressed={view === "cards"}
@@ -427,8 +437,9 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
           the actions stay with the selection rather than with whatever made
           it. Nothing renders at all until something is chosen. */}
       {chosen.length > 0 && (
-        <div className="sticky top-0 z-20 mb-3">
-          <div className="card flex flex-wrap items-center gap-3 px-4 py-3">
+        // Docked above the tab bar on a phone, where the thumb already is.
+        <div className="sticky top-0 z-20 mb-3 max-md:fixed max-md:inset-x-3 max-md:bottom-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+8px)] max-md:top-auto max-md:z-30 max-md:mb-0">
+          <div className="card flex flex-wrap items-center gap-3 px-4 py-3 max-md:gap-2 max-md:px-3 max-md:shadow-card-hover">
             <span className="num text-sm font-medium">
               {chosen.length} selected
             </span>
@@ -446,23 +457,29 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
               type="button"
               onClick={bulkDelete}
               disabled={pending}
-              className="btn-danger disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-danger disabled:cursor-not-allowed disabled:opacity-50 max-md:px-3"
             >
-              Delete selected
+              <span className="max-md:hidden">Delete selected</span>
+              <span className="md:hidden">Delete</span>
             </button>
             <button
               type="button"
               onClick={() => setSelected(new Set())}
               disabled={pending}
-              className="btn-ghost ml-auto disabled:opacity-50"
+              className="btn-ghost ml-auto disabled:opacity-50 max-md:px-3"
             >
-              {pending ? "Working…" : "Clear selection"}
+              {pending ? "Working…" : (
+                <>
+                  <span className="max-md:hidden">Clear selection</span>
+                  <span className="md:hidden">Clear</span>
+                </>
+              )}
             </button>
           </div>
         </div>
       )}
 
-      {view === "cards" ? (
+      {view === "cards" || phone ? (
         <>
           {/* The grid has no header row to hang "select all" off, so it gets
               its own — same checkbox, same rule about only reaching what is
@@ -661,6 +678,8 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
           </table>
         </div>
       )}
+      {/* Room under the last card for the docked selection bar. */}
+      {chosen.length > 0 && <div className="h-20 md:hidden" aria-hidden />}
     </div>
   );
 }

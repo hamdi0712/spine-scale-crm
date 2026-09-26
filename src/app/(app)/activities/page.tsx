@@ -163,7 +163,7 @@ export default async function ActivitiesPage({
 // pair wears.
 function Header({ view }: { view: "board" | "checklist" }) {
   return (
-    <div className="flex items-end justify-between">
+    <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
       <div>
         <h1 className="display text-[32px] font-semibold">Activities</h1>
         <p className="mt-1.5 text-sm text-muted">

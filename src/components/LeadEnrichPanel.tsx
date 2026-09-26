@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import useDialogMotion from "@/components/useDialogMotion";
 import {
   ENRICH_FIELD_LABELS,
@@ -185,9 +186,11 @@ function EnrichDialog({
 
   const runnable = plan.filter((p) => p.willRun);
 
-  return (
+  // Portalled to <body>: on a phone this dialog can be opened from a page's
+  // ⋯ actions sheet (PageActions), which hides itself as the dialog opens.
+  return createPortal(
     <div
-      className={`${scrimClass} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
+      className={`${scrimClass} dialog-scrim fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
@@ -196,7 +199,7 @@ function EnrichDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="enrich-title"
-        className={`${dialogClass} card my-auto flex max-h-[88vh] w-full max-w-2xl flex-col`}
+        className={`${dialogClass} dialog-sheet card my-auto flex max-h-[88dvh] w-full max-w-2xl flex-col`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
           <div className="min-w-0">
@@ -307,7 +310,8 @@ function EnrichDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

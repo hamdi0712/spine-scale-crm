@@ -205,7 +205,7 @@ function HabitRow({
 // choices of icon or disagree about what a target may be.
 function HabitFields({ habit }: { habit?: MonkHabit }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid gap-4 sm:grid-cols-2 max-sm:grid-cols-1">
       <div className="sm:col-span-2">
         <label className="field-label" htmlFor={`name-${habit?.id ?? "new"}`}>
           Name

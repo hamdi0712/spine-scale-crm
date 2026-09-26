@@ -78,7 +78,7 @@ export default async function RejectedCandidatesPage({
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex items-end justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <Link href="/discovery" className="text-sm text-accent hover:underline">
             ← Discovery

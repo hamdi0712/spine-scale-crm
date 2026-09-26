@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
@@ -141,7 +142,7 @@ export default async function DiscoveryPage({
               pipeline from here without a score
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
+          <PageActions className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
             <Link href="/discovery/rejected" className="btn">
               Rejected
               {rejected > 0 && <span className="num">({rejected})</span>}
@@ -173,7 +174,7 @@ export default async function DiscoveryPage({
               queued={queued}
               settings={settings}
             />
-          </div>
+          </PageActions>
         </div>
 
         {summary && (

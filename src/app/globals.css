@@ -401,12 +401,14 @@
     box-shadow var(--motion) var(--motion-ease),
     transform var(--motion) var(--motion-ease);
 }
+@media (hover: hover) {
 .btn-primary:hover {
   background-image: linear-gradient(to bottom, #4d8dff, #2378ff);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     inset 0 -2px 0 rgba(0, 0, 0, 0.12),
     0 8px 20px rgba(18, 109, 251, 0.4);
+}
 }
 .btn-primary:active {
   background-image: linear-gradient(to bottom, #126dfb, #0f5edd);
@@ -464,11 +466,13 @@
 .btn-ai .btn-ai-spark {
   color: #3fd1c8;
 }
+@media (hover: hover) {
 .btn-ai:hover:not(:disabled) {
   box-shadow:
     0 1px 2px rgba(49, 30, 122, 0.14),
     0 8px 20px rgba(75, 50, 195, 0.18),
     0 0 26px rgba(124, 58, 237, 0.16);
+}
 }
 .btn-ai:active:not(:disabled) {
   box-shadow:
@@ -593,12 +597,14 @@
     0 1px 2px rgba(28, 27, 39, 0.03),
     0 6px 16px rgba(37, 84, 168, 0.06);
 }
+@media (hover: hover) {
 .glass-panel-hover:hover {
   background-image: linear-gradient(135deg, #F4F8FF 0%, #E8F1FE 45%, #DDEAFB 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     0 1px 2px rgba(28, 27, 39, 0.04),
     0 8px 20px rgba(37, 84, 168, 0.1);
+}
 }
 
 /* The business-hours field: the ground the map is embedded in.
@@ -716,6 +722,7 @@ tbody tr:last-child > .td {
     0 6px 16px rgba(0, 0, 0, 0.45),
     0 0 18px rgba(var(--c-accent) / 0.22);
 }
+@media (hover: hover) {
 .dark .btn-primary:hover {
   background-image: linear-gradient(
     to bottom,
@@ -727,6 +734,7 @@ tbody tr:last-child > .td {
     inset 0 -2px 0 rgba(0, 0, 0, 0.28),
     0 8px 20px rgba(0, 0, 0, 0.5),
     0 0 24px rgba(var(--c-accent) / 0.3);
+}
 }
 .dark .btn-primary:active {
   background-image: linear-gradient(
@@ -760,11 +768,13 @@ tbody tr:last-child > .td {
     0 4px 12px rgba(0, 0, 0, 0.4),
     0 0 14px rgba(167, 139, 250, 0.28);
 }
+@media (hover: hover) {
 .dark .btn-ai:hover:not(:disabled) {
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.5),
     0 6px 16px rgba(0, 0, 0, 0.45),
     0 0 20px rgba(167, 139, 250, 0.42);
+}
 }
 .dark .btn-ai:active:not(:disabled) {
   box-shadow:
@@ -853,12 +863,14 @@ tbody tr:last-child > .td {
     0 1px 2px rgba(0, 0, 0, 0.3),
     0 6px 16px rgba(0, 0, 0, 0.35);
 }
+@media (hover: hover) {
 .dark .glass-panel-hover:hover {
   background-image: linear-gradient(135deg, #1B2537 0%, #1D2942 45%, #20304C 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
     0 1px 2px rgba(0, 0, 0, 0.35),
     0 8px 20px rgba(0, 0, 0, 0.45);
+}
 }
 
 /* The business-hours widget.
@@ -953,9 +965,11 @@ html {
     border-color var(--motion) var(--motion-ease),
     background-color var(--motion) var(--motion-ease);
 }
+@media (hover: hover) {
 .card-interactive:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow-card-hover);
+}
 }
 /* The press puts it back down. Without this the card stays lifted while it is
    being clicked, which reads as the click not landing. */
@@ -985,9 +999,11 @@ html {
     box-shadow var(--motion) var(--motion-ease),
     transform var(--motion) var(--motion-ease);
 }
+@media (hover: hover) {
 .btn:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: var(--shadow-btn-hover);
+}
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px);
@@ -1221,9 +1237,11 @@ tbody tr {
     border-color var(--motion) var(--motion-ease),
     background-color var(--motion) var(--motion-ease);
 }
+@media (hover: hover) {
 .monk-tile:hover:has(button:not(:disabled)) {
   transform: translateY(-1px);
   box-shadow: var(--shadow-card-hover);
+}
 }
 .monk-tile:active:has(button:not(:disabled)) {
   transform: translateY(0);
@@ -1343,4 +1361,480 @@ tbody tr {
     rgba(255, 255, 255, 0.98),
     rgba(255, 255, 255, 0.7)
   );
+}
+
+/* ─── Phones, tablets and touch ─────────────────────────────────────────────
+   Everything below is scoped to a narrow viewport (max-width: 767px — below
+   Tailwind's md, where the sidebar gives way to the tab bar) or to a touch
+   device ((pointer: coarse) / (hover: none)). A desktop with a mouse matches
+   none of it, which is the point: the desktop app is exactly what it was.
+
+   The hover half of this lives further up and in tailwind.config.ts: every
+   :hover rule in this file is wrapped in @media (hover: hover), and every
+   Tailwind hover: utility is emitted behind the same query
+   (hoverOnlyWhenSupported). What touch gets in its place is below — a short
+   press that scales the thing down, so a tap has somewhere to land. */
+
+:root {
+  /* The bottom tab bar's height, above the home indicator. Read by the tab
+     bar itself, the page's bottom padding in AppShell, and anything that
+     docks above the bar (the pipeline's bulk-action bar). */
+  --tabbar-h: 60px;
+}
+
+/* One tab in the bottom bar: glyph over a short label, the whole column the
+   target. The active tab is brand blue with a short bar along its top edge. */
+.tab-item {
+  @apply relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium tracking-normal text-muted;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--motion) var(--motion-ease);
+}
+.tab-item > span {
+  @apply max-w-full truncate px-0.5;
+}
+.tab-item-on {
+  @apply text-accent;
+}
+.tab-item-on::before {
+  content: "";
+  @apply absolute left-1/2 top-0 h-[3px] w-7 -translate-x-1/2 rounded-b-full bg-accent;
+}
+.tab-item:active > :first-child {
+  transform: scale(0.9);
+}
+.tab-item > :first-child {
+  transition: transform var(--motion) var(--motion-ease);
+}
+
+/* The bar at the head of a sheet that says it can be pulled down. */
+.sheet-handle {
+  @apply mx-auto h-[5px] w-9 rounded-full bg-line;
+}
+
+/* A sheet travels up from the bottom edge rather than growing in place the
+   way a desktop dialog does. Same durations and curve as the dialog motion. */
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes sheet-out {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+.sheet-panel.motion-dialog-in {
+  animation: sheet-in 260ms var(--motion-ease) both;
+}
+.sheet-panel.motion-dialog-out {
+  animation: sheet-out var(--motion) ease-in both;
+}
+
+/* A page's actions, moved into the top bar's ⋯ sheet: stacked, full width,
+   and every button a comfortable 48px. Whatever wrapper the page put round a
+   group of them is flattened into the one column. */
+.page-actions-sheet > *,
+.page-actions-sheet form {
+  @apply w-full;
+}
+.page-actions-sheet .btn,
+.page-actions-sheet .btn-primary,
+.page-actions-sheet .btn-ghost,
+.page-actions-sheet .btn-danger,
+.page-actions-sheet .btn-ai {
+  @apply h-12 w-full justify-center;
+}
+.page-actions-sheet .segment {
+  @apply w-full;
+}
+.page-actions-sheet .segment-item {
+  @apply flex-1 justify-center;
+}
+
+/* ─── Dialogs as bottom sheets ─────────────────────────────────────────────
+   The app's centred dialogs (Process queue, Enrich, Add clinic) are the same
+   components on a phone, put on the bottom edge: flush to the sides, rounded
+   only at the top, capped at the dynamic viewport height, and travelling up
+   rather than growing. The two classes go on the scrim and the panel. */
+@media (max-width: 767px) {
+  .dialog-scrim {
+    align-items: flex-end;
+    padding: 0;
+    overflow: hidden;
+  }
+  .dialog-scrim > .dialog-sheet {
+    margin: 0;
+    max-width: none;
+    max-height: calc(100dvh - 2rem);
+    border-bottom-width: 0;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+  }
+  .dialog-sheet::before {
+    content: "";
+    @apply mx-auto mt-2 block h-[5px] w-9 shrink-0 rounded-full bg-line;
+  }
+  .dialog-sheet.motion-dialog-in {
+    animation: sheet-in 260ms var(--motion-ease) both;
+  }
+  .dialog-sheet.motion-dialog-out {
+    animation: sheet-out var(--motion) ease-in both;
+  }
+  /* The last row of a dialog — its buttons — clears the home indicator. */
+  .dialog-sheet > :last-child {
+    padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+  }
+  /* A dialog's scrolling middle keeps its scroll to itself. */
+  .dialog-sheet .overflow-y-auto {
+    overscroll-behavior: contain;
+  }
+}
+
+/* ─── Touch ────────────────────────────────────────────────────────────────
+   Targets. Every button, link, tab and toggle answers to at least 44×44px of
+   finger, whatever it looks like: the visible control keeps its size, and an
+   invisible ::after centred on it is widened to 44px in whichever direction it
+   falls short. :where() keeps all of this at zero specificity, so anything
+   that already positions itself (absolute, fixed, sticky) keeps doing so.
+
+   No grey flash on tap, and no 300ms wait for a double-tap zoom that a
+   control never wants. */
+@media (pointer: coarse) {
+  :where(a[href], button, [role="button"], [role="tab"], [role="switch"], summary, label, select, input[type="checkbox"], input[type="radio"]) {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  /* .tap-target opts in anything else — an icon-only link, say — that has
+     no 44px of its own. */
+  :where(button, [role="button"], [role="tab"], [role="switch"], summary, .tap-target) {
+    position: relative;
+  }
+  :where(button, [role="button"], [role="tab"], [role="switch"], summary, .tap-target)::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+  /* The app's buttons are drawn at 42px; on touch they are the full 44. */
+  .btn,
+  .btn-primary,
+  .btn-ghost,
+  .btn-danger,
+  .btn-ai,
+  .segment {
+    min-height: 44px;
+  }
+  /* Checkboxes and radios are drawn larger rather than padded, because
+     Safari will not put a pseudo-element on a form control. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  /* iOS zooms the page on focus into any field set under 16px. The fields
+     are drawn at 16px on touch instead — the reader's own pinch-zoom is left
+     alone (see the viewport in the root layout). */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* A scroll panel keeps its scroll: reaching the end of a sheet, a board
+     column or a pill row does not start scrolling the page behind it, or
+     swipe the browser back. */
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .overflow-auto {
+    overscroll-behavior: contain;
+  }
+}
+
+/* The press. On a device without hover, a control that is being touched
+   scales down a touch, the way a native button does — the replacement for
+   the hover lift a finger cannot trigger. */
+@media (hover: none) {
+  .btn:active:not(:disabled),
+  .btn-primary:active:not(:disabled),
+  .btn-ghost:active:not(:disabled),
+  .btn-danger:active:not(:disabled),
+  .btn-ai:active:not(:disabled),
+  .segment-item:active,
+  .card-interactive:active,
+  .monk-tile:active:has(button:not(:disabled)) {
+    transform: scale(0.97);
+  }
+  .btn-primary,
+  .btn-ai,
+  .btn-ghost,
+  .btn-danger {
+    transition-property: background-color, border-color, color, box-shadow, transform;
+    transition-duration: var(--motion);
+    transition-timing-function: var(--motion-ease);
+  }
+}
+
+/* ─── Small-screen layout helpers ──────────────────────────────────────────
+   A row that scrolls sideways and snaps: the KPI cards on a phone, the filter
+   pills, a board's columns. The scrollbar is hidden (the peeking next item is
+   what says it scrolls), and the row bleeds to the screen edges so the item
+   scrolling out is cut by the glass rather than by the gutter. */
+@media (max-width: 767px) {
+  .m-scroll-row {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 16px;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .m-scroll-row::-webkit-scrollbar {
+    display: none;
+  }
+  .m-scroll-row > * {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+  /* The pill row: the same scroller, items sized to their label. */
+  .m-pill-row {
+    display: flex;
+    flex-wrap: nowrap;
+    /* Full bleed: the gutter-wide negative margins below, and the width to
+       match, so the row reaches both edges of the screen. */
+    width: calc(100% + 32px);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    overscroll-behavior-x: contain;
+  }
+  .m-pill-row::-webkit-scrollbar {
+    display: none;
+  }
+  .m-pill-row > * {
+    flex-shrink: 0;
+  }
+  /* A table on a phone that has no card form of its own scrolls inside its
+     card rather than pushing the page sideways. */
+  .m-table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+  /* Page headings a size down: 32px display type over a 343px column wraps
+     most clinic names onto three lines. */
+  main h1.display {
+    font-size: 26px;
+    line-height: 1.15;
+  }
+}
+
+@media (max-width: 767px) {
+  /* KPI cards in a scrolling row: one card and the edge of the next, so it
+     is obvious at a glance that the row goes on. */
+  .m-kpi-row > * {
+    width: 74%;
+    max-width: 280px;
+  }
+  .m-kpi-row {
+    padding-bottom: 6px;
+  }
+}
+
+/* No visible scrollbar on a row that scrolls sideways — the item cut off at
+   the edge is what says there is more. A utility so it can be put behind a
+   breakpoint (max-md:scrollbar-none) and leave desktop's scrollbars alone. */
+@layer utilities {
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Every segmented control — sub-navs, view toggles, filter groups —
+     scrolls sideways inside its own border when it is wider than the phone,
+     instead of pushing the page. */
+  .segment {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .segment::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  /* A filter drawn as a pill: a select in a sideways-scrolling filter row. */
+  select.m-pill {
+    @apply h-10 shrink-0 rounded-full pl-4 pr-9;
+  }
+}
+
+@media (max-width: 767px) {
+  /* A form grid on a phone is one column, whatever it is at sm and up —
+     including any field told to span two or three of the desktop columns,
+     which would otherwise conjure implicit columns off the edge of the grid. */
+  .m-form-stack {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .m-form-stack > * {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 767px) {
+  /* Card padding a step tighter on a phone. 24px inside a card inside 16px
+     gutters leaves under 300px for the content on a 375px screen; 16px gives
+     back a sixth of it without the card looking crowded. */
+  .card.p-6,
+  .card-kpi.p-6,
+  .card-ai.p-6 {
+    padding: 16px;
+  }
+  .card.px-6,
+  .card .px-6,
+  .card-ai .px-6 {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .card.p-5 {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 1023px) {
+  /* A table that scrolls sideways inside its card must also contain its own
+     absolutely positioned bits — the sr-only header labels above all. With no
+     positioned ancestor they are placed against the page itself, at the
+     column's unscrolled position, and push the whole page wide. */
+  table {
+    position: relative;
+  }
+}
+
+/* ─── Tables as cards ──────────────────────────────────────────────────────
+   On a phone a table marked .m-cards stops being a grid: the header row goes,
+   each row becomes a block of its own separated by a hairline, and each cell
+   a line inside it with its column's name (data-label) on the left and the
+   value on the right. The row's first cell (data-m="primary") is its title and runs
+   full width. A cell marked data-m="hide" is left off — a column that earns its
+   place across a desktop but is noise in a stack. */
+@media (max-width: 767px) {
+  .m-cards thead {
+    display: none;
+  }
+  .m-cards,
+  .m-cards tbody,
+  .m-cards tfoot {
+    display: block;
+    width: 100%;
+  }
+  .m-cards tr {
+    display: block;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgb(var(--c-line) / 0.6);
+  }
+  .m-cards tr:last-child {
+    border-bottom-width: 0;
+  }
+  .m-cards td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+    width: auto !important;
+    padding: 5px 0 !important;
+    border-width: 0 !important;
+    text-align: right;
+  }
+  .m-cards td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 500;
+    color: rgb(var(--c-muted));
+    text-align: left;
+  }
+  .m-cards td[data-m="primary"] {
+    display: block;
+    padding-bottom: 6px !important;
+    text-align: left;
+    font-size: 15px;
+  }
+  .m-cards td[data-m="hide"] {
+    display: none;
+  }
+  /* The empty-state row is one sentence, not a label and a value. */
+  .m-cards td[colspan]:not([data-label]) {
+    display: block;
+    text-align: left;
+  }
+}
+
+/* A habit card is one target on touch. The button that bumps the habit is
+   only the icon and the name, which on a desktop is plenty for a pointer; on
+   a phone the whole card answers the tap. The button's hit area is stretched
+   over the card (the tile is the positioned ancestor), and the dot row for a
+   multi-count habit is painted after it, so its own dots still take their
+   taps first. */
+@media (pointer: coarse) {
+  .monk-tile > form,
+  .monk-tile > form > button {
+    position: static;
+  }
+  .monk-tile > form > button::after {
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    transform: none;
+  }
+}
+
+/* The keyboard is up (MobileNav keeps the flag): the tab bar gets out of the
+   way, and everything sized off its height — the page's bottom padding, the
+   copilot's column — takes the room back. */
+@media (max-width: 767px) {
+  html[data-keyboard] {
+    --tabbar-h: 0px;
+  }
+  html[data-keyboard] nav[aria-label="Primary"] {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  /* A section heading with its caption set off to the right ("Calls ·
+     Alongside the next follow-up date…") stacks on a phone: the caption goes
+     under the heading instead of squeezing it into a two-word column. */
+  .flex.justify-between:is(.items-baseline, .items-end):has(> h2:first-child) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .flex.justify-between:is(.items-baseline, .items-end):has(> h2:first-child) > p {
+    text-align: left;
+    max-width: none;
+  }
 }

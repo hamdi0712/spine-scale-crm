@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -63,16 +64,18 @@ export default async function ClientReportingPage({
           <Link href="/reporting" className="text-sm text-accent hover:underline">
             ← Reporting
           </Link>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
             <h1 className="display text-[32px] font-semibold">
               {client.clinicName}
             </h1>
             <ClientStatusBadge status={client.status} />
           </div>
         </div>
-        <Link href={`/clients/${client.id}`} className="btn">
-          Client record →
-        </Link>
+        <PageActions className="contents">
+          <Link href={`/clients/${client.id}`} className="btn">
+            Client record →
+          </Link>
+        </PageActions>
       </div>
 
       {trend.length > 0 && (
@@ -85,7 +88,7 @@ export default async function ClientReportingPage({
       <section className="mt-8">
         <h2 className="display mb-4 text-xl font-semibold">Log a week</h2>
         <form action={upsert} className="card p-6">
-          <div className="grid grid-cols-2 gap-5 md:grid-cols-6">
+          <div className="m-form-stack grid grid-cols-2 gap-5 md:grid-cols-6">
             <div>
               <label className="field-label" htmlFor="weekStart">
                 Week start
@@ -190,7 +193,7 @@ export default async function ClientReportingPage({
       <section className="mt-8">
         <h2 className="display mb-4 text-xl font-semibold">Weekly history</h2>
         <div className="card overflow-x-auto">
-          <table className="w-full">
+          <table className="m-cards w-full">
             <thead>
               <tr>
                 <th className="th">Week of</th>
@@ -212,34 +215,34 @@ export default async function ClientReportingPage({
                 const remove = deleteWeeklyReport.bind(null, r.id);
                 return (
                   <tr key={r.id} className="hover:bg-wash/70">
-                    <td className="td num text-xs">
+                    <td data-m="primary" className="td num text-xs">
                       {fmtDate(r.weekStart)}
                     </td>
-                    <td className="td num">
+                    <td data-label="Spend" className="td num">
                       {fmtMoney(r.spend)}
                     </td>
-                    <td className="td num">{r.leads}</td>
-                    <td className="td num">{r.booked}</td>
-                    <td className="td num">{r.shows}</td>
-                    <td className="td num">
+                    <td data-label="Leads" className="td num">{r.leads}</td>
+                    <td data-label="Booked" className="td num">{r.booked}</td>
+                    <td data-label="Shows" className="td num">{r.shows}</td>
+                    <td data-label="Revenue" className="td num">
                       {fmtMoney(r.revenue)}
                     </td>
-                    <td className="td">
+                    <td data-label="CPL" className="td">
                       <FlaggedValue value={fmtMoneyCents(m.cpl)} flag={m.cplFlag} />
                     </td>
-                    <td className="td">
+                    <td data-label="Lead→Booked" className="td">
                       <FlaggedValue
                         value={fmtPct(m.leadToBooked)}
                         flag={m.leadToBookedFlag}
                       />
                     </td>
-                    <td className="td">
+                    <td data-label="Show rate" className="td">
                       <FlaggedValue
                         value={fmtPct(m.showRate)}
                         flag={m.showRateFlag}
                       />
                     </td>
-                    <td className="td max-w-[16rem] truncate text-xs text-muted">
+                    <td data-label="Notes" className="td max-w-[16rem] truncate text-xs text-muted">
                       {r.notes ?? ""}
                     </td>
                     <td className="td">

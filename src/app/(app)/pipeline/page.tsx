@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { leadTier } from "@/lib/icp";
@@ -85,7 +86,7 @@ export default async function PipelinePage({
 
   return (
     <div>
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <h1 className="display text-[32px] font-semibold">Pipeline</h1>
           <p className="mt-1.5 text-sm text-muted">
@@ -122,12 +123,16 @@ export default async function PipelinePage({
           </div>
           {/* Imports live in Discovery now — nothing lands in the pipeline
               without a score, so bulk-adding straight to it is gone. */}
-          <Link href="/discovery" className="btn">
-            Discovery
-          </Link>
-          <Link href="/pipeline/new" className="btn-primary">
-            New lead
-          </Link>
+          {/* On a phone these two go into the top bar's ⋯ menu; the view
+              toggle stays, because it is how the page is read. */}
+          <PageActions className="contents">
+            <Link href="/discovery" className="btn">
+              Discovery
+            </Link>
+            <Link href="/pipeline/new" className="btn-primary">
+              New lead
+            </Link>
+          </PageActions>
         </div>
       </div>
 

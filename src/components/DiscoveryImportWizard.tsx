@@ -317,7 +317,7 @@ export default function DiscoveryImportWizard({
           {/* ─── Step 1b — run an Apify actor or task ────────────────────── */}
           {step === 1 && source === "apify" && (
             <>
-              <div className="grid grid-cols-[150px_1fr] gap-4">
+              <div className="m-form-stack grid grid-cols-[150px_1fr] gap-4">
                 <div>
                   <label className="field-label" htmlFor="apify-kind">
                     Run a

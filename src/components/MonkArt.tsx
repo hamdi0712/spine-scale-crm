@@ -80,7 +80,7 @@ export function MonkHabitBottomArt({ slug }: { slug: string }) {
     // roughly square corner: cover would crop the subject out of most of them.
     <div
       aria-hidden
-      className="pointer-events-none absolute -bottom-1.5 -right-1.5 h-[68px] w-[84px]"
+      className="pointer-events-none absolute -bottom-1.5 -right-1.5 h-[68px] w-[84px] max-md:h-[54px] max-md:w-[66px]"
     >
       <Image
         src={`/habit-bottom-${slug}.png`}

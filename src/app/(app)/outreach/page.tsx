@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { ICP_MAX_SCORE, IcpTier, leadTier, scoreIcp } from "@/lib/icp";
@@ -58,14 +59,14 @@ export default async function OutreachQueuePage() {
             New
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
+        <PageActions className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
           <span className="num text-xs text-muted">
             {rows.length} lead{rows.length === 1 ? "" : "s"} waiting
           </span>
           <Link href="/pipeline" className="btn">
             Pipeline
           </Link>
-        </div>
+        </PageActions>
       </div>
 
       {rows.length === 0 ? (

@@ -72,7 +72,7 @@ export default async function MonkProgressPage() {
         }
       />
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2 max-sm:grid-cols-1">
         <section className="card flex flex-col p-5">
           <h2 className="display mb-4 shrink-0 text-xl font-semibold">Overall</h2>
           <MonkDonut tally={tally} />

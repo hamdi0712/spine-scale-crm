@@ -36,7 +36,7 @@ export default async function ClientsPage() {
       </div>
 
       <div className="card mt-8 overflow-x-auto">
-        <table className="w-full">
+        <table className="m-cards w-full">
           <thead>
             <tr>
               <th className="th">Clinic</th>
@@ -66,7 +66,7 @@ export default async function ClientsPage() {
                   : 0;
               return (
               <tr key={client.id} className="hover:bg-wash/70">
-                <td className="td">
+                <td data-m="primary" className="td">
                   <div className="flex items-center gap-2.5">
                     <Link
                       href={`/clients/${client.id}`}
@@ -86,7 +86,7 @@ export default async function ClientsPage() {
                     </Link>
                   )}
                 </td>
-                <td className="td">
+                <td data-label="Status" className="td">
                   {health ? (
                     <span className="flex items-center gap-1.5">
                       <HealthBadge
@@ -106,14 +106,14 @@ export default async function ClientsPage() {
                     <ClientStatusBadge status={client.status} />
                   )}
                 </td>
-                <td className="td text-muted">{client.packageName ?? "—"}</td>
-                <td className="td num">
+                <td data-label="Package" className="td text-muted">{client.packageName ?? "—"}</td>
+                <td data-label="Monthly fee" className="td num">
                   {fmtMoney(client.monthlyFee)}
                 </td>
-                <td className="td num text-xs">
+                <td data-label="Contract start" className="td num text-xs">
                   {fmtDate(client.contractStart)}
                 </td>
-                <td className="td">
+                <td data-label="Delivery" className="td">
                   <CapsuleBar
                     items={client.checklist.map((i) => ({
                       title: i.title,

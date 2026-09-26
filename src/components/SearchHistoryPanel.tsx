@@ -116,7 +116,7 @@ export default function SearchHistoryPanel({
         // Everything .card is except its overflow-hidden, which would clip the
         // status menu off the bottom of the last row.
         <div className="rounded-2xl border border-line bg-surface shadow-card">
-          <table className="w-full">
+          <table className="m-cards w-full">
             <thead>
               <tr>
                 <th className="th">Search</th>
@@ -132,15 +132,15 @@ export default function SearchHistoryPanel({
                 const { status, manual } = searchStatus(row);
                 return (
                   <tr key={row.id}>
-                    <td className="td max-w-[420px]">
+                    <td data-m="primary" className="td max-w-[420px]">
                       <p className="truncate font-medium" title={row.key}>
                         {describeSearchKey(row.type, row.key)}
                       </p>
                     </td>
-                    <td className="td text-xs text-muted">
+                    <td data-label="Kind" className="td text-xs text-muted">
                       {APIFY_SEARCH_TYPE_LABELS[row.type]}
                     </td>
-                    <td className="td">
+                    <td data-label="Status" className="td">
                       <StatusPicker
                         status={status}
                         manual={manual}
@@ -149,8 +149,8 @@ export default function SearchHistoryPanel({
                         onPick={(next) => setStatus(row.id, next)}
                       />
                     </td>
-                    <td className="num td">{row.runCount}</td>
-                    <td className="num td text-muted">
+                    <td data-label="Runs" className="num td">{row.runCount}</td>
+                    <td data-label="Last used" className="num td text-muted">
                       {row.lastRunAt ? (
                         fmtDateTime(row.lastRunAt)
                       ) : (
@@ -325,7 +325,7 @@ function ManualAddForm({ onDone }: { onDone: () => void }) {
           yours, and stays yours until you change it.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-[180px_1fr]">
+      <div className="grid gap-4 sm:grid-cols-[180px_1fr] max-sm:grid-cols-1">
         <div>
           <label className="field-label" htmlFor="logType">
             Kind

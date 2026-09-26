@@ -20,7 +20,7 @@ export default async function ReportingPage() {
       </p>
 
       <div className="card mt-8 overflow-x-auto">
-        <table className="w-full">
+        <table className="m-cards w-full">
           <thead>
             <tr>
               <th className="th">Client</th>
@@ -38,7 +38,7 @@ export default async function ReportingPage() {
               const m = latest ? computeMetrics(latest) : null;
               return (
                 <tr key={client.id} className="hover:bg-wash/70">
-                  <td className="td">
+                  <td data-m="primary" className="td">
                     <Link
                       href={`/reporting/${client.id}`}
                       className="font-medium text-ink hover:underline"
@@ -46,23 +46,23 @@ export default async function ReportingPage() {
                       {client.clinicName}
                     </Link>
                   </td>
-                  <td className="td">
+                  <td data-label="Status" className="td">
                     <ClientStatusBadge status={client.status} />
                   </td>
-                  <td className="td num text-xs">
+                  <td data-label="Last week" className="td num text-xs">
                     {latest ? fmtDate(latest.weekStart) : "—"}
                   </td>
-                  <td className="td num">
+                  <td data-label="Leads" className="td num">
                     {latest ? latest.leads : "—"}
                   </td>
-                  <td className="td">
+                  <td data-label="CPL" className="td">
                     {m ? (
                       <FlaggedValue value={fmtMoneyCents(m.cpl)} flag={m.cplFlag} />
                     ) : (
                       <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td className="td">
+                  <td data-label="Lead→Booked" className="td">
                     {m ? (
                       <FlaggedValue
                         value={fmtPct(m.leadToBooked)}
@@ -72,7 +72,7 @@ export default async function ReportingPage() {
                       <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td className="td">
+                  <td data-label="Show rate" className="td">
                     {m ? (
                       <FlaggedValue
                         value={fmtPct(m.showRate)}

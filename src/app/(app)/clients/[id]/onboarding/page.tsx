@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -66,7 +67,7 @@ export default async function OnboardingPage({
       </Link>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
             <h1 className="display text-[32px] font-semibold">
               {client.clinicName}
             </h1>
@@ -74,11 +75,13 @@ export default async function OnboardingPage({
           </div>
           <p className="mt-1.5 text-sm text-muted">Client onboarding</p>
         </div>
+        <PageActions className="contents">
         <form action={skip} className="shrink-0">
           <button type="submit" className="btn">
             Skip onboarding wizard
           </button>
         </form>
+        </PageActions>
       </div>
 
       <div className="mt-8">
@@ -153,7 +156,7 @@ function StepDetails({ client }: { client: WizardClient }) {
             className="field"
           />
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="field-label" htmlFor="contactName">
               Contact name
@@ -250,7 +253,7 @@ function StepContract({ client }: { client: WizardClient }) {
   return (
     <form action={save}>
       <div className="space-y-5 p-6">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="field-label" htmlFor="contractStatus">
               Contract status

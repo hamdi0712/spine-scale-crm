@@ -240,7 +240,7 @@ export default async function DailyKpiPage({
 
       {/* Tighter than the dashboard's headline row: four compact tiles on
           one line, at the gap the rest of this page's rows use. */}
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="m-scroll-row m-kpi-row mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {DAILY_KPI_KEYS.map((key) => {
           const monthly = isMonthly(key);
           // The button is offered on the day being looked at, and a past day
@@ -269,7 +269,7 @@ export default async function DailyKpiPage({
         })}
       </div>
 
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4 max-md:grid-cols-1">
         <section className="card p-6 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
@@ -400,7 +400,7 @@ export default async function DailyKpiPage({
         </section>
       </div>
 
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4 max-md:grid-cols-1">
         <section className="card lg:col-span-3">
           <div className="border-b border-line/60 px-6 py-4">
             <h2 className="display text-xl font-semibold">
@@ -410,8 +410,11 @@ export default async function DailyKpiPage({
               Daily metrics by day; the monthly pair month to date
             </p>
           </div>
+          {/* On a phone each metric is a card of its own (.m-cards): its
+              goal, the viewed day and the average. The individual day
+              columns are left to the chart above, which already draws them. */}
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="m-cards w-full">
               <thead>
                 <tr>
                   <th className="th">KPI</th>
@@ -447,7 +450,7 @@ export default async function DailyKpiPage({
                     : dayCount >= goals[key];
                   return (
                     <tr key={key}>
-                      <td className="td">
+                      <td data-m="primary" className="td">
                         <div className="flex items-center gap-2.5">
                           {/* The same flat two-tone mark the cards carry, at
                               table size — one object, drawn once, in
@@ -474,7 +477,7 @@ export default async function DailyKpiPage({
                           </div>
                         </div>
                       </td>
-                      <td className="td num text-right text-muted">
+                      <td data-label="Goal" className="td num text-right text-muted">
                         {goals[key]}
                         <span className="ml-1 text-xs">
                           {monthly ? "/mo" : "/day"}
@@ -486,6 +489,7 @@ export default async function DailyKpiPage({
                            so it does not pretend to one: the day columns give
                            way to the month it is actually judged over. */
                         <td
+                          data-label="This month"
                           className="td text-right text-sm font-normal text-muted"
                           colSpan={recent.length + 2}
                         >
@@ -504,6 +508,7 @@ export default async function DailyKpiPage({
                           {recent.map((d) => (
                             <td
                               key={d.day.getTime()}
+                              data-m="hide"
                               className="td num text-right text-muted"
                             >
                               {d.counts[key]}
@@ -513,7 +518,7 @@ export default async function DailyKpiPage({
                               it is the one that carries the metric's own
                               colour — softly when the goal is not met yet,
                               because a tint is a highlight and not a verdict. */}
-                          <td className="td text-right">
+                          <td data-label={isToday ? "Today" : "That day"} className="td text-right">
                             <span
                               className="num inline-flex min-w-[46px] justify-center rounded-lg px-2 py-1 text-sm font-semibold"
                               style={{
@@ -524,7 +529,7 @@ export default async function DailyKpiPage({
                               {counts[key]}
                             </span>
                           </td>
-                          <td className="td num text-right font-medium">
+                          <td data-label={`${DAILY_KPI_TREND_DAYS}-day avg`} className="td num text-right font-medium">
                             {averageFor(trendDays, key)}
                           </td>
                         </>

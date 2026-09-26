@@ -54,7 +54,7 @@ export default async function MonkSettingsPage() {
 
         <form
           action={updateMonkChallenge.bind(null, challenge.id)}
-          className="mt-4 grid gap-4 sm:grid-cols-2"
+          className="mt-4 grid gap-4 sm:grid-cols-2 max-sm:grid-cols-1"
         >
           <div>
             <label className="field-label" htmlFor="startDate">
