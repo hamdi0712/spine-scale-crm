@@ -67,6 +67,7 @@ const SUGGESTIONS: { title: string; hint: string; prompt: string }[] = [
 const TOOL_LABELS: Record<string, string> = {
   getPipelineLeads: "Pipeline",
   searchLeads: "Lead search",
+  auditLeadsForNonClinic: "Non-clinic audit",
   getLeadDetail: "Lead record",
   getDiscoveryQueueStatus: "Discovery queue",
   getClientHealthSummary: "Client health",

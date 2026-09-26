@@ -320,11 +320,57 @@ function listMeta(returned: number, total: number, cap: number) {
   };
 }
 
+// The same thing for a list that can be paged. A capped list says "there is
+// more and you cannot have it"; a paged one says "there is more and here is
+// how to ask", which is a different sentence and has to read like one — a model
+// told only that its list was truncated will qualify an answer it could simply
+// have finished.
+function pageMeta(returned: number, total: number, cap: number, offset: number) {
+  const shown = offset + returned;
+  const more = shown < total;
+  const where =
+    returned === 0
+      ? `Nothing at offset ${offset} — the list has ${total} in it, so the last page starts below that.`
+      : `Leads ${offset + 1} to ${shown} of ${total}.`;
+  return {
+    returned,
+    totalMatching: total,
+    offset,
+    pageSize: cap,
+    // The same key the capped lookups set, so a reader of either knows what it
+    // means: there is more matching than came back.
+    truncated: more,
+    ...(more ? { nextOffset: shown } : {}),
+    note: more
+      ? `${where} Call getPipelineLeads again with offset ${shown} and the same filters for the next page, and keep going until nextOffset stops coming back. Do not state a total you have not paged to the end of.`
+      : `${where} That is the end of the list — there is no page after this one.`,
+  };
+}
+
 // ─── 1. Pipeline leads ─────────────────────────────────────────────────────
 
+/**
+ * The pipeline as a list, a page at a time.
+ *
+ * `offset` is what turns this from a view into something that can be read to
+ * the end. It used to return the sixty most recently touched leads and stop,
+ * which is fine for "how does the pipeline look" and useless for any question
+ * asked of every lead — auditing the whole B tier, for one, which is where the
+ * ceiling was actually discovered. Sixty is still a page; there is simply a
+ * page two now.
+ *
+ * Paging is done after the tier filter rather than in the query, because tier
+ * is computed from the scorecard and not stored: an offset applied in SQL would
+ * count rows this function then drops, and page two would skip leads page one
+ * never showed. The order is the same recency order the pipeline table uses, so
+ * a lead edited between two calls can move between pages — worth knowing before
+ * treating a paged sweep as a transaction, and the reason the audit lookup
+ * below does its own scan in one call rather than paging.
+ */
 export async function getPipelineLeads(args: {
   tier?: string;
   stage?: string;
+  offset?: number;
 }): Promise<unknown> {
   const stage =
     args.stage && (LEAD_STAGES as readonly string[]).includes(args.stage)
@@ -350,14 +396,24 @@ export async function getPipelineLeads(args: {
     return tier === "UNSCORED" ? t === null : t === tier;
   });
 
+  // A negative or fractional offset is a model doing arithmetic, not an error
+  // worth refusing: it is floored into the list and the result says where it
+  // actually started.
+  const offset = Math.max(0, Math.floor(args.offset ?? 0));
+  const page = matching.slice(offset, offset + LEADS_MAX);
+
   return {
     filters: {
       tier: args.tier ?? "any",
       stage: stage ? stageLabel(stage) : "any",
     },
-    ...listMeta(Math.min(matching.length, LEADS_MAX), matching.length, LEADS_MAX),
+    ...pageMeta(page.length, matching.length, LEADS_MAX, offset),
+    // The whole filtered set, not this page of it. A page's own subtotal would
+    // be a number nobody asked for and the model would quote it as the
+    // pipeline's value.
     openPipelineValue: matching.reduce((s, l) => s + (l.estValue ?? 0), 0),
-    leads: matching.slice(0, LEADS_MAX).map((lead) => {
+    openPipelineValueCovers: "Every lead matching these filters, not just this page.",
+    leads: page.map((lead) => {
       const tierNow = leadTier(lead);
       return {
         id: lead.id,
@@ -2692,7 +2748,298 @@ export async function searchLeads(args: {
   };
 }
 
-// ─── 26. Monk Mode ─────────────────────────────────────────────────────────
+// ─── 26. Auditing the pipeline for leads that are not clinics ──────────────
+//
+// The pipeline is supposed to hold chiropractic and non-surgical spine
+// practices. It does not always: a discovery scrape pointed at clinic-shaped
+// search terms also catches the device manufacturer selling to clinics, the
+// biologics company running trials, the hospital system, and the franchise
+// whose marketing is decided three states away. Each of those is a lead nobody
+// can sell to, sitting in a tier that says to chase it.
+//
+// Finding them used to be a conversation. The model would page the pipeline —
+// or rather, could not page the pipeline — open each lead in turn, read the
+// crawled copy, and form a view, at one round trip per lead. A hundred B-tier
+// leads is a hundred round trips and a context window full of website copy, so
+// in practice the audit was never finished. This lookup does the reading in one
+// call, server-side, and hands back only the leads that tripped something.
+//
+// What it deliberately does not do is decide. Every other lookup here returns
+// facts and leaves the reasoning to the model, and a lookup that answered "this
+// is a pharmaceutical company, not a clinic" would be a keyword list making a
+// judgement call in a sentence the operator then reads as a conclusion. "Inc"
+// in a name is a fact. What the business actually is, is a question — and the
+// keyword that fired is very often wrong about it: a legitimate clinic can be
+// incorporated, sit inside a group, or have the word Institute over the door.
+// So this returns the hit and the evidence that caused it, and the model reads
+// them and says what it thinks.
+
+// The keyword lists, and the three of them are meant to be edited.
+//
+// Each is a first pass whose only job is to be worth a human's attention. False
+// positives are the expected cost and the reason the evidence travels with the
+// hit; a keyword that turns out to fire on real clinics more often than not
+// belongs out of the list, and one that keeps getting missed belongs in it.
+
+// Words in a clinic name that are usually a company rather than a practice.
+// "Inc" is in here knowing full well that plenty of real practices are
+// incorporated — it is a flag for a person to look at, not a verdict.
+export const NON_CLINIC_NAME_KEYWORDS = [
+  "Inc",
+  "Biologics",
+  "Therapeutics",
+  "Pharma",
+  "Pharmaceuticals",
+  "Devices",
+  "Labs",
+  "Health System",
+  "Hospital",
+  "Institute",
+  "Network",
+  "Group",
+  "Supply",
+  "Solutions",
+  "Technologies",
+];
+
+// Words in the crawled website copy that belong to a company selling to
+// clinics, or running research, rather than treating patients in one. A
+// practice's own site talks about patients, conditions and appointments; it does
+// not talk about its distributors.
+export const NON_CLINIC_WEBSITE_KEYWORDS = [
+  "clinical trials",
+  "pipeline",
+  "investors",
+  "FDA",
+  "IND",
+  "preclinical",
+  "distributors",
+  "B2B",
+];
+
+// Franchises and hospital systems whose locations are real clinics and still
+// not sellable: the marketing decision is not made at the location. Seeded with
+// a couple of the ones this pipeline actually keeps catching, and meant to grow
+// as more turn up.
+export const FRANCHISE_OR_SYSTEM_NAMES = [
+  "The Joint",
+  "HealthSource",
+  "ChiroOne",
+  "Kaiser",
+  "Mayo Clinic",
+];
+
+// Fifty. Long enough that a real audit of a tier comes back whole, short enough
+// that the result is a list somebody reads rather than a second pipeline in the
+// context window. A sweep that hits it says so and says which tier to narrow to.
+const NON_CLINIC_AUDIT_MAX = 50;
+
+// How much of the crawled copy to quote around a match. A sentence's worth: it
+// is here so the model can see the keyword in use and tell "our patients ask
+// about FDA clearance" from "our IND filing", and a longer excerpt would put the
+// website copy this lookup exists to summarise back into the conversation whole.
+const AUDIT_EXCERPT_CHARS = 160;
+
+// The tiers a sweep covers when nothing is asked for. A and B are the leads
+// somebody is about to spend time on, which is what makes a non-clinic in there
+// expensive; C and the unscored are cheap to leave alone.
+const DEFAULT_AUDIT_TIERS: IcpTier[] = ["A", "B"];
+
+// A keyword matched on word boundaries rather than anywhere in the string.
+// "Inc" as a substring is in Lincoln, Incline and Principal, and a list of
+// flags that fires on every third clinic in the pipeline is a list nobody
+// reads. Multi-word keywords work the same way: the boundary is around the
+// whole phrase.
+function keywordHit(haystack: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(haystack);
+}
+
+function keywordsFound(haystack: string, keywords: string[]): string[] {
+  return keywords.filter((keyword) => keywordHit(haystack, keyword));
+}
+
+// The text around the first match, so a keyword arrives in the sentence that
+// used it. Cut on the raw string rather than tidied: this is scraped copy, and
+// it goes back fenced.
+function excerptAround(text: string, keyword: string): string {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = new RegExp(`\\b${escaped}\\b`, "i").exec(text);
+  const at = match?.index ?? 0;
+  const from = Math.max(0, at - Math.floor(AUDIT_EXCERPT_CHARS / 2));
+  const excerpt = text.slice(from, from + AUDIT_EXCERPT_CHARS).replace(/\s+/g, " ").trim();
+  return `${from > 0 ? "…" : ""}${excerpt}${from + AUDIT_EXCERPT_CHARS < text.length ? "…" : ""}`;
+}
+
+/**
+ * Every lead in a tier that trips at least one non-clinic check, with the
+ * evidence that tripped it.
+ *
+ * Four checks, run over every matching lead in one pass:
+ *
+ *   clinicNameKeyword — a company word in the clinic name.
+ *   websiteNotesKeyword — a company or research word in the crawled copy.
+ *   missingLocalFootprint — no Google review count, or no location on the
+ *     record. A clinic treating patients in a town has both; a company selling
+ *     into clinics frequently has neither. This one is the weakest of the four
+ *     on its own, because an unenriched lead looks exactly the same, so the
+ *     evidence names which half fired and whether the lead has ever been
+ *     enriched at all.
+ *   knownFranchiseOrSystem — the name matches a franchise or hospital system
+ *     the agency already knows it cannot sell to.
+ *
+ * A lead that trips nothing is not returned. A lead that trips several comes
+ * back once, with all of them.
+ *
+ * `tier` narrows the sweep; the default is A and B. The count that matters more
+ * than the hits is `leadsChecked`: a sweep that examined eleven leads and
+ * flagged none is a different answer from one that examined two hundred, and
+ * without it the model cannot tell them apart.
+ */
+export async function auditLeadsForNonClinic(args: {
+  tier?: string;
+}): Promise<unknown> {
+  const tierArg = (args.tier ?? "").trim().toUpperCase();
+  const tierFilter: (IcpTier | "UNSCORED")[] =
+    tierArg === "UNSCORED"
+      ? ["UNSCORED"]
+      : tierArg === "ALL"
+        ? [...ICP_TIER_ORDER, "UNSCORED"]
+        : (ICP_TIER_ORDER as string[]).includes(tierArg)
+          ? [tierArg as IcpTier]
+          : DEFAULT_AUDIT_TIERS;
+
+  // Archived leads are out, the same ones every other lead lookup leaves out:
+  // a converted client is not a lead to disqualify, and a closed-out one has
+  // already been disqualified by somebody.
+  const leads = await prisma.lead.findMany({
+    where: { archived: false },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const inScope = leads.filter((lead) => {
+    const tier = leadTier(lead);
+    return tierFilter.includes(tier ?? "UNSCORED");
+  });
+
+  const flagged = inScope
+    .map((lead) => {
+      const nameKeywords = keywordsFound(lead.clinicName, NON_CLINIC_NAME_KEYWORDS);
+      const notes = lead.websiteNotes ?? "";
+      const notesKeywords = notes === "" ? [] : keywordsFound(notes, NON_CLINIC_WEBSITE_KEYWORDS);
+      const franchises = keywordsFound(lead.clinicName, FRANCHISE_OR_SYSTEM_NAMES);
+      const noReviews = lead.reviewCount === null;
+      const noLocation = (lead.location ?? "").trim() === "";
+
+      const checksHit: string[] = [];
+      if (nameKeywords.length > 0) checksHit.push("clinicNameKeyword");
+      if (notesKeywords.length > 0) checksHit.push("websiteNotesKeyword");
+      if (noReviews || noLocation) checksHit.push("missingLocalFootprint");
+      if (franchises.length > 0) checksHit.push("knownFranchiseOrSystem");
+      if (checksHit.length === 0) return null;
+
+      const tier = leadTier(lead);
+      return {
+        id: lead.id,
+        clinicName: lead.clinicName,
+        // Orientation, not judgement: which tier says to chase this and where
+        // it sits, so the model can say what flagging it would cost.
+        icpTier: tierLabel(tier),
+        stage: stageLabel(lead.stage),
+        checksHit,
+        evidence: {
+          ...(nameKeywords.length > 0
+            ? {
+                clinicNameKeyword: {
+                  matchedKeywords: nameKeywords,
+                  inClinicName: lead.clinicName,
+                },
+              }
+            : {}),
+          ...(noReviews || noLocation
+            ? {
+                missingLocalFootprint: {
+                  googleReviewCount: lead.reviewCount,
+                  reviewCountIsNull: noReviews,
+                  location: lead.location,
+                  locationIsEmpty: noLocation,
+                  everEnriched: lead.enrichedAt !== null,
+                  // Said plainly because it is the one check that is as likely
+                  // to be about the record as about the business.
+                  caveat:
+                    lead.enrichedAt === null
+                      ? "This lead has never been enriched, so the missing fields may mean nothing at all about the business."
+                      : "The lead has been enriched, so a missing review count or location is what the run actually found.",
+                },
+              }
+            : {}),
+          ...(franchises.length > 0
+            ? {
+                knownFranchiseOrSystem: {
+                  matchedNames: franchises,
+                  inClinicName: lead.clinicName,
+                },
+              }
+            : {}),
+        },
+        // The crawled copy goes back fenced, the same as everywhere else in
+        // this file: it is the clinic's own website talking, it is the reason
+        // this lookup reads website copy in bulk at all, and an excerpt is no
+        // less third-party text than a whole page is.
+        ...(notesKeywords.length > 0
+          ? {
+              [UNTRUSTED_CONTENT_KEY]: {
+                warning: UNTRUSTED_CONTENT_WARNING,
+                websiteNotesKeyword: {
+                  matchedKeywords: notesKeywords,
+                  excerpts: notesKeywords.slice(0, 3).map((keyword) => ({
+                    keyword,
+                    around: excerptAround(notes, keyword),
+                  })),
+                },
+              },
+            }
+          : {}),
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  return {
+    tiersAudited: tierFilter,
+    tierFilterWas:
+      args.tier === undefined || args.tier.trim() === ""
+        ? "Not given, so the default: tiers A and B."
+        : tierArg === "ALL" || tierArg === "UNSCORED" || (ICP_TIER_ORDER as string[]).includes(tierArg)
+          ? `As asked: ${tierArg}.`
+          : `"${args.tier}" is not a tier, so the default was used instead: A and B. Valid values are ${[...ICP_TIER_ORDER, "UNSCORED", "ALL"].join(", ")}.`,
+    leadsChecked: inScope.length,
+    leadsFlagged: flagged.length,
+    ...listMeta(
+      Math.min(flagged.length, NON_CLINIC_AUDIT_MAX),
+      flagged.length,
+      NON_CLINIC_AUDIT_MAX,
+    ),
+    checks: {
+      clinicNameKeyword: `The clinic name contains one of: ${NON_CLINIC_NAME_KEYWORDS.join(", ")}. Matched on whole words, case-insensitively.`,
+      websiteNotesKeyword: `The crawled website copy contains one of: ${NON_CLINIC_WEBSITE_KEYWORDS.join(", ")}.`,
+      missingLocalFootprint:
+        "No Google review count on the record, or no location on it, or neither. Weak on its own — an unenriched lead looks the same — so the evidence says whether the lead was ever enriched.",
+      knownFranchiseOrSystem: `The clinic name matches a known franchise or hospital system: ${FRANCHISE_OR_SYSTEM_NAMES.join(", ")}.`,
+    },
+    whatThisIsNot:
+      "These are keyword and null-field hits, not findings. This lookup does not know what any of these businesses is and has not decided that any of them is wrong for the pipeline — a real clinic can be incorporated, sit inside a group, have Institute over the door, or simply never have been enriched. Read the evidence on each one and say what you think it is, and say which ones you are unsure about rather than flattening the list into a verdict.",
+    flaggedLeads: flagged.slice(0, NON_CLINIC_AUDIT_MAX),
+    ...(flagged.length === 0
+      ? {
+          note: `Nothing in ${tierFilter.join(" or ")} tripped any of the four checks, across ${inScope.length} leads. That is an answer.`,
+        }
+      : {}),
+    reminder:
+      "Reading only. Nothing here is flagged, archived or rejected by this lookup — a lead is disqualified on its own page in Pipeline, on its ICP scorecard.",
+  };
+}
+
+// ─── 27. Monk Mode ─────────────────────────────────────────────────────────
 //
 // The one lookup that is not about the CRM. Monk Mode is the operator's own
 // discipline challenge — habits, a streak and a run of days — and it shares
@@ -2822,6 +3169,7 @@ export async function getMonkModeStatus(): Promise<unknown> {
 const LOOKUPS = {
   getPipelineLeads,
   searchLeads,
+  auditLeadsForNonClinic,
   getLeadDetail,
   getDiscoveryQueueStatus,
   getClientHealthSummary,
@@ -2900,7 +3248,21 @@ export async function runCopilotTool(
         data: await getPipelineLeads({
           tier: typeof args.tier === "string" ? args.tier : undefined,
           stage: typeof args.stage === "string" ? args.stage : undefined,
+          // `skip` and `start` accepted alongside `offset`: it is a page
+          // number by another name, and a model reaching for one reaches for
+          // whichever it thought of. A value that is not a number at all is
+          // dropped and the first page comes back, which the result says.
+          offset: num(args.offset) ?? num(args.skip) ?? num(args.start),
         }),
+      };
+    case "auditLeadsForNonClinic":
+      // An unrecognised tier is answered by the lookup — it falls back to A and
+      // B and says in the result that it did — rather than refused here, for
+      // the same reason searchLeads answers its own bad status: a sentence the
+      // model can act on beats an error it has to guess at.
+      return {
+        ok: true,
+        data: await auditLeadsForNonClinic({ tier: str(args.tier) }),
       };
     case "searchLeads":
       // `name` and `q` accepted alongside `query`: it is a search box, and a
