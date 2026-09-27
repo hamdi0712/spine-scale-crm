@@ -226,7 +226,7 @@ export default async function LibraryPage({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted">
+            <p className="helper-text text-sm text-muted">
               Select an entry, or create one with “+ New”.
             </p>
           )}

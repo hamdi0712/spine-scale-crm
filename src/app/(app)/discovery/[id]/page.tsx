@@ -95,7 +95,7 @@ export default async function DiscoveryCandidatePage({
               </span>
             )}
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
             <span title={DISCOVERY_SOURCE_KIND_MEANINGS[pathway]}>
               {DISCOVERY_SOURCE_KIND_LABELS[pathway]}
             </span>
@@ -111,6 +111,17 @@ export default async function DiscoveryCandidatePage({
                 >
                   Enriched {fmtRelative(candidate.enrichedAt)}
                 </span>
+              </>
+            )}
+          </p>
+          {/* A phone keeps the pathway and the enrichment age and drops the
+              sentence explaining the status — the badge above names it. */}
+          <p className="md:hidden mt-2 text-xs leading-relaxed text-muted">
+            {DISCOVERY_SOURCE_KIND_LABELS[pathway]}
+            {candidate.enrichedAt && (
+              <>
+                {" · "}
+                <span className="num">Enriched {fmtRelative(candidate.enrichedAt)}</span>
               </>
             )}
           </p>
@@ -427,7 +438,9 @@ export default async function DiscoveryCandidatePage({
           <h2 className="display mb-4 text-xl font-semibold">Enrichment</h2>
           {enriched ? (
             <div className="card">
-              <div className="border-b border-line/60 px-6 py-4">
+              {/* The caption is the row's only content, so the row goes with
+                  it on a phone rather than leaving an empty bordered band. */}
+              <div className="helper-text border-b border-line/60 px-6 py-4">
                 <p className="num text-xs text-muted">
                   {candidate.enrichedAt
                     ? `Last run ${fmtDateTime(candidate.enrichedAt)} — a snapshot, not live`

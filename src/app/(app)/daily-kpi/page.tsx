@@ -569,7 +569,7 @@ export default async function DailyKpiPage({
                 {streak === 1 ? "Day" : "Days"}
               </span>
             </ProgressRing>
-            <p className="mt-4 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-4 text-xs leading-relaxed text-muted">
               {streak === 0
                 ? "No run going. Hit both daily goals in a day to start one."
                 : metToday

@@ -205,7 +205,7 @@ export default async function ResearchPage({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted">
+            <p className="helper-text text-sm text-muted">
               Select a note, or create one with &ldquo;+ New&rdquo;.
             </p>
           )}

@@ -127,7 +127,7 @@ function SecretRow({
             <IconKey size={14} stroke={1.75} aria-hidden className="text-muted" />
             {status.masked ?? "Not set"}
           </span>
-          <p className="text-xs leading-relaxed text-muted">
+          <p className="helper-text text-xs leading-relaxed text-muted">
             {status.source === "database"
               ? "Stored in the database. This is the key in force."
               : status.source === "env"

@@ -299,7 +299,7 @@ function QueueDialog({
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
           {/* The one thing this dialog must say, and it says it first. */}
-          <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
+          <div className="helper-text rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
             <p className="text-sm font-medium text-ink">
               This runs here, in this tab, while you watch it
             </p>
@@ -312,6 +312,13 @@ function QueueDialog({
               this again picks up where it left off.
             </p>
           </div>
+          {/* The same warning on a phone, in one line and in the terms a
+              phone fails in: the screen locking or another app taking over
+              is what stops the run there. */}
+          <p className="md:hidden rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3 text-sm font-medium text-ink">
+            Keep this screen open until it finishes — locking your phone or
+            switching apps can stop the run.
+          </p>
 
           {error && (
             <div className="rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">

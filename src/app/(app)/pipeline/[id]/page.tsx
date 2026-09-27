@@ -599,7 +599,7 @@ export default async function LeadDetailPage({
             <>
               <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
                 <h2 className="display text-xl font-semibold">Enrichment</h2>
-                <p className="num text-xs text-muted">
+                <p className="helper-text num text-xs text-muted">
                   {lead.enrichedAt
                     ? `Last run ${fmtDateTime(lead.enrichedAt)} — a snapshot, not live`
                     : "From an actor run — a snapshot, not live"}
