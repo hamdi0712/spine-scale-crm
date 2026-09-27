@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { clinicDiscoverySettings } from "@/lib/actions/clinicDiscovery";
 import { clinicKeywordStatuses } from "@/lib/actions/apifySearchLog";
@@ -31,7 +32,7 @@ export default async function ClinicDiscoveryPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6 flex items-end justify-between gap-4">
+      <div className="mb-6 flex items-end justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <Link href="/discovery" className="text-sm text-accent hover:underline">
             ← Discovery
@@ -39,22 +40,22 @@ export default async function ClinicDiscoveryPage() {
           <h1 className="display mt-2 text-[32px] font-semibold">
             Clinic-first search
           </h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Find the clinic first and the decision-maker later — the same
             enrichment chain, the same scoring, no person needed to start
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <PageActions className="flex shrink-0 flex-wrap gap-2">
           <Link href="/discovery/search-history" className="btn">
             Search history
           </Link>
           <Link href="/discovery/import/apify" className="btn">
             Import from Apify
           </Link>
-        </div>
+        </PageActions>
       </div>
 
-      <div className="card mb-8 px-6 py-4">
+      <div className="helper-text card mb-8 px-6 py-4">
         <p className="text-sm font-medium">What happens to what it finds</p>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Every clinic imported here becomes a Pending candidate and goes

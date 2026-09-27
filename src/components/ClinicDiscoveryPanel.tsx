@@ -176,7 +176,7 @@ export default function ClinicDiscoveryPanel({
       {/* ─── What to search for ────────────────────────────────────────── */}
       <section>
         <h2 className="display mb-1 text-xl font-semibold">Search terms</h2>
-        <p className="mb-4 text-sm text-muted">
+        <p className="helper-text mb-4 text-sm text-muted">
           One run per term. These are a starting set, not a rule — remove what
           is not working and add what is.
         </p>
@@ -253,11 +253,11 @@ export default function ClinicDiscoveryPanel({
       {/* ─── Where, how big, how many ───────────────────────────────────── */}
       <section>
         <h2 className="display mb-1 text-xl font-semibold">Where and how much</h2>
-        <p className="mb-4 text-sm text-muted">
+        <p className="helper-text mb-4 text-sm text-muted">
           The location every term is searched in, and the ceiling on what one
           run brings back
         </p>
-        <div className="card grid gap-5 p-6 sm:grid-cols-2">
+        <div className="card grid gap-5 p-6 sm:grid-cols-2 max-sm:grid-cols-1">
           <div>
             <label className="field-label" htmlFor="clinicLocation">
               Location
@@ -288,7 +288,7 @@ export default function ClinicDiscoveryPanel({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
               Only some actors can filter on this. Where one cannot, it is
               ignored — the headcount is still read during enrichment and still
               scored.
@@ -320,7 +320,8 @@ export default function ClinicDiscoveryPanel({
               placeholder={actorId}
               className="field font-mono text-xs"
             />
-            <p className="mt-1 text-xs leading-relaxed text-muted">
+            {/* The malformed-ID error stays on a phone; the hint does not. */}
+            <p className={`${actorMalformed ? "" : "helper-text "}mt-1 text-xs leading-relaxed text-muted`}>
               {actorMalformed
                 ? "That does not look like an actor ID. Use the 17-character ID or the username~name form."
                 : `Leave blank to run ${actorId}, from Settings → Pipeline. Anything typed here is used for this run only and is not saved.`}
@@ -338,7 +339,7 @@ export default function ClinicDiscoveryPanel({
         >
           {running ? "Searching…" : `Search ${terms.length} term${terms.length === 1 ? "" : "s"}`}
         </button>
-        <p className="text-xs leading-relaxed text-muted">
+        <p className="helper-text text-xs leading-relaxed text-muted">
           One actor run per term, on the server, while you wait. Nothing is
           written until the results below are imported.
         </p>
@@ -361,7 +362,7 @@ export default function ClinicDiscoveryPanel({
                 {result.clinics.length} clinic
                 {result.clinics.length === 1 ? "" : "s"} found
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="helper-text mt-1 text-sm text-muted">
                 Nothing is written yet. Clinics already in Discovery are merged
                 into what is there rather than added again.
               </p>
@@ -389,7 +390,7 @@ export default function ClinicDiscoveryPanel({
           {result.clinics.length > 0 && (
             <>
               <div className="card mb-4 overflow-x-auto">
-                <table className="w-full">
+                <table className="m-cards w-full">
                   <thead>
                     <tr>
                       <th className="th">Clinic</th>
@@ -402,21 +403,21 @@ export default function ClinicDiscoveryPanel({
                   <tbody>
                     {result.clinics.map((clinic, i) => (
                       <tr key={`${clinic.clinicName}-${i}`}>
-                        <td className="td font-medium">{clinic.clinicName}</td>
-                        <td className="td max-w-[220px] truncate text-muted">
+                        <td data-m="primary" className="td font-medium">{clinic.clinicName}</td>
+                        <td data-label="Website" className="td max-w-[220px] truncate text-muted">
                           {clinic.websiteUrl ?? (
                             <span className="text-muted/70">
                               Not found — enrichment will look
                             </span>
                           )}
                         </td>
-                        <td className="td text-muted">{clinic.location ?? "—"}</td>
-                        <td className="td text-muted">
+                        <td data-label="Location" className="td text-muted">{clinic.location ?? "—"}</td>
+                        <td data-label="Decision maker" className="td text-muted">
                           {clinic.contactName ?? (
                             <span className="text-muted/70">Not found</span>
                           )}
                         </td>
-                        <td className="td text-xs text-muted">
+                        <td data-label="Term" className="td text-xs text-muted">
                           {clinic.sourceQuery}
                         </td>
                       </tr>

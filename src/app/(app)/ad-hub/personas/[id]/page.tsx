@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -57,7 +58,7 @@ export default async function PersonaDetailPage({
             {countLabel(creatives, "creative")}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <PageActions className="flex shrink-0 items-center gap-2">
           <Link href="/ad-hub/concepts/new" className="btn-primary">
             New concept
           </Link>
@@ -68,10 +69,10 @@ export default async function PersonaDetailPage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5 max-md:grid-cols-1">
         <section className="lg:col-span-3">
           <h2 className="display mb-4 text-xl font-semibold">Persona</h2>
           <form action={update} className="card space-y-5 p-6">
@@ -114,10 +115,13 @@ export default async function PersonaDetailPage({
           <h2 className="display mb-4 text-xl font-semibold">Concepts</h2>
           <div className="card">
             {persona.concepts.length === 0 ? (
-              <p className="p-6 text-sm text-muted">
-                Nothing built for this persona yet. The new-concept wizard picks
-                them up at step 1.
-              </p>
+              <>
+                <p className="helper-text p-6 text-sm text-muted">
+                  Nothing built for this persona yet. The new-concept wizard picks
+                  them up at step 1.
+                </p>
+                <p className="md:hidden p-6 text-sm text-muted">Nothing built for this persona yet.</p>
+              </>
             ) : (
               <ul>
                 {persona.concepts.map((concept) => (

@@ -16,6 +16,11 @@ const config: Config = {
   // Class strategy rather than media: the toggle in the sidebar puts `dark` on
   // <html>, so an explicit choice can disagree with the OS.
   darkMode: "class",
+  // Every `hover:` utility — and every `hover:` inside an @apply — only
+  // applies on a device that can actually hover. A mouse sees exactly what it
+  // always did; a finger no longer leaves a card stuck in its lifted state
+  // after a tap. The press feedback touch gets instead is in globals.css.
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       colors: {

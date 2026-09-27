@@ -35,7 +35,7 @@ export default function DailyKpiGoalsForm({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="display text-xl font-semibold">Goals</h2>
-          <p className="mt-1 text-sm text-muted">
+          <p className="helper-text mt-1 text-sm text-muted">
             What a full day looks like for the work you control, and a full
             month for the answers it earns. A goal of 0 takes a metric out of
             the score and the streak without taking it off the page.
@@ -76,7 +76,7 @@ export default function DailyKpiGoalsForm({
               }
               className="field num"
             />
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+            <p className="helper-text mt-1.5 text-[11px] leading-relaxed text-muted">
               {DAILY_KPI_BLURBS[key]}
             </p>
           </div>

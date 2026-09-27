@@ -10,7 +10,7 @@ export default function NewClientPage() {
           ← Clients
         </Link>
         <h1 className="display mt-2 text-[32px] font-semibold">New client</h1>
-        <p className="mt-1.5 text-sm text-muted">
+        <p className="helper-text mt-1.5 text-sm text-muted">
           Seeds the default delivery checklist automatically.
         </p>
       </div>
@@ -21,7 +21,7 @@ export default function NewClientPage() {
           </label>
           <input id="clinicName" name="clinicName" required className="field" />
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="field-label" htmlFor="contactName">
               Contact name

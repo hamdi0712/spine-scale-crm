@@ -47,11 +47,11 @@ export default async function LibraryPage({
   return (
     <div>
       <h1 className="display text-[32px] font-semibold">Library</h1>
-      <p className="mt-1.5 text-sm text-muted">
+      <p className="helper-text mt-1.5 text-sm text-muted">
         Playbooks and templates, written as you build them
       </p>
 
-      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[12rem_16rem_1fr] lg:divide-x lg:divide-y-0">
+      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[12rem_16rem_1fr] lg:divide-x lg:divide-y-0 max-md:grid-cols-1">
         {/* Categories */}
         <nav className="self-stretch py-1">
           {LIBRARY_CATEGORIES.map((c) => (
@@ -86,10 +86,13 @@ export default async function LibraryPage({
             </Link>
           </div>
           {entries.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted">
-              Nothing here yet — this category fills up as you write real
-              material.
-            </p>
+            <>
+              <p className="helper-text px-4 py-6 text-sm text-muted">
+                Nothing here yet — this category fills up as you write real
+                material.
+              </p>
+              <p className="md:hidden px-4 py-6 text-sm text-muted">Nothing here yet.</p>
+            </>
           ) : (
             <ul className="flex-1">
               {entries.map((e) => (
@@ -223,7 +226,7 @@ export default async function LibraryPage({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted">
+            <p className="helper-text text-sm text-muted">
               Select an entry, or create one with “+ New”.
             </p>
           )}

@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -94,7 +95,7 @@ export default async function DiscoveryCandidatePage({
               </span>
             )}
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
             <span title={DISCOVERY_SOURCE_KIND_MEANINGS[pathway]}>
               {DISCOVERY_SOURCE_KIND_LABELS[pathway]}
             </span>
@@ -113,8 +114,19 @@ export default async function DiscoveryCandidatePage({
               </>
             )}
           </p>
+          {/* A phone keeps the pathway and the enrichment age and drops the
+              sentence explaining the status — the badge above names it. */}
+          <p className="md:hidden mt-2 text-xs leading-relaxed text-muted">
+            {DISCOVERY_SOURCE_KIND_LABELS[pathway]}
+            {candidate.enrichedAt && (
+              <>
+                {" · "}
+                <span className="num">Enriched {fmtRelative(candidate.enrichedAt)}</span>
+              </>
+            )}
+          </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <PageActions className="flex shrink-0 items-center gap-2">
           {candidate.promotedLead ? (
             <Link
               href={`/pipeline/${candidate.promotedLead.id}`}
@@ -158,7 +170,7 @@ export default async function DiscoveryCandidatePage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
       {candidate.status === "FAILED" && candidate.failureReason && (
@@ -169,7 +181,7 @@ export default async function DiscoveryCandidatePage({
           <p className="mt-0.5 text-xs leading-relaxed text-muted">
             {candidate.failureReason}
           </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
             Nothing was scored on partial evidence, deliberately. Fix whatever
             it names below and the next “Process queue” run picks this one up
             again from the top.
@@ -209,7 +221,7 @@ export default async function DiscoveryCandidatePage({
         </div>
       )}
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 lg:grid-cols-2 max-md:grid-cols-1">
         <section>
           <h2 className="display mb-4 text-xl font-semibold">Details</h2>
           <form action={update} className="card space-y-5 p-6">
@@ -225,7 +237,7 @@ export default async function DiscoveryCandidatePage({
                 className="field"
               />
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+            <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
               <div>
                 <label className="field-label" htmlFor="contactName">
                   Contact name
@@ -407,7 +419,7 @@ export default async function DiscoveryCandidatePage({
                 />
               </div>
             </div>
-            <p className="border-t border-line/60 pt-5 text-xs leading-relaxed text-muted">
+            <p className="helper-text border-t border-line/60 pt-5 text-xs leading-relaxed text-muted">
               These are the fields the chain runs on. The company page, the
               Facebook page, the website and the clinic name with its location
               are each one actor’s input — an empty one is a skipped actor, not
@@ -426,7 +438,9 @@ export default async function DiscoveryCandidatePage({
           <h2 className="display mb-4 text-xl font-semibold">Enrichment</h2>
           {enriched ? (
             <div className="card">
-              <div className="border-b border-line/60 px-6 py-4">
+              {/* The caption is the row's only content, so the row goes with
+                  it on a phone rather than leaving an empty bordered band. */}
+              <div className="helper-text border-b border-line/60 px-6 py-4">
                 <p className="num text-xs text-muted">
                   {candidate.enrichedAt
                     ? `Last run ${fmtDateTime(candidate.enrichedAt)} — a snapshot, not live`
@@ -463,7 +477,7 @@ export default async function DiscoveryCandidatePage({
           ) : (
             <div className="card px-6 py-8 text-center">
               <p className="text-sm font-medium">Nothing gathered yet</p>
-              <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted">
+              <p className="helper-text mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted">
                 The four actors run as the first step of “Process queue”, from
                 the URLs on the left. What they bring back appears here, dated,
                 and is what the scoring reads.
@@ -479,7 +493,7 @@ export default async function DiscoveryCandidatePage({
           <div className="card">
             <DiscoveryScoreHeader breakdown={breakdown} />
             <DiscoveryBreakdownView breakdown={breakdown} />
-            <p className="border-t border-line/60 px-6 py-4 text-xs leading-relaxed text-muted">
+            <p className="helper-text border-t border-line/60 px-6 py-4 text-xs leading-relaxed text-muted">
               This is the transcript of one automated run against the evidence
               it had that day, stored as it was written — it does not re-read
               itself when the framework changes. The editable scorecard lives on
@@ -490,7 +504,7 @@ export default async function DiscoveryCandidatePage({
         ) : (
           <div className="card px-6 py-8 text-center">
             <p className="text-sm font-medium">Not scored yet</p>
-            <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted">
+            <p className="helper-text mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted">
               Scoring happens in “Process queue” — five hard disqualifiers,
               four categories out of {ICP_MAX_SCORE}, every answer with the
               sentence behind it. Nothing is scored by hand here, deliberately.

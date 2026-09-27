@@ -88,7 +88,7 @@ export default function CreativeWizard({
           <h2 className="text-sm font-medium">
             <span className="num">{step}.</span> {meta.title}
           </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {meta.blurb}
           </p>
         </div>
@@ -102,7 +102,7 @@ export default function CreativeWizard({
               awarenessLevel}{" "}
             · {stage.label}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
             {AWARENESS_LEVEL_GUIDANCE[awarenessLevel as AwarenessLevel] ??
               stage.guidance}
           </p>
@@ -164,7 +164,7 @@ export default function CreativeWizard({
                   placeholder="The line on the creative itself"
                   className="field"
                 />
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   {CONCEPT_HEADLINE_GUIDANCE}
                 </p>
               </div>
@@ -192,7 +192,7 @@ export default function CreativeWizard({
                   placeholder="The headline under the creative in the ad unit"
                   className="field mt-2"
                 />
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   {AD_HEADLINE_GUIDANCE}
                 </p>
               </div>
@@ -227,7 +227,7 @@ export default function CreativeWizard({
                 placeholder="Book your assessment"
                 className="field"
               />
-              <p className="mt-2 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                 One ask. The creative is saved as a Draft — it cannot be marked
                 Ready until the compliance checklist on its record is fully
                 checked.

@@ -16,7 +16,7 @@ function SubmitButton() {
 export default function LoginPage() {
   const [state, formAction] = useFormState<LoginState, FormData>(login, {});
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-dvh items-center justify-center px-4">
       <div className="card w-full max-w-sm p-8">
         <div className="mb-8">
           <LogoWordmarkChip />

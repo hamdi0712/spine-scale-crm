@@ -180,7 +180,7 @@ export default function OutreachSequencePanel({
           mark={actions.markReplied}
           clear={actions.clearReplied}
         />
-        <p className="w-full text-xs leading-relaxed text-muted">
+        <p className="helper-text w-full text-xs leading-relaxed text-muted">
           {salutationNote}
         </p>
       </div>
@@ -197,7 +197,7 @@ export default function OutreachSequencePanel({
       <div
         role="tablist"
         aria-label="Outreach steps"
-        className="-mx-6 mt-4 flex gap-1 overflow-x-auto border-b border-line px-6"
+        className="-mx-6 mt-4 flex gap-1 overflow-x-auto border-b border-line px-6 max-md:-mx-4 max-md:px-4 max-md:scrollbar-none"
       >
         {entries.map((entry) => (
           <StepTab
@@ -223,9 +223,12 @@ export default function OutreachSequencePanel({
         // Nothing is reachable at all, which is the state a lead sits in before
         // it has been enriched. The reasons are all in the list below, so this
         // says the one thing the list cannot.
-        <p className="mt-4 text-xs leading-relaxed text-muted">
-          No step is reachable yet. What each one is waiting for is below.
-        </p>
+        <>
+          <p className="helper-text mt-4 text-xs leading-relaxed text-muted">
+            No step is reachable yet. What each one is waiting for is below.
+          </p>
+          <p className="md:hidden mt-4 text-xs leading-relaxed text-muted">No step is reachable yet.</p>
+        </>
       )}
 
       {locked.length > 0 && <WhatsNext entries={locked} />}
@@ -390,7 +393,7 @@ function StepPanel({
       <p className="text-sm font-medium text-ink">
         {OUTREACH_STEP_LABELS[step]}
       </p>
-      <p className="mt-0.5 text-xs leading-relaxed text-muted">
+      <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
         {OUTREACH_STEP_BLURBS[step]}
       </p>
 
@@ -445,7 +448,7 @@ function Aside({
   children: React.ReactNode;
 }) {
   return (
-    <details className="group/aside mt-2">
+    <details className="helper-text group/aside mt-2">
       <summary className="flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium tracking-[0.02em] text-muted hover:text-ink [&::-webkit-details-marker]:hidden">
         <IconChevronRight
           size={12}
@@ -551,7 +554,7 @@ function Note({ note, step }: { note: StepNote; step: OutreachStep }) {
         <p className="text-sm font-medium text-ink">
           A bump, not a new observation
         </p>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
           The first message went out and was never answered, so there is no
           reply to build a second angle on. This restates what was already sent
           in one line and gives them an easy way to end it. It adds no new
@@ -704,7 +707,7 @@ function MessageCard({
               <span className="inline-flex h-[18px] items-center rounded-[6px] bg-accent/10 px-1.5 text-accent">
                 Option {message.variant}
               </span>
-              <span className="ml-2 font-normal text-muted">
+              <span className="helper-text ml-2 font-normal text-muted">
                 {VARIANT_BLURBS[message.variant as FirstMessageVariant] ?? ""}
               </span>
             </>
@@ -755,7 +758,9 @@ function MessageCard({
           type="button"
           onClick={() => void copy()}
           disabled={text.trim() === ""}
-          className="btn h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+          // Full width on a phone: copying the message is the whole point of
+          // this card there, and the thumb should not have to find it.
+          className="btn h-[34px] px-3.5 text-xs disabled:cursor-not-allowed disabled:opacity-50 max-md:h-11 max-md:w-full max-md:justify-center max-md:text-sm"
         >
           {copied ? "Copied ✓" : "Copy"}
         </button>

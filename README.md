@@ -782,6 +782,27 @@ again.
     draws its Tabler glyph as before. The banner keeps a gradient underneath
     its photograph, so a missing file is never a broken image.
 
+## On a phone or tablet
+
+The desktop layout (1024px and up) is the app as designed; everything that
+changes a narrower screen sits behind `max-md:` / `md:max-lg:` or a
+`(pointer: coarse)` / `(hover: none)` media query, so a desktop with a mouse
+never matches it.
+
+- **Below 768px** the sidebar gives way to a bottom tab bar (Dashboard,
+  Outreach, Monk Mode, Iman, More) and a slim top bar. More opens a sheet with
+  every other page in the sidebar's groups, plus Settings, the theme toggle
+  and Sign out. A page's header buttons move into the top bar's ⋯ menu
+  (`PageActions`), and every dialog becomes a bottom sheet (`Sheet`, and the
+  `.dialog-scrim` / `.dialog-sheet` classes on the existing dialogs).
+- **768–1023px** keeps the sidebar, held to its 64px icon rail.
+- **Touch**: 44px tap targets, 16px form fields (no iOS focus zoom — pinch
+  zoom is left alone), hover lifts replaced by a press, and a tap-to-move
+  stage picker on board cards in place of dragging.
+- **Installable**: `src/app/manifest.ts` and the icons in `public/` make it an
+  add-to-home-screen app. There is deliberately no service worker — every page
+  needs the live server.
+
 ## Deploying to Vercel + hosted Postgres (later)
 
 The app is built so the move is a datasource swap, not a rewrite:

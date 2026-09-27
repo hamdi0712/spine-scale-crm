@@ -180,7 +180,7 @@ export default function DecisionMakerPanel({
             )}
             {confidence && <ConfidenceBadge confidence={confidence} />}
             {evidence && (
-              <p className="pt-1 text-xs leading-relaxed text-muted">{evidence}</p>
+              <p className="helper-text pt-1 text-xs leading-relaxed text-muted">{evidence}</p>
             )}
           </div>
         ) : (
@@ -243,7 +243,7 @@ export default function DecisionMakerPanel({
               <p className="text-xs font-medium">
                 Others found at this clinic
               </p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
                 The strongest was taken. If it picked the wrong person, one of
                 these can replace it — a lower confidence means the
                 verification could not tie them to this clinic outright, not
@@ -261,7 +261,7 @@ export default function DecisionMakerPanel({
                         {candidate.title ?? "No title stated"} ·{" "}
                         {EVIDENCE_SOURCE_LABELS[candidate.source]}
                       </p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
+                      <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
                         {candidate.evidence}
                       </p>
                     </div>
@@ -288,7 +288,7 @@ export default function DecisionMakerPanel({
           not for the ordinary case — but never absent, because a stage that
           found nobody and said nothing about why is one nobody can debug. */}
       {attempts.length > 0 && (
-        <div className="mt-5 border-t border-line/60 pt-4">
+        <div className="helper-text mt-5 border-t border-line/60 pt-4">
           <button
             type="button"
             onClick={() => setShowLog((v) => !v)}

@@ -27,6 +27,8 @@ import {
   WEEKDAYS,
 } from "@/lib/calendar";
 import { fmtTimeInZone } from "@/lib/timezones";
+import Sheet from "@/components/Sheet";
+import { useIsPhone } from "@/components/useMediaQuery";
 import Icon from "@/components/Icons";
 
 // How many dots a cell shows before the rest fold into a "+n". Four keeps the
@@ -70,6 +72,11 @@ export default function CalendarMonth({
   const selectedKey = selected ?? todayKey;
   const agenda = byDay.get(selectedKey) ?? [];
 
+  // A phone has no room for the agenda beside the month, so tapping a day
+  // raises it as a sheet instead.
+  const phone = useIsPhone();
+  const [agendaOpen, setAgendaOpen] = useState(false);
+
   const go = (delta: number) => setCursor(shiftMonth(year, month, delta));
   const goToday = () => {
     setCursor(null);
@@ -77,15 +84,15 @@ export default function CalendarMonth({
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start max-md:grid-cols-1">
       <div className="card">
-        <div className="flex items-center justify-between gap-4 border-b border-line/60 px-5 py-4">
+        <div className="flex items-center justify-between gap-4 border-b border-line/60 px-5 py-4 max-md:px-4 max-md:py-3">
           <h2 className="display text-lg font-semibold">{view.label}</h2>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={goToday}
-              className="h-8 rounded-[10px] px-3 text-xs font-medium text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+              className="h-8 rounded-[10px] px-3 text-xs max-md:h-10 font-medium text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
             >
               Today
             </button>
@@ -94,7 +101,7 @@ export default function CalendarMonth({
                 type="button"
                 onClick={() => go(-1)}
                 aria-label="Previous month"
-                className="flex h-8 w-8 items-center justify-center text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/30"
+                className="flex h-8 w-8 items-center justify-center text-muted max-md:h-10 max-md:w-10 hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/30"
               >
                 <Icon name="chevronLeft" className="h-4 w-4" />
               </button>
@@ -102,7 +109,7 @@ export default function CalendarMonth({
                 type="button"
                 onClick={() => go(1)}
                 aria-label="Next month"
-                className="flex h-8 w-8 items-center justify-center border-l border-line text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/30"
+                className="flex h-8 w-8 items-center justify-center max-md:h-10 max-md:w-10 border-l border-line text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/30"
               >
                 <Icon name="chevronRight" className="h-4 w-4" />
               </button>
@@ -114,7 +121,7 @@ export default function CalendarMonth({
           {WEEKDAYS.map((day) => (
             <div
               key={day}
-              className="px-2 py-2 text-center text-xs font-medium tracking-[0.02em] text-muted"
+              className="px-2 py-2 text-center text-xs font-medium tracking-[0.02em] text-muted max-md:px-0"
             >
               {day}
             </div>
@@ -134,6 +141,7 @@ export default function CalendarMonth({
               onSelect={() => {
                 setSelected(cell.key);
                 if (!cell.inMonth) setCursor(parseDayKey(cell.key));
+                if (phone) setAgendaOpen(true);
               }}
             />
           ))}
@@ -154,7 +162,12 @@ export default function CalendarMonth({
         </div>
       </div>
 
-      <Agenda dayKey={selectedKey} events={agenda} mounted={mounted} />
+      <div className="max-md:hidden">
+        <Agenda dayKey={selectedKey} events={agenda} mounted={mounted} />
+      </div>
+      <Sheet open={phone && agendaOpen} onClose={() => setAgendaOpen(false)}>
+        <Agenda dayKey={selectedKey} events={agenda} mounted={mounted} bare />
+      </Sheet>
     </div>
   );
 }
@@ -190,7 +203,7 @@ function DayCell({
       aria-label={`${fmtDayKey(dayKey)} — ${
         events.length === 1 ? "1 item" : `${events.length} items`
       }`}
-      className={`flex h-[92px] flex-col items-start gap-1.5 border-b border-r border-line/60 p-2 text-left transition-colors last:border-r-0 [&:nth-child(7n)]:border-r-0 ${
+      className={`flex h-[92px] flex-col max-md:min-w-0 items-start gap-1.5 border-b border-r border-line/60 p-2 text-left max-md:h-[54px] max-md:items-center max-md:gap-1 max-md:p-1 transition-colors last:border-r-0 [&:nth-child(7n)]:border-r-0 ${
         isSelected ? "bg-accent/[0.05]" : inMonth ? "hover:bg-wash/60" : "bg-wash/30 hover:bg-wash/50"
       }`}
     >
@@ -206,7 +219,7 @@ function DayCell({
         {day}
       </span>
       {events.length > 0 && (
-        <span className="flex flex-wrap items-center gap-1">
+        <span className="flex flex-wrap items-center gap-1 max-md:justify-center">
           {dots.map((event) => (
             <span
               key={event.id}
@@ -233,14 +246,17 @@ function Agenda({
   dayKey,
   events,
   mounted,
+  bare = false,
 }: {
   dayKey: string;
   events: PlacedEvent[];
   mounted: boolean;
+  // Drawn inside a sheet, which is already the card.
+  bare?: boolean;
 }) {
   const overdue = events.filter((e) => e.overdue).length;
   return (
-    <div className="card px-5 py-4">
+    <div className={bare ? "pt-1" : "card px-5 py-4"}>
       <h2 className="display text-base font-semibold">{fmtDayKey(dayKey)}</h2>
       <p className="mt-1 text-xs text-muted">
         {events.length === 0

@@ -42,6 +42,7 @@ import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
 import { PipelineSettings } from "@/lib/pipelineSettings";
 import CostEstimate from "@/components/CostEstimate";
 import AiButton from "@/components/AiButton";
+import { createPortal } from "react-dom";
 import useDialogMotion from "@/components/useDialogMotion";
 import { useDiscoverySelection } from "@/components/DiscoverySelection";
 
@@ -259,9 +260,11 @@ function QueueDialog({
   };
   const unreached = items.filter((i) => i.state === "waiting").length;
 
-  return (
+  // Portalled to <body>: on a phone this dialog can be opened from a page's
+  // ⋯ actions sheet (PageActions), which hides itself as the dialog opens.
+  return createPortal(
     <div
-      className={`${scrimClass} fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
+      className={`${scrimClass} dialog-scrim fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && phase !== "running") close();
       }}
@@ -270,14 +273,14 @@ function QueueDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="queue-title"
-        className={`${dialogClass} card my-auto flex max-h-[88vh] w-full max-w-2xl flex-col`}
+        className={`${dialogClass} dialog-sheet card my-auto flex max-h-[88dvh] w-full max-w-2xl flex-col`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
           <div className="min-w-0">
             <h2 id="queue-title" className="display text-lg font-semibold">
               Process queue{selectedIds && " (selected)"}
             </h2>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
               {selectedIds
                 ? "Enrich, score and decide — only the candidates you selected. Everything else stays queued."
                 : "Enrich, score and decide — every pending candidate, and every one that failed last time."}
@@ -296,7 +299,7 @@ function QueueDialog({
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
           {/* The one thing this dialog must say, and it says it first. */}
-          <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
+          <div className="helper-text rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
             <p className="text-sm font-medium text-ink">
               This runs here, in this tab, while you watch it
             </p>
@@ -309,6 +312,13 @@ function QueueDialog({
               this again picks up where it left off.
             </p>
           </div>
+          {/* The same warning on a phone, in one line and in the terms a
+              phone fails in: the screen locking or another app taking over
+              is what stops the run there. */}
+          <p className="md:hidden rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3 text-sm font-medium text-ink">
+            Keep this screen open until it finishes — locking your phone or
+            switching apps can stop the run.
+          </p>
 
           {error && (
             <div className="rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
@@ -331,7 +341,7 @@ function QueueDialog({
           />
 
           {phase === "planning" && (
-            <ol className="space-y-2 text-xs leading-relaxed text-muted">
+            <ol className="helper-text space-y-2 text-xs leading-relaxed text-muted">
               <li>
                 <span className="num font-medium text-ink">1.</span> Enrich —
                 the same steps the lead page runs, from whatever URLs the
@@ -483,7 +493,8 @@ function QueueDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

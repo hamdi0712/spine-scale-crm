@@ -143,11 +143,11 @@ export default function DailyKpiTrend({ data }: { data: DailyKpiPoint[] }) {
           more machinery than reading two names is worth. Up here it is also
           read before the curves rather than after them, which is the order a
           legend is actually useful in. */}
-      <div className="mb-1 flex flex-wrap items-center justify-end gap-2">
+      <div className="mb-1 flex flex-wrap items-center justify-end gap-2 max-md:justify-start max-md:gap-1.5">
         {DAILY_GOAL_KEYS.map((key) => (
           <span
             key={key}
-            className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-line/70 bg-surface px-2.5 text-[12px] font-medium text-muted"
+            className="inline-flex h-[26px] items-center gap-1.5 rounded-full border border-line/70 bg-surface px-2.5 text-[12px] font-medium text-muted max-md:h-[22px] max-md:px-2 max-md:text-[11px]"
           >
             <span
               className="h-2 w-2 rounded-full"
@@ -159,7 +159,10 @@ export default function DailyKpiTrend({ data }: { data: DailyKpiPoint[] }) {
         ))}
       </div>
 
-      <div className="h-56">
+      {/* Fluid on a phone: a share of the screen's width rather than a fixed
+          224px, which on a 343px-wide card is a chart taller than it is
+          readable. */}
+      <div className="h-56 max-md:aspect-[16/10] max-md:h-auto max-md:max-h-56">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={data}

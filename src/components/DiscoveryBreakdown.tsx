@@ -40,7 +40,7 @@ export function DiscoveryScoreHeader({
     <div className="flex items-center justify-between gap-4 border-b border-line/60 px-6 py-4">
       <div className="min-w-0">
         <h3 className="text-sm font-medium">Score</h3>
-        <p className="num mt-0.5 text-xs text-muted">
+        <p className="helper-text num mt-0.5 text-xs text-muted">
           {breakdown.scoredAt === ""
             ? "Scored automatically in Discovery"
             : `Scored automatically ${fmtDateTime(breakdown.scoredAt)}`}
@@ -89,7 +89,7 @@ export default function DiscoveryBreakdownView({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
             The categories below were still scored and kept — a clinic that
             would otherwise have scored well is the one worth looking at again.
           </p>
@@ -119,8 +119,10 @@ export default function DiscoveryBreakdownView({
         </div>
       )}
 
+      {/* The receipt is explanation and goes on a phone; the notes under it
+          can say evidence was missing, which is information, so they stay. */}
       <div className="space-y-1.5 text-xs leading-relaxed text-muted">
-        <p>
+        <p className="helper-text">
           Read from{" "}
           {breakdown.evidence.length === 0
             ? "this candidate's enrichment"
@@ -155,7 +157,7 @@ function EntryRow({ entry }: { entry: DiscoveryScoreEntry }) {
           </span>
         </span>
       </div>
-      <p className="mt-1 text-xs leading-relaxed text-muted">{entry.reason}</p>
+      <p className="helper-text mt-1 text-xs leading-relaxed text-muted">{entry.reason}</p>
     </li>
   );
 }

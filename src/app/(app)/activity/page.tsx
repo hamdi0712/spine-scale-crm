@@ -22,7 +22,7 @@ export default async function ActivityPage() {
         ← Dashboard
       </Link>
       <h1 className="display mt-2 text-[32px] font-semibold">Activity</h1>
-      <p className="mt-1.5 text-sm text-muted">
+      <p className="helper-text mt-1.5 text-sm text-muted">
         Milestones across every lead and client — conversions, reports,
         contracts, payments, health changes and completed onboardings.
       </p>

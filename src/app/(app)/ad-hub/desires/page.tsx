@@ -32,7 +32,7 @@ export default async function DesiresPage() {
         blurb="Mass desires and the benefits written against them — shared across every concept"
       />
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-3">
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-3 max-md:grid-cols-1">
         <section className="lg:col-span-1">
           <h2 className="display mb-4 text-xl font-semibold">New desire</h2>
           <form action={createDesire} className="card space-y-5 p-6">
@@ -48,7 +48,7 @@ export default async function DesiresPage() {
                 placeholder="I want to get through a full workday without my back seizing up"
                 className="field"
               />
-              <p className="mt-2 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                 First person, as they would say it. A desire is not owned by one
                 persona — the same want turns up across several of them, which
                 is why it lives here rather than on a persona record.
@@ -84,10 +84,11 @@ export default async function DesiresPage() {
 
           {desires.length === 0 ? (
             <div className="card p-6">
-              <p className="text-sm text-muted">
+              <p className="helper-text text-sm text-muted">
                 No desires yet. Write the first one on the left, or let the
                 new-concept wizard create one as you go.
               </p>
+              <p className="md:hidden text-sm text-muted">No desires yet.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -166,7 +167,7 @@ export default async function DesiresPage() {
                             action={updateBenefit.bind(null, benefit.id)}
                             className="space-y-3"
                           >
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="m-form-stack grid grid-cols-2 gap-3">
                               <div>
                                 <label className="field-label">
                                   Product / feature name
@@ -229,7 +230,7 @@ export default async function DesiresPage() {
                         action={createBenefit.bind(null, desire.id)}
                         className="space-y-3 rounded-[10px] border border-dashed border-line p-4"
                       >
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="m-form-stack grid grid-cols-2 gap-3">
                           <div>
                             <label className="field-label">
                               Product / feature name

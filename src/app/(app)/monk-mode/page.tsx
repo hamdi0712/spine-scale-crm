@@ -236,7 +236,7 @@ export default async function MonkModePage({
           tallest one's: each is a short reading, and the row is what makes
           them comparable. This replaced a main column and a rail, which could
           not be the same height as each other and so never were. */}
-      <div className="mt-3.5 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3.5 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4 max-md:grid-cols-1">
         <section className="card flex flex-col p-5">
           {/* Every panel in the row is headed by its own mark now. Filled
               rather than outlined: at sixteen pixels beside a heading a

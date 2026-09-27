@@ -188,7 +188,7 @@ export default async function DailyKpiPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="display text-2xl font-semibold">Daily KPI</h1>
-          <p className="mt-1.5 text-sm font-normal text-muted">
+          <p className="helper-text mt-1.5 text-sm font-normal text-muted">
             Track your daily progress. Small actions compound into clinic
             growth.
           </p>
@@ -232,15 +232,18 @@ export default async function DailyKpiPage({
       </div>
 
       {!isToday && (
-        <p className="mt-4 text-xs text-muted">
-          Showing {dayLabel} — the actuals that day had. Past days are read off
-          the records and are not editable.
-        </p>
+        <>
+          <p className="helper-text mt-4 text-xs text-muted">
+            Showing {dayLabel} — the actuals that day had. Past days are read off
+            the records and are not editable.
+          </p>
+          <p className="md:hidden mt-4 text-xs text-muted">Showing {dayLabel}.</p>
+        </>
       )}
 
       {/* Tighter than the dashboard's headline row: four compact tiles on
           one line, at the gap the rest of this page's rows use. */}
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="m-scroll-row m-kpi-row mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {DAILY_KPI_KEYS.map((key) => {
           const monthly = isMonthly(key);
           // The button is offered on the day being looked at, and a past day
@@ -269,14 +272,14 @@ export default async function DailyKpiPage({
         })}
       </div>
 
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4 max-md:grid-cols-1">
         <section className="card p-6 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="display text-xl font-semibold">
                 Daily progress overview
               </h2>
-              <p className="mt-0.5 text-xs font-normal text-muted">
+              <p className="helper-text mt-0.5 text-xs font-normal text-muted">
                 The two metrics held to a daily goal
               </p>
             </div>
@@ -314,7 +317,7 @@ export default async function DailyKpiPage({
               <span className="mt-1 text-[11px] text-muted">/100</span>
             </ProgressRing>
             <div className="mt-4 text-sm font-semibold">{note.headline}</div>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
               {note.detail}
             </p>
           </div>
@@ -322,7 +325,7 @@ export default async function DailyKpiPage({
 
         <section className="card p-6">
           <h2 className="display text-xl font-semibold">Weekly summary</h2>
-          <p className="mt-1 text-xs font-normal text-muted">
+          <p className="helper-text mt-1 text-xs font-normal text-muted">
             Week to date vs the same days last week
           </p>
           <ul className="mt-4 space-y-3">
@@ -369,7 +372,7 @@ export default async function DailyKpiPage({
           {/* The monthly pair is not a week's work, so it is not reported as
               one: month to date against the monthly goal, and the pace that
               implies. Same rows, a different question. */}
-          <p className="mt-5 border-t border-line/60 pt-4 text-xs font-normal text-muted">
+          <p className="helper-text mt-5 border-t border-line/60 pt-4 text-xs font-normal text-muted">
             Month to date vs the monthly goal
           </p>
           <ul className="mt-3 space-y-3">
@@ -400,18 +403,21 @@ export default async function DailyKpiPage({
         </section>
       </div>
 
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-4 max-md:grid-cols-1">
         <section className="card lg:col-span-3">
           <div className="border-b border-line/60 px-6 py-4">
             <h2 className="display text-xl font-semibold">
               Daily KPI breakdown
             </h2>
-            <p className="mt-0.5 text-xs font-normal text-muted">
+            <p className="helper-text mt-0.5 text-xs font-normal text-muted">
               Daily metrics by day; the monthly pair month to date
             </p>
           </div>
+          {/* On a phone each metric is a card of its own (.m-cards): its
+              goal, the viewed day and the average. The individual day
+              columns are left to the chart above, which already draws them. */}
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="m-cards w-full">
               <thead>
                 <tr>
                   <th className="th">KPI</th>
@@ -447,7 +453,7 @@ export default async function DailyKpiPage({
                     : dayCount >= goals[key];
                   return (
                     <tr key={key}>
-                      <td className="td">
+                      <td data-m="primary" className="td">
                         <div className="flex items-center gap-2.5">
                           {/* The same flat two-tone mark the cards carry, at
                               table size — one object, drawn once, in
@@ -474,7 +480,7 @@ export default async function DailyKpiPage({
                           </div>
                         </div>
                       </td>
-                      <td className="td num text-right text-muted">
+                      <td data-label="Goal" className="td num text-right text-muted">
                         {goals[key]}
                         <span className="ml-1 text-xs">
                           {monthly ? "/mo" : "/day"}
@@ -486,6 +492,7 @@ export default async function DailyKpiPage({
                            so it does not pretend to one: the day columns give
                            way to the month it is actually judged over. */
                         <td
+                          data-label="This month"
                           className="td text-right text-sm font-normal text-muted"
                           colSpan={recent.length + 2}
                         >
@@ -504,6 +511,7 @@ export default async function DailyKpiPage({
                           {recent.map((d) => (
                             <td
                               key={d.day.getTime()}
+                              data-m="hide"
                               className="td num text-right text-muted"
                             >
                               {d.counts[key]}
@@ -513,7 +521,7 @@ export default async function DailyKpiPage({
                               it is the one that carries the metric's own
                               colour — softly when the goal is not met yet,
                               because a tint is a highlight and not a verdict. */}
-                          <td className="td text-right">
+                          <td data-label={isToday ? "Today" : "That day"} className="td text-right">
                             <span
                               className="num inline-flex min-w-[46px] justify-center rounded-lg px-2 py-1 text-sm font-semibold"
                               style={{
@@ -524,7 +532,7 @@ export default async function DailyKpiPage({
                               {counts[key]}
                             </span>
                           </td>
-                          <td className="td num text-right font-medium">
+                          <td data-label={`${DAILY_KPI_TREND_DAYS}-day avg`} className="td num text-right font-medium">
                             {averageFor(trendDays, key)}
                           </td>
                         </>
@@ -561,7 +569,7 @@ export default async function DailyKpiPage({
                 {streak === 1 ? "Day" : "Days"}
               </span>
             </ProgressRing>
-            <p className="mt-4 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-4 text-xs leading-relaxed text-muted">
               {streak === 0
                 ? "No run going. Hit both daily goals in a day to start one."
                 : metToday

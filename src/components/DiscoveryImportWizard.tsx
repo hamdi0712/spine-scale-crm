@@ -273,7 +273,7 @@ export default function DiscoveryImportWizard({
           <h2 className="text-sm font-medium">
             <span className="num">{step}.</span> {meta.title}
           </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">{meta.blurb}</p>
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">{meta.blurb}</p>
         </div>
 
         <div className="space-y-6 p-6">
@@ -307,7 +307,7 @@ export default function DiscoveryImportWizard({
                 }}
               />
               <span className="btn pointer-events-none">Choose a CSV file</span>
-              <span className="text-xs leading-relaxed text-muted">
+              <span className="helper-text text-xs leading-relaxed text-muted">
                 or drop it here — Apify exports, spreadsheet exports, anything
                 with a header row
               </span>
@@ -317,7 +317,7 @@ export default function DiscoveryImportWizard({
           {/* ─── Step 1b — run an Apify actor or task ────────────────────── */}
           {step === 1 && source === "apify" && (
             <>
-              <div className="grid grid-cols-[150px_1fr] gap-4">
+              <div className="m-form-stack grid grid-cols-[150px_1fr] gap-4">
                 <div>
                   <label className="field-label" htmlFor="apify-kind">
                     Run a
@@ -359,7 +359,7 @@ export default function DiscoveryImportWizard({
                   placeholder={APIFY_INPUT_PLACEHOLDER}
                   className="field font-mono text-xs"
                 />
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   Paste it from the {apifyKind}’s own input tab in the Apify
                   console. Leave it empty to run with the {apifyKind}’s
                   defaults.
@@ -378,7 +378,9 @@ export default function DiscoveryImportWizard({
                 >
                   {running ? "Running…" : parsed ? "Run again" : "Run and fetch results"}
                 </button>
-                <span className="text-xs leading-relaxed text-muted">
+                {/* The wait is status and stays on a phone; the billing note
+                    does not. */}
+                <span className={`${running ? "" : "helper-text "}text-xs leading-relaxed text-muted`}>
                   {running
                     ? "Waiting for the run to finish — this can take a couple of minutes."
                     : `The run is charged to the account the token belongs to.`}
@@ -467,7 +469,7 @@ export default function DiscoveryImportWizard({
                 </table>
               </div>
 
-              <ul className="space-y-1.5">
+              <ul className="helper-text space-y-1.5">
                 {IMPORT_FIELDS.filter((f) => f.hint).map((f) => (
                   <li key={f.key} className="text-xs leading-relaxed text-muted">
                     <span className="font-medium text-ink">{f.label}</span> —{" "}
@@ -501,7 +503,7 @@ export default function DiscoveryImportWizard({
                   <p className="text-sm font-medium text-ink">
                     Map a {noun} to Clinic name to continue
                   </p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                  <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
                     It is the one field a candidate cannot be created without.
                   </p>
                 </div>
@@ -529,7 +531,7 @@ export default function DiscoveryImportWizard({
                   placeholder={batchDefault}
                   className="field max-w-md"
                 />
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   All {candidates.length} candidate
                   {candidates.length === 1 ? "" : "s"} import under this label,
                   and Discovery filters by it. Dated and named after the{" "}

@@ -96,7 +96,10 @@ export default function MonkStreakPanel({
           strip used to be positioned against the card with a hand-computed
           offset, and it was twenty pixels of card padding wrong, sitting over
           "best streak" where the image is dark enough to show it. */}
-      <div className="relative mt-3 flex-1">
+      {/* On a phone the panel is not stretched to a row of four, so the
+          slack the treeline stands in is given a floor of its own — without it
+          the 116px strip rises over the dots and the counter above them. */}
+      <div className="relative mt-3 flex-1 max-md:min-h-[150px]">
         <div className="flex w-full items-start justify-between gap-1">
         {row.map((cell) => (
           <div key={cell.key} className="flex flex-col items-center gap-1.5">

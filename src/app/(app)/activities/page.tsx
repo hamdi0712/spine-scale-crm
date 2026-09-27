@@ -163,10 +163,10 @@ export default async function ActivitiesPage({
 // pair wears.
 function Header({ view }: { view: "board" | "checklist" }) {
   return (
-    <div className="flex items-end justify-between">
+    <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
       <div>
         <h1 className="display text-[32px] font-semibold">Activities</h1>
-        <p className="mt-1.5 text-sm text-muted">
+        <p className="helper-text mt-1.5 text-sm text-muted">
           {view === "checklist"
             ? "The fixed daily routine, and what the records say actually happened"
             : "Everything that wants doing and is not a call, a follow-up or an onboarding step"}

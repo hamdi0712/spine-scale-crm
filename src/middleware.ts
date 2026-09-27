@@ -34,7 +34,10 @@ export const config = {
   // Nothing is exposed by this that was not already public: these are static
   // files under public/, served by URL to anyone who asks, and the bypass only
   // decides whether the request is answered or redirected.
+  //
+  // The web app manifest and its icons are on the list for the same reason as
+  // the logos: a phone fetches them to install the app, with no session.
   matcher: [
-    "/((?!login|_next/static|_next/image|favicon.ico|logo-icon.png|logo-wordmark.png|iman-avatar.png|monk-.*\\.png|habit-.*\\.png).*)",
+    "/((?!login|_next/static|_next/image|favicon.ico|logo-icon.png|logo-wordmark.png|manifest.webmanifest|apple-touch-icon.png|icon-.*\\.png|iman-avatar.png|monk-.*\\.png|habit-.*\\.png).*)",
   ],
 };

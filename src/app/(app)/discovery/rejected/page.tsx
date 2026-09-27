@@ -78,13 +78,13 @@ export default async function RejectedCandidatesPage({
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex items-end justify-between gap-4 max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <Link href="/discovery" className="text-sm text-accent hover:underline">
             ← Discovery
           </Link>
           <h1 className="display mt-2 text-[32px] font-semibold">Rejected</h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Every candidate the queue decided against, and why — highest score
             first, because that is where a decision worth overruling would be
           </p>
@@ -115,7 +115,7 @@ export default async function RejectedCandidatesPage({
       {candidates.length === 0 ? (
         <div className="card mt-8 px-6 py-10 text-center">
           <p className="text-sm font-medium">Nothing rejected here</p>
-          <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
+          <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
             {filter === "all"
               ? "The queue has not turned anything down yet."
               : "No rejection in this list was reached that way."}

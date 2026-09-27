@@ -72,7 +72,7 @@ export default async function MonkProgressPage() {
         }
       />
 
-      <div className="grid gap-5 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2 max-sm:grid-cols-1">
         <section className="card flex flex-col p-5">
           <h2 className="display mb-4 shrink-0 text-xl font-semibold">Overall</h2>
           <MonkDonut tally={tally} />
@@ -98,7 +98,7 @@ export default async function MonkProgressPage() {
       <section className="card mt-5">
         <div className="border-b border-line/60 px-6 py-4">
           <h2 className="display text-xl font-semibold">Habit by habit</h2>
-          <p className="mt-0.5 text-xs text-muted">
+          <p className="helper-text mt-0.5 text-xs text-muted">
             How much of each habit&rsquo;s target has been met across the{" "}
             {lived.length} {lived.length === 1 ? "day" : "days"} so far
           </p>

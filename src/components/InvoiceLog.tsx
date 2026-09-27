@@ -51,7 +51,7 @@ export default function InvoiceLog({
   return (
     <div className="space-y-5">
       <div className="overflow-hidden rounded-[10px] border border-line">
-        <table className="w-full">
+        <table className="m-cards w-full">
           <thead>
             <tr>
               <th className="th">Date</th>
@@ -67,8 +67,8 @@ export default function InvoiceLog({
           <tbody>
             {invoices.map((invoice) => (
               <tr key={invoice.id} className="hover:bg-wash/60">
-                <td className="td num text-xs">{fmtDate(invoice.issuedOn)}</td>
-                <td
+                <td data-m="primary" className="td num text-xs">{fmtDate(invoice.issuedOn)}</td>
+                <td data-label="Due"
                   className={`td num text-xs ${
                     isInvoiceOverdue(invoice, today) ? "text-bad" : "text-muted"
                   }`}
@@ -76,8 +76,8 @@ export default function InvoiceLog({
                   {invoice.dueDate ? fmtDate(invoice.dueDate) : "—"}
                   {isInvoiceOverdue(invoice, today) && " · overdue"}
                 </td>
-                <td className="td num">{fmtMoney(invoice.amount)}</td>
-                <td className="td">
+                <td data-label="Amount" className="td num">{fmtMoney(invoice.amount)}</td>
+                <td data-label="Status" className="td">
                   <div className="inline-flex overflow-hidden rounded-full border border-line">
                     {INVOICE_STATUSES.map((s) => {
                       const setStatus = setInvoiceStatus.bind(null, invoice.id, s);
@@ -101,7 +101,7 @@ export default function InvoiceLog({
                     })}
                   </div>
                 </td>
-                <td className="td text-xs text-muted">{invoice.memo ?? "—"}</td>
+                <td data-label="Memo" className="td text-xs text-muted">{invoice.memo ?? "—"}</td>
                 <td className="td text-right">
                   <ConfirmForm
                     action={deleteInvoice.bind(null, invoice.id)}

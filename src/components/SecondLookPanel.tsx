@@ -76,7 +76,7 @@ export default function SecondLookPanel({
           <AiMark size="sm" />
           <div className="min-w-0">
             <p className="text-sm font-medium">Second looks</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+            <p className={`${rejected === 0 ? "" : "helper-text "}mt-0.5 text-xs leading-relaxed text-muted`}>
               {rejected === 0
                 ? "Nothing has been rejected yet, so there is nothing to re-read."
                 : "Re-reads every rejection above against the promotion bar and the reasoning that ended each run, and marks the ones worth a second human look — a score that landed just under the bar, or a disqualifier whose stated reason does not really establish it. It flags; it never promotes."}

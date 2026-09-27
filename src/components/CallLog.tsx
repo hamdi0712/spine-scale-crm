@@ -38,10 +38,13 @@ export default function CallLog({
   return (
     <div className="card">
       {calls.length === 0 ? (
-        <p className="px-5 py-6 text-sm text-muted">
-          No calls logged yet. Schedule one below — this log sits alongside the
-          record&rsquo;s other dates, it doesn&rsquo;t replace them.
-        </p>
+        <>
+          <p className="helper-text px-5 py-6 text-sm text-muted">
+            No calls logged yet. Schedule one below — this log sits alongside the
+            record&rsquo;s other dates, it doesn&rsquo;t replace them.
+          </p>
+          <p className="md:hidden px-5 py-6 text-sm text-muted">No calls logged yet.</p>
+        </>
       ) : (
         <>
           {upcoming.length > 0 && (

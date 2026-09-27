@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Caveat, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
@@ -32,7 +32,40 @@ const caveat = Caveat({
 export const metadata: Metadata = {
   title: "Spine Scale Ops",
   description: "Internal ops CRM for Spine Scale",
-  icons: { icon: "/logo-icon.png" },
+  icons: { icon: "/logo-icon.png", apple: "/apple-touch-icon.png" },
+  // Added to the home screen, iOS runs the app in a standalone window. The
+  // translucent status bar lets the page draw under it, which is what the
+  // mobile top bar's safe-area padding is for (see MobileTopBar).
+  appleWebApp: {
+    capable: true,
+    title: "Spine Scale",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+// The phone-shaped half of the page contract.
+//
+// viewport-fit=cover lets the layout reach under the notch and the home
+// indicator, and every edge that meets one pads itself by the matching
+// env(safe-area-inset-*). resizes-content asks the browser to shrink the
+// layout viewport when the on-screen keyboard opens, so the copilot's input
+// stays above it; Safari ignores the key, and the copilot page has its own
+// visualViewport fallback for that. Zoom is deliberately left alone — no
+// maximum-scale, no user-scalable=no: the 16px form fields in globals.css are
+// what stop iOS zooming on focus, not a lock on the reader's own pinch.
+//
+// themeColor is the browser chrome's tint, one per OS scheme. The in-app
+// toggle can disagree with the OS, so applyTheme() (lib/theme.ts) rewrites
+// these tags to match whichever theme is actually on the page.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FEFEFE" },
+    { media: "(prefers-color-scheme: dark)", color: "#0B0E14" },
+  ],
 };
 
 export default function RootLayout({

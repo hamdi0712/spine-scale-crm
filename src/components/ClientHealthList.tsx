@@ -42,7 +42,7 @@ export default function ClientHealthList({ rows }: { rows: HealthRow[] }) {
         <p className="mt-5 text-sm font-medium">
           Your next client will show up here
         </p>
-        <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
+        <p className="helper-text mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
           Track performance, campaign results and growth across all your clinic
           partners.
         </p>

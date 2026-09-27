@@ -21,7 +21,7 @@ export default async function PipelineSettingsPage() {
     <div>
       <div className="mb-4">
         <h2 className="display text-xl font-semibold">Pipeline</h2>
-        <p className="mt-1 text-sm text-muted">
+        <p className="helper-text mt-1 text-sm text-muted">
           Which enrichment steps run, the actors behind them, and the score a
           candidate has to reach to become a lead
         </p>
@@ -29,9 +29,9 @@ export default async function PipelineSettingsPage() {
 
       {/* The honest limit of what this page can promise, said before anything
           on it is touched rather than discovered afterwards. */}
-      <div className="card mb-8 px-6 py-4">
+      <div className="helper-text card mb-8 px-6 py-4">
         <p className="text-sm font-medium">What a swap can and cannot do</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
           Each step sends an input built for its actor and reads named fields
           back out. A replacement actor that takes the same input and names its
           output the same way drops straight in; one that names things

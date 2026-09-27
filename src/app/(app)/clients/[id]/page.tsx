@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -83,12 +84,14 @@ export default async function ClientDetailPage({
 
   return (
     <div>
-      <div className="flex items-start justify-between">
+      {/* Below desktop width the actions wrap under the title rather than
+          pushing the header wider than the page. */}
+      <div className="flex items-start justify-between max-lg:flex-wrap max-lg:gap-4">
         <div>
           <Link href="/clients" className="text-sm text-accent hover:underline">
             ← Clients
           </Link>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
             <h1 className="display text-[32px] font-semibold">
               {client.clinicName}
             </h1>
@@ -114,7 +117,7 @@ export default async function ClientDetailPage({
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <PageActions className="flex items-center gap-2">
           <Link href={`/reporting/${client.id}`} className="btn">
             Weekly reporting →
           </Link>
@@ -130,7 +133,7 @@ export default async function ClientDetailPage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
       <section className="mt-8">
@@ -163,7 +166,7 @@ export default async function ClientDetailPage({
         </div>
       </section>
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5 max-md:grid-cols-1">
         <section className="lg:col-span-2">
           <h2 className="display mb-4 text-xl font-semibold">Client details</h2>
           <form action={update} className="card space-y-5 p-6">
@@ -179,7 +182,7 @@ export default async function ClientDetailPage({
                 className="field"
               />
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+            <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
               <div>
                 <label className="field-label" htmlFor="contactName">
                   Contact name
@@ -306,7 +309,7 @@ export default async function ClientDetailPage({
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-xs text-muted">
+                <p className="helper-text mt-2 text-xs text-muted">
                   Path A keeps every form and automation symptom-agnostic, so no
                   patient health information is ever collected. Switching to Path
                   B adds &ldquo;{HIPAA_CHECKLIST_ITEM}&rdquo; to the checklist
@@ -328,7 +331,7 @@ export default async function ClientDetailPage({
                     Force At risk — operational break
                   </option>
                 </select>
-                <p className="mt-2 text-xs text-muted">
+                <p className="helper-text mt-2 text-xs text-muted">
                   For when something is broken that the numbers have not caught
                   up with — ad account down, tracking dead, access revoked.
                   While it is set, health reads At risk whatever the metrics

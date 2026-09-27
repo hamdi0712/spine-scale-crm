@@ -70,4 +70,17 @@ export function applyTheme(resolved: "light" | "dark") {
   const root = document.documentElement;
   root.classList.toggle("dark", resolved === "dark");
   root.style.colorScheme = resolved;
+  syncThemeColor(resolved);
+}
+
+// The browser chrome's tint on a phone — the status bar, and the toolbar in a
+// standalone window. The root layout ships one <meta name="theme-color"> per
+// OS scheme; the in-app toggle can overrule the OS, so both tags are pointed
+// at the theme that is actually painted. The values are --c-bg in each theme.
+const THEME_COLORS = { light: "#FEFEFE", dark: "#0B0E14" } as const;
+
+export function syncThemeColor(resolved: "light" | "dark") {
+  document
+    .querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')
+    .forEach((m) => m.setAttribute("content", THEME_COLORS[resolved]));
 }

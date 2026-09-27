@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
@@ -276,16 +277,18 @@ export default async function DashboardPage() {
             <MotivationalLine />
           </Suspense>
         </div>
-        <div className="flex items-center gap-3">
+        <PageActions className="flex items-center gap-3">
           <BusinessHoursChip />
           <Link href="/clients/new" className="btn-primary">
             <Icon name="plus" className="h-4 w-4" />
             New client
           </Link>
-        </div>
+        </PageActions>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-6 lg:grid-cols-4">
+      {/* On a phone the four cards are one sideways-scrolling row with the
+          next card peeking in (.m-kpi-row) rather than a 2×2 of slivers. */}
+      <div className="m-scroll-row m-kpi-row mt-6 grid grid-cols-2 gap-6 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
           <KpiCard key={kpi.label} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
@@ -304,7 +307,7 @@ export default async function DashboardPage() {
 
           The flag comes off the data attribute TodaysFocus sets from the state
           behind its own "View all" toggle. */}
-      <div className="mt-5 grid items-stretch gap-6 has-[[data-focus-expanded]]:items-start lg:grid-cols-2">
+      <div className="mt-5 grid items-stretch gap-6 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1">
         <section className="card self-stretch p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
@@ -426,7 +429,7 @@ export default async function DashboardPage() {
           The stretch reaches the bordered card directly because each section
           carries .card itself and is the grid item — no wrapper in between to
           stretch instead and leave the visible card floating short inside it. */}
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1">
         <section className="card p-6">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Recent activity</h2>

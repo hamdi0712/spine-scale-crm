@@ -46,7 +46,7 @@ export default function PerformanceLog({
     <div className="space-y-5">
       <div className="overflow-hidden rounded-[10px] border border-line">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="m-cards w-full">
             <thead>
               <tr>
                 <th className="th">Date</th>
@@ -64,15 +64,15 @@ export default function PerformanceLog({
             <tbody>
               {logs.map((log) => (
                 <tr key={log.id} className="hover:bg-wash/60">
-                  <td className="td num text-xs">{fmtDate(log.loggedOn)}</td>
-                  <td className="td num">{fmtMoney(log.spend)}</td>
-                  <td className="td num text-xs">
+                  <td data-m="primary" className="td num text-xs">{fmtDate(log.loggedOn)}</td>
+                  <td data-label="Spend" className="td num">{fmtMoney(log.spend)}</td>
+                  <td data-label="Impressions" className="td num text-xs">
                     {fmtCount(log.impressions)}
                   </td>
-                  <td className="td num text-xs">{fmtPctValue(log.ctr)}</td>
-                  <td className="td num text-xs">{fmtMoneyCents(log.cpl)}</td>
-                  <td className="td num">{log.conversions}</td>
-                  <td className="td text-xs text-muted">{log.notes ?? "—"}</td>
+                  <td data-label="CTR" className="td num text-xs">{fmtPctValue(log.ctr)}</td>
+                  <td data-label="CPL" className="td num text-xs">{fmtMoneyCents(log.cpl)}</td>
+                  <td data-label="Conversions" className="td num">{log.conversions}</td>
+                  <td data-label="Notes" className="td text-xs text-muted">{log.notes ?? "—"}</td>
                   <td className="td text-right">
                     <ConfirmForm
                       action={deletePerformanceLog.bind(null, log.id)}

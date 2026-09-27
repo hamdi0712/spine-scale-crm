@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -66,7 +67,7 @@ export default async function OnboardingPage({
       </Link>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
             <h1 className="display text-[32px] font-semibold">
               {client.clinicName}
             </h1>
@@ -74,11 +75,13 @@ export default async function OnboardingPage({
           </div>
           <p className="mt-1.5 text-sm text-muted">Client onboarding</p>
         </div>
+        <PageActions className="contents">
         <form action={skip} className="shrink-0">
           <button type="submit" className="btn">
             Skip onboarding wizard
           </button>
         </form>
+        </PageActions>
       </div>
 
       <div className="mt-8">
@@ -90,7 +93,7 @@ export default async function OnboardingPage({
           <h2 className="text-sm font-medium">
             <span className="num">{step}.</span> {meta.title}
           </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {meta.blurb}
           </p>
         </div>
@@ -153,7 +156,7 @@ function StepDetails({ client }: { client: WizardClient }) {
             className="field"
           />
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="field-label" htmlFor="contactName">
               Contact name
@@ -231,7 +234,7 @@ function StepDetails({ client }: { client: WizardClient }) {
             />
           </div>
         </div>
-        <p className="text-xs leading-relaxed text-muted">
+        <p className="helper-text text-xs leading-relaxed text-muted">
           Pre-filled from the lead where there was something to carry over. The
           time zone drives the local-time badges and the kickoff-call
           comparison in step 4.
@@ -250,7 +253,7 @@ function StepContract({ client }: { client: WizardClient }) {
   return (
     <form action={save}>
       <div className="space-y-5 p-6">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-5">
+        <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5">
           <div>
             <label className="field-label" htmlFor="contractStatus">
               Contract status
@@ -404,7 +407,7 @@ function StepHandoff({ client }: { client: WizardClient }) {
             </li>
           ))}
         </ul>
-        <p className="text-xs leading-relaxed text-muted">
+        <p className="helper-text text-xs leading-relaxed text-muted">
           Anything still open is fine to finish later — nothing above blocks the
           handoff. Finishing closes the wizard and drops you on the client
           record, where the delivery checklist takes over.

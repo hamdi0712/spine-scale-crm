@@ -41,7 +41,7 @@ export default function ComplianceChecklist({
             />
             Compliance check
           </h3>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {AD_COMPLIANCE_RULE}
           </p>
         </div>

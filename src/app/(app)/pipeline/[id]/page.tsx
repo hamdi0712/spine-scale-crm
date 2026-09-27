@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -196,7 +197,7 @@ export default async function LeadDetailPage({
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <PageActions className="flex flex-wrap items-center gap-2">
           <LeadEnrichPanel
             run={runEnrichment}
             applySelection={applySelection}
@@ -232,10 +233,10 @@ export default async function LeadDetailPage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
+      <div className="mt-8 grid gap-8 lg:grid-cols-2 max-md:grid-cols-1">
         <section>
           <h2 className="display mb-4 text-xl font-semibold">Details</h2>
           <form action={update} className="card space-y-5 p-6">
@@ -245,7 +246,7 @@ export default async function LeadDetailPage({
                 empty field, and the URLs that actually need the room were
                 getting the same half and truncating in it. Two columns on a
                 phone, where six would be four characters wide. */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-6">
+            <div className="m-form-stack grid grid-cols-2 gap-x-4 gap-y-5 sm:grid-cols-6">
               <div className="col-span-2 sm:col-span-6">
                 <label className="field-label" htmlFor="clinicName">
                   Clinic name
@@ -556,7 +557,7 @@ export default async function LeadDetailPage({
                 placeholder="Paste their reply here, as they wrote it."
                 className="field"
               />
-              <p className="mb-5 mt-1.5 text-xs leading-relaxed text-muted">
+              <p className="helper-text mb-5 mt-1.5 text-xs leading-relaxed text-muted">
                 The audit offer in the sequence below is written from this. Its
                 job is to answer what they actually said, so pasting the reply in
                 is what stops it opening with a generic “appreciate that
@@ -578,7 +579,7 @@ export default async function LeadDetailPage({
                 autoComplete="off"
                 className="field"
               />
-              <p className="mt-1.5 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
                 Save the lead to store it. The delivery message in the sequence
                 below unlocks once there is one, and the link is dropped into it
                 as written.
@@ -598,7 +599,7 @@ export default async function LeadDetailPage({
             <>
               <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
                 <h2 className="display text-xl font-semibold">Enrichment</h2>
-                <p className="num text-xs text-muted">
+                <p className="helper-text num text-xs text-muted">
                   {lead.enrichedAt
                     ? `Last run ${fmtDateTime(lead.enrichedAt)} — a snapshot, not live`
                     : "From an actor run — a snapshot, not live"}
@@ -660,9 +661,12 @@ export default async function LeadDetailPage({
               form. It grows into a card the moment there is something to
               hold. */}
           {lead.notes.length === 0 ? (
-            <p className="mt-3 rounded-[10px] border border-dashed border-line px-4 py-3.5 text-center text-xs leading-relaxed text-muted">
-              No activity yet. Notes are append-only and timestamped.
-            </p>
+            <>
+              <p className="helper-text mt-3 rounded-[10px] border border-dashed border-line px-4 py-3.5 text-center text-xs leading-relaxed text-muted">
+                No activity yet. Notes are append-only and timestamped.
+              </p>
+              <p className="md:hidden mt-3 rounded-[10px] border border-dashed border-line px-4 py-3.5 text-center text-xs leading-relaxed text-muted">No activity yet.</p>
+            </>
           ) : (
             <div className="card mt-4">
               <ul>
@@ -697,7 +701,7 @@ export default async function LeadDetailPage({
               question about both. */}
           <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
             <h2 className="display text-xl font-semibold">Outreach sequence</h2>
-            <p className="text-xs text-muted">
+            <p className="helper-text text-xs text-muted">
               Drafts to copy — nothing here is sent
             </p>
           </div>
@@ -725,7 +729,7 @@ export default async function LeadDetailPage({
       <section className="mt-8">
         <div className="mb-4 flex items-baseline justify-between gap-4">
           <h2 className="display text-xl font-semibold">Calls</h2>
-          <p className="text-sm text-muted">
+          <p className="helper-text text-sm text-muted">
             Alongside the next follow-up date, not instead of it
           </p>
         </div>
@@ -735,7 +739,7 @@ export default async function LeadDetailPage({
       <section className="mt-8">
         <div className="mb-4 flex items-baseline justify-between">
           <h2 className="display text-xl font-semibold">ICP Scorecard</h2>
-          <p className="max-w-xl text-right text-sm text-muted">
+          <p className="helper-text max-w-xl text-right text-sm text-muted">
             {ICP_SCORING_RULE}
           </p>
         </div>

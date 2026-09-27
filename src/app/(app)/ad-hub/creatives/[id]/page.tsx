@@ -1,3 +1,4 @@
+import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -95,7 +96,7 @@ export default async function CreativeDetailPage({
             )}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <PageActions className="flex shrink-0 items-center gap-2">
           <form action={duplicate}>
             <button
               type="submit"
@@ -112,15 +113,15 @@ export default async function CreativeDetailPage({
           >
             Delete
           </ConfirmForm>
-        </div>
+        </PageActions>
       </div>
 
-      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5">
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-5 max-md:grid-cols-1">
         {/* ─── The copy ────────────────────────────────────────────────── */}
         <section className="lg:col-span-3">
           <h2 className="display mb-4 text-xl font-semibold">The creative</h2>
           <form action={update} className="card space-y-5 p-6">
-            <div className="grid grid-cols-3 gap-x-4 gap-y-5">
+            <div className="m-form-stack grid grid-cols-3 gap-x-4 gap-y-5">
               <div className="col-span-2">
                 <label className="field-label" htmlFor="creativeType">
                   Creative type
@@ -165,7 +166,7 @@ export default async function CreativeDetailPage({
                 defaultValue={creative.conceptHeadline}
                 className="field"
               />
-              <p className="mt-2 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                 {CONCEPT_HEADLINE_GUIDANCE}
               </p>
             </div>
@@ -194,7 +195,7 @@ export default async function CreativeDetailPage({
                 defaultValue={creative.adHeadline}
                 className="field mt-2"
               />
-              <p className="mt-2 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                 {AD_HEADLINE_GUIDANCE}
               </p>
             </div>
@@ -284,7 +285,7 @@ export default async function CreativeDetailPage({
           <div>
             <h2 className="display mb-4 text-xl font-semibold">Iteration</h2>
             <div className="card p-6">
-              <p className="text-xs leading-relaxed text-muted">
+              <p className="helper-text text-xs leading-relaxed text-muted">
                 {ITERATE_NOTE}
               </p>
               <div className="mt-4 space-y-2">
@@ -304,10 +305,13 @@ export default async function CreativeDetailPage({
                   />
                 ))}
                 {!creative.parent && creative.variations.length === 0 && (
-                  <p className="text-sm text-muted">
-                    No lineage yet — this creative has not been duplicated and
-                    did not come from another.
-                  </p>
+                  <>
+                    <p className="helper-text text-sm text-muted">
+                      No lineage yet — this creative has not been duplicated and
+                      did not come from another.
+                    </p>
+                    <p className="md:hidden text-sm text-muted">No lineage yet.</p>
+                  </>
                 )}
               </div>
             </div>

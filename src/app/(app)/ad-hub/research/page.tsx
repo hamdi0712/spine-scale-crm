@@ -64,7 +64,7 @@ export default async function ResearchPage({
         }
       />
 
-      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[13rem_16rem_1fr] lg:divide-x lg:divide-y-0">
+      <div className="card mt-8 grid items-stretch divide-y divide-line lg:grid-cols-[13rem_16rem_1fr] lg:divide-x lg:divide-y-0 max-md:grid-cols-1">
         {/* Types */}
         <nav className="self-stretch py-1">
           {[ALL, ...RESEARCH_NOTE_TYPES].map((t) => (
@@ -86,7 +86,7 @@ export default async function ResearchPage({
             </Link>
           ))}
           {type !== ALL && (
-            <p className="mx-1.5 mt-2 px-3 pb-2 text-xs leading-relaxed text-muted">
+            <p className="helper-text mx-1.5 mt-2 px-3 pb-2 text-xs leading-relaxed text-muted">
               {RESEARCH_NOTE_TYPE_BLURBS[type as ResearchNoteType]}
             </p>
           )}
@@ -106,10 +106,13 @@ export default async function ResearchPage({
             </Link>
           </div>
           {notes.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted">
-              Nothing here yet — research fills this up before any of it becomes
-              a persona or a concept.
-            </p>
+            <>
+              <p className="helper-text px-4 py-6 text-sm text-muted">
+                Nothing here yet — research fills this up before any of it becomes
+                a persona or a concept.
+              </p>
+              <p className="md:hidden px-4 py-6 text-sm text-muted">Nothing here yet.</p>
+            </>
           ) : (
             <ul className="flex-1">
               {notes.map((n) => (
@@ -202,7 +205,7 @@ export default async function ResearchPage({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted">
+            <p className="helper-text text-sm text-muted">
               Select a note, or create one with &ldquo;+ New&rdquo;.
             </p>
           )}
@@ -229,7 +232,7 @@ function NoteForm({
 }) {
   return (
     <form action={action} className="flex h-full flex-col gap-5">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="m-form-stack grid grid-cols-3 gap-4">
         <div className="col-span-2">
           <label className="field-label" htmlFor="title">
             Title
