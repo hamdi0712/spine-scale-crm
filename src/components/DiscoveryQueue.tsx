@@ -341,7 +341,7 @@ function QueueDialog({
           />
 
           {phase === "planning" && (
-            <ol className="space-y-2 text-xs leading-relaxed text-muted">
+            <ol className="helper-text space-y-2 text-xs leading-relaxed text-muted">
               <li>
                 <span className="num font-medium text-ink">1.</span> Enrich —
                 the same steps the lead page runs, from whatever URLs the
