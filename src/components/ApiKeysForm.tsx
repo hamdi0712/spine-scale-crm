@@ -64,7 +64,7 @@ function SecretRow({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium">{meta.label}</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {meta.help}
           </p>
         </div>
@@ -103,7 +103,7 @@ function SecretRow({
             autoComplete="off"
             className="field font-mono text-xs"
           />
-          <p className="mt-1.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
             Saved to the database and used from the next request — no restart.
             Leaving this blank and saving clears the stored key and falls back
             to{" "}

@@ -12,7 +12,7 @@ export default function NewPersonaPage() {
         <h1 className="display mt-2 text-[32px] font-semibold">
           New persona
         </h1>
-        <p className="mt-1.5 text-sm text-muted">
+        <p className="helper-text mt-1.5 text-sm text-muted">
           Who the ads talk to. The last two prompts matter most — what they
           already tried, and why it failed them.
         </p>

@@ -27,7 +27,9 @@ export default function DraftEmailPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium">{label}</p>
-          <p className="mt-0.5 truncate text-xs text-muted">
+          {/* The missing-email warning stays on a phone; the how-it-works
+              line does not. */}
+          <p className={`${to ? "helper-text " : ""}mt-0.5 truncate text-xs text-muted`}>
             {to
               ? `Opens Gmail with a draft to ${to} — you send it.`
               : "No contact email on this client yet — add one in step 1 to draft the email."}
@@ -86,7 +88,7 @@ export default function DraftEmailPanel({
               className="field"
             />
           </div>
-          <p className="text-xs text-muted">
+          <p className="helper-text text-xs text-muted">
             Edits here only change the draft this button opens — nothing is
             saved to the client record.
           </p>

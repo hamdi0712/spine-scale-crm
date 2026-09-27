@@ -194,7 +194,7 @@ export default function ConceptWizard({
           <h2 className="text-sm font-medium">
             <span className="num">{step}.</span> {meta.title}
           </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {meta.blurb}
           </p>
         </div>
@@ -269,7 +269,7 @@ export default function ConceptWizard({
           {/* ─── Step 2 — desire ──────────────────────────────────────── */}
           {step === 2 && (
             <>
-              <p className="-mt-1 text-xs leading-relaxed text-muted">
+              <p className="helper-text -mt-1 text-xs leading-relaxed text-muted">
                 Desires are shared across concepts and personas — the same want
                 turns up in several of them. Reuse one wherever you can; a
                 near-duplicate hides that they are the same want.
@@ -309,7 +309,7 @@ export default function ConceptWizard({
                       placeholder="I want to get through a full workday without my back seizing up"
                       className="field"
                     />
-                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                    <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                       Write it as they would say it, first person, starting
                       &ldquo;I want to…&rdquo;.
                     </p>
@@ -367,7 +367,7 @@ export default function ConceptWizard({
               {s.benefitId === NEW && (
                 <div className="space-y-5 rounded-[10px] border border-line p-5">
                   {desireBenefits.length === 0 && (
-                    <p className="-mb-1 text-xs leading-relaxed text-muted">
+                    <p className="helper-text -mb-1 text-xs leading-relaxed text-muted">
                       Nothing has been written against this desire yet — this is
                       the first benefit answering it.
                     </p>
@@ -411,7 +411,7 @@ export default function ConceptWizard({
                       placeholder="…get back to a full day on site without planning it around the pain"
                       className="field"
                     />
-                    <p className="mt-2 text-xs leading-relaxed text-muted">
+                    <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                       Finish the sentence &ldquo;so you can…&rdquo;. If it
                       describes the product rather than their day, it is still a
                       feature.
@@ -427,7 +427,7 @@ export default function ConceptWizard({
             <>
               <div>
                 <span className="field-label mb-0 block">Awareness level</span>
-                <p className="mb-2 mt-1 text-xs leading-relaxed text-muted">
+                <p className="helper-text mb-2 mt-1 text-xs leading-relaxed text-muted">
                   {AWARENESS_GUIDANCE_INTRO}
                 </p>
                 <div className="space-y-2" role="radiogroup">
@@ -447,7 +447,7 @@ export default function ConceptWizard({
                 <span className="field-label mb-0 block">
                   Market sophistication stage
                 </span>
-                <p className="mb-2 mt-1 text-xs leading-relaxed text-muted">
+                <p className="helper-text mb-2 mt-1 text-xs leading-relaxed text-muted">
                   {SOPHISTICATION_GUIDANCE_INTRO}
                 </p>
                 <div className="space-y-2" role="radiogroup">

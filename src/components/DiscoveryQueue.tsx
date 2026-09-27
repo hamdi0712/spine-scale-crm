@@ -280,7 +280,7 @@ function QueueDialog({
             <h2 id="queue-title" className="display text-lg font-semibold">
               Process queue{selectedIds && " (selected)"}
             </h2>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
               {selectedIds
                 ? "Enrich, score and decide — only the candidates you selected. Everything else stays queued."
                 : "Enrich, score and decide — every pending candidate, and every one that failed last time."}

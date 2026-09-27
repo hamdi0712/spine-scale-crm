@@ -71,7 +71,7 @@ export default async function MonkSettingsPage() {
             {/* Moving the start is the one place rewriting the past is right:
                 the completions are filed under real days, so this only changes
                 which of them the challenge counts. */}
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+            <p className="helper-text mt-1.5 text-[11px] leading-relaxed text-muted">
               Day 1 is this date. Move it back if you started before you set
               this up — the days you logged are already there.
             </p>
@@ -90,7 +90,7 @@ export default async function MonkSettingsPage() {
               defaultValue={challenge.durationDays}
               className="field num"
             />
-            <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+            <p className="helper-text mt-1.5 text-[11px] leading-relaxed text-muted">
               21 by default. Between {MIN_DURATION_DAYS} and{" "}
               {MAX_DURATION_DAYS}.
             </p>
@@ -111,7 +111,7 @@ export default async function MonkSettingsPage() {
       {shape.finished && (
         <section className="card mb-6 p-6">
           <h2 className="display text-xl font-semibold">Go again</h2>
-          <p className="mt-0.5 text-sm text-muted">
+          <p className="helper-text mt-0.5 text-sm text-muted">
             Starts a fresh challenge today with the same habits. The one you
             just finished stays exactly as it is.
           </p>

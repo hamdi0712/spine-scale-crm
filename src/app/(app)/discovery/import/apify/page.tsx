@@ -26,7 +26,7 @@ export default async function ApifyImportPage() {
           <h1 className="display mt-2 text-[32px] font-semibold">
             Import from Apify
           </h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Run an actor or a saved task and map what it returns — same mapping
             and duplicate checks as the CSV import
           </p>

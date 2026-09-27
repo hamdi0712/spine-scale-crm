@@ -40,7 +40,7 @@ export default async function ClinicDiscoveryPage() {
           <h1 className="display mt-2 text-[32px] font-semibold">
             Clinic-first search
           </h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Find the clinic first and the decision-maker later — the same
             enrichment chain, the same scoring, no person needed to start
           </p>
@@ -55,7 +55,7 @@ export default async function ClinicDiscoveryPage() {
         </PageActions>
       </div>
 
-      <div className="card mb-8 px-6 py-4">
+      <div className="helper-text card mb-8 px-6 py-4">
         <p className="text-sm font-medium">What happens to what it finds</p>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Every clinic imported here becomes a Pending candidate and goes

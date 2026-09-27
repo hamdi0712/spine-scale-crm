@@ -50,10 +50,13 @@ export default function MonkHabitGrid({
 }) {
   if (rows.length === 0) {
     return (
-      <p className="py-6 text-center text-sm text-muted">
-        No habits yet. Add your non-negotiables under{" "}
-        <span className="font-medium text-ink">Habits</span>.
-      </p>
+      <>
+        <p className="helper-text py-6 text-center text-sm text-muted">
+          No habits yet. Add your non-negotiables under{" "}
+          <span className="font-medium text-ink">Habits</span>.
+        </p>
+        <p className="md:hidden py-6 text-center text-sm text-muted">No habits yet.</p>
+      </>
     );
   }
 

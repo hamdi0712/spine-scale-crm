@@ -56,10 +56,11 @@ export default function AdHubTree({ personas }: { personas: TreePersona[] }) {
   if (personas.length === 0) {
     return (
       <div className="card p-6">
-        <p className="text-sm text-muted">
+        <p className="helper-text text-sm text-muted">
           No personas yet. The new-concept wizard writes the first one — it
           starts by asking who the ad is for.
         </p>
+        <p className="md:hidden text-sm text-muted">No personas yet.</p>
       </div>
     );
   }

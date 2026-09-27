@@ -166,7 +166,9 @@ export default function IcpScorecard({
       <div className="flex items-center justify-between gap-4 border-b border-line/60 px-6 py-4 max-md:flex-col max-md:items-start max-md:gap-2">
         <div>
           <h3 className="text-sm font-medium">Score</h3>
-          <p className="mt-0.5 text-xs text-muted">
+          {/* The disqualification is status and stays on a phone; the tier
+              bands legend is explanation and does not. */}
+          <p className={`${disqualified ? "" : "helper-text "}mt-0.5 text-xs text-muted`}>
             {disqualified
               ? "Disqualified at Layer 1 — scoring does not apply"
               : ICP_TIER_BANDS}
@@ -198,7 +200,7 @@ export default function IcpScorecard({
           <legend className="field-label">
             Layer 1 — Hard disqualifiers (check first)
           </legend>
-          <p className="-mt-1 mb-2 text-xs leading-relaxed text-muted">
+          <p className="helper-text -mt-1 mb-2 text-xs leading-relaxed text-muted">
             {ICP_DISQUALIFIER_RULE}
           </p>
           <div className="space-y-2">
@@ -282,7 +284,7 @@ export default function IcpScorecard({
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium">Scoring assist</p>
-                  <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                  <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
                     {enriched
                       ? "Reads this lead’s enrichment — website notes, Meta ads signal, review count — against the framework below and suggests B and the two Automation Gap boxes it can see. Suggestions arrive pre-selected with their reasoning; nothing is scored until you save this card."
                       : "Run “Enrich this lead” first. The suggestion is made from the website notes, the Meta ads signal and the review count, and this lead has none of them yet."}
@@ -320,7 +322,7 @@ export default function IcpScorecard({
                       ? "No summary came back with this suggestion."
                       : assist.summary}
                   </p>
-                  <p className="mt-1.5 text-xs leading-relaxed text-muted">
+                  <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
                     Read from{" "}
                     {assistBasedOn.length === 0
                       ? "this lead’s enrichment"
@@ -343,7 +345,7 @@ export default function IcpScorecard({
                   {answers[category.key] ?? 0} / {category.max}
                 </span>
               </div>
-              <p className="mb-2 mt-1 text-xs leading-relaxed text-muted">
+              <p className="helper-text mb-2 mt-1 text-xs leading-relaxed text-muted">
                 {category.guidance}
               </p>
               {suggestingStaffSize && category.key === "icpStaffSize" && (
@@ -436,7 +438,7 @@ export default function IcpScorecard({
                 })}
               </div>
               {category.note && (
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   {category.note}
                 </p>
               )}
@@ -450,7 +452,7 @@ export default function IcpScorecard({
                 {result.gapTotal} / {ICP_GAP_MAX}
               </span>
             </div>
-            <p className="mb-2 mt-1 text-xs leading-relaxed text-muted">
+            <p className="helper-text mb-2 mt-1 text-xs leading-relaxed text-muted">
               {ICP_GAP_GUIDANCE}
             </p>
             <div className="space-y-2">

@@ -49,7 +49,7 @@ export default function DailyChecklist({
             />
             Daily checklist
           </h3>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {readOnly
               ? "A past day, as it was left. Ticks are only made on the day itself."
               : "The same routine every day, and only the parts of it you control. It starts empty each morning — yesterday's ticks stay on yesterday."}
@@ -221,7 +221,7 @@ function BonusSection({
           </li>
         ))}
       </ul>
-      <p className="border-b border-line/60 px-6 py-2.5 text-xs leading-relaxed text-muted">
+      <p className="helper-text border-b border-line/60 px-6 py-2.5 text-xs leading-relaxed text-muted">
         {readOnly
           ? "Counted off that day's records — replies, audit offers, Looms and follow-ups that actually happened."
           : "Added automatically as replies, audit offers, Looms and follow-ups land today. Nothing here is ticked, and a quiet day costs nothing."}

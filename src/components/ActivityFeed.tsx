@@ -56,16 +56,19 @@ export default function ActivityFeed({
         {/* Same gap as Client health's: a clear line under the disc, so the
             heading reads as copy rather than as a label on the mark. */}
         <p className="mt-5 text-sm font-medium">No milestones logged yet</p>
-        <p className="mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
+        <p className="helper-text mx-auto mt-1 max-w-[15rem] text-xs leading-relaxed text-muted">
           Conversions, reports, contracts and invoices land here as they happen.
         </p>
       </div>
     ) : (
-      <p className="py-6 text-sm text-muted">
-        No milestones logged yet. Converting a lead, generating a report,
-        signing a contract, collecting an invoice, a health change or finishing
-        onboarding will each land here.
-      </p>
+      <>
+        <p className="helper-text py-6 text-sm text-muted">
+          No milestones logged yet. Converting a lead, generating a report,
+          signing a contract, collecting an invoice, a health change or finishing
+          onboarding will each land here.
+        </p>
+        <p className="md:hidden py-6 text-sm text-muted">No milestones logged yet.</p>
+      </>
     );
   }
   return (

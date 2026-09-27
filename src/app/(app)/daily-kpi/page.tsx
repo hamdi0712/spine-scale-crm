@@ -188,7 +188,7 @@ export default async function DailyKpiPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="display text-2xl font-semibold">Daily KPI</h1>
-          <p className="mt-1.5 text-sm font-normal text-muted">
+          <p className="helper-text mt-1.5 text-sm font-normal text-muted">
             Track your daily progress. Small actions compound into clinic
             growth.
           </p>
@@ -232,10 +232,13 @@ export default async function DailyKpiPage({
       </div>
 
       {!isToday && (
-        <p className="mt-4 text-xs text-muted">
-          Showing {dayLabel} — the actuals that day had. Past days are read off
-          the records and are not editable.
-        </p>
+        <>
+          <p className="helper-text mt-4 text-xs text-muted">
+            Showing {dayLabel} — the actuals that day had. Past days are read off
+            the records and are not editable.
+          </p>
+          <p className="md:hidden mt-4 text-xs text-muted">Showing {dayLabel}.</p>
+        </>
       )}
 
       {/* Tighter than the dashboard's headline row: four compact tiles on
@@ -276,7 +279,7 @@ export default async function DailyKpiPage({
               <h2 className="display text-xl font-semibold">
                 Daily progress overview
               </h2>
-              <p className="mt-0.5 text-xs font-normal text-muted">
+              <p className="helper-text mt-0.5 text-xs font-normal text-muted">
                 The two metrics held to a daily goal
               </p>
             </div>
@@ -314,7 +317,7 @@ export default async function DailyKpiPage({
               <span className="mt-1 text-[11px] text-muted">/100</span>
             </ProgressRing>
             <div className="mt-4 text-sm font-semibold">{note.headline}</div>
-            <p className="mt-1 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
               {note.detail}
             </p>
           </div>
@@ -322,7 +325,7 @@ export default async function DailyKpiPage({
 
         <section className="card p-6">
           <h2 className="display text-xl font-semibold">Weekly summary</h2>
-          <p className="mt-1 text-xs font-normal text-muted">
+          <p className="helper-text mt-1 text-xs font-normal text-muted">
             Week to date vs the same days last week
           </p>
           <ul className="mt-4 space-y-3">
@@ -369,7 +372,7 @@ export default async function DailyKpiPage({
           {/* The monthly pair is not a week's work, so it is not reported as
               one: month to date against the monthly goal, and the pace that
               implies. Same rows, a different question. */}
-          <p className="mt-5 border-t border-line/60 pt-4 text-xs font-normal text-muted">
+          <p className="helper-text mt-5 border-t border-line/60 pt-4 text-xs font-normal text-muted">
             Month to date vs the monthly goal
           </p>
           <ul className="mt-3 space-y-3">
@@ -406,7 +409,7 @@ export default async function DailyKpiPage({
             <h2 className="display text-xl font-semibold">
               Daily KPI breakdown
             </h2>
-            <p className="mt-0.5 text-xs font-normal text-muted">
+            <p className="helper-text mt-0.5 text-xs font-normal text-muted">
               Daily metrics by day; the monthly pair month to date
             </p>
           </div>

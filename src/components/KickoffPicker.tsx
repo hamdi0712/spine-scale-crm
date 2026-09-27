@@ -82,7 +82,7 @@ export default function KickoffPicker({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium">Schedule on Calendar</p>
-            <p className="mt-0.5 text-xs text-muted">
+            <p className="helper-text mt-0.5 text-xs text-muted">
               Opens a pre-filled Google Calendar event — you invite and save it.
             </p>
           </div>
@@ -106,7 +106,7 @@ export default function KickoffPicker({
             </span>
           )}
         </div>
-        <p className="mt-3 border-t border-line/60 pt-3 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-3 border-t border-line/60 pt-3 text-xs leading-relaxed text-muted">
           {MEET_LIMITATION_NOTE}
         </p>
       </div>

@@ -47,7 +47,7 @@ export default async function LibraryPage({
   return (
     <div>
       <h1 className="display text-[32px] font-semibold">Library</h1>
-      <p className="mt-1.5 text-sm text-muted">
+      <p className="helper-text mt-1.5 text-sm text-muted">
         Playbooks and templates, written as you build them
       </p>
 
@@ -86,10 +86,13 @@ export default async function LibraryPage({
             </Link>
           </div>
           {entries.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted">
-              Nothing here yet — this category fills up as you write real
-              material.
-            </p>
+            <>
+              <p className="helper-text px-4 py-6 text-sm text-muted">
+                Nothing here yet — this category fills up as you write real
+                material.
+              </p>
+              <p className="md:hidden px-4 py-6 text-sm text-muted">Nothing here yet.</p>
+            </>
           ) : (
             <ul className="flex-1">
               {entries.map((e) => (

@@ -148,7 +148,7 @@ function AddDialog({
             <h2 id="add-clinic-title" className="display text-lg font-semibold">
               Add clinic by name
             </h2>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
               One clinic, searched for by name — it lands in Discovery as
               Pending, like any import.
             </p>
@@ -198,7 +198,7 @@ function AddDialog({
               placeholder="Austin, TX"
               className="field disabled:opacity-60"
             />
-            <p className="mt-1.5 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
               Narrows the search when two clinics share a name, and is left out
               of it when you leave it blank rather than guessed at.
             </p>
@@ -243,7 +243,7 @@ function AddDialog({
                     ? `Website found: ${added.websiteUrl}`
                     : `Searched for “${added.query}” and nothing in the results read as the clinic’s own site. The candidate was created anyway — add a website on it, or let the queue try Maps on the name.`}
               </p>
-              <p className="mt-1.5 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
                 It is scored by Process queue, with the same chain every other
                 candidate goes through.
               </p>

@@ -26,7 +26,7 @@ export default function AdHubNav({
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <h1 className="display text-[32px] font-semibold">Ad Hub</h1>
-        <p className="mt-1.5 text-sm text-muted">{blurb}</p>
+        <p className="helper-text mt-1.5 text-sm text-muted">{blurb}</p>
       </div>
       <div className="flex items-center gap-2 max-md:w-full">
         <div className="flex h-[42px] items-center gap-1 rounded-[10px] border border-line bg-surface p-1 max-md:max-w-full max-md:overflow-x-auto max-md:scrollbar-none">

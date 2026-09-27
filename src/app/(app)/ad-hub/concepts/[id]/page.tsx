@@ -154,7 +154,7 @@ export default async function ConceptDetailPage({
               Awareness level
             </p>
             <p className="mt-1 text-base font-semibold">{awareness}</p>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
               {AWARENESS_LEVEL_GUIDANCE[
                 concept.awarenessLevel as AwarenessLevel
               ] ?? "—"}
@@ -165,7 +165,7 @@ export default async function ConceptDetailPage({
               Market sophistication
             </p>
             <p className="mt-1 text-base font-semibold">{stage.label}</p>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
               {stage.guidance}
             </p>
           </div>
@@ -220,7 +220,7 @@ export default async function ConceptDetailPage({
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   {ITERATE_NOTE}
                 </p>
               </div>
@@ -283,7 +283,7 @@ export default async function ConceptDetailPage({
                     ),
                   )}
                 </select>
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   Grouped by the desire each one answers. Keep it under the
                   desire above unless you mean to change what this concept
                   sells.
@@ -363,10 +363,13 @@ export default async function ConceptDetailPage({
           </div>
           <div className="card">
             {concept.creatives.length === 0 ? (
-              <p className="p-6 text-sm text-muted">
-                No creatives yet. The wizard walks type → hook and headline → ad
-                copy → CTA, and drops the result here as a Draft.
-              </p>
+              <>
+                <p className="helper-text p-6 text-sm text-muted">
+                  No creatives yet. The wizard walks type → hook and headline → ad
+                  copy → CTA, and drops the result here as a Draft.
+                </p>
+                <p className="md:hidden p-6 text-sm text-muted">No creatives yet.</p>
+              </>
             ) : (
               <ul>
                 {concept.creatives.map((creative) => {

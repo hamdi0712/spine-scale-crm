@@ -24,15 +24,15 @@ export default async function BusinessContextPage() {
     <div>
       <div className="mb-4">
         <h2 className="display text-xl font-semibold">Business context</h2>
-        <p className="mt-1 text-sm text-muted">
+        <p className="helper-text mt-1 text-sm text-muted">
           What the AI Copilot should know about your business before it answers
           anything
         </p>
       </div>
 
-      <div className="card mb-6 px-6 py-4">
+      <div className="helper-text card mb-6 px-6 py-4">
         <p className="text-sm font-medium">How this is used</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
           Whatever is saved here is put at the top of the copilot&rsquo;s
           instructions on every conversation, before it looks anything up. It is
           treated as your own standing instruction — it shapes how answers are

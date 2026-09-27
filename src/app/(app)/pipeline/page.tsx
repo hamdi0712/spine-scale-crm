@@ -89,7 +89,7 @@ export default async function PipelinePage({
       <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <h1 className="display text-[32px] font-semibold">Pipeline</h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Clinics in play — every one of them scored before it got here
           </p>
         </div>
@@ -175,7 +175,7 @@ function UntaggedFirstMessages({
     return (
       <div className="card px-6 py-8 text-center">
         <p className="text-sm font-medium text-ink">Nothing left untagged</p>
-        <p className="mt-1 text-sm text-muted">
+        <p className="helper-text mt-1 text-sm text-muted">
           Every first message that has gone out says which kind of opener it
           was, so the comparison above is reading all of them.
         </p>
@@ -189,7 +189,7 @@ function UntaggedFirstMessages({
         <p className="text-sm font-medium text-ink">
           Sent first messages with no opener type
         </p>
-        <p className="mt-1 text-sm text-muted">
+        <p className="helper-text mt-1 text-sm text-muted">
           These went out before the type was recorded, so they are in neither
           group above. Read the opening line and tag it — nothing is guessed for
           you, because a guess in this column is what would make the comparison

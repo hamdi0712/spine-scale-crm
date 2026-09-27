@@ -74,7 +74,7 @@ export default function PipelineSettingsForm({
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="display text-xl font-semibold">Enrichment chain</h2>
-            <p className="mt-1 text-sm text-muted">
+            <p className="helper-text mt-1 text-sm text-muted">
               The steps every candidate goes through, in the order they run
             </p>
           </div>
@@ -113,7 +113,7 @@ export default function PipelineSettingsForm({
       {/* ─── The bar ─────────────────────────────────────────────────────── */}
       <section>
         <h2 className="display mb-1 text-xl font-semibold">Promotion threshold</h2>
-        <p className="mb-4 text-sm text-muted">
+        <p className="helper-text mb-4 text-sm text-muted">
           The score a candidate has to reach to become a lead
         </p>
         <div className="card p-6">
@@ -145,11 +145,11 @@ export default function PipelineSettingsForm({
                 className="field num w-[120px]"
               />
             </div>
-            <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted">
+            <p className="helper-text min-w-0 flex-1 text-xs leading-relaxed text-muted">
               {thresholdMeaning(draft.promotionThreshold)}
             </p>
           </div>
-          <p className="mt-4 border-t border-line/60 pt-4 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-4 border-t border-line/60 pt-4 text-xs leading-relaxed text-muted">
             This is the promotion bar, not the tier bands. A candidate is still
             scored and tiered by the framework —{" "}
             <span className="num">{ICP_TIER_BANDS}</span> — and a hard
@@ -165,7 +165,7 @@ export default function PipelineSettingsForm({
         <h2 className="display mb-1 text-xl font-semibold">
           Clinic-First Discovery
         </h2>
-        <p className="mb-4 text-sm text-muted">
+        <p className="helper-text mb-4 text-sm text-muted">
           The second way into Discovery: search for clinics directly, and find
           the decision-maker afterwards
         </p>
@@ -173,7 +173,7 @@ export default function PipelineSettingsForm({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-sm font-medium">Clinic-first search</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
                 Runs one actor per search term from Discovery → Clinic-first
                 search. What it finds becomes ordinary Pending candidates and
                 goes through the chain above. It is off until it is switched on,
@@ -220,7 +220,7 @@ export default function PipelineSettingsForm({
                   : ""
               }`}
             />
-            <p className="mt-1.5 text-xs leading-relaxed text-muted">
+            <p className={`${clinicActorMalformed ? "" : "helper-text "}mt-1.5 text-xs leading-relaxed text-muted`}>
               {clinicActorMalformed
                 ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
                 : `Any actor returning one object per clinic works: its fields are matched by name — clinic, website, address, phone — rather than mapped by hand. Blank runs ${DEFAULT_CLINIC_DISCOVERY_ACTOR_ID}.`}
@@ -234,7 +234,7 @@ export default function PipelineSettingsForm({
         <h2 className="display mb-1 text-xl font-semibold">
           Decision-maker enrichment
         </h2>
-        <p className="mb-4 text-sm text-muted">
+        <p className="helper-text mb-4 text-sm text-muted">
           Who to talk to at a clinic that has already qualified — run by hand,
           from the candidate, never from the queue
         </p>
@@ -242,7 +242,7 @@ export default function PipelineSettingsForm({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <p className="text-sm font-medium">Find decision maker</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
                 Reads a name — any doctor, owner or member of staff, with or
                 without a stated role — out of the website copy the crawler
                 already stored, searches for that exact name against the
@@ -287,7 +287,7 @@ export default function PipelineSettingsForm({
                 dmActorMalformed ? "border-bad focus:border-bad focus:ring-bad/15" : ""
               }`}
             />
-            <p className="mt-1.5 text-xs leading-relaxed text-muted">
+            <p className={`${dmActorMalformed ? "" : "helper-text "}mt-1.5 text-xs leading-relaxed text-muted`}>
               {dmActorMalformed
                 ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
                 : `Every step of this stage that costs anything is a Google search, so this is a search actor: any that returns a result's link, title and snippet works. Blank runs ${DEFAULT_DECISION_MAKER_ACTOR_ID}, the one the chain already searches with.`}
@@ -324,7 +324,7 @@ function StepRow({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium">{PIPELINE_STEP_LABELS[stepKey]}</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {PIPELINE_STEP_BLURBS[stepKey]}
           </p>
         </div>
@@ -362,7 +362,8 @@ function StepRow({
         </p>
       </div>
 
-      <p className="mt-1.5 text-xs leading-relaxed text-muted">
+      {/* An actor-ID error stays on a phone; the three hints do not. */}
+      <p className={`${malformed ? "" : "helper-text "}mt-1.5 text-xs leading-relaxed text-muted`}>
         {malformed
           ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
           : typed === ""

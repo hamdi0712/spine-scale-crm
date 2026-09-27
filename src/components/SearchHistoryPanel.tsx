@@ -106,7 +106,7 @@ export default function SearchHistoryPanel({
       {shown.length === 0 ? (
         <div className="card px-6 py-10 text-center">
           <p className="text-sm font-medium">Nothing logged yet</p>
-          <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
+          <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
             Every Apify import and every Clinic-First term is counted here from
             the moment it is run. Searches run before this existed are not —
             log them by hand and set the status they have really earned.
@@ -319,7 +319,7 @@ function ManualAddForm({ onDone }: { onDone: () => void }) {
     <div className="card space-y-4 p-6">
       <div>
         <p className="text-sm font-medium">Log a search by hand</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
           For a keyword or a search that was being run long before any of this
           was counted. It is logged with no runs behind it — the status is
           yours, and stays yours until you change it.
@@ -372,7 +372,7 @@ function ManualAddForm({ onDone }: { onDone: () => void }) {
               className="field"
             />
           )}
-          <p className="mt-1 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
             {type === "LINKEDIN_SEARCH"
               ? "Pasted as it goes into the actor. Spacing and key order do not matter — it is canonicalised, so the same search always finds the same row."
               : "Matched the way the panel matches its terms: trimmed, and case is ignored."}

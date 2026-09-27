@@ -48,7 +48,7 @@ export default function CostEstimate({
               .map((k) => PIPELINE_STEP_LABELS[k])
               .join(", ")}), about ${fmtEstimate(perCandidate).replace("~", "")} each.`}
       </p>
-      <p className="mt-0.5 text-xs leading-relaxed text-muted">
+      <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
         Approximate published actor rates, not a quote — the real figure is
         Apify&rsquo;s, and a clinic running more ads than most costs more than
         this says. The model call per candidate is fractions of a cent and is

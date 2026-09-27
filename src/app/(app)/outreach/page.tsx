@@ -54,7 +54,7 @@ export default async function OutreachQueuePage() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <h1 className="display text-[32px] font-semibold">Outreach Queue</h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Qualified leads nobody has written to yet — A and B tier, still at
             New
           </p>
@@ -72,7 +72,7 @@ export default async function OutreachQueuePage() {
       {rows.length === 0 ? (
         <div className="card mt-8 px-6 py-10 text-center">
           <p className="text-sm font-medium">Nothing waiting on a first message</p>
-          <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
+          <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
             Every A- and B-tier lead in the pipeline has moved past New, which
             means every one of them has been contacted. New leads land here the
             moment Discovery promotes them.

@@ -206,7 +206,7 @@ function EnrichDialog({
             <h2 id="enrich-title" className="display text-lg font-semibold">
               Enrich this lead
             </h2>
-            <p className="mt-0.5 truncate text-xs leading-relaxed text-muted">
+            <p className="helper-text mt-0.5 truncate text-xs leading-relaxed text-muted">
               {clinicName} — {runnable.length} step
               {runnable.length === 1 ? "" : "s"}, run from this lead’s own
               fields. Nothing new is created.

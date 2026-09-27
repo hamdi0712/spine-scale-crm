@@ -309,7 +309,7 @@ export default async function ClientDetailPage({
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-xs text-muted">
+                <p className="helper-text mt-2 text-xs text-muted">
                   Path A keeps every form and automation symptom-agnostic, so no
                   patient health information is ever collected. Switching to Path
                   B adds &ldquo;{HIPAA_CHECKLIST_ITEM}&rdquo; to the checklist
@@ -331,7 +331,7 @@ export default async function ClientDetailPage({
                     Force At risk — operational break
                   </option>
                 </select>
-                <p className="mt-2 text-xs text-muted">
+                <p className="helper-text mt-2 text-xs text-muted">
                   For when something is broken that the numbers have not caught
                   up with — ad account down, tracking dead, access revoked.
                   While it is set, health reads At risk whatever the metrics

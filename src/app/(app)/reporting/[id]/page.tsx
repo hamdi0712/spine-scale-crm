@@ -183,7 +183,7 @@ export default async function ClientReportingPage({
               Save week
             </button>
           </div>
-          <p className="mt-2 text-xs text-muted">
+          <p className="helper-text mt-2 text-xs text-muted">
             One entry per week — saving an existing week-start date overwrites
             that week.
           </p>
@@ -267,7 +267,7 @@ export default async function ClientReportingPage({
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-xs text-muted">
+        <p className="helper-text mt-2 text-xs text-muted">
           Targets — CPL: $10–35 · Lead→Booked: 20–40% · Show rate: 50–70%.
           Yellow = near band, red = outside.
         </p>

@@ -38,7 +38,7 @@ export default function MonkHabitSettings({ habits }: { habits: MonkHabit[] }) {
         <div className="flex items-center justify-between gap-3 border-b border-line/60 px-6 py-4">
           <div>
             <h2 className="display text-xl font-semibold">Your non-negotiables</h2>
-            <p className="mt-0.5 text-xs text-muted">
+            <p className="helper-text mt-0.5 text-xs text-muted">
               The habits on the dashboard, in the order they are drawn there
             </p>
           </div>
@@ -48,9 +48,12 @@ export default function MonkHabitSettings({ habits }: { habits: MonkHabit[] }) {
         </div>
 
         {active.length === 0 ? (
-          <p className="px-6 py-8 text-center text-sm text-muted">
-            No active habits. Add one below.
-          </p>
+          <>
+            <p className="helper-text px-6 py-8 text-center text-sm text-muted">
+              No active habits. Add one below.
+            </p>
+            <p className="md:hidden px-6 py-8 text-center text-sm text-muted">No active habits.</p>
+          </>
         ) : (
           <ul>
             {active.map((habit, i) => (
@@ -73,7 +76,7 @@ export default function MonkHabitSettings({ habits }: { habits: MonkHabit[] }) {
         <section className="card">
           <div className="border-b border-line/60 px-6 py-4">
             <h2 className="display text-xl font-semibold">Retired</h2>
-            <p className="mt-0.5 text-xs text-muted">
+            <p className="helper-text mt-0.5 text-xs text-muted">
               Off the grid and out of the scoring. Their history is untouched
               and they can come back.
             </p>
@@ -104,7 +107,7 @@ export default function MonkHabitSettings({ habits }: { habits: MonkHabit[] }) {
 
       <section className="card p-6">
         <h2 className="display text-xl font-semibold">Add a habit</h2>
-        <p className="mt-0.5 text-xs text-muted">
+        <p className="helper-text mt-0.5 text-xs text-muted">
           It joins the end of the list and starts counting from today
         </p>
         <form action={addMonkHabit} className="mt-4">
@@ -283,7 +286,7 @@ function HabitFields({ habit }: { habit?: MonkHabit }) {
           defaultValue={habit?.dailyTarget ?? 1}
           className="field num"
         />
-        <p className="mt-1.5 text-[11px] text-muted">
+        <p className="helper-text mt-1.5 text-[11px] text-muted">
           1 for most things. 5 for Salah.
         </p>
       </div>

@@ -98,7 +98,7 @@ export default async function MonkProgressPage() {
       <section className="card mt-5">
         <div className="border-b border-line/60 px-6 py-4">
           <h2 className="display text-xl font-semibold">Habit by habit</h2>
-          <p className="mt-0.5 text-xs text-muted">
+          <p className="helper-text mt-0.5 text-xs text-muted">
             How much of each habit&rsquo;s target has been met across the{" "}
             {lived.length} {lived.length === 1 ? "day" : "days"} so far
           </p>

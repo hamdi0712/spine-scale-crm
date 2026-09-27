@@ -1838,3 +1838,28 @@ tbody tr {
     max-width: none;
   }
 }
+
+/* ─── Helper text ─────────────────────────────────────────────────────────
+   Explanation, as opposed to information: page and card subtitles, "how
+   this works" notes, field hints, empty-state paragraphs, the copilot's
+   disclaimers, tool receipts. Every piece of it wears .helper-text, and on a
+   phone all of it goes — the screen is for the data and the controls.
+
+   Only a phone. The rule is a display: none inside a max-width query and
+   nothing else, so from md up a tagged element is drawn exactly as it was,
+   with whatever display it already had (block, inline, flex).
+
+   Errors, warnings, status flags, failure reasons, validation messages and
+   KPI deltas are information and are never tagged. */
+@media (max-width: 767px) {
+  .helper-text {
+    display: none !important;
+  }
+  /* A stack's spacing (space-y-*) is a margin on every child after the
+     first, and a hidden first child still counts as the first. When the
+     helper text opened the stack, the element that now leads it drops the
+     gap it no longer sits under. */
+  .helper-text:first-child + * {
+    margin-top: 0 !important;
+  }
+}

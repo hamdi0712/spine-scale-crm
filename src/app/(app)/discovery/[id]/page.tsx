@@ -170,7 +170,7 @@ export default async function DiscoveryCandidatePage({
           <p className="mt-0.5 text-xs leading-relaxed text-muted">
             {candidate.failureReason}
           </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
             Nothing was scored on partial evidence, deliberately. Fix whatever
             it names below and the next “Process queue” run picks this one up
             again from the top.
@@ -408,7 +408,7 @@ export default async function DiscoveryCandidatePage({
                 />
               </div>
             </div>
-            <p className="border-t border-line/60 pt-5 text-xs leading-relaxed text-muted">
+            <p className="helper-text border-t border-line/60 pt-5 text-xs leading-relaxed text-muted">
               These are the fields the chain runs on. The company page, the
               Facebook page, the website and the clinic name with its location
               are each one actor’s input — an empty one is a skipped actor, not
@@ -464,7 +464,7 @@ export default async function DiscoveryCandidatePage({
           ) : (
             <div className="card px-6 py-8 text-center">
               <p className="text-sm font-medium">Nothing gathered yet</p>
-              <p className="mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted">
+              <p className="helper-text mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted">
                 The four actors run as the first step of “Process queue”, from
                 the URLs on the left. What they bring back appears here, dated,
                 and is what the scoring reads.
@@ -480,7 +480,7 @@ export default async function DiscoveryCandidatePage({
           <div className="card">
             <DiscoveryScoreHeader breakdown={breakdown} />
             <DiscoveryBreakdownView breakdown={breakdown} />
-            <p className="border-t border-line/60 px-6 py-4 text-xs leading-relaxed text-muted">
+            <p className="helper-text border-t border-line/60 px-6 py-4 text-xs leading-relaxed text-muted">
               This is the transcript of one automated run against the evidence
               it had that day, stored as it was written — it does not re-read
               itself when the framework changes. The editable scorecard lives on
@@ -491,7 +491,7 @@ export default async function DiscoveryCandidatePage({
         ) : (
           <div className="card px-6 py-8 text-center">
             <p className="text-sm font-medium">Not scored yet</p>
-            <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted">
+            <p className="helper-text mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted">
               Scoring happens in “Process queue” — five hard disqualifiers,
               four categories out of {ICP_MAX_SCORE}, every answer with the
               sentence behind it. Nothing is scored by hand here, deliberately.

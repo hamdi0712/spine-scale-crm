@@ -137,7 +137,7 @@ export default async function DiscoveryPage({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <h1 className="display text-[32px] font-semibold">Discovery</h1>
-            <p className="mt-1.5 text-sm text-muted">
+            <p className="helper-text mt-1.5 text-sm text-muted">
               Scraped clinics waiting to be qualified — nothing reaches the
               pipeline from here without a score
             </p>
@@ -191,7 +191,7 @@ export default async function DiscoveryPage({
         {candidates.length === 0 ? (
           <div className="card mt-8 px-6 py-10 text-center">
             <p className="text-sm font-medium">Nothing in Discovery yet</p>
-            <p className="mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
+            <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
               Imports land here rather than in the pipeline. Bring in a CSV
               export, run an Apify actor, search for clinics directly, or add a
               single clinic by name — then press Process queue, and each

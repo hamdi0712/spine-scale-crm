@@ -93,7 +93,7 @@ export default async function OnboardingPage({
           <h2 className="text-sm font-medium">
             <span className="num">{step}.</span> {meta.title}
           </h2>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
             {meta.blurb}
           </p>
         </div>
@@ -234,7 +234,7 @@ function StepDetails({ client }: { client: WizardClient }) {
             />
           </div>
         </div>
-        <p className="text-xs leading-relaxed text-muted">
+        <p className="helper-text text-xs leading-relaxed text-muted">
           Pre-filled from the lead where there was something to carry over. The
           time zone drives the local-time badges and the kickoff-call
           comparison in step 4.
@@ -407,7 +407,7 @@ function StepHandoff({ client }: { client: WizardClient }) {
             </li>
           ))}
         </ul>
-        <p className="text-xs leading-relaxed text-muted">
+        <p className="helper-text text-xs leading-relaxed text-muted">
           Anything still open is fine to finish later — nothing above blocks the
           handoff. Finishing closes the wizard and drops you on the client
           record, where the delivery checklist takes over.

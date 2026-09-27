@@ -27,7 +27,7 @@ export default async function ImportCandidatesPage() {
           <h1 className="display mt-2 text-[32px] font-semibold">
             Import candidates
           </h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Bulk-add scraped clinics from a CSV export — the columns are yours
             to map, whatever the source called them
           </p>

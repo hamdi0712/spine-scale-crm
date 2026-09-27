@@ -20,16 +20,16 @@ export default async function ApiKeysPage() {
     <div>
       <div className="mb-4">
         <h2 className="display text-xl font-semibold">API Keys</h2>
-        <p className="mt-1 text-sm text-muted">
+        <p className="helper-text mt-1 text-sm text-muted">
           The credentials for the two services this app calls out to
         </p>
       </div>
 
       {/* Said before a key is typed rather than found out afterwards: what the
           page will and will not show back. */}
-      <div className="card mb-6 px-6 py-4">
+      <div className="helper-text card mb-6 px-6 py-4">
         <p className="text-sm font-medium">What is stored, and what is shown</p>
-        <p className="mt-1 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
           A saved key is written to the database and read from there on every
           call, with the matching <code className="rounded bg-wash/70 px-1 py-0.5 font-mono text-[11px]">.env</code>{" "}
           variable as the fallback when nothing is stored. Once saved, a key is

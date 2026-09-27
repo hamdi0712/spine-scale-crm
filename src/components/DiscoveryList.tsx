@@ -498,7 +498,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
           {visible.length === 0 ? (
             <div className="card px-6 py-10 text-center">
               <p className="text-sm font-medium">No candidates match</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted">
+              <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
                 Nothing in Discovery answers to those filters.
               </p>
             </div>

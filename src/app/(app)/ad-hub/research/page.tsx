@@ -86,7 +86,7 @@ export default async function ResearchPage({
             </Link>
           ))}
           {type !== ALL && (
-            <p className="mx-1.5 mt-2 px-3 pb-2 text-xs leading-relaxed text-muted">
+            <p className="helper-text mx-1.5 mt-2 px-3 pb-2 text-xs leading-relaxed text-muted">
               {RESEARCH_NOTE_TYPE_BLURBS[type as ResearchNoteType]}
             </p>
           )}
@@ -106,10 +106,13 @@ export default async function ResearchPage({
             </Link>
           </div>
           {notes.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-muted">
-              Nothing here yet — research fills this up before any of it becomes
-              a persona or a concept.
-            </p>
+            <>
+              <p className="helper-text px-4 py-6 text-sm text-muted">
+                Nothing here yet — research fills this up before any of it becomes
+                a persona or a concept.
+              </p>
+              <p className="md:hidden px-4 py-6 text-sm text-muted">Nothing here yet.</p>
+            </>
           ) : (
             <ul className="flex-1">
               {notes.map((n) => (

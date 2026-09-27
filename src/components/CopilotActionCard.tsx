@@ -93,20 +93,32 @@ export default function CopilotActionCard({
       </p>
 
       {current.recordName !== null && current.recordHref !== null && (
-        <p className="mt-1.5 text-xs text-muted">
-          On{" "}
-          <Link
-            href={current.recordHref}
-            className="font-medium text-accent hover:underline"
-          >
-            {current.recordName}
-          </Link>{" "}
-          — open the record in another tab if you want to look before you agree.
-        </p>
+        <>
+          <p className="helper-text mt-1.5 text-xs text-muted">
+            On{" "}
+            <Link
+              href={current.recordHref}
+              className="font-medium text-accent hover:underline"
+            >
+              {current.recordName}
+            </Link>{" "}
+            — open the record in another tab if you want to look before you agree.
+          </p>
+          {/* A phone keeps the record link and drops the advice after it. */}
+          <p className="md:hidden mt-1.5 text-xs text-muted">
+            On{" "}
+            <Link
+              href={current.recordHref}
+              className="font-medium text-accent hover:underline"
+            >
+              {current.recordName}
+            </Link>
+          </p>
+        </>
       )}
 
       {current.askedFor !== null && (
-        <p className="mt-1.5 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
           Asked for by: “{current.askedFor}”
         </p>
       )}
@@ -135,7 +147,7 @@ export default function CopilotActionCard({
           </div>
           {/* Said on the card rather than trusted to be understood: nothing has
               happened, and there is a clock on it. */}
-          <p className="mt-2 text-xs leading-relaxed text-muted">
+          <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
             Nothing has changed yet. Confirm applies it and logs it to Recent
             Activity; Cancel discards it. Proposals expire after{" "}
             {COPILOT_ACTION_TTL_MINUTES} minutes.

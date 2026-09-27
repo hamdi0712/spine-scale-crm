@@ -31,7 +31,7 @@ export default async function SearchHistoryPage() {
           <h1 className="display mt-2 text-[32px] font-semibold">
             Search history
           </h1>
-          <p className="mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted">
             Every search that has been run, and how worn it is — so a keyword
             that stopped paying is visible before it is run again
           </p>
@@ -46,7 +46,7 @@ export default async function SearchHistoryPage() {
         </PageActions>
       </div>
 
-      <div className="card mb-8 px-6 py-4">
+      <div className="helper-text card mb-8 px-6 py-4">
         <p className="text-sm font-medium">How the status is worked out</p>
         <p className="num mt-1 text-xs leading-relaxed text-muted">
           Never run: New · 1–{APIFY_SEARCH_SATURATING_AT - 1} runs: Used ·{" "}

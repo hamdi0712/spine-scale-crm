@@ -35,7 +35,7 @@ export default async function NewConceptPage() {
       <h1 className="display mt-2 text-[32px] font-semibold">
         New concept
       </h1>
-      <p className="mb-8 mt-1.5 text-sm text-muted">
+      <p className="helper-text mb-8 mt-1.5 text-sm text-muted">
         Persona, desire, benefit, positioning — decided before a word of copy is
         written
       </p>

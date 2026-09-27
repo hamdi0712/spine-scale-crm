@@ -250,10 +250,13 @@ export default function CopilotPage({
 
   const historyList =
     conversations.length === 0 ? (
-      <p className="px-3 py-4 text-center text-xs text-muted">
-        No saved conversations yet. The first question you ask saves
-        one.
-      </p>
+      <>
+        <p className="helper-text px-3 py-4 text-center text-xs text-muted">
+          No saved conversations yet. The first question you ask saves
+          one.
+        </p>
+        <p className="md:hidden px-3 py-4 text-center text-xs text-muted">No saved conversations yet.</p>
+      </>
     ) : (
       conversations.map((c) => (
         <div
@@ -378,7 +381,7 @@ export default function CopilotPage({
             <h2 className="display mt-5 text-2xl font-semibold text-ink">
               Ask Iman
             </h2>
-            <p className="mt-2 max-w-[440px] text-sm leading-relaxed text-muted">
+            <p className="helper-text mt-2 max-w-[440px] text-sm leading-relaxed text-muted">
               Ask me anything about your pipeline, clients, or what to focus on
               today.
             </p>
@@ -507,7 +510,7 @@ export default function CopilotPage({
               now is ask — so the line says where the line is, because "it can
               change things" and "it can change things once you have read the
               card and clicked Confirm" are different products. */}
-          <p className="px-2 pb-2 pt-2 text-center text-xs text-muted max-md:pb-0 max-md:text-[11px] max-md:leading-snug">
+          <p className="helper-text px-2 pb-2 pt-2 text-center text-xs text-muted max-md:pb-0 max-md:text-[11px] max-md:leading-snug">
             Iman reads your records to answer. It can propose a change to a lead,
             a candidate or the task board — nothing happens until you confirm it.
             It cannot delete anything, touch clients or reporting, or send
@@ -585,7 +588,7 @@ function MessageRow({ message }: { message: StoredMessage }) {
           </div>
         )}
         {message.toolsUsed.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <div className="helper-text mt-1.5 flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted">Read</span>
             {message.toolsUsed.map((tool) => (
               <span key={tool} className="chip-stat">

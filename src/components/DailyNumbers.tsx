@@ -27,7 +27,7 @@ export default function DailyNumbers({
         <h3 className="text-sm font-medium">
           {isToday ? "Today’s numbers" : `Numbers for ${dayLabel}`}
         </h3>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted">
+        <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
           Counted off the records{isToday ? " for today" : ""} — nothing here is
           entered by hand.
         </p>

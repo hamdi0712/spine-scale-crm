@@ -115,10 +115,13 @@ export default async function PersonaDetailPage({
           <h2 className="display mb-4 text-xl font-semibold">Concepts</h2>
           <div className="card">
             {persona.concepts.length === 0 ? (
-              <p className="p-6 text-sm text-muted">
-                Nothing built for this persona yet. The new-concept wizard picks
-                them up at step 1.
-              </p>
+              <>
+                <p className="helper-text p-6 text-sm text-muted">
+                  Nothing built for this persona yet. The new-concept wizard picks
+                  them up at step 1.
+                </p>
+                <p className="md:hidden p-6 text-sm text-muted">Nothing built for this persona yet.</p>
+              </>
             ) : (
               <ul>
                 {persona.concepts.map((concept) => (
