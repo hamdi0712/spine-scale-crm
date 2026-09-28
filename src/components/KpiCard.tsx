@@ -68,21 +68,32 @@ function tint(tone: string, a: string): string {
 
 export interface Kpi {
   label: string;
+  // The phone's shorter copies, drawn instead of label and delta below md.
+  // shortDelta null drops the line on a phone.
+  shortLabel?: string;
   value: string;
   icon: KpiGlyph;
   delta: string;
+  shortDelta?: string | null;
   tone: "up" | "alert" | "flat";
 }
 
 export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
   const hue = KPI_TONES[tone];
   const Glyph = GLYPHS[kpi.icon];
+  const deltaColour =
+    kpi.tone === "up" ? "text-ok" : kpi.tone === "alert" ? "text-bad" : "text-muted";
 
   return (
-    <div className="card-kpi p-6">
+    // .kpi-compact tightens the card below md (globals.css); the short copies
+    // are separate phone-only elements so the desktop text is untouched.
+    <div className="card-kpi kpi-compact p-6">
       <div className="flex items-start justify-between gap-3">
-        <div className="text-xs font-medium tracking-[0.02em] text-muted">
+        <div className="text-xs font-medium tracking-[0.02em] text-muted max-md:hidden">
           {kpi.label}
+        </div>
+        <div className="min-w-0 truncate text-xs font-medium tracking-[0.02em] text-muted md:hidden">
+          {kpi.shortLabel ?? kpi.label}
         </div>
         {/* The same disc the empty-state glyphs in Recent activity and Client
             health are drawn in: a circle, a soft wash of the card's own hue,
@@ -105,22 +116,26 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
           half as tall again as it needed to be, and the four of them together
           cost more vertical room than the dashboard has to give — the whole
           page is meant to land on one laptop screen. */}
-      <div className="num mt-2 text-[28px] font-semibold leading-none tracking-tight">
+      <div className="num mt-2 text-[28px] font-semibold leading-none tracking-tight max-md:text-[26px]">
         {kpi.value}
       </div>
 
       <div
-        className={`mt-2.5 flex items-center gap-1 text-xs ${
-          kpi.tone === "up"
-            ? "text-ok"
-            : kpi.tone === "alert"
-              ? "text-bad"
-              : "text-muted"
-        }`}
+        className={`mt-2.5 flex items-center gap-1 text-xs max-md:hidden ${deltaColour}`}
       >
         {kpi.tone !== "flat" && <Icon name="arrowUp" className="h-3.5 w-3.5" />}
         {kpi.delta}
       </div>
+      {kpi.shortDelta !== null && (
+        <div
+          className={`mt-2 flex min-w-0 items-center gap-1 whitespace-nowrap text-xs md:hidden ${deltaColour}`}
+        >
+          {kpi.tone !== "flat" && (
+            <Icon name="arrowUp" className="h-3.5 w-3.5 shrink-0" />
+          )}
+          <span className="truncate">{kpi.shortDelta ?? kpi.delta}</span>
+        </div>
+      )}
 
     </div>
   );
