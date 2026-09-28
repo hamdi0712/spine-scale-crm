@@ -31,7 +31,7 @@ import { dayKey, toChecklistDay } from "@/lib/dailyChecklist";
 // One class list, used by the real line and by the placeholder below, so the
 // two cannot drift into different shapes and make the swap visible.
 const LINE_CLASS =
-  "mt-1.5 max-w-prose text-sm leading-relaxed text-pretty break-words text-muted";
+  "mt-1.5 max-md:mt-2 max-md:line-clamp-2 max-w-prose text-sm leading-relaxed text-pretty break-words text-muted";
 
 export default async function MotivationalLine() {
   const quote = await loadDailyQuote(new Date());
