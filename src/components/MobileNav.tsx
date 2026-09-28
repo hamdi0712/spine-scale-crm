@@ -96,6 +96,24 @@ export function MobileTopBar() {
     return () => io.disconnect();
   }, [pathname]);
 
+  // The Dashboard's bar scrolls away with the page: logo and name inline,
+  // set off by whitespace rather than a divider or a frosted background.
+  if (pathname === "/") {
+    return (
+      <header className="px-5 pt-[calc(env(safe-area-inset-top)+8px)] md:hidden">
+        <div className="flex h-11 items-center gap-3">
+          <Link href="/" aria-label="Dashboard" className="flex shrink-0 items-center gap-3">
+            <LogoIconChip className="!h-11 !w-11 !rounded-[11px]" />
+            <span className="display text-[20px] font-semibold text-ink">Spine Scale</span>
+          </Link>
+          <div className="flex-1" />
+          {/* PageActions portals the ⋯ button in here. */}
+          <div id={TOPBAR_ACTIONS_ID} className="flex shrink-0 items-center" />
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-line/60 bg-bg/80 pt-[env(safe-area-inset-top)] backdrop-blur-md backdrop-saturate-150 md:hidden">
       <div className="flex h-12 items-center gap-2 pl-2 pr-2">

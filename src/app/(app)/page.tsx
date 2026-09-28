@@ -264,7 +264,7 @@ export default async function DashboardPage() {
 
 
   return (
-    <div>
+    <div className="max-md:pt-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         {/* min-w-0 so the quote below can wrap: a flex item's automatic minimum
             size is its content, so without this a long motivational line sets
@@ -301,7 +301,7 @@ export default async function DashboardPage() {
 
       {/* On a phone all four cards sit in a 2×2 grid, each drawn compact
           (KpiCard) so the four read at once without scrolling. */}
-      <div className="mt-6 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-6 max-md:mt-8 max-md:gap-3 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
           <KpiCard key={kpi.label} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
@@ -320,7 +320,7 @@ export default async function DashboardPage() {
 
           The flag comes off the data attribute TodaysFocus sets from the state
           behind its own "View all" toggle. */}
-      <div className="mt-5 grid items-stretch gap-6 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1">
+      <div className="mt-5 grid items-stretch gap-6 max-md:mt-7 max-md:gap-7 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1">
         <section className="card self-stretch p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
@@ -350,7 +350,7 @@ export default async function DashboardPage() {
           {/* The banner is the one lit surface inside a white card: a shallow
               blue gradient with a pale edge, so the headline sits on glass
               rather than on a flat tint. */}
-          <div className="glass-panel mt-4 flex items-center gap-4 !rounded-[18px] p-4">
+          <div className="glass-panel mt-4 max-md:mt-5 flex items-center gap-4 !rounded-[18px] p-4">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--glass-chip-strong)] text-accent shadow-[0_1px_2px_rgba(28,27,39,0.07)]">
               <Icon name="bell" />
             </span>
@@ -373,7 +373,7 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          <h3 className="mb-2 mt-5 text-sm font-semibold">Today&rsquo;s focus</h3>
+          <h3 className="mb-2 mt-5 max-md:mb-3 max-md:mt-6 text-sm font-semibold">Today&rsquo;s focus</h3>
           <TodaysFocus visible={visible} hidden={hidden} />
         </section>
 
