@@ -192,8 +192,8 @@ export default async function DashboardPage() {
       value: String(messages),
       icon: "messages",
       delta: messagesTotalSubtitle(messages),
-      // A description rather than a figure, so a phone drops it.
-      shortDelta: null,
+      // The window the count covers, the way Calls booked says "This month".
+      shortDelta: messages > 0 ? "All time" : "None yet",
       // An all-time total has nothing behind it to compare against, so the up
       // arrow only marks that there is something there at all.
       tone: messages > 0 ? "up" : "flat",
