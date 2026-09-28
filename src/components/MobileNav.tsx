@@ -100,7 +100,7 @@ export function MobileTopBar() {
   // set off by whitespace rather than a divider or a frosted background.
   if (pathname === "/") {
     return (
-      <header className="px-5 pt-[calc(env(safe-area-inset-top)+8px)] md:hidden">
+      <header className="px-5 pt-[calc(env(safe-area-inset-top)+27px)] md:hidden">
         <div className="flex h-11 items-center gap-3">
           <Link href="/" aria-label="Dashboard" className="flex shrink-0 items-center gap-3">
             <LogoIconChip className="!h-11 !w-11 !rounded-[11px]" />
