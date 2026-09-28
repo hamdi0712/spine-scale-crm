@@ -136,6 +136,14 @@ export function messagesSubtitle(c: MessagesSent): string {
 // no date bound at all: it is a running total of everyone approached to date,
 // not a week's activity. The windowed pair above still backs the Copilot
 // lookup, which is asked a "this week vs last" question.
+// The phone's version of the qualified line: the number to act on and
+// nothing else. Null where there is no number to show, which hides the line.
+export function qualifiedShortSubtitle(q: QualifiedLeads): string | null {
+  if (q.total === 0) return null;
+  if (q.untouched === 0) return `all ${q.total} approached`;
+  return `${q.untouched} to approach`;
+}
+
 export function messagesTotalSubtitle(total: number): string {
   if (total === 0) return "No leads contacted yet";
   return "All leads contacted to date";
@@ -180,6 +188,12 @@ export function replyRate(
 
 export function replyRateValue(r: ReplyRate): string {
   return r.percent === null ? "—" : `${r.percent}%`;
+}
+
+// Phone: the ratio alone, "3 of 12".
+export function replyRateShortSubtitle(r: ReplyRate): string | null {
+  if (r.contacted === 0) return null;
+  return `${r.replied} of ${r.contacted}`;
 }
 
 export function replyRateSubtitle(r: ReplyRate): string {

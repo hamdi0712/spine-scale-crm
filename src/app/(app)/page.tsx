@@ -23,6 +23,8 @@ import {
   replyRate,
   replyRateSubtitle,
   replyRateValue,
+  qualifiedShortSubtitle,
+  replyRateShortSubtitle
 } from "@/lib/funnel";
 import ActivityFeed from "@/components/ActivityFeed";
 import BusinessHoursPanel, {
@@ -175,18 +177,23 @@ export default async function DashboardPage() {
   const kpis: Kpi[] = [
     {
       label: "Qualified leads",
+      shortLabel: "Qualified",
       value: String(qualified.total),
       icon: "qualified",
       delta: qualifiedSubtitle(qualified),
+      shortDelta: qualifiedShortSubtitle(qualified),
       // Green only where there is something to act on. A row of encouraging
       // green on four zeroes is the thing this whole row was rewritten to stop.
       tone: qualified.untouched > 0 ? "up" : "flat",
     },
     {
       label: "Messages sent",
+      shortLabel: "Messages",
       value: String(messages),
       icon: "messages",
       delta: messagesTotalSubtitle(messages),
+      // A description rather than a figure, so a phone drops it.
+      shortDelta: null,
       // An all-time total has nothing behind it to compare against, so the up
       // arrow only marks that there is something there at all.
       tone: messages > 0 ? "up" : "flat",
@@ -194,15 +201,21 @@ export default async function DashboardPage() {
     {
       label: `Reply rate (${REPLY_RATE_WINDOW_DAYS}d)`,
       value: replyRateValue(replies),
+      shortLabel: "Reply rate",
       icon: "replies",
       delta: replyRateSubtitle(replies),
+      shortDelta: replyRateShortSubtitle(replies),
       tone: replies.replied > 0 ? "up" : "flat",
     },
     {
       label: "Discovery calls booked",
+      shortLabel: "Calls booked",
       value: String(discovery.total),
       icon: "calls",
       delta: discoverySubtitle(discovery),
+      // The window the count covers. The upcoming/held split is left to the
+      // desktop line: at double digits it does not fit a phone's half-width card.
+      shortDelta: "This month",
       tone: discovery.total > 0 ? "up" : "flat",
     },
   ];
@@ -286,9 +299,9 @@ export default async function DashboardPage() {
         </PageActions>
       </div>
 
-      {/* On a phone the four cards are one sideways-scrolling row with the
-          next card peeking in (.m-kpi-row) rather than a 2×2 of slivers. */}
-      <div className="m-scroll-row m-kpi-row mt-6 grid grid-cols-2 gap-6 lg:grid-cols-4">
+      {/* On a phone all four cards sit in a 2×2 grid, each drawn compact
+          (KpiCard) so the four read at once without scrolling. */}
+      <div className="mt-6 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
           <KpiCard key={kpi.label} kpi={kpi} tone={KPI_TONES[i]} />
         ))}

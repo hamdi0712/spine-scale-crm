@@ -1863,3 +1863,20 @@ tbody tr {
     margin-top: 0 !important;
   }
 }
+
+/* The dashboard's KPI cards on a phone: four to a 2×2 grid, so each is
+   tightened — less padding and a smaller glyph disc. The number's size is a
+   utility on the card itself (KpiCard). */
+@media (max-width: 767px) {
+  .card-kpi.kpi-compact {
+    padding: 14px;
+  }
+  .kpi-compact .kpi-mark {
+    height: 30px;
+    width: 30px;
+  }
+  .kpi-compact .kpi-mark svg {
+    width: 15px;
+    height: 15px;
+  }
+}
