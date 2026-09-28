@@ -1880,3 +1880,21 @@ tbody tr {
     height: 15px;
   }
 }
+
+/* ─── No visible scrollbars ────────────────────────────────────────────────
+   Every scroll area keeps scrolling — wheel, trackpad, touch, keyboard — but
+   none of them draws a bar: the page, the sidebar, sheets, tables, board
+   columns. Applies at every width, desktop included. The ::-webkit- rule
+   covers Chrome, Safari and Edge; scrollbar-width covers Firefox; the -ms-
+   property covers legacy Edge. */
+::-webkit-scrollbar {
+  display: none;
+}
+
+html {
+  scrollbar-width: none;
+}
+
+body {
+  -ms-overflow-style: none;
+}
