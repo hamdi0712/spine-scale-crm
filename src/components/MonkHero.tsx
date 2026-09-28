@@ -127,7 +127,37 @@ export default function MonkHero({
 // outline, so it is marked without that mark being mistaken for progress.
 function DayTicks({ cells }: { cells: MonkDayCell[] }) {
   return (
-    <div className="flex items-end gap-[3px]" aria-hidden>
+    <>
+      <DesktopDayTicks cells={cells} />
+      <PhoneDayTicks cells={cells} />
+    </>
+  );
+}
+
+// The phone's row: thin flat bars, today in the badge's gold rather than a ring.
+function PhoneDayTicks({ cells }: { cells: MonkDayCell[] }) {
+  return (
+    <div className="flex gap-[3px] md:hidden" aria-hidden>
+      {cells.map((cell) => {
+        let tone = "bg-white/[0.12]";
+        if (cell.isToday) tone = "bg-warn";
+        else if (cell.complete) tone = "bg-white";
+        else if (cell.past) tone = "bg-white/25";
+        return (
+          <span
+            key={cell.key}
+            title={`Day ${cell.dayNumber} · ${Math.round(cell.completion * 100)}%`}
+            className={`h-1 flex-1 rounded-[2px] ${tone}`}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function DesktopDayTicks({ cells }: { cells: MonkDayCell[] }) {
+  return (
+    <div className="flex items-end gap-[3px] max-md:hidden" aria-hidden>
       {cells.map((cell) => {
         // The alphas are set high because the ground under them is a
         // photograph at dusk: white at a tenth reads as black on this panel,

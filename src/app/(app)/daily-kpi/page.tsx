@@ -44,6 +44,7 @@ import DailyKpiTrend, { DailyKpiPoint } from "@/components/DailyKpiTrend";
 import DayPicker from "@/components/DayPicker";
 import Icon from "@/components/Icons";
 import ProgressRing from "@/components/ProgressRing";
+import SkipDayButton from "@/components/SkipDayButton";
 
 export const dynamic = "force-dynamic";
 
@@ -416,7 +417,68 @@ export default async function DailyKpiPage({
           {/* On a phone each metric is a card of its own (.m-cards): its
               goal, the viewed day and the average. The individual day
               columns are left to the chart above, which already draws them. */}
-          <div className="overflow-x-auto">
+          {/* Phones get one compact block per metric instead of the table:
+              name and value on a line, a thin bar, one meta line. */}
+          <ul className="divide-y divide-line/60 md:hidden">
+            {DAILY_KPI_KEYS.map((key) => {
+              const hue = DAILY_KPI_HUES[key];
+              const monthly = isMonthly(key);
+              const skipped = skippedToday.has(key);
+              const value = monthly ? pace[key].monthToDate : counts[key];
+              const pct = monthly
+                ? pace[key].pct
+                : progressPct(scored[key], goals[key]);
+              const canSkip = !monthly && isSkippable(key) && isToday;
+              return (
+                <li key={key} className="px-4 py-4">
+                  <div className="flex items-center gap-2.5 whitespace-nowrap">
+                    <KpiMark metric={key} size={22} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-normal">
+                      {DAILY_KPI_LABELS[key]}
+                    </span>
+                    <span className="num shrink-0 tabular-nums">
+                      <span className="text-lg font-semibold">{value}</span>
+                      <span className="text-xs text-muted">
+                        {" "}/ {goals[key]}
+                        {monthly ? "/mo" : "/day"}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-2.5 h-1 overflow-hidden rounded-[2px] bg-wash">
+                    <div
+                      className="h-full rounded-[2px]"
+                      style={{ width: `${pct}%`, background: hue }}
+                    />
+                  </div>
+                  <div className="mt-2 flex min-h-[22px] items-center gap-2 whitespace-nowrap text-xs text-muted">
+                    <span className="num min-w-0 flex-1 truncate tabular-nums">
+                      {monthly
+                        ? pace[key].daysElapsed < 3
+                          ? "Early in the month"
+                          : `On pace for ${Math.round(
+                              (pace[key].monthToDate / pace[key].daysElapsed) *
+                                pace[key].daysTotal,
+                            )} by month end`
+                        : `${DAILY_KPI_TREND_DAYS}-day avg ${averageFor(trendDays, key)}`}
+                    </span>
+                    {skipped && !canSkip && (
+                      <span className="chip-stat h-[18px] px-2 text-[10px]">
+                        Skipped
+                      </span>
+                    )}
+                    {canSkip && (
+                      <SkipDayButton
+                        skipped={skipped}
+                        label={DAILY_KPI_LABELS[key]}
+                        toggle={toggleDailyKpiSkip.bind(null, toDayKey(day), key)}
+                      />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="overflow-x-auto max-md:hidden">
             <table className="m-cards w-full">
               <thead>
                 <tr>
