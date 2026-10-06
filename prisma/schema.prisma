@@ -1211,6 +1211,11 @@ model MonkModeChallenge {
   // Midnight UTC on the first day. Day 1 is this date, not the day after it.
   startDate    DateTime
   durationDays Int      @default(21)
+  // The last day counted, stamped when the challenge is ended by starting a
+  // new one. Null on the one being run. Ending a challenge deletes nothing:
+  // completions and notes are filed under real days, not under a challenge,
+  // so a finished challenge is only ever this date range read back.
+  endDate DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

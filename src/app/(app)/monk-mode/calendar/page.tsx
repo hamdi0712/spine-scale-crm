@@ -13,12 +13,14 @@ import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import {
   activeHabits,
   loadChallenge,
+  loadChallengeById,
   loadHabits,
   loadProgress,
 } from "@/lib/monkModeStore";
 import {
   addDays,
   addMonths,
+  challengeAsRun,
   challengeProgress,
   indexProgress,
   monkDateRange,
@@ -32,22 +34,37 @@ import MonkCalendarGrid, {
   MonkCalendarLegend,
 } from "@/components/MonkCalendarGrid";
 import MonkHeader from "@/components/MonkHeader";
+import MonkPastBanner from "@/components/MonkPastBanner";
 
 export const dynamic = "force-dynamic";
 
 export default async function MonkCalendarPage({
   searchParams,
 }: {
-  searchParams: { month?: string };
+  searchParams: { month?: string; challenge?: string };
 }) {
   const now = new Date();
-  const monthStart = parseMonthKey(searchParams.month, now);
 
-  const [challenge, habits] = await Promise.all([
+  // ?challenge= opens a finished challenge from Progress → Past challenges.
+  // Loading the current one first keeps the history repaired either way; an
+  // unknown or still-open id just reads as the current challenge.
+  const [current, habits] = await Promise.all([
     loadChallenge(now),
     loadHabits(),
   ]);
+  const picked = searchParams.challenge
+    ? await loadChallengeById(searchParams.challenge)
+    : null;
+  const pastView = picked?.endDate ? challengeAsRun(picked) : null;
+  const challenge = pastView ?? current;
   const active = activeHabits(habits);
+  const query = pastView ? `&challenge=${pastView.id}` : "";
+
+  // A past challenge opens on the month it started in, not on this one.
+  const monthStart = parseMonthKey(
+    searchParams.month,
+    pastView ? toChecklistDay(pastView.startDate) : now,
+  );
 
   // Six weeks either side of the first of the month covers the whole grid,
   // including the neighbouring months' days that fill its corners.
@@ -66,21 +83,37 @@ export default async function MonkCalendarPage({
         title={<h1 className="display text-[32px] font-semibold">Calendar</h1>}
         subtitle={
           <span className="num">
-            {monkDateRange(shape.start, shape.end)} · day {shape.day} of{" "}
-            {shape.total} · {tally.pct}% of habit-days completed
+            {pastView ? (
+              <>
+                Past challenge · {monkDateRange(shape.start, shape.end)} ·{" "}
+                {shape.total} days
+              </>
+            ) : (
+              <>
+                {monkDateRange(shape.start, shape.end)} · day {shape.day} of{" "}
+                {shape.total}
+              </>
+            )}{" "}
+            · {tally.pct}% of habit-days completed
           </span>
         }
       />
+
+      {pastView && <MonkPastBanner href="/monk-mode/calendar" />}
 
       <section className="card p-6">
         <div className="mb-5 flex items-center justify-between gap-3">
           <h2 className="display text-xl font-semibold">{month.label}</h2>
           <div className="flex items-center gap-1">
-            <MonthLink month={addMonths(monthStart, -1)} direction="prev" />
+            <MonthLink
+              month={addMonths(monthStart, -1)}
+              direction="prev"
+              query={query}
+            />
             {/* A way back to the month you are actually in, because paging six
                 months out and then paging back is not a journey anybody should
                 have to make. Hidden when it would do nothing. */}
-            {monthKey(monthStart) !== monthKey(toChecklistDay(now)) && (
+            {!pastView && monthKey(monthStart) !== monthKey(toChecklistDay(now)) && (
               <Link
                 href="/monk-mode/calendar"
                 className="rounded-[8px] px-2.5 py-1.5 text-xs font-medium text-accent hover:bg-wash"
@@ -88,7 +121,11 @@ export default async function MonkCalendarPage({
                 Today
               </Link>
             )}
-            <MonthLink month={addMonths(monthStart, 1)} direction="next" />
+            <MonthLink
+              month={addMonths(monthStart, 1)}
+              direction="next"
+              query={query}
+            />
           </div>
         </div>
 
@@ -100,7 +137,7 @@ export default async function MonkCalendarPage({
           // for a day before the challenge started is not part of it.
           hrefFor={(cell) =>
             cell.dayNumber !== null && cell.past
-              ? `/monk-mode/journal?date=${cell.key}`
+              ? `/monk-mode/journal?date=${cell.key}${query}`
               : null
           }
         />
@@ -116,14 +153,16 @@ export default async function MonkCalendarPage({
 function MonthLink({
   month,
   direction,
+  query,
 }: {
   month: Date;
   direction: "prev" | "next";
+  query: string;
 }) {
   const Glyph = direction === "prev" ? IconChevronLeft : IconChevronRight;
   return (
     <Link
-      href={`/monk-mode/calendar?month=${monthKey(month)}`}
+      href={`/monk-mode/calendar?month=${monthKey(month)}${query}`}
       aria-label={direction === "prev" ? "Previous month" : "Next month"}
       className="rounded-[8px] p-2 text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
     >

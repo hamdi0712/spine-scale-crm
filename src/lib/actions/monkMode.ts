@@ -30,6 +30,7 @@ import {
   MAX_DAILY_TARGET,
   MAX_DURATION_DAYS,
   MIN_DURATION_DAYS,
+  addDays,
   dayKey,
   monkAccent,
   monkIconKey,
@@ -266,29 +267,85 @@ export async function updateMonkChallenge(id: string, formData: FormData) {
     MAX_DURATION_DAYS,
   );
 
+  // Not back over a finished challenge: those days are already counted by
+  // the one before, and two challenges claiming the same day would make the
+  // history disagree with itself.
+  const previous = await prisma.monkModeChallenge.findFirst({
+    where: { id: { not: id }, endDate: { not: null } },
+    orderBy: { endDate: "desc" },
+    select: { endDate: true },
+  });
+  const floor = previous?.endDate
+    ? addDays(toChecklistDay(previous.endDate), 1)
+    : null;
+
   await prisma.monkModeChallenge.update({
     where: { id },
-    data: { startDate, durationDays },
+    data: {
+      startDate:
+        floor && startDate.getTime() < floor.getTime() ? floor : startDate,
+      durationDays,
+    },
   });
 
   revalidateMonkMode();
 }
 
-// Start a fresh challenge from today, leaving the finished one behind.
+// End the current challenge and start a fresh one from today.
 //
-// A new row rather than an edit of the old one: loadChallenge reads the most
-// recent by start date, so this becomes the active challenge the moment it is
-// written, and the twenty-one days that came before it stay on the record.
-// Habits and completions are untouched — the habits carry over, which is the
-// point of running it again.
+// Nothing is deleted. The current row gets an end date — yesterday, or its own
+// planned last day if that came first — and a new row opens today. Completions
+// and notes are filed under real days rather than under a challenge, so the
+// finished one reads back exactly as it was from its date range, and the
+// habits carry over, which is the point of running it again.
+//
+// A challenge that started today has no finished day to keep, so restarting it
+// resets its length in place instead of leaving a zero-day row behind.
 export async function restartMonkChallenge(formData: FormData) {
   const raw = Math.trunc(Number(formData.get("durationDays")) || 0);
   const durationDays = Math.min(
     Math.max(raw, MIN_DURATION_DAYS),
     MAX_DURATION_DAYS,
   );
-  await prisma.monkModeChallenge.create({
-    data: { startDate: toChecklistDay(new Date()), durationDays },
+  const today = toChecklistDay(new Date());
+
+  const current = await prisma.monkModeChallenge.findFirst({
+    where: { endDate: null },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }],
   });
+
+  if (current && toChecklistDay(current.startDate).getTime() >= today.getTime()) {
+    await prisma.monkModeChallenge.update({
+      where: { id: current.id },
+      data: { startDate: today, durationDays },
+    });
+    revalidateMonkMode();
+    return;
+  }
+
+  const ops = [];
+  if (current) {
+    const planned = addDays(
+      toChecklistDay(current.startDate),
+      current.durationDays - 1,
+    );
+    const yesterday = addDays(today, -1);
+    ops.push(
+      prisma.monkModeChallenge.update({
+        where: { id: current.id },
+        data: {
+          endDate:
+            planned.getTime() < yesterday.getTime() ? planned : yesterday,
+        },
+      }),
+    );
+  }
+  ops.push(
+    prisma.monkModeChallenge.create({
+      data: { startDate: today, durationDays },
+    }),
+  );
+  await prisma.$transaction(ops);
+
   revalidateMonkMode();
 }
