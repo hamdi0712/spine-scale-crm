@@ -35,6 +35,27 @@ export interface MonkChallenge {
   id: string;
   startDate: Date;
   durationDays: number;
+  // The last day counted, on a challenge that has been ended. Absent or null
+  // on the one being run.
+  endDate?: Date | null;
+}
+
+// A finished challenge as the days it actually ran: its planned length cut
+// short at its end date. Everything that reads a challenge — the tally, the
+// streaks, the calendar — can then read a past one unchanged, because every
+// one of its days is over.
+export function challengeAsRun(challenge: MonkChallenge): MonkChallenge {
+  if (!challenge.endDate) return challenge;
+  const start = toChecklistDay(challenge.startDate);
+  const ran =
+    Math.round(
+      (toChecklistDay(challenge.endDate).getTime() - start.getTime()) /
+        86_400_000,
+    ) + 1;
+  return {
+    ...challenge,
+    durationDays: Math.max(1, Math.min(ran, challenge.durationDays)),
+  };
 }
 
 // Every day of the challenge, in order, as midnight-UTC days.

@@ -103,39 +103,48 @@ export default async function MonkSettingsPage() {
         </form>
       </section>
 
-      {/* Starting again is a new challenge rather than an edit of this one, so
-          the run that just finished stays on the record. The habits carry
-          over, which is the point of running it again. Offered once the
-          current one has finished, because starting a second challenge on day
-          four of the first is almost certainly a misclick. */}
-      {shape.finished && (
-        <section className="card mb-6 p-6">
-          <h2 className="display text-xl font-semibold">Go again</h2>
-          <p className="helper-text mt-0.5 text-sm text-muted">
-            Starts a fresh challenge today with the same habits. The one you
-            just finished stays exactly as it is.
-          </p>
-          <form action={restartMonkChallenge} className="mt-4 flex items-end gap-3">
-            <div>
-              <label className="field-label" htmlFor="restartDuration">
-                Length, in days
-              </label>
-              <input
-                id="restartDuration"
-                name="durationDays"
-                type="number"
-                min={MIN_DURATION_DAYS}
-                max={MAX_DURATION_DAYS}
-                defaultValue={challenge.durationDays}
-                className="field num w-32"
-              />
-            </div>
-            <button type="submit" className="btn">
-              Start a new challenge
-            </button>
-          </form>
-        </section>
-      )}
+      {/* Starting again ends this challenge and opens a new one; nothing is
+          deleted, and the finished run moves to Progress → Past challenges.
+          Before the planned end it asks for a tick first, because ending a
+          challenge on day four is more often a misclick than a decision. */}
+      <section className="card mb-6 p-6">
+        <h2 className="display text-xl font-semibold">
+          {shape.finished ? "Go again" : "Start a new challenge"}
+        </h2>
+        <p className="helper-text mt-0.5 text-sm text-muted">
+          Ends this challenge and starts a fresh one today with the same
+          habits. Nothing is deleted — the one you end is kept under Progress,
+          with its calendar and journal.
+        </p>
+        <form
+          action={restartMonkChallenge}
+          className="mt-4 flex flex-wrap items-end gap-3"
+        >
+          <div>
+            <label className="field-label" htmlFor="restartDuration">
+              Length, in days
+            </label>
+            <input
+              id="restartDuration"
+              name="durationDays"
+              type="number"
+              min={MIN_DURATION_DAYS}
+              max={MAX_DURATION_DAYS}
+              defaultValue={challenge.durationDays}
+              className="field num w-32"
+            />
+          </div>
+          <button type="submit" className="btn">
+            Start new challenge
+          </button>
+          {!shape.finished && (
+            <label className="flex w-full items-center gap-2 text-xs text-muted">
+              <input type="checkbox" name="confirm" required />
+              End the current challenge on day {shape.day} of {shape.total}
+            </label>
+          )}
+        </form>
+      </section>
 
       <MonkHabitSettings habits={habits} />
       </div>

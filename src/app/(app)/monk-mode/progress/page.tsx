@@ -9,11 +9,15 @@ import {
   activeHabits,
   loadChallenge,
   loadHabits,
+  loadPastChallenges,
   loadProgress,
 } from "@/lib/monkModeStore";
+import Link from "next/link";
 import {
+  MonkChallenge,
   MonkHabit,
   MonkProgressMap,
+  challengeAsRun,
   challengeDays,
   challengeProgress,
   dayIsOver,
@@ -37,10 +41,13 @@ export const dynamic = "force-dynamic";
 
 export default async function MonkProgressPage() {
   const now = new Date();
+  // The current challenge first: loading it repairs the history the past
+  // list then reads.
   const [challenge, habits] = await Promise.all([
     loadChallenge(now),
     loadHabits(),
   ]);
+  const past = await loadPastChallenges();
   const active = activeHabits(habits);
   const days = challengeDays(challenge);
 
@@ -59,6 +66,8 @@ export default async function MonkProgressPage() {
   const perHabit = active.map((habit) =>
     readHabitRun(habit, progress, lived, now),
   );
+
+  const pastRuns = await readPastRuns(past, active, now);
 
   return (
     <div className="max-w-5xl">
@@ -115,7 +124,122 @@ export default async function MonkProgressPage() {
           </ul>
         )}
       </section>
+
+      <PastChallenges runs={pastRuns} />
     </div>
+  );
+}
+
+interface PastRun {
+  challenge: MonkChallenge;
+  start: Date;
+  end: Date;
+  days: number;
+  pct: number;
+  best: number;
+  perfect: number;
+}
+
+// Every finished challenge, read with the same rules as the current one. One
+// query for all of them: the completions are filed by day, so the whole span
+// from the oldest start to the newest end is one range.
+async function readPastRuns(
+  past: MonkChallenge[],
+  active: MonkHabit[],
+  now: Date,
+): Promise<PastRun[]> {
+  if (past.length === 0) return [];
+  const runs = past.map(challengeAsRun);
+  const spans = runs.map((c) => challengeDays(c));
+  const from = new Date(Math.min(...spans.map((d) => d[0].getTime())));
+  const to = new Date(Math.max(...spans.map((d) => d[d.length - 1].getTime())));
+  const progress = indexProgress(await loadProgress(from, to));
+
+  return runs.map((run, i) => {
+    const days = spans[i];
+    return {
+      challenge: run,
+      start: days[0],
+      end: days[days.length - 1],
+      days: days.length,
+      pct: monkTally(run, active, progress, now).pct,
+      best: monkStreaks(run, active, progress, now).best,
+      perfect: monkPerfectDays(active, progress, days, now),
+    };
+  });
+}
+
+function PastChallenges({ runs }: { runs: PastRun[] }) {
+  return (
+    <section className="card mt-5">
+      <div className="border-b border-line/60 px-6 py-4 max-sm:px-4">
+        <h2 className="display text-xl font-semibold">Past challenges</h2>
+        <p className="helper-text mt-0.5 text-xs text-muted">
+          Every challenge you have finished, read the same way as this one
+        </p>
+      </div>
+      {runs.length === 0 ? (
+        <p className="px-6 py-8 text-center text-sm text-muted">
+          No finished challenges yet.
+        </p>
+      ) : (
+        <ul>
+          {runs.map((run) => (
+            <li
+              key={run.challenge.id}
+              className="border-b border-line/60 px-6 py-4 last:border-b-0 max-sm:px-4"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className="num text-sm font-medium">
+                  {monkDateRange(run.start, run.end)}
+                </span>
+                <span className="num text-xs text-muted">
+                  {run.days} {run.days === 1 ? "day" : "days"}
+                </span>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-wash">
+                <div
+                  className="h-full rounded-full bg-ok"
+                  style={{ width: `${run.pct}%` }}
+                />
+              </div>
+              <dl className="num mt-2 grid grid-cols-3 gap-2 text-[11px] text-muted">
+                <div>
+                  <dt>Completed</dt>
+                  <dd className="text-sm font-semibold text-ink">{run.pct}%</dd>
+                </div>
+                <div>
+                  <dt>Best streak</dt>
+                  <dd className="text-sm font-semibold text-ink">
+                    {run.best} {run.best === 1 ? "day" : "days"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Perfect days</dt>
+                  <dd className="text-sm font-semibold text-ink">
+                    {run.perfect} of {run.days}
+                  </dd>
+                </div>
+              </dl>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-medium">
+                <Link
+                  href={`/monk-mode/calendar?challenge=${run.challenge.id}`}
+                  className="text-accent hover:underline"
+                >
+                  View calendar
+                </Link>
+                <Link
+                  href={`/monk-mode/journal?challenge=${run.challenge.id}`}
+                  className="text-accent hover:underline"
+                >
+                  View journal
+                </Link>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

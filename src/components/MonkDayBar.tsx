@@ -29,6 +29,7 @@ export default function MonkDayBar({
   day,
   today,
   basePath = "/monk-mode",
+  query = "",
 }: {
   // The day being shown and written to, and the real one, both as
   // midnight-UTC days.
@@ -37,10 +38,11 @@ export default function MonkDayBar({
   // Which page the arrows page within — the dashboard logs habits, the
   // journal writes notes, and both hold a day the same way.
   basePath?: string;
+  // Extra parameters the arrows carry, e.g. "&challenge=…" so paging through
+  // a past challenge's journal stays in it.
+  query?: string;
 }) {
   const isToday = toChecklistDay(day).getTime() === toChecklistDay(today).getTime();
-  const href = (d: Date) => `${basePath}?date=${dayKey(d)}`;
-
   return (
     <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
       {/* The indicator, and the empty space it leaves on today. Rendered as a
@@ -61,7 +63,12 @@ export default function MonkDayBar({
       )}
 
       <div className="flex shrink-0 items-center gap-1">
-        <DayLink day={addDays(day, -1)} basePath={basePath} direction="prev" />
+        <DayLink
+          day={addDays(day, -1)}
+          basePath={basePath}
+          query={query}
+          direction="prev"
+        />
         {/* Hidden when it would do nothing, the way the calendar's own Today
             link is. */}
         {!isToday && (
@@ -75,6 +82,7 @@ export default function MonkDayBar({
         <DayLink
           day={addDays(day, 1)}
           basePath={basePath}
+          query={query}
           direction="next"
           disabled={isToday}
         />
@@ -86,11 +94,13 @@ export default function MonkDayBar({
 function DayLink({
   day,
   basePath,
+  query,
   direction,
   disabled = false,
 }: {
   day: Date;
   basePath: string;
+  query: string;
   direction: "prev" | "next";
   disabled?: boolean;
 }) {
@@ -113,7 +123,7 @@ function DayLink({
 
   return (
     <Link
-      href={`${basePath}?date=${dayKey(day)}`}
+      href={`${basePath}?date=${dayKey(day)}${query}`}
       aria-label={label}
       className="rounded-[8px] p-2 text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
     >

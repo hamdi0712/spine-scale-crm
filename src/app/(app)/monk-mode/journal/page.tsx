@@ -16,12 +16,15 @@ import Link from "next/link";
 import {
   activeHabits,
   loadChallenge,
+  loadChallengeById,
   loadHabits,
   loadNote,
   loadNotes,
   loadProgress,
 } from "@/lib/monkModeStore";
 import {
+  challengeAsRun,
+  challengeDays,
   dayIsOver,
   dayKey,
   dayNumber,
@@ -34,6 +37,7 @@ import { fmtDate } from "@/lib/format";
 import MonkDayBar from "@/components/MonkDayBar";
 import MonkHeader from "@/components/MonkHeader";
 import MonkNote from "@/components/MonkNote";
+import MonkPastBanner from "@/components/MonkPastBanner";
 import MonkTodayList from "@/components/MonkTodayList";
 
 export const dynamic = "force-dynamic";
@@ -41,10 +45,29 @@ export const dynamic = "force-dynamic";
 export default async function MonkJournalPage({
   searchParams,
 }: {
-  searchParams: { date?: string };
+  searchParams: { date?: string; challenge?: string };
 }) {
   const now = new Date();
-  const day = toChecklistDay(parseDayKey(searchParams.date, now));
+
+  // ?challenge= opens a finished challenge from Progress → Past challenges:
+  // its notes only, opening on its last day. Loading the current challenge
+  // first keeps the history repaired; an unknown or open id reads as current.
+  const current = await loadChallenge(now);
+  const picked = searchParams.challenge
+    ? await loadChallengeById(searchParams.challenge)
+    : null;
+  const pastView = picked?.endDate ? challengeAsRun(picked) : null;
+  const challenge = pastView ?? current;
+  const pastDays = pastView ? challengeDays(pastView) : null;
+  const query = pastView ? `&challenge=${pastView.id}` : "";
+
+  const day = toChecklistDay(
+    parseDayKey(
+      searchParams.date ??
+        (pastDays ? dayKey(pastDays[pastDays.length - 1]) : undefined),
+      now,
+    ),
+  );
   const key = dayKey(day);
   const today = toChecklistDay(now);
   const past = dayIsOver(day, now);
@@ -52,11 +75,15 @@ export default async function MonkJournalPage({
   // the page should not offer a box that will be ignored.
   const future = toChecklistDay(day).getTime() > toChecklistDay(now).getTime();
 
-  const [challenge, habits, note, notes, rows] = await Promise.all([
-    loadChallenge(now),
+  const [habits, note, notes, rows] = await Promise.all([
     loadHabits(),
     loadNote(day),
-    loadNotes(),
+    loadNotes(
+      60,
+      pastDays
+        ? { from: pastDays[0], to: pastDays[pastDays.length - 1] }
+        : undefined,
+    ),
     loadProgress(day, day),
   ]);
   const active = activeHabits(habits);
@@ -73,7 +100,16 @@ export default async function MonkJournalPage({
 
       {/* Which day is open, and the way to another one. Says "Editing …" on
           anything but today, the same indicator the dashboard carries. */}
-      {!future && <MonkDayBar day={day} today={today} basePath="/monk-mode/journal" />}
+      {pastView && <MonkPastBanner href="/monk-mode/journal" />}
+
+      {!future && (
+        <MonkDayBar
+          day={day}
+          today={today}
+          basePath="/monk-mode/journal"
+          query={query}
+        />
+      )}
 
       <section className="card p-6">
         <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -117,7 +153,9 @@ export default async function MonkJournalPage({
       </section>
 
       <section className="mt-6">
-        <h2 className="display mb-3 text-xl font-semibold">Everything written</h2>
+        <h2 className="display mb-3 text-xl font-semibold">
+          {pastView ? "Written during this challenge" : "Everything written"}
+        </h2>
         {notes.length === 0 ? (
           <p className="card p-6 text-center text-sm text-muted">
             Nothing written down yet.
@@ -128,7 +166,7 @@ export default async function MonkJournalPage({
               <li key={entry.day} className="card p-5">
                 <div className="flex items-baseline justify-between gap-3">
                   <Link
-                    href={`/monk-mode/journal?date=${entry.day}`}
+                    href={`/monk-mode/journal?date=${entry.day}${query}`}
                     className="num text-sm font-medium text-accent hover:underline"
                   >
                     {fmtDate(new Date(`${entry.day}T00:00:00.000Z`))}
