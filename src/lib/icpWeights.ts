@@ -94,18 +94,10 @@ export const V2_FIT_FLOOR_NEAR_MISS = 5;
 // rejected as "Chiro without a real program". There is no hold.
 export const CHIRO_PROGRAM_MIN_SIGNALS = 2;
 
-// Signal 1 — a page of its own. Matched against the crawled page's URL path.
-export const CHIRO_PROGRAM_PAGE_TERMS = [
-  "decompression",
-  "disc",
-  "sciatica",
-  "avoid-surgery",
-  "avoid_surgery",
-  "avoidsurgery",
-  "surgery-alternative",
-  "non-surgical",
-  "herniated",
-];
+// Signal 1 — a page of its own: a crawled page whose URL, or a link on any
+// crawled page whose text or URL, names decompression, disc, sciatica or
+// avoiding surgery. The word-bounded matcher is isProgramLink in
+// src/lib/websiteCrawl.ts.
 
 // Signal 2 — named equipment. Matched as words anywhere on the site, case
 // insensitive. Add to this list as new tables and lasers turn up.

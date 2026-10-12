@@ -27,6 +27,7 @@ const EVIDENCE_SELECT = {
   clinicName: true,
   websiteUrl: true,
   websiteNotes: true,
+  websiteLinks: true,
   metaAdsSignal: true,
   reviewCount: true,
   staffCountRaw: true,

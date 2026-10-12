@@ -33,11 +33,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
+import { runWebsiteCrawl } from "@/lib/websiteCrawlRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { deepSeekJson } from "@/lib/deepseek";
 import {
+  ENRICH_ACTORS,
   ENRICH_STEP_LABELS,
   EnrichInputs,
+  crawlDiagnostics,
+  sanitizeEnrichUpdate,
   isEnrichLookupKey,
   EnrichOutcome,
   EnrichUpdate,
@@ -858,6 +862,7 @@ async function scoreCandidateV2({
     metaAdsSignal: string | null;
     reviewCount: number | null;
     websiteNotes: string | null;
+    websiteLinks?: string | null;
   };
   websiteUrl: string | null;
   settings: PipelineSettings;
@@ -879,6 +884,7 @@ async function scoreCandidateV2({
       clinicName: candidate.clinicName,
       websiteUrl,
       websiteNotes: enriched.websiteNotes,
+      websiteLinks: enriched.websiteLinks ?? null,
       metaAdsSignal: enriched.metaAdsSignal,
       reviewCount: enriched.reviewCount,
       staffCountRaw: enriched.staffCountRaw,
@@ -1047,12 +1053,14 @@ async function writeCandidateEnrichment(
   metaAdsSignal: string | null;
   reviewCount: number | null;
   websiteNotes: string | null;
+  websiteLinks: string | null;
 }> {
   const select = {
     staffCountRaw: true,
     metaAdsSignal: true,
     reviewCount: true,
     websiteNotes: true,
+    websiteLinks: true,
   } as const;
 
   if (enrichFieldsWritten(update).length === 0) {
@@ -1146,6 +1154,73 @@ export async function rejectDiscoveryCandidate(id: string, reason: string) {
   revalidatePath("/discovery");
   revalidatePath("/discovery/rejected");
   revalidatePath(`/discovery/${id}`);
+}
+
+// ─── Re-crawl a candidate's website ────────────────────────────────────────
+
+export type RecrawlResult =
+  | { ok: true; clinicName: string; pages: number; links: number; note: string | null }
+  | { ok: false; clinicName: string; error: string };
+
+// Runs the Website Content Crawler alone, under the current crawl settings,
+// and replaces the stored website notes and links with what it read. Nothing
+// else: no other actor, no rescoring, no status change. A crawl that reads
+// nothing leaves what was stored before, rather than blanking it.
+//
+// One candidate per call, driven from the Discovery selection bar the way
+// Process queue is driven, so the cost is spent where somebody can see it.
+export async function recrawlCandidateWebsite(id: string): Promise<RecrawlResult> {
+  const candidate = await prisma.discoveryCandidate.findUnique({
+    where: { id },
+    select: { clinicName: true, websiteUrl: true },
+  });
+  if (!candidate) return { ok: false, clinicName: "That candidate", error: "No longer here." };
+  const url = (candidate.websiteUrl ?? "").trim();
+  if (url === "") {
+    return { ok: false, clinicName: candidate.clinicName, error: "No website URL on this candidate." };
+  }
+  const settings = await loadPipelineSettings();
+  if (!settings.steps.websiteContent.enabled) {
+    return {
+      ok: false,
+      clinicName: candidate.clinicName,
+      error: "The Website Content Crawler is turned off in Settings → Pipeline.",
+    };
+  }
+
+  let crawl;
+  try {
+    crawl = await runWebsiteCrawl(url, settings);
+  } catch {
+    return { ok: false, clinicName: candidate.clinicName, error: "The crawl could not be reached." };
+  }
+  if (!crawl.ok) return { ok: false, clinicName: candidate.clinicName, error: crawl.error };
+
+  const actor = ENRICH_ACTORS.find((a) => a.key === "websiteContent")!;
+  const read = sanitizeEnrichUpdate(actor.read(crawl.table));
+  if (read.websiteNotes === undefined) {
+    return {
+      ok: false,
+      clinicName: candidate.clinicName,
+      error: `The crawl ran but read nothing — ${crawlDiagnostics(crawl.table)}. The stored notes were kept.`,
+    };
+  }
+  await prisma.discoveryCandidate.update({
+    where: { id },
+    data: {
+      websiteNotes: read.websiteNotes,
+      websiteLinks: read.websiteLinks ?? null,
+      enrichedAt: new Date(),
+    },
+  });
+  revalidatePath(`/discovery/${id}`);
+  return {
+    ok: true,
+    clinicName: candidate.clinicName,
+    pages: crawl.table.rows.length,
+    links: read.websiteLinks ? (JSON.parse(read.websiteLinks) as unknown[]).length : 0,
+    note: crawl.note,
+  };
 }
 
 // ─── Bulk actions from the discovery table ─────────────────────────────────

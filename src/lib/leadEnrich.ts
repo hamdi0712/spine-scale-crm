@@ -25,6 +25,16 @@
 // Nothing here touches the network or the database: the actor definitions are
 // data, the readers are pure, and src/lib/actions/enrich.ts does the running.
 
+import {
+  DEFAULT_WEBSITE_CRAWL_PAGES,
+  MAX_WEBSITE_CRAWL_PAGES,
+  WebsiteLink,
+  crawlInput,
+  dedupeLinks,
+  linksFromMarkdown,
+  parseLinks,
+  serializeLinks,
+} from "@/lib/websiteCrawl";
 import { parseCount } from "@/lib/discoveryImport";
 import {
   PIPELINE_STEP_KEYS,
@@ -61,6 +71,7 @@ export const ENRICH_FIELD_KEYS = [
   "metaAdsSignal",
   "reviewCount",
   "websiteNotes",
+  "websiteLinks",
 ] as const;
 
 export type EnrichFieldKey = (typeof ENRICH_FIELD_KEYS)[number];
@@ -72,6 +83,7 @@ export const ENRICH_FIELD_LABELS: Record<EnrichFieldKey, string> = {
   metaAdsSignal: "Meta ads signal",
   reviewCount: "Review count",
   websiteNotes: "Website notes",
+  websiteLinks: "Website links",
 };
 
 // What one actor's result, read through its own reader, would write. A key
@@ -86,6 +98,8 @@ export type EnrichUpdate = Partial<{
   metaAdsSignal: string;
   reviewCount: number;
   websiteNotes: string;
+  // JSON [{ text, url, page }] — see src/lib/websiteCrawl.ts.
+  websiteLinks: string;
 }>;
 
 export function enrichFieldsWritten(update: EnrichUpdate): EnrichFieldKey[] {
@@ -95,8 +109,12 @@ export function enrichFieldsWritten(update: EnrichUpdate): EnrichFieldKey[] {
 // Scraped copy is stored whole, but "whole" has to stop somewhere: a crawler
 // pointed at a site with a blog attached can return a book. Cut with an
 // ellipsis so a truncated note never reads as a complete one.
-export const WEBSITE_NOTES_MAX_CHARS = 20000;
-const WEBSITE_NOTES_MAX_PAGES = 3;
+// Raised from 20k with the crawl: six pages, nav and footer included.
+export const WEBSITE_NOTES_MAX_CHARS = 40000;
+// The most pages a crawl can read; how many it actually reads is a setting
+// (websiteCrawlPages, Settings → Pipeline), within this.
+const WEBSITE_NOTES_MAX_PAGES = MAX_WEBSITE_CRAWL_PAGES;
+const WEBSITE_LINKS_MAX_CHARS = 120000;
 
 // Longest a freeform signal is allowed to be. Ours are built, not copied, so
 // this only ever catches a chosen item posted back from the browser.
@@ -351,35 +369,24 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     requires: "websiteUrl",
     requiresLabel: "Website URL",
     maxItems: WEBSITE_NOTES_MAX_PAGES,
-    writes: ["websiteNotes"],
+    writes: ["websiteNotes", "websiteLinks"],
     identifies: false,
     identityFields: [],
+    // What a single-pass crawl of the site sends. A real run is two passes —
+    // the home page, then the links most likely to be a program page — made by
+    // src/lib/websiteCrawlRun.ts with crawlInput() from src/lib/websiteCrawl.ts;
+    // this is the input tools/inspect-website-crawl.ts falls back to.
     buildInput: (inputs) => ({
-      startUrls: [{ url: inputs.websiteUrl }],
-      maxCrawlPages: WEBSITE_NOTES_MAX_PAGES,
-      // This used to be "cheerio" — the cheap crawler that fetches the HTML
-      // and never runs a line of JavaScript — on the reasoning that reading
-      // copy off a clinic's marketing site is not rendering an application.
-      //
-      // That reasoning was wrong about the sites. A chiropractic clinic's site
-      // is, more often than not, Wix or Squarespace or a React template, and
-      // what those serve to a crawler that does not run scripts is a shell
-      // with the copy missing. The crawl succeeded, the page was fetched, and
-      // there was nothing in it — which is exactly the failure this step kept
-      // reporting as "nothing reads as website notes".
-      //
-      // "playwright:adaptive" is the crawler's own answer to that: it fetches
-      // plainly first and only starts a browser for the pages that turn out to
-      // need one. The cheap path still runs on the sites where it worked; the
-      // sites where it did not now come back with a body.
-      crawlerType: "playwright:adaptive",
-      // Asked for so the reader has a second field to fall back on when the
-      // plain-text extraction of a page comes back thin (CRAWLED_TEXT_FIELDS).
-      saveMarkdown: true,
+      ...crawlInput([inputs.websiteUrl ?? ""], DEFAULT_WEBSITE_CRAWL_PAGES),
+      maxCrawlDepth: 1,
     }),
     read: (table) => {
       const notes = crawledText(table);
-      return notes === null ? {} : { websiteNotes: notes };
+      const links = serializeLinks(linksFromTable(table));
+      return {
+        ...(notes === null ? {} : { websiteNotes: notes }),
+        ...(links === null ? {} : { websiteLinks: links }),
+      };
     },
     // Why nothing was read, when nothing was read. The rest of the actors fail
     // legibly — a 404 is a 404 — and this one does not, so it is the only step
@@ -885,6 +892,18 @@ export function crawledText(table: EnrichTable): string | null {
   return capped(parts.join("\n\n"));
 }
 
+// Every link on every crawled page, read out of the crawler's markdown, with
+// the page it was found on.
+export function linksFromTable(table: EnrichTable): WebsiteLink[] {
+  const links: WebsiteLink[] = [];
+  for (let i = 0; i < table.rows.length; i++) {
+    const markdown = cell(table, i, ["markdown"]);
+    if (markdown === "") continue;
+    links.push(...linksFromMarkdown(markdown, cell(table, i, CRAWLED_URL_FIELDS)));
+  }
+  return dedupeLinks(links);
+}
+
 // What to store when no page came back with a body worth reading. Two goes at
 // it, in order: the longest thin body the crawl did return, and failing that
 // the pages' own titles and meta descriptions. Either is labelled for what it
@@ -1004,6 +1023,17 @@ export function sanitizeEnrichUpdate(update: EnrichUpdate): EnrichUpdate {
     const v = update.websiteNotes.trim().slice(0, WEBSITE_NOTES_MAX_CHARS);
     if (v !== "") out.websiteNotes = v;
   }
+  if (typeof update.websiteLinks === "string") {
+    // Re-read and re-written rather than trusted, so what is stored is always
+    // a list of links and never longer than the column should hold.
+    const links = parseLinks(update.websiteLinks);
+    let v = serializeLinks(links);
+    while (v !== null && v.length > WEBSITE_LINKS_MAX_CHARS) {
+      v = serializeLinks(links.slice(0, Math.floor(links.length * 0.8)));
+      links.length = Math.floor(links.length * 0.8);
+    }
+    if (v !== null) out.websiteLinks = v;
+  }
   return out;
 }
 
@@ -1016,6 +1046,10 @@ export function enrichValuePreview(
 ): string {
   const value = update[key];
   if (value === undefined) return "";
+  if (key === "websiteLinks") {
+    const n = parseLinks(String(value)).length;
+    return `${n} link${n === 1 ? "" : "s"}`;
+  }
   const text = String(value);
   return text.length > 120 ? `${text.slice(0, 120)}…` : text;
 }

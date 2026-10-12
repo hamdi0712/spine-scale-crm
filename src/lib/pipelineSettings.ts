@@ -27,6 +27,7 @@
 
 import { ICP_MAX_SCORE } from "@/lib/icp";
 import { DEFAULT_V2_PROMOTION_THRESHOLD, V2_MAX_SCORE } from "@/lib/icpWeights";
+import { DEFAULT_WEBSITE_CRAWL_PAGES, readWebsiteCrawlPages } from "@/lib/websiteCrawl";
 import { normalizeApifyId } from "@/lib/apifyId";
 import { GOOGLE_SEARCH_ACTOR_ID } from "@/lib/googleSearch";
 
@@ -116,6 +117,8 @@ export interface PipelineSettings {
   // The ICP model's own bar, out of V2_MAX_SCORE. Read only when
   // scoringModel is "v2", and by Compare scoring.
   promotionThresholdV2: number;
+  // How many pages of a clinic's site the crawler reads (src/lib/websiteCrawl.ts).
+  websiteCrawlPages: number;
 }
 
 // The score a candidate has to reach to be promoted rather than rejected. The
@@ -182,6 +185,7 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   },
   scoringModel: "v1",
   promotionThresholdV2: DEFAULT_V2_PROMOTION_THRESHOLD,
+  websiteCrawlPages: DEFAULT_WEBSITE_CRAWL_PAGES,
 };
 
 // ─── Reading a row ─────────────────────────────────────────────────────────
@@ -227,6 +231,7 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
     // thrown on purpose.
     scoringModel: record.scoringModel === "v2" ? "v2" : "v1",
     promotionThresholdV2: readPromotionThresholdV2(record.promotionThresholdV2),
+    websiteCrawlPages: readWebsiteCrawlPages(record.websiteCrawlPages),
   };
 }
 
@@ -299,6 +304,7 @@ export function pipelineSettingsRow(
   row.decisionMakerActorId = settings.decisionMaker.actorId;
   row.scoringModel = settings.scoringModel;
   row.promotionThresholdV2 = settings.promotionThresholdV2;
+  row.websiteCrawlPages = settings.websiteCrawlPages;
   return row;
 }
 
@@ -317,6 +323,7 @@ export function isDefaultPipelineSettings(settings: PipelineSettings): boolean {
     settings.promotionThreshold === DEFAULT_PROMOTION_THRESHOLD &&
     settings.promotionThresholdV2 === DEFAULT_V2_PROMOTION_THRESHOLD &&
     settings.scoringModel === "v1" &&
+    settings.websiteCrawlPages === DEFAULT_WEBSITE_CRAWL_PAGES &&
     settings.clinicDiscovery.enabled === DEFAULT_CLINIC_DISCOVERY_ENABLED &&
     settings.clinicDiscovery.actorId === DEFAULT_CLINIC_DISCOVERY_ACTOR_ID &&
     settings.decisionMaker.enabled === DEFAULT_DECISION_MAKER_ENABLED &&
@@ -363,13 +370,24 @@ export const PIPELINE_STEP_RATES: Record<PipelineStepKey, PipelineStepRate> = {
   // every record that doesn't.
   facebookLookup: { usdPerUnit: 0.004, unitsPerCandidate: 1, unit: "search" },
   facebookAds: { usdPerUnit: 0.003, unitsPerCandidate: 10, unit: "ad" },
-  websiteContent: { usdPerUnit: 0.001, unitsPerCandidate: 3, unit: "page" },
+  // Pages per candidate is the crawl setting rather than this figure — see
+  // stepUnits below. Six by default, up from the three it shipped with.
+  websiteContent: { usdPerUnit: 0.001, unitsPerCandidate: DEFAULT_WEBSITE_CRAWL_PAGES, unit: "page" },
   googleReviews: { usdPerUnit: 0.004, unitsPerCandidate: 5, unit: "place" },
 };
 
-export function stepCostPerCandidate(key: PipelineStepKey): number {
-  const rate = PIPELINE_STEP_RATES[key];
-  return rate.usdPerUnit * rate.unitsPerCandidate;
+// What one candidate consumes of a step under these settings. Only the crawl
+// has a setting behind it; every other step uses its typical figure.
+export function stepUnits(key: PipelineStepKey, settings?: Pick<PipelineSettings, "websiteCrawlPages">): number {
+  if (key === "websiteContent" && settings) return settings.websiteCrawlPages;
+  return PIPELINE_STEP_RATES[key].unitsPerCandidate;
+}
+
+export function stepCostPerCandidate(
+  key: PipelineStepKey,
+  settings?: Pick<PipelineSettings, "websiteCrawlPages">,
+): number {
+  return PIPELINE_STEP_RATES[key].usdPerUnit * stepUnits(key, settings);
 }
 
 // What one candidate costs to put through the chain, under these settings.
@@ -377,7 +395,7 @@ export function stepCostPerCandidate(key: PipelineStepKey): number {
 // is the other half of what the toggles are for.
 export function costPerCandidate(settings: PipelineSettings): number {
   return PIPELINE_STEP_KEYS.filter((key) => settings.steps[key].enabled).reduce(
-    (total, key) => total + stepCostPerCandidate(key),
+    (total, key) => total + stepCostPerCandidate(key, settings),
     0,
   );
 }

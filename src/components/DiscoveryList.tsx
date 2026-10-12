@@ -48,7 +48,12 @@ import {
   DISCOVERY_SOURCE_KIND_MEANINGS,
   DiscoverySourceKind,
 } from "@/lib/clinicDiscovery";
-import { deleteDiscoveryCandidates } from "@/lib/actions/discovery";
+import {
+  deleteDiscoveryCandidates,
+  recrawlCandidateWebsite,
+} from "@/lib/actions/discovery";
+import { useRouter } from "next/navigation";
+import { fmtEstimate } from "@/lib/pipelineSettings";
 import {
   ICP_TIER_ACTIONS,
   ICP_TIER_LABELS,
@@ -105,7 +110,17 @@ type SortKey = "clinicName" | "status" | "icpTier" | "icpTotal" | "createdAt";
 // and a fourth button would make the row read as a legend rather than a filter.
 const QUICK_TIERS: IcpTier[] = ["A", "B", "C"];
 
-export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
+export default function DiscoveryList({
+  rows,
+  recrawlCostPerClinic = 0,
+}: {
+  rows: DiscoveryRow[];
+  // What one Website Content Crawler run costs under the current settings,
+  // for the estimate "Re-crawl website" quotes before it spends anything.
+  recrawlCostPerClinic?: number;
+}) {
+  const router = useRouter();
+  const [recrawl, setRecrawl] = useState<{ done: number; total: number; current: string | null; failed: string[]; summary: string | null } | null>(null);
   const [view, setView] = useState<"cards" | "table">("cards");
   const phone = useIsPhone();
   const [query, setQuery] = useState("");
@@ -244,6 +259,48 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
       }
       return next;
     });
+  }
+
+  // Re-runs the Website Content Crawler alone for the selected candidates that
+  // have a website, one at a time, replacing their notes and links. No other
+  // actor, no rescoring, no status change — the confirmation says so, with the
+  // cost, before anything runs.
+  async function bulkRecrawl() {
+    const targets = chosen.filter((r) => (r.websiteUrl ?? "").trim() !== "");
+    if (targets.length === 0) {
+      alert("None of the selected candidates has a website URL to crawl.");
+      return;
+    }
+    const skipped = chosen.length - targets.length;
+    if (
+      !confirm(
+        `Re-crawl the website of ${targets.length} candidate${targets.length === 1 ? "" : "s"}? ${fmtEstimate(targets.length * recrawlCostPerClinic)} in Apify usage (Website Content Crawler only).\n\nTheir stored website notes and links are replaced. Nothing is re-scored and no status changes.${
+          skipped > 0 ? `\n\n${skipped} selected without a website URL ${skipped === 1 ? "is" : "are"} skipped.` : ""
+        }`,
+      )
+    ) {
+      return;
+    }
+    const failed: string[] = [];
+    let wrote = 0;
+    for (let i = 0; i < targets.length; i++) {
+      setRecrawl({ done: i, total: targets.length, current: targets[i].clinicName, failed, summary: null });
+      try {
+        const result = await recrawlCandidateWebsite(targets[i].id);
+        if (result.ok) wrote++;
+        else failed.push(`${result.clinicName}: ${result.error}`);
+      } catch {
+        failed.push(`${targets[i].clinicName}: the server could not be reached`);
+      }
+    }
+    setRecrawl({
+      done: targets.length,
+      total: targets.length,
+      current: null,
+      failed,
+      summary: `Re-crawled ${wrote} of ${targets.length}.${failed.length > 0 ? ` ${failed.length} failed.` : ""}`,
+    });
+    router.refresh();
   }
 
   function bulkDelete() {
@@ -460,6 +517,15 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
             )}
             <button
               type="button"
+              onClick={() => void bulkRecrawl()}
+              disabled={pending || (recrawl !== null && recrawl.summary === null)}
+              className="btn disabled:cursor-not-allowed disabled:opacity-50 max-md:px-3"
+            >
+              <span className="max-md:hidden">Re-crawl website</span>
+              <span className="md:hidden">Re-crawl</span>
+            </button>
+            <button
+              type="button"
               onClick={bulkDelete}
               disabled={pending}
               className="btn-danger disabled:cursor-not-allowed disabled:opacity-50 max-md:px-3"
@@ -481,6 +547,29 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
               )}
             </button>
           </div>
+        </div>
+      )}
+
+      {recrawl && (
+        <div className="card mb-3 px-4 py-3 text-xs leading-relaxed max-md:px-3">
+          <div className="flex items-start justify-between gap-3">
+            <p className="min-w-0 text-ink-soft">
+              {recrawl.summary ??
+                `Re-crawling ${recrawl.done + 1} of ${recrawl.total}${recrawl.current ? ` — ${recrawl.current}` : ""}…`}
+            </p>
+            {recrawl.summary !== null && (
+              <button type="button" className="btn-ghost shrink-0 px-2 py-0.5 text-xs" onClick={() => setRecrawl(null)}>
+                Dismiss
+              </button>
+            )}
+          </div>
+          {recrawl.failed.length > 0 && (
+            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-bad">
+              {recrawl.failed.map((f, i) => (
+                <li key={i} className="break-words">{f}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 

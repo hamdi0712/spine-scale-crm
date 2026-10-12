@@ -11,7 +11,7 @@
 // Nothing here touches the network or the database.
 
 // How much of the website notes to send. The crawler stores up to 20k
-// characters (three pages), and the answer to "does this clinic name a program
+// characters (up to the crawl page limit), and the answer to "does this clinic name a program
 // and price it" is on the first few thousand — the rest is a blog. Cut with an
 // ellipsis so a truncated note never reads to the model as a complete one.
 export const ASSIST_NOTES_MAX_CHARS = 12000;

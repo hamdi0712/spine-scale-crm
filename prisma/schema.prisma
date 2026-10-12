@@ -139,6 +139,11 @@ model DiscoveryCandidate {
   metaAdsSignal String?
   reviewCount   Int?
   websiteNotes  String?
+  // Every link on the crawled pages — nav, header, footer, buttons, body — as
+  // JSON [{ text, url, page }], read out of the crawler's markdown. Kept apart
+  // from websiteNotes because a link's target is evidence the text alone does
+  // not carry (src/lib/websiteCrawl.ts).
+  websiteLinks  String?
   enrichedAt    DateTime?
 
   // Where this candidate is in the queue. Constrained to DISCOVERY_STATUSES in
@@ -311,6 +316,7 @@ model Lead {
   metaAdsSignal String?
   reviewCount   Int?
   websiteNotes  String? // crawled copy, as long as the actor returned it
+  websiteLinks  String? // JSON [{ text, url, page }] — every link on the crawled pages
 
   // When the enrichment run last wrote anything at all. One date for the whole
   // record rather than one per field: the run does all four actors together,
@@ -924,6 +930,11 @@ model PipelineSettings {
   // reinterpretation of the one above, so neither model's bar is ever read on
   // the other's scale and switching back is a toggle rather than a re-entry.
   promotionThresholdV2 Int @default(60)
+
+  // How many pages of a clinic's site the Website Content Crawler reads: the
+  // home page, then the links most likely to be a program page first
+  // (src/lib/websiteCrawl.ts). Billed per page.
+  websiteCrawlPages Int @default(6)
 
   updatedAt DateTime @updatedAt
 }

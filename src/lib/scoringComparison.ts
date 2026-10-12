@@ -114,6 +114,7 @@ export function storedEvidence(record: {
   clinicName: string;
   websiteUrl: string | null;
   websiteNotes: string | null;
+  websiteLinks?: string | null;
   metaAdsSignal: string | null;
   reviewCount: number | null;
   staffCountRaw: number | null;
@@ -125,6 +126,7 @@ export function storedEvidence(record: {
     clinicName: record.clinicName,
     websiteUrl: record.websiteUrl,
     websiteNotes: record.websiteNotes,
+    websiteLinks: record.websiteLinks ?? null,
     metaAdsSignal: record.metaAdsSignal,
     reviewCount: record.reviewCount,
     staffCountRaw: record.staffCountRaw,

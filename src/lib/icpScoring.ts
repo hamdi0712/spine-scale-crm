@@ -33,6 +33,7 @@
 // rejected clinic is gone.
 
 import { budgetSignalScore, hasActiveAds } from "@/lib/discovery";
+import { isProgramLink, isProgramPageUrl, parseLinks } from "@/lib/websiteCrawl";
 import { GapPrecheck, precheckNote } from "@/lib/discoveryAssist";
 import { ICP_GAPS, IcpGapKey, IcpTier } from "@/lib/icp";
 import {
@@ -47,7 +48,6 @@ import {
   CHIRO_CONSULT_PHRASES,
   CHIRO_EQUIPMENT,
   CHIRO_PROGRAM_MIN_SIGNALS,
-  CHIRO_PROGRAM_PAGE_TERMS,
   FIT_FLOOR,
   FIT_MAX,
   FIT_WEIGHTS,
@@ -74,6 +74,10 @@ export interface ScoringEvidence {
   location: string | null;
   contactName: string | null;
   contactTitle: string | null;
+  // JSON [{ text, url, page }] — every link on the crawled pages, where the
+  // crawl stored them (src/lib/websiteCrawl.ts). Absent on records crawled
+  // before links were kept.
+  websiteLinks?: string | null;
 }
 
 // A claim and where it was read. `source` is a page URL for anything off the
@@ -1347,22 +1351,29 @@ export function chiroProgramCheck(
     reason,
   });
 
-  // 1. A page of its own: the crawled page's URL names it, cited with a line
-  // from that page.
-  const pagePattern = new RegExp(
-    `(${CHIRO_PROGRAM_PAGE_TERMS.map(escapeRegExp).join("|")})`,
-    "i",
-  );
+  // 1. A page of its own: a crawled page whose URL names it, cited with a
+  // line from that page — or, where that page was not among the pages read, a
+  // link to it on any page that was (menu, footer, button), cited with the
+  // link's own text and target.
   let page: Citation[] = [];
+  let pageReason = "A page of the site is dedicated to it.";
   for (const doc of websiteDocs(docs)) {
     if (!/^https?:\/\//i.test(doc.source)) continue;
-    const path = doc.source.replace(/^https?:\/\/[^/]+/i, "");
-    if (!pagePattern.test(path)) continue;
+    if (!isProgramPageUrl(doc.source)) continue;
     const firstLine = doc.text.split(/\n/).map((l) => l.trim()).find((l) => l.split(/\s+/).length >= 4);
     const citation = firstLine ? verifyQuote(clip(firstLine, 300).replace(/…$/, ""), doc.source, docs) : null;
     if (citation) {
       page = [citation];
       break;
+    }
+  }
+  if (page.length === 0) {
+    const link = parseLinks(evidence.websiteLinks ?? null).find(
+      (l) => l.text.trim() !== "" && isProgramLink(l),
+    );
+    if (link) {
+      page = [{ quote: link.text, source: link.url }];
+      pageReason = `The site links to a dedicated page (found on ${link.page || "a crawled page"}).`;
     }
   }
 
@@ -1409,7 +1420,7 @@ export function chiroProgramCheck(
     : [];
 
   const signals = [
-    signal("page", page, page.length ? "A page of the site is dedicated to it." : "No crawled page is dedicated to decompression, disc, sciatica or avoiding surgery."),
+    signal("page", page, page.length ? pageReason : "No crawled page, and no link on one, is dedicated to decompression, disc, sciatica or avoiding surgery."),
     signal("equipment", equipment ? [equipment.citation] : [], equipment ? `Names ${equipment.match[0]}.` : "No named table or laser on the site."),
     signal("consult", consult ? [consult.citation] : [], consult ? "Offers a consult." : "No consult offer on the site."),
     signal("team", team, team.length ? "Two or more providers or staff are named." : "Fewer than two named providers or staff."),

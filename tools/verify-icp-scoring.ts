@@ -924,6 +924,48 @@ async function main(): Promise<void> {
     console.log(`       ${name}: fit ${b.fitTotal}/60 — ${b.fit.map((e) => `${e.label} ${e.points} (${e.source})`).join(", ")}`);
   }
 
+  // Links: read off the crawler's markdown, chosen to follow, and counted for
+  // the chiro "dedicated page" signal when that page itself was not crawled.
+  {
+    const { linksFromMarkdown, choosePagesToFollow, isProgramLink, serializeLinks } = await import("../src/lib/websiteCrawl");
+    const { chiroProgramCheck, evidenceDocs } = await import("../src/lib/icpScoring");
+    const home = "https://ridgechiro.com/";
+    const md = [
+      "[Home](/) [About Us](/about) [Spinal Decompression](/spinal-decompression) [Blog](/blog)",
+      "[Discount plans](/discount) [Discover more](/discover) ![logo](/logo.png)",
+      "[Sciatica Relief](https://ridgechiro.com/sciatica/) [Facebook](https://facebook.com/ridge) [Brochure](/b.pdf)",
+      "© 2026 Ridge Chiropractic · [Privacy](/privacy)",
+    ].join("\n");
+    const links = linksFromMarkdown(md, home);
+    check("links come out of markdown with absolute URLs", links.some((l) => l.text === "Spinal Decompression" && l.url === "https://ridgechiro.com/spinal-decompression"));
+    check("an image is not a link", !links.some((l) => l.url.endsWith("/logo.png")));
+    const follow = choosePagesToFollow(links, home, 3);
+    check(
+      "priority links are followed first, off-site and files skipped",
+      follow[0] === "https://ridgechiro.com/spinal-decompression" && follow[1] === "https://ridgechiro.com/sciatica/" && !follow.some((u) => u.includes("facebook") || u.endsWith(".pdf")),
+      follow.join(", "),
+    );
+    check("'discount' and 'discover' are not 'disc'", !isProgramLink({ text: "Discount plans", url: "https://x.com/discount" }) && !isProgramLink({ text: "Discover more", url: "https://x.com/discover" }));
+    check("'avoid surgery' and a /disc-herniation URL are program links", isProgramLink({ text: "Avoid Surgery", url: "https://x.com/a" }) && isProgramLink({ text: "Learn", url: "https://x.com/disc-herniation" }));
+
+    const evidence = {
+      clinicName: "Ridge Chiropractic",
+      websiteNotes: "[https://ridgechiro.com/]\nWelcome to Ridge Chiropractic, family care in Boise.",
+      websiteLinks: serializeLinks(links),
+      metaAdsSignal: null,
+      reviewCount: null,
+    };
+    const docs = evidenceDocs(evidence as Parameters<typeof evidenceDocs>[0]);
+    const viaLink = chiroProgramCheck(evidence as Parameters<typeof chiroProgramCheck>[0], null, docs).signals.find((x) => x.key === "page");
+    check(
+      "a program page linked in the nav but never crawled counts for signal 1",
+      viaLink?.found === true && viaLink.citations[0]?.source === "https://ridgechiro.com/spinal-decompression",
+      viaLink?.reason ?? "",
+    );
+    const noLinks = chiroProgramCheck({ ...evidence, websiteLinks: null } as Parameters<typeof chiroProgramCheck>[0], null, docs).signals.find((x) => x.key === "page");
+    check("…and without stored links it does not", noLinks?.found === false);
+  }
+
   // Step 2 reads the pain points as background, and only when there are some.
   const ctx = {
     evidence: { clinicName: "Summit", websiteNotes: "x", metaAdsSignal: null, reviewCount: null },

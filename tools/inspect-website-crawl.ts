@@ -26,25 +26,82 @@
 //
 //   DATABASE_URL="file:$PWD/prisma/dev.db" npx tsx tools/inspect-website-crawl.ts https://example.com
 //
-// It spends money: one crawler run, the same three pages a real enrichment
-// asks for. Nothing is written to the database — this reads and prints.
+// It runs the crawl exactly as the app now does — two passes, the home page
+// and then up to (pages − 1) links off it, program-looking links first — and
+// prints, on top of the above, the links read off the pages, which of them
+// were picked to follow, whether menu/footer text came through, and which
+// links would count for the chiro "dedicated page" signal.
+//
+//   APIFY_API_TOKEN=... npx tsx tools/inspect-website-crawl.ts https://example.com [pages]
+//
+// It spends money: up to [pages] crawled pages (default 6). Nothing is written
+// to the database — this reads and prints.
 
-import { ENRICH_ACTORS, crawlDiagnostics, crawledText } from "../src/lib/leadEnrich";
+import { crawlDiagnostics, crawledText, linksFromTable, EnrichTable } from "../src/lib/leadEnrich";
 import { itemsToTable } from "../src/lib/apify";
 import { DEFAULT_ACTOR_IDS } from "../src/lib/pipelineSettings";
+import { mergeTables } from "../src/lib/websiteCrawlRun";
+import {
+  DEFAULT_WEBSITE_CRAWL_PAGES,
+  choosePagesToFollow,
+  crawlInput,
+  dedupeLinks,
+  isProgramLink,
+  readWebsiteCrawlPages,
+} from "../src/lib/websiteCrawl";
 
 const API_BASE = "https://api.apify.com/v2";
-const RUN_TIMEOUT_SECONDS = 120;
+const RUN_TIMEOUT_SECONDS = 180;
+
+// Words that only turn up in a site's menu or footer, to tell whether the
+// chrome survived the crawl.
+const NAV_HINTS = ["home", "about", "contact", "services", "privacy", "copyright", "©", "book", "schedule"];
+
+async function run(token: string, actorId: string, input: object, maxItems: number, label: string) {
+  console.log(`\n── ${label}: input sent ─────────────────────────────────────`);
+  console.log(JSON.stringify(input, null, 2));
+  const endpoint =
+    `${API_BASE}/acts/${encodeURIComponent(actorId)}/run-sync-get-dataset-items` +
+    `?timeout=${RUN_TIMEOUT_SECONDS}&maxItems=${maxItems}&limit=${maxItems}`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    console.error(`\nApify said HTTP ${response.status}:`);
+    console.error(await response.text());
+    process.exit(1);
+  }
+  const items = (await response.json()) as unknown[];
+  console.log(`\n── ${label}: raw items (text/markdown truncated) ──────────────`);
+  console.log(
+    JSON.stringify(
+      items.map((it) =>
+        it && typeof it === "object"
+          ? Object.fromEntries(
+              Object.entries(it as Record<string, unknown>).map(([k, v]) => [
+                k,
+                typeof v === "string" && v.length > 1500 ? `${v.slice(0, 1500)}… (${v.length} chars)` : v,
+              ]),
+            )
+          : it,
+      ),
+      null,
+      2,
+    ),
+  );
+  return itemsToTable(Array.isArray(items) ? items : [], maxItems);
+}
 
 async function main() {
   const url = process.argv[2];
   if (!url) {
-    console.error(
-      "Usage: npx tsx tools/inspect-website-crawl.ts <website-url> [actor-id]",
-    );
+    console.error("Usage: npx tsx tools/inspect-website-crawl.ts <website-url> [pages] [actor-id]");
     process.exit(1);
   }
-  const actorId = process.argv[3] ?? DEFAULT_ACTOR_IDS.websiteContent;
+  const pages = process.argv[3] ? readWebsiteCrawlPages(process.argv[3]) : DEFAULT_WEBSITE_CRAWL_PAGES;
+  const actorId = process.argv[4] ?? DEFAULT_ACTOR_IDS.websiteContent;
 
   const token = await readToken();
   if (!token) {
@@ -53,57 +110,28 @@ async function main() {
     );
     process.exit(1);
   }
+  console.log(`actor: ${actorId}   page limit: ${pages}`);
 
-  const actor = ENRICH_ACTORS.find((a) => a.key === "websiteContent");
-  if (!actor) throw new Error("The websiteContent step is no longer in ENRICH_ACTORS.");
+  const home = await run(token, actorId, crawlInput([url], 1), 1, "Pass 1 (home page)");
+  const homeLinks = linksFromTable(home);
+  const follow = choosePagesToFollow(homeLinks, url, pages - 1);
 
-  // The very input a real run builds, rather than a hand-written one — the
-  // point of this tool is to reproduce production, and an input that differs
-  // in one field reproduces something else.
-  const input = actor.buildInput({
-    clinicName: "",
-    companyLinkedinUrl: null,
-    facebookUrl: null,
-    location: null,
-    websiteUrl: url,
-  } as Parameters<typeof actor.buildInput>[0]);
+  console.log("\n── Links read off the home page ────────────────────────────");
+  console.log(`${homeLinks.length} links`);
+  for (const l of homeLinks.slice(0, 80)) console.log(`  [${l.text || "(no text)"}] ${l.url}`);
+  if (homeLinks.length > 80) console.log(`  … ${homeLinks.length - 80} more`);
 
-  console.log("── Input sent ──────────────────────────────────────────────");
-  console.log(`actor: ${actorId}`);
-  console.log(JSON.stringify(input, null, 2));
+  console.log("\n── Pages picked to follow (priority first) ─────────────────");
+  for (const f of follow) console.log(`  ${f}`);
+  if (follow.length === 0) console.log("  none — the app would fall back to one crawl from home, depth 1");
 
-  const endpoint =
-    `${API_BASE}/acts/${encodeURIComponent(actorId)}/run-sync-get-dataset-items` +
-    `?timeout=${RUN_TIMEOUT_SECONDS}&maxItems=${actor.maxItems}&limit=${actor.maxItems}`;
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    console.error(`\nApify said HTTP ${response.status}:`);
-    console.error(await response.text());
-    process.exit(1);
+  let table: EnrichTable = home;
+  if (follow.length > 0) {
+    const rest = await run(token, actorId, crawlInput(follow, follow.length), follow.length, "Pass 2 (followed pages)");
+    table = mergeTables(home, rest);
+  } else if (pages > 1) {
+    table = await run(token, actorId, { ...crawlInput([url], pages), maxCrawlDepth: 1 }, pages, "Fallback crawl");
   }
-
-  const items = (await response.json()) as unknown[];
-
-  console.log("\n── Raw dataset items, exactly as returned ──────────────────");
-  console.log(JSON.stringify(items, null, 2));
-
-  if (!Array.isArray(items) || items.length === 0) {
-    console.log("\nThe run returned no items at all.");
-    return;
-  }
-
-  // The same flattening the enrichment does, so a field that the reader cannot
-  // see here is a field it cannot see in production either.
-  const table = itemsToTable(items, actor.maxItems);
 
   console.log("\n── Flattened headers the reader sees ───────────────────────");
   for (const header of table.headers) {
@@ -116,14 +144,24 @@ async function main() {
   console.log(crawlDiagnostics(table));
 
   const notes = crawledText(table);
+  console.log("\n── Menu / footer text check ────────────────────────────────");
+  if (notes) {
+    const lower = notes.toLowerCase();
+    const found = NAV_HINTS.filter((h) => lower.includes(h));
+    console.log(`menu/footer words present: ${found.join(", ") || "NONE — nav and footer look stripped"}`);
+  }
+
+  const links = dedupeLinks(linksFromTable(table));
+  const program = links.filter((l) => l.text.trim() !== "" && isProgramLink(l));
+  console.log("\n── All links stored as websiteLinks ────────────────────────");
+  console.log(`${links.length} links${links.length === 0 ? " — NONE: links are not coming through, signal 1 cannot use them" : ""}`);
+  console.log("\n── Links that would count for the 'dedicated page' signal ──");
+  for (const l of program) console.log(`  [${l.text}] ${l.url}   (on ${l.page})`);
+  if (program.length === 0) console.log("  none");
+
   console.log("\n── What would be stored as websiteNotes ────────────────────");
   if (notes === null) {
-    console.log(
-      "NOTHING — this is the case that reports 'nothing in the result reads as website notes'.",
-    );
-    console.log(
-      "Read the diagnosis above: HTTP 403/404 on every page is the site refusing the crawl, 200s with near-zero characters is a page built in the browser, and a header above that plainly holds the copy is a field this reader needs adding to CRAWLED_TEXT_FIELDS.",
-    );
+    console.log("NOTHING — read the diagnosis above.");
   } else {
     console.log(`${notes.length} characters:\n`);
     console.log(notes.slice(0, 2000));

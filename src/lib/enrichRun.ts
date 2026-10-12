@@ -64,6 +64,7 @@ import {
   websiteSearchQuery,
 } from "@/lib/googleSearch";
 import { runGoogleSearch } from "@/lib/googleSearchRun";
+import { runWebsiteCrawl } from "@/lib/websiteCrawlRun";
 
 export interface EnrichActorsResult {
   // One entry per actor, always — a run of four reports four things.
@@ -174,7 +175,17 @@ export async function runEnrichActors(
     // One actor's failure is that actor's failure. The batch carries on: a
     // Facebook page that 404s should not cost the record its website notes.
     let result;
+    let crawlNote: string | null = null;
     try {
+      // The crawler runs as two passes of its own — the home page, then the
+      // pages most likely to hold a program (src/lib/websiteCrawlRun.ts).
+      if (actor.key === "websiteContent") {
+        const crawl = await runWebsiteCrawl(required, settings);
+        result = crawl.ok
+          ? { ok: true as const, label: "", headers: crawl.table.headers, rows: crawl.table.rows }
+          : crawl;
+        if (crawl.ok) crawlNote = crawl.note;
+      } else
       result = await runApifySync({
         kind: "actor",
         // The actor this step runs, as Pipeline Settings has it — the ID this
@@ -261,7 +272,13 @@ export async function runEnrichActors(
       key: actor.key,
       status: "wrote",
       fields,
-      values: fields.map((f) => enrichValuePreview(f, update)),
+      // A crawl that fell back says so on its notes line, since that is the
+      // value it bears on.
+      values: fields.map((f) =>
+        f === "websiteNotes" && crawlNote
+          ? `${enrichValuePreview(f, update)} (${crawlNote})`
+          : enrichValuePreview(f, update),
+      ),
     });
   }
 

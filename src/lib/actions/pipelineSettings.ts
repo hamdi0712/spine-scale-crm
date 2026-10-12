@@ -25,6 +25,7 @@ import {
   readPromotionThreshold,
   readPromotionThresholdV2,
 } from "@/lib/pipelineSettings";
+import { readWebsiteCrawlPages } from "@/lib/websiteCrawl";
 import {
   loadPipelineSettings,
   savePipelineSettings as write,
@@ -62,6 +63,9 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
     promotionThresholdV2: formData.has("promotionThresholdV2")
       ? readPromotionThresholdV2(formData.get("promotionThresholdV2"))
       : current.promotionThresholdV2,
+    websiteCrawlPages: formData.has("websiteCrawlPages")
+      ? readWebsiteCrawlPages(formData.get("websiteCrawlPages"))
+      : current.websiteCrawlPages,
   };
 
   await write(settings);

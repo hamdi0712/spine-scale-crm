@@ -34,8 +34,13 @@ import {
   PipelineStepKey,
   costPerCandidate,
   fmtEstimate,
-  stepCostPerCandidate,
+  stepUnits,
 } from "@/lib/pipelineSettings";
+import {
+  DEFAULT_WEBSITE_CRAWL_PAGES,
+  MAX_WEBSITE_CRAWL_PAGES,
+  MIN_WEBSITE_CRAWL_PAGES,
+} from "@/lib/websiteCrawl";
 import { ICP_MAX_SCORE, ICP_TIER_BANDS, tierForScore } from "@/lib/icp";
 import Toggle from "@/components/Toggle";
 import Link from "next/link";
@@ -97,6 +102,10 @@ export default function PipelineSettingsForm({
               stepKey={key}
               step={draft.steps[key]}
               onChange={(patch) => setStep(key, patch)}
+              crawlPages={draft.websiteCrawlPages}
+              onCrawlPages={(pages) =>
+                setDraft((prev) => ({ ...prev, websiteCrawlPages: pages }))
+              }
             />
           ))}
         </ul>
@@ -373,11 +382,16 @@ function StepRow({
   stepKey,
   step,
   onChange,
+  crawlPages,
+  onCrawlPages,
 }: {
   stepKey: PipelineStepKey;
   step: { enabled: boolean; actorId: string };
   onChange: (patch: Partial<{ enabled: boolean; actorId: string }>) => void;
+  crawlPages: number;
+  onCrawlPages: (pages: number) => void;
 }) {
+  const units = stepUnits(stepKey, { websiteCrawlPages: Number(crawlPages) || 0 });
   const rate = PIPELINE_STEP_RATES[stepKey];
   const typed = step.actorId.trim();
   // Empty is not an error — it is the field saying "use the default", which is
@@ -422,12 +436,44 @@ function StepRow({
             }`}
           />
         </div>
+        {/* The one step with a setting of its own: how many pages of a
+            clinic's site the crawler reads, priority pages first. */}
+        {stepKey === "websiteContent" && (
+          <div>
+            <label className="field-label" htmlFor="websiteCrawlPages">
+              Pages per site
+            </label>
+            <input
+              id="websiteCrawlPages"
+              name="websiteCrawlPages"
+              type="number"
+              inputMode="numeric"
+              min={MIN_WEBSITE_CRAWL_PAGES}
+              max={MAX_WEBSITE_CRAWL_PAGES}
+              step={1}
+              value={crawlPages}
+              onChange={(e) =>
+                onCrawlPages(e.target.value === "" ? ("" as unknown as number) : Number(e.target.value))
+              }
+              className="field num w-[96px]"
+            />
+          </div>
+        )}
         <p className="num shrink-0 pb-2.5 text-xs text-muted">
-          ~{fmtEstimate(stepCostPerCandidate(stepKey)).replace("~", "")} ·{" "}
-          {rate.unitsPerCandidate} {rate.unit}
-          {rate.unitsPerCandidate === 1 ? "" : "s"}
+          ~{fmtEstimate(rate.usdPerUnit * units).replace("~", "")} ·{" "}
+          {units} {rate.unit}
+          {units === 1 ? "" : "s"}
         </p>
       </div>
+      {stepKey === "websiteContent" && (
+        <p className="helper-text mt-1.5 text-xs leading-relaxed text-muted">
+          Reads the home page first, then the links most likely to be a program
+          page — decompression, disc, sciatica, back pain, spine, avoiding
+          surgery — before anything else. Menus and footers are kept, and every
+          link is stored for the scoring to cite. Default{" "}
+          {DEFAULT_WEBSITE_CRAWL_PAGES}.
+        </p>
+      )}
 
       {/* An actor-ID error stays on a phone; the three hints do not. */}
       <p className={`${malformed ? "" : "helper-text "}mt-1.5 text-xs leading-relaxed text-muted`}>

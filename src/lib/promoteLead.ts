@@ -79,6 +79,7 @@ export async function promoteToLead(
         metaAdsSignal: candidate.metaAdsSignal,
         reviewCount: candidate.reviewCount,
         websiteNotes: candidate.websiteNotes,
+        websiteLinks: candidate.websiteLinks,
         enrichedAt: candidate.enrichedAt,
         // The review count's own date. The candidate keeps one date for the
         // whole run, so this is the closest honest reading of when that number
