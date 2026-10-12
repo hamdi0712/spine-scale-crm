@@ -40,7 +40,6 @@ export const dynamic = "force-dynamic";
 const GROUP_ORDER: ComparisonOutcome[] = [
   "newly_rejected",
   "newly_promoted",
-  "newly_held",
   "newly_failed",
   "unchanged",
 ];
@@ -86,6 +85,9 @@ export default async function CompareScoringPage() {
     rows: rows.filter((r) => r.outcome === outcome),
   }));
   const errors = rows.filter((r) => r.outcome === "error");
+  // Rows from a run made while the Tier 2 chiro hold existed. The hold is
+  // gone, so they are counted rather than grouped, with the way to refresh.
+  const retiredHeld = rows.filter((r) => r.outcome === "newly_held").length;
 
   return (
     <div className="max-w-5xl">
@@ -181,6 +183,13 @@ export default async function CompareScoringPage() {
             {groups.map((g) => (
               <GroupSection key={g.outcome} outcome={g.outcome} rows={g.rows} />
             ))}
+            {retiredHeld > 0 && (
+              <p className="text-xs leading-relaxed text-muted">
+                {retiredHeld} row{retiredHeld === 1 ? " was" : "s were"} held as Tier 2 chiro under
+                the retired hold rule. Run Compare scoring again to see them under the
+                real-program check.
+              </p>
+            )}
             {errors.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-bad">Could not be scored</h3>

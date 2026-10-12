@@ -151,9 +151,6 @@ const DISCOVERY_TONES: Record<DiscoveryStatus, Tone> = {
   // Amber, not green: it cleared the bar, and it is waiting on somebody.
   QUALIFIED_NO_CONTACT: "amber",
   PROMOTED: "green",
-  // Purple: qualified, and waiting on a person rather than on the queue — the
-  // Tier 2 chiro hold is a group somebody reviews on its own.
-  HELD_CHIRO: "purple",
   REJECTED: "neutral",
   FAILED: "red",
 };

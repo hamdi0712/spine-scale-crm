@@ -17,6 +17,7 @@ import {
   CriterionEntry,
   CriterionSource,
   IcpBreakdownV2,
+  ChiroProgramCheck,
   PAYMENT_MODEL_LABELS,
   SOURCE_PRECHECK,
   V2VerdictKind,
@@ -36,7 +37,7 @@ export const VERDICT_CLS: Record<V2VerdictKind, string> = {
   disqualified: "border-bad/30 bg-bad-soft/60",
   not_a_fit: "border-warn/30 bg-warn-soft/60",
   below_threshold: "border-line bg-wash/60",
-  held_chiro: "border-purple/30 bg-purple-soft/60",
+  chiro_no_program: "border-warn/30 bg-warn-soft/60",
   promoted: "border-ok/30 bg-ok-soft/60",
 };
 
@@ -44,7 +45,7 @@ export const VERDICT_TITLES: Record<V2VerdictKind, string> = {
   disqualified: "Disqualified at the gate",
   not_a_fit: "Not a confirmed fit",
   below_threshold: "A fit, below the bar",
-  held_chiro: "Held — Tier 2 chiro",
+  chiro_no_program: "Chiro without a real program",
   promoted: "Qualified",
 };
 
@@ -226,6 +227,13 @@ export default function IcpBreakdownV2View({
         )}
       </div>
 
+      {breakdown.primaryService.chiropractic && (
+        <div className="space-y-3">
+          <ChiroProgramChecklist check={breakdown.chiroProgram} />
+          <PaymentModelCard breakdown={breakdown} />
+        </div>
+      )}
+
       <div>
         <p className="field-label">Disqualifier gate</p>
         {triggered.length > 0 ? (
@@ -323,6 +331,54 @@ export function PrimaryAndPayment({ breakdown }: { breakdown: IcpBreakdownV2 }) 
         {primaryService.citation && <CitationLine citation={primaryService.citation} />}
       </div>
       <PaymentModelCard breakdown={breakdown} />
+    </div>
+  );
+}
+
+// The chiro real-program check as a checklist: each of the five signals,
+// whether it was found, and the quote it was found with — so a promotion or a
+// rejection on it can be read line by line.
+export function ChiroProgramChecklist({ check }: { check: ChiroProgramCheck | null }) {
+  if (!check) {
+    return (
+      <p className="text-xs leading-relaxed text-muted">
+        Scored before the real-program check existed — run it again to see the five signals.
+      </p>
+    );
+  }
+  const met = check.count >= check.required;
+  return (
+    <div className="rounded-[10px] border border-line px-3.5 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-xs font-medium">Chiro real-program check</p>
+        <span className={`num text-xs font-medium ${met ? "text-ok" : "text-warn-on-soft"}`}>
+          {check.count} of 5 signals · needs {check.required}
+        </span>
+      </div>
+      <ul className="mt-2 space-y-2">
+        {check.signals.map((signal) => (
+          <li key={signal.key} className="flex gap-2.5 text-xs leading-relaxed">
+            <span
+              aria-hidden
+              className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                signal.found ? "bg-ok text-white" : "border border-line text-muted"
+              }`}
+            >
+              {signal.found ? "✓" : ""}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={signal.found ? "font-medium text-ink-soft" : "text-muted"}>
+                {signal.label}
+              </span>
+              <span className="sr-only">{signal.found ? " — found" : " — not found"}</span>
+              <span className="block text-muted">{signal.reason}</span>
+              {signal.citations.map((c, i) => (
+                <CitationLine key={i} citation={c} />
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

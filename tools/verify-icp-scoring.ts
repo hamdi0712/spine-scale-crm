@@ -12,7 +12,8 @@
 // insurance-only PT clinic, a hybrid clinic that lists its insurers, a
 // 12-location PE-backed group, a general sports chiro, a spinal decompression
 // clinic — plus three that exercise the paths those seven do not: a
-// chiropractic-first clinic with a disc program (the Tier 2 hold), a lead with
+// chiropractic-first clinic without a real program and one with (the chiro
+// real-program check), a lead with
 // a Maps listing and no website (the "No website" rule), and a lead nothing was
 // ever gathered for (Failed, not Rejected).
 //
@@ -438,8 +439,55 @@ const SEEDS: Seed[] = [
       gapRemarketing: null,
       summary: "A chiropractic-first clinic with a real disc program.",
     },
-    expect: "newly_held",
+    // Chiro-first and over the bar, but no dedicated page, no equipment, no
+    // consult offer, one named doctor and no ads: 0 of 5 signals.
+    expect: "unchanged",
     expectDiscarded: /absence or a hedge/,
+  },
+  // A chiropractic-first clinic with a real program behind it: a page of its
+  // own, named equipment, a consult offer — three of five signals.
+  {
+    kind: "candidate",
+    clinicName: "Ridgeline Chiropractic",
+    status: "REJECTED",
+    websiteUrl: "https://ridgelinechiro.com",
+    websiteNotes: [
+      page(
+        "https://ridgelinechiro.com/",
+        "Ridgeline Chiropractic is a family chiropractic office in Fort Collins. Dr. Sara Lund, DC, owner, sees patients at 310 College Ave, Fort Collins, CO 80524. Call today to schedule your free consultation.",
+      ),
+      page(
+        "https://ridgelinechiro.com/spinal-decompression",
+        "Non-surgical spinal decompression for herniated and bulging discs. We use the DRX9000 decompression table. See if you qualify for our 20-visit decompression program.",
+      ),
+    ].join("\n\n"),
+    metaAdsSignal: null,
+    reviewCount: 64,
+    staffCountRaw: null,
+    location: "Fort Collins, CO",
+    old: {
+      packageEconomics: 1,
+      gaps: { icpGapBooking: true },
+      summary: "Family chiro.",
+    },
+    reply: {
+      disqualifiers: [],
+      coreService: { service: "spinal decompression", quote: "Non-surgical spinal decompression for herniated and bulging discs", source: "https://ridgelinechiro.com/spinal-decompression" },
+      adjacentService: { service: "chiropractic", quote: "a family chiropractic office in Fort Collins", source: "https://ridgelinechiro.com/" },
+      spineProgram: null,
+      primaryService: { service: "chiropractic", quote: "Ridgeline Chiropractic is a family chiropractic office in Fort Collins", source: "https://ridgelinechiro.com/" },
+      decisionMaker: { name: "Sara Lund", title: "owner", quote: "Dr. Sara Lund, DC, owner, sees patients", source: "https://ridgelinechiro.com/" },
+      location: { place: "Fort Collins, CO", quote: "310 College Ave, Fort Collins, CO 80524", source: "https://ridgelinechiro.com/" },
+      locationCount: null,
+      team: null,
+      buyingTriggers: [],
+      paymentModel: null,
+      gapBooking: { checked: true, reason: "Booking is by phone." },
+      gapReviews: null,
+      gapRemarketing: null,
+      summary: "A chiropractic office with a dedicated decompression page, the DRX9000 and a free consultation offer.",
+    },
+    expect: "newly_promoted",
   },
   // Modelled on two real Compare results, to pin the tuning they prompted.
   // The site copy is written to match the cases as described, not scraped;
@@ -737,7 +785,7 @@ async function main(): Promise<void> {
 
   // ─── The report, as the compare page groups it ────────────────────────
   console.log("\nThe comparison, grouped");
-  const order = ["newly_rejected", "newly_promoted", "newly_held", "newly_failed", "unchanged"];
+  const order = ["newly_rejected", "newly_promoted", "newly_failed", "unchanged"];
   for (const outcome of order) {
     const group = rows.filter((r) => r.outcome === outcome);
     console.log(`\n  ${outcome} (${group.length})`);
@@ -810,6 +858,40 @@ async function main(): Promise<void> {
     { v1: 5, v2: 60 },
   );
   check("the second-look sweep reads a v2 rejection on its own scale", flag === null, `fit ${peak.fitTotal}/60 is not a near miss of the floor`);
+
+  // ─── The retired hold: nothing left stranded ──────────────────────────
+  console.log("\nRetired Tier 2 chiro hold");
+  const { resolveHeldCandidates, RETIRED_HELD_STATUS } = await import("@/lib/heldCleanup");
+  const ridgeRow = rows.find((r) => r.clinicName === "Ridgeline Chiropractic")!;
+  const harborRow = rows.find((r) => r.clinicName === "Harbor Chiropractic & Disc Center")!;
+  // Two candidates left in HELD_CHIRO by the old rule, each carrying a
+  // breakdown the hold wrote — the shape a real stranded row has.
+  const asHeld = (raw: string) => {
+    const b = JSON.parse(raw);
+    b.verdict = { ...b.verdict, status: "HELD_CHIRO", kind: "held_chiro", reason: "Held — Tier 2 chiro" };
+    delete b.chiroProgram;
+    return JSON.stringify(b);
+  };
+  for (const row of [ridgeRow, harborRow]) {
+    await prisma.discoveryCandidate.update({
+      where: { id: row.subjectId },
+      data: { status: RETIRED_HELD_STATUS, icpBreakdown: asHeld(row.breakdown!), scoringModel: "v2" },
+    });
+  }
+  const cleaned = await resolveHeldCandidates();
+  check(
+    "held candidates are re-judged under the real-program check, none left held",
+    (await prisma.discoveryCandidate.count({ where: { status: RETIRED_HELD_STATUS } })) === 0,
+    JSON.stringify(cleaned),
+  );
+  const ridge = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: ridgeRow.subjectId } });
+  const harbor = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: harborRow.subjectId } });
+  check("…a chiro with a real program is promoted", ridge.status === "PROMOTED" && ridge.promotedLeadId !== null);
+  check(
+    "…and one without is rejected, with the signals counted",
+    harbor.status === "REJECTED" && /Chiro without a real program \(0 of 5 signals\)/.test(harbor.disqualifiedReason ?? ""),
+    harbor.disqualifiedReason ?? "",
+  );
 
   // The tuning rules, directly.
   const { isSpecificSpineProgram, summaryConsistency, emptyBreakdownV2 } = await import("@/lib/icpScoring");

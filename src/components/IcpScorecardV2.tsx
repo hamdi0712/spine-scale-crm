@@ -35,6 +35,7 @@ import { fmtDateTime } from "@/lib/format";
 import { IcpTierBadge } from "@/components/Badge";
 import AiButton from "@/components/AiButton";
 import {
+  ChiroProgramChecklist,
   CitationLine,
   SourceChip,
   VERDICT_CLS,
@@ -280,7 +281,7 @@ export default function IcpScorecardV2({
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-medium">Primary service is chiropractic</span>
               <span className="mt-0.5 block text-xs leading-relaxed text-muted">
-                Holds a qualifying clinic as Tier 2 chiro instead of promoting it.
+                A qualifying chiro-first clinic is promoted only with a real program — 2 of the 5 signals below.
                 {base.primaryService.service ? ` The run read it as ${base.primaryService.service}.` : ""}
               </span>
               {base.primaryService.citation && <CitationLine citation={base.primaryService.citation} />}
@@ -297,6 +298,8 @@ export default function IcpScorecardV2({
             {base.paymentModel.citation && <CitationLine citation={base.paymentModel.citation} />}
           </div>
         </div>
+
+        {chiro && <ChiroProgramChecklist check={live.chiroProgram} />}
 
         {base.summary !== "" && (
           <div className="rounded-[10px] border border-accent/30 bg-accent/5 px-3.5 py-2.5">

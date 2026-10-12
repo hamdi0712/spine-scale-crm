@@ -469,7 +469,7 @@ function thresholdMeaningV2(threshold: number): string {
   if (threshold >= MAX_PROMOTION_THRESHOLD_V2) {
     return `Only a perfect ${MAX_PROMOTION_THRESHOLD_V2}/${MAX_PROMOTION_THRESHOLD_V2} is promoted. Expect almost everything to be rejected.`;
   }
-  return `A confirmed fit scoring ${threshold} or more becomes a lead (or is held, if it is chiropractic-first); under it, it is rejected with its reasoning kept. ${threshold} is in the ${v2TierForScore(threshold)}-tier band.`;
+  return `A confirmed fit scoring ${threshold} or more becomes a lead (a chiropractic-first one only with a real program); under it, it is rejected with its reasoning kept. ${threshold} is in the ${v2TierForScore(threshold)}-tier band.`;
 }
 
 // Save, and the way back. Reset fills the form with the defaults rather than

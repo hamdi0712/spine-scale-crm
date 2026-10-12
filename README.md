@@ -377,11 +377,18 @@ again.
      count 5), and the existing three automation gaps (4/3/3).
   4. **Fit floor.** Fit under 35 is *Not a confirmed fit* and rejected with
      what was missing, whatever the total.
-  5. **Chiro hold.** A clinic that would be promoted but whose primary service
-     is chiropractic is held as **Held — Tier 2 chiro** instead, with Promote
-     and Reject on it and its payment model (cash, hybrid, insurance, not
-     stated) and the quote behind it on the card. *Discovery → Held — Tier 2
-     chiro* lists them, filterable by payment model.
+  5. **Chiro real-program check.** A clinic whose primary service is
+     chiropractic and that clears the fit floor and the bar is promoted only
+     with 2 or more of five signals, each with its own citation: a dedicated
+     decompression, disc, sciatica or avoid-surgery page; named equipment
+     (DRX9000, SpineMED, Class IV laser… — the list is `CHIRO_EQUIPMENT` in
+     `src/lib/icpWeights.ts`); a consult offer; a team of 2+ named providers
+     or staff; running ads. With 0–1 it is rejected as *Chiro without a real
+     program (X of 5 signals)*. The five show as a checklist with their quotes
+     on the scorecard and on every chiro card, beside the payment model.
+     There is no hold: any candidate the retired Tier 2 chiro hold left behind
+     is re-judged under this check, from its stored evidence, the next time
+     Discovery is opened.
   6. Otherwise promoted at or above the bar (**Settings → Pipeline**, default
      60). Tiers: A 80+, B 60–79, C below 60.
 
@@ -398,7 +405,7 @@ again.
   came through Discovery, from the enrichment already stored — one DeepSeek
   call each, no Apify runs, no status changes — and shows the DeepSeek cost,
   measured off the prompts it would send, before it starts. Results are grouped
-  into newly rejected, newly promoted, newly held as chiro, not enough evidence,
+  into newly rejected, newly promoted, not enough evidence,
   and unchanged, each row with its old and new score and status and the reason
   for the flip. **Apply new scoring** unlocks only after a run has finished
   with every record scored, and is the only thing that moves Process queue
@@ -413,7 +420,7 @@ again.
   `tools/verify-icp-scoring.ts` seeds a yoga studio, an education business, an
   insurance-only PT clinic, a hybrid clinic that lists insurers, a 12-location
   PE-backed group, a general sports chiro, a spinal decompression clinic, a
-  chiro with a disc program and two bare leads into a scratch database and runs
+  chiro without a real program, one with, and two bare leads into a scratch database and runs
   the real comparison against them (scripted model unless `DEEPSEEK_API_KEY` is
   set):
 

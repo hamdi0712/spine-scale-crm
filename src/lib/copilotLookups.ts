@@ -298,7 +298,9 @@ function v2ForCopilot(b: IcpBreakdownV2) {
       overridden: r.scoredPoints !== undefined,
     })),
     primaryService: b.primaryService.service,
-    heldAsTier2Chiro: b.verdict.kind === "held_chiro",
+    chiroRealProgram: b.primaryService.chiropractic && b.chiroProgram
+      ? `${b.chiroProgram.count} of 5 signals (${b.chiroProgram.signals.filter((x) => x.found).map((x) => x.label).join("; ") || "none"})`
+      : null,
     paymentModel: PAYMENT_MODEL_LABELS[b.paymentModel.model],
     summary: b.summary || null,
     [UNTRUSTED_CONTENT_KEY]: {
@@ -321,7 +323,7 @@ function promotionRule(settings: {
   promotionThresholdV2: number;
 }): string {
   return settings.scoringModel === "v2"
-    ? `A discovery candidate is scored against the active ICP Definition, out of 100. Any cited disqualifier rejects it; a fit under ${FIT_FLOOR} of ${FIT_MAX} rejects it as not a confirmed fit; a chiropractic-first clinic that would qualify is held for review; otherwise it needs ${settings.promotionThresholdV2} of 100 to be promoted.`
+    ? `A discovery candidate is scored against the active ICP Definition, out of 100. Any cited disqualifier rejects it; a fit under ${FIT_FLOOR} of ${FIT_MAX} rejects it as not a confirmed fit; a chiropractic-first clinic that would qualify needs a real program — 2 of 5 cited signals (a dedicated page, named equipment, a consult offer, a team of 2+ named, running ads) — or it is rejected; otherwise it needs ${settings.promotionThresholdV2} of 100 to be promoted.`
     : `A discovery candidate needs ${settings.promotionThreshold} of ${ICP_MAX_SCORE} to be promoted into the pipeline; below that it is rejected.`;
 }
 

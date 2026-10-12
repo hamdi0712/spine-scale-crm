@@ -16,9 +16,11 @@
 //   3. Signals, out of 40: buying triggers, budget, automation gaps. They rank
 //      fits against each other and nothing more.
 //
-// Then a chiropractic-first clinic that would have been promoted is held for a
-// person instead ("Held — Tier 2 chiro", with its payment model on the card),
-// and everything else is promoted at or above the bar. Weights, the floor and
+// Then a chiropractic-first clinic that would be promoted has to show a real
+// program — at least two of five cited signals (a dedicated page, named
+// equipment, a consult offer, a named team, running ads) — or it is rejected
+// as "Chiro without a real program". Nothing is held; everything else is
+// promoted at or above the bar. Weights, the floor and
 // the tier bands are all in src/lib/icpWeights.ts.
 //
 // Pure, like src/lib/discovery.ts: no network, no database. The model's reply
@@ -30,7 +32,7 @@
 // code as well as asked for in the prompt, because a prompt is a request and a
 // rejected clinic is gone.
 
-import { budgetSignalScore } from "@/lib/discovery";
+import { budgetSignalScore, hasActiveAds } from "@/lib/discovery";
 import { GapPrecheck, precheckNote } from "@/lib/discoveryAssist";
 import { ICP_GAPS, IcpGapKey, IcpTier } from "@/lib/icp";
 import {
@@ -42,6 +44,10 @@ import {
 } from "@/lib/icpDefinition";
 import {
   BUDGET_MAX,
+  CHIRO_CONSULT_PHRASES,
+  CHIRO_EQUIPMENT,
+  CHIRO_PROGRAM_MIN_SIGNALS,
+  CHIRO_PROGRAM_PAGE_TERMS,
   FIT_FLOOR,
   FIT_MAX,
   FIT_WEIGHTS,
@@ -214,13 +220,39 @@ export interface DisqualifierHit {
   scoredTriggered?: boolean;
 }
 
-export type V2Status = "PROMOTED" | "REJECTED" | "HELD_CHIRO";
+export type V2Status = "PROMOTED" | "REJECTED";
 export type V2VerdictKind =
   | "disqualified"
   | "not_a_fit"
   | "below_threshold"
-  | "held_chiro"
+  | "chiro_no_program"
   | "promoted";
+
+// The five signals that make a chiropractic-first clinic's program real.
+export const CHIRO_SIGNAL_KEYS = ["page", "equipment", "consult", "team", "ads"] as const;
+export type ChiroSignalKey = (typeof CHIRO_SIGNAL_KEYS)[number];
+
+export const CHIRO_SIGNAL_LABELS: Record<ChiroSignalKey, string> = {
+  page: "Dedicated decompression, disc, sciatica or avoid-surgery page",
+  equipment: "Named equipment",
+  consult: "Consult offer",
+  team: "Team of 2+ named providers or staff",
+  ads: "Running ads",
+};
+
+export interface ChiroSignal {
+  key: ChiroSignalKey;
+  label: string;
+  found: boolean;
+  citations: Citation[];
+  reason: string;
+}
+
+export interface ChiroProgramCheck {
+  signals: ChiroSignal[];
+  count: number;
+  required: number;
+}
 
 export interface V2Verdict {
   status: V2Status;
@@ -263,6 +295,9 @@ export interface IcpBreakdownV2 {
   tier: IcpTier;
   primaryService: PrimaryServiceFinding;
   paymentModel: PaymentModelFinding;
+  // The real-program check. Worked out for every clinic and decisive only for
+  // a chiropractic-first one; null on a breakdown written before it existed.
+  chiroProgram: ChiroProgramCheck | null;
   verdict: V2Verdict;
   summary: string;
   evidence: string[];
@@ -593,6 +628,7 @@ export function buildBreakdownV2(input: BuildInput): IcpBreakdownV2 {
   ];
   const primaryService = primaryServiceFinding(evidence, reply, docs);
   const paymentModel = paymentModelFinding(reply, docs);
+  const chiroProgram = chiroProgramCheck(evidence, reply, docs);
 
   return finish(
     {
@@ -604,6 +640,7 @@ export function buildBreakdownV2(input: BuildInput): IcpBreakdownV2 {
       signals,
       primaryService,
       paymentModel,
+      chiroProgram,
       summary: reply?.summary ?? "",
       evidence: input.evidenceLabels,
       notes,
@@ -634,13 +671,12 @@ export function finish(b: Unfinished, threshold: number): IcpBreakdownV2 {
     fitTotal,
     total,
     chiropractic: b.primaryService.chiropractic,
-    primaryService: b.primaryService,
-    paymentModel: b.paymentModel,
+    chiroProgram: b.chiroProgram,
     threshold,
   });
   const tier: IcpTier = gated
     ? "DISQUALIFIED"
-    : verdict.kind === "not_a_fit"
+    : verdict.kind === "not_a_fit" || verdict.kind === "chiro_no_program"
       ? "C"
       : v2TierForScore(total);
   return { ...b, fitTotal, signalsTotal, ungatedTotal, total, tier, verdict };
@@ -658,15 +694,15 @@ export function v2TierForScore(total: number): Exclude<IcpTier, "DISQUALIFIED"> 
 
 export const V2_TIER_BANDS = `${V2_TIER_A_MIN}+ A-tier · ${V2_TIER_B_MIN}–${V2_TIER_A_MIN - 1} B-tier · below ${V2_TIER_B_MIN} C-tier`;
 
-// The order the brief sets: the gate, the fit floor, the chiro hold, the bar.
+// The order the brief sets: the gate, the fit floor, the bar, then the
+// real-program check for a chiropractic-first clinic.
 function decideVerdict(args: {
   triggered: DisqualifierHit[];
   fit: CriterionEntry[];
   fitTotal: number;
   total: number;
   chiropractic: boolean;
-  primaryService: PrimaryServiceFinding;
-  paymentModel: PaymentModelFinding;
+  chiroProgram: ChiroProgramCheck | null;
   threshold: number;
 }): V2Verdict {
   const base = { threshold: args.threshold, fitFloor: FIT_FLOOR };
@@ -708,14 +744,24 @@ function decideVerdict(args: {
   }
 
   if (args.chiropractic) {
-    const cite = args.primaryService.citation
-      ? ` (“${clip(args.primaryService.citation.quote, 100)}”)`
-      : "";
+    const check = args.chiroProgram;
+    const found = check ? check.signals.filter((x) => x.found) : [];
+    const required = check?.required ?? CHIRO_PROGRAM_MIN_SIGNALS;
+    if (found.length < required) {
+      return {
+        ...base,
+        status: "REJECTED",
+        kind: "chiro_no_program",
+        reason: `Chiro without a real program (${found.length} of 5 signals)${
+          found.length > 0 ? ` — found: ${found.map((x) => x.label.toLowerCase()).join("; ")}` : " — none found"
+        }. Needs ${required}.`,
+      };
+    }
     return {
       ...base,
-      status: "HELD_CHIRO",
-      kind: "held_chiro",
-      reason: `Held — Tier 2 chiro: qualifies at ${args.total}/${V2_MAX_SCORE}, but its primary service is chiropractic${cite}. Payment model: ${PAYMENT_MODEL_LABELS[args.paymentModel.model].toLowerCase()}.`,
+      status: "PROMOTED",
+      kind: "promoted",
+      reason: `Promoted — ${v2TierForScore(args.total)}-tier, ${args.total}/${V2_MAX_SCORE} (fit ${args.fitTotal}/${FIT_MAX}); chiropractic-first with a real program (${found.length} of 5 signals: ${found.map((x) => x.label.toLowerCase()).join("; ")}).`,
     };
   }
 
@@ -1274,6 +1320,108 @@ function teamEvidence(
   return findNamedDoctor(reply, docs)?.citation ?? null;
 }
 
+// ─── The chiro real-program check ──────────────────────────────────────────
+//
+// Five signals, each needing its own citation under the same verbatim rule as
+// every other line: a quote off a stored page, or the computed ads signal.
+// Two or more and a chiropractic-first clinic's program is real.
+
+function wordsPattern(phrase: string): string {
+  return phrase
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map(escapeRegExp)
+    .join("[\\s-]*");
+}
+
+export function chiroProgramCheck(
+  evidence: ScoringEvidence,
+  reply: ScoringReply | null,
+  docs: EvidenceDoc[],
+): ChiroProgramCheck {
+  const signal = (key: ChiroSignalKey, citations: Citation[], reason: string): ChiroSignal => ({
+    key,
+    label: CHIRO_SIGNAL_LABELS[key],
+    found: citations.length > 0,
+    citations,
+    reason,
+  });
+
+  // 1. A page of its own: the crawled page's URL names it, cited with a line
+  // from that page.
+  const pagePattern = new RegExp(
+    `(${CHIRO_PROGRAM_PAGE_TERMS.map(escapeRegExp).join("|")})`,
+    "i",
+  );
+  let page: Citation[] = [];
+  for (const doc of websiteDocs(docs)) {
+    if (!/^https?:\/\//i.test(doc.source)) continue;
+    const path = doc.source.replace(/^https?:\/\/[^/]+/i, "");
+    if (!pagePattern.test(path)) continue;
+    const firstLine = doc.text.split(/\n/).map((l) => l.trim()).find((l) => l.split(/\s+/).length >= 4);
+    const citation = firstLine ? verifyQuote(clip(firstLine, 300).replace(/…$/, ""), doc.source, docs) : null;
+    if (citation) {
+      page = [citation];
+      break;
+    }
+  }
+
+  // 2. Named equipment, from the editable list.
+  const equipment = findInPages(
+    docs,
+    new RegExp(`\\b(${CHIRO_EQUIPMENT.map(wordsPattern).join("|")})\\b`, "i"),
+  );
+
+  // 3. A consult offer.
+  const consult = findInPages(
+    docs,
+    new RegExp(`\\b(${CHIRO_CONSULT_PHRASES.map((p) => wordsPattern(p.replace(/'/g, "'?"))).join("|")})`, "i"),
+  );
+
+  // 4. Two or more named providers or staff: the model's cited team, or two
+  // different named doctors on the site.
+  // Named means named: "and our associate doctors" is a team, but not one
+  // with two names in it, so only a quote carrying two names counts.
+  let team: Citation[] = [];
+  if (reply?.team && (reply.team.providers ?? 0) >= 2) {
+    const citation = verifyQuote(reply.team.quote, reply.team.source, docs);
+    const names = citation ? citation.quote.match(new RegExp(NAMED_DOCTOR.source, "g")) ?? [] : [];
+    if (citation && new Set(names.map((n) => n.replace(/,.*$/, "").trim())).size >= 2) team = [citation];
+  }
+  if (team.length === 0) {
+    const names = new Map<string, Citation>();
+    for (const doc of websiteDocs(docs)) {
+      const re = new RegExp(NAMED_DOCTOR.source, "g");
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(doc.text)) !== null) {
+        const name = m[0].replace(/,.*$/, "").replace(/\s+/g, " ").trim();
+        if (names.has(name)) continue;
+        const citation = verifyQuote(snippetAround(doc.text, m.index, m[0].length), doc.source, docs);
+        if (citation) names.set(name, citation);
+      }
+    }
+    if (names.size >= 2) team = Array.from(names.values()).slice(0, 3);
+  }
+
+  // 5. Running ads — the existing computed signal.
+  const ads = hasActiveAds(evidence.metaAdsSignal)
+    ? [{ quote: (evidence.metaAdsSignal ?? "").trim(), source: SOURCE_ADS }]
+    : [];
+
+  const signals = [
+    signal("page", page, page.length ? "A page of the site is dedicated to it." : "No crawled page is dedicated to decompression, disc, sciatica or avoiding surgery."),
+    signal("equipment", equipment ? [equipment.citation] : [], equipment ? `Names ${equipment.match[0]}.` : "No named table or laser on the site."),
+    signal("consult", consult ? [consult.citation] : [], consult ? "Offers a consult." : "No consult offer on the site."),
+    signal("team", team, team.length ? "Two or more providers or staff are named." : "Fewer than two named providers or staff."),
+    signal("ads", ads, ads.length ? "Ads are running now." : "No ads running."),
+  ];
+  return {
+    signals,
+    count: signals.filter((x) => x.found).length,
+    required: CHIRO_PROGRAM_MIN_SIGNALS,
+  };
+}
+
 // ─── The summary has to agree with the scores ──────────────────────────────
 //
 // The model's "Overall fit" sentence is read for the facts it states. Where it
@@ -1670,6 +1818,17 @@ export function emptyBreakdownV2(
       signals: SIGNAL_KEYS.map(blank),
       primaryService: { service: null, chiropractic: false, citation: null, reason: "Not checked." },
       paymentModel: { model: "unknown", citation: null, reason: "Not checked." },
+      chiroProgram: {
+        signals: CHIRO_SIGNAL_KEYS.map((key) => ({
+          key,
+          label: CHIRO_SIGNAL_LABELS[key],
+          found: false,
+          citations: [],
+          reason: "Not checked — score against the ICP to read the site.",
+        })),
+        count: 0,
+        required: CHIRO_PROGRAM_MIN_SIGNALS,
+      },
       summary: "",
       evidence: [],
       notes: [],
@@ -1749,16 +1908,24 @@ export function parseBreakdownV2(raw: string | null | undefined): IcpBreakdownV2
       citation: readCitation(b.paymentModel?.citation),
       reason: typeof b.paymentModel?.reason === "string" ? b.paymentModel.reason : "",
     },
-    verdict: {
-      status:
-        b.verdict.status === "PROMOTED" || b.verdict.status === "HELD_CHIRO"
-          ? b.verdict.status
-          : "REJECTED",
-      kind: b.verdict.kind ?? "below_threshold",
-      reason: typeof b.verdict.reason === "string" ? b.verdict.reason : "",
-      threshold: num(b.verdict.threshold),
-      fitFloor: num(b.verdict.fitFloor) || FIT_FLOOR,
-    },
+    chiroProgram: readChiroProgram(b.chiroProgram),
+    // A breakdown written under the retired Tier 2 chiro hold reads as a
+    // chiro rejection pending the real-program check, never as a hold.
+    verdict: (b.verdict.status as string) === "HELD_CHIRO" || (b.verdict.kind as string) === "held_chiro"
+      ? {
+          status: "REJECTED",
+          kind: "chiro_no_program",
+          reason: "Scored under the retired Tier 2 chiro hold — it has not had the real-program check yet.",
+          threshold: num(b.verdict.threshold),
+          fitFloor: num(b.verdict.fitFloor) || FIT_FLOOR,
+        }
+      : {
+          status: b.verdict.status === "PROMOTED" ? "PROMOTED" : "REJECTED",
+          kind: b.verdict.kind ?? "below_threshold",
+          reason: typeof b.verdict.reason === "string" ? b.verdict.reason : "",
+          threshold: num(b.verdict.threshold),
+          fitFloor: num(b.verdict.fitFloor) || FIT_FLOOR,
+        },
     summary: typeof b.summary === "string" ? b.summary : "",
     evidence: Array.isArray(b.evidence) ? b.evidence.filter((s): s is string => typeof s === "string") : [],
     notes: Array.isArray(b.notes) ? b.notes.filter((s): s is string => typeof s === "string") : [],
@@ -1813,6 +1980,33 @@ function readEntry(e: Record<string, unknown>): CriterionEntry {
       : {}),
     ...(typeof e.scoredPoints === "number" ? { scoredPoints: e.scoredPoints } : {}),
   };
+}
+
+function readChiroProgram(v: unknown): ChiroProgramCheck | null {
+  if (!isObject(v) || !Array.isArray(v.signals)) return null;
+  const signals = (v.signals as unknown[]).filter(isObject).flatMap((x): ChiroSignal[] => {
+    const key = (CHIRO_SIGNAL_KEYS as readonly string[]).includes(String(x.key)) ? (x.key as ChiroSignalKey) : null;
+    if (!key) return [];
+    const citations = Array.isArray(x.citations)
+      ? (x.citations as unknown[]).map(readCitation).filter((c): c is Citation => c !== null)
+      : [];
+    return [{ key, label: CHIRO_SIGNAL_LABELS[key], found: x.found === true && citations.length > 0, citations, reason: typeof x.reason === "string" ? x.reason : "" }];
+  });
+  return {
+    signals,
+    count: signals.filter((x) => x.found).length,
+    required: num(v.required) || CHIRO_PROGRAM_MIN_SIGNALS,
+  };
+}
+
+// Re-judges a stored breakdown with the real-program check worked out afresh
+// from the record's stored evidence — no model call, nothing re-scored. For
+// candidates scored under the retired hold, and nothing else.
+export function rejudgeChiroProgram(
+  b: IcpBreakdownV2,
+  evidence: ScoringEvidence,
+): IcpBreakdownV2 {
+  return finish({ ...b, chiroProgram: chiroProgramCheck(evidence, null, evidenceDocs(evidence)) }, b.verdict.threshold);
 }
 
 export function triggeredHits(b: IcpBreakdownV2): DisqualifierHit[] {

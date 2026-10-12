@@ -933,14 +933,13 @@ async function scoreCandidateV2({
   });
 
   const verdict = breakdown.verdict;
-  if (verdict.status === "REJECTED" || verdict.status === "HELD_CHIRO") {
+  if (verdict.status === "REJECTED") {
     await prisma.discoveryCandidate.update({
       where: { id },
       data: {
         status: verdict.status,
         disqualified: gated,
-        // The one-line reason the lists read without opening the JSON — the
-        // rejection's, or the hold's.
+        // The one-line reason the lists read without opening the JSON.
         disqualifiedReason: verdict.reason,
         processedAt: now,
       },
@@ -1000,7 +999,6 @@ export async function promoteDiscoveryCandidate(id: string) {
 
   revalidatePath("/discovery");
   revalidatePath("/discovery/rejected");
-  revalidatePath("/discovery/held");
   revalidatePath("/pipeline");
   revalidatePath("/");
   redirect(`/pipeline/${leadId}`);
@@ -1148,22 +1146,6 @@ export async function rejectDiscoveryCandidate(id: string, reason: string) {
   revalidatePath("/discovery");
   revalidatePath("/discovery/rejected");
   revalidatePath(`/discovery/${id}`);
-}
-
-// The Reject half of the Tier 2 chiro hold. A held candidate is a decision
-// left to a person; this is them making it, with the reason saying so. It
-// goes through the same write as any other rejection by hand.
-export async function rejectHeldCandidate(id: string) {
-  const candidate = await prisma.discoveryCandidate.findUnique({
-    where: { id },
-    select: { status: true },
-  });
-  if (!candidate || candidate.status !== "HELD_CHIRO") return;
-  await rejectDiscoveryCandidate(
-    id,
-    "Rejected by hand from the Tier 2 chiro hold.",
-  );
-  revalidatePath("/discovery/held");
 }
 
 // ─── Bulk actions from the discovery table ─────────────────────────────────

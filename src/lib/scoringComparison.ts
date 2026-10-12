@@ -18,7 +18,6 @@ import { V2_MAX_SCORE } from "@/lib/icpWeights";
 export const COMPARISON_OUTCOMES = [
   "newly_rejected",
   "newly_promoted",
-  "newly_held",
   "newly_failed",
   "unchanged",
 ] as const;
@@ -27,17 +26,14 @@ export type ComparisonOutcome = (typeof COMPARISON_OUTCOMES)[number];
 export const COMPARISON_OUTCOME_LABELS: Record<ComparisonOutcome, string> = {
   newly_rejected: "Newly rejected",
   newly_promoted: "Newly promoted",
-  newly_held: "Newly held as Tier 2 chiro",
   newly_failed: "Not enough evidence to judge",
   unchanged: "Unchanged",
 };
 
 export const COMPARISON_OUTCOME_MEANINGS: Record<ComparisonOutcome, string> = {
   newly_rejected:
-    "Promoted (or in the pipeline) today, and the new model would reject it — disqualified, not a confirmed fit, or under the bar.",
+    "Promoted (or in the pipeline) today, and the new model would reject it — disqualified, not a confirmed fit, under the bar, or a chiro without a real program.",
   newly_promoted: "Rejected today, and the new model would promote it.",
-  newly_held:
-    "The new model would hold it for review: a qualifying clinic whose primary service is chiropractic.",
   newly_failed:
     "The stored evidence is not enough for the new model to judge fit at all. It would be Failed and retried, not rejected.",
   unchanged: "Same outcome under both models.",
@@ -73,7 +69,6 @@ export function comparisonOutcome(
 ): ComparisonOutcome {
   if (!next.ok) return "newly_failed";
   const status = next.breakdown.verdict.status;
-  if (status === "HELD_CHIRO") return "newly_held";
   if (status === "REJECTED" && old.status === "PROMOTED") return "newly_rejected";
   if (status === "PROMOTED" && old.status === "REJECTED") return "newly_promoted";
   return "unchanged";
@@ -100,13 +95,13 @@ export function newStatusLabel(next: NewStanding): string {
   switch (next.breakdown.verdict.status) {
     case "PROMOTED":
       return "Promoted";
-    case "HELD_CHIRO":
-      return "Held — Tier 2 chiro";
     default:
       return next.breakdown.verdict.kind === "not_a_fit"
         ? "Rejected — not a confirmed fit"
         : next.breakdown.verdict.kind === "disqualified"
           ? "Rejected — disqualified"
+          : next.breakdown.verdict.kind === "chiro_no_program"
+            ? "Rejected — chiro without a real program"
           : "Rejected — below the bar";
   }
 }
