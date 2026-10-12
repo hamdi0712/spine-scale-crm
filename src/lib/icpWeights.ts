@@ -38,7 +38,13 @@ export const FIT_MAX =
 // Below this, a clinic cannot be promoted whatever its total — it is rejected
 // as "Not a confirmed fit" with what was missing. Signals only rank fits
 // against each other; they never make a fit out of a clinic that is not one.
-export const FIT_FLOOR = 40;
+//
+// 35 rather than 40 so a missing decision-maker can never be what sinks a
+// clinic: clinic-first candidates usually have no contact yet, and a clinic
+// with a cited core service, location and size (35 + 10 + 5 = 50) or an
+// adjacent service with a real spine program (25 + 10 = 35) clears it without
+// the title's 10.
+export const FIT_FLOOR = 35;
 
 // ─── Signals — among fits, which first? ────────────────────────────────────
 

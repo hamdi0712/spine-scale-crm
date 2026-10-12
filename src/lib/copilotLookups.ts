@@ -71,6 +71,7 @@ import {
   parseStoredBreakdown,
 } from "@/lib/storedBreakdown";
 import { IcpBreakdownV2, PAYMENT_MODEL_LABELS } from "@/lib/icpScoring";
+import { FIT_FLOOR, FIT_MAX } from "@/lib/icpWeights";
 import { leadBreakdownV2, leadScore, leadScoreText, leadTier } from "@/lib/leadScore";
 import {
   HEALTH_ACTIONS,
@@ -320,7 +321,7 @@ function promotionRule(settings: {
   promotionThresholdV2: number;
 }): string {
   return settings.scoringModel === "v2"
-    ? `A discovery candidate is scored against the active ICP Definition, out of 100. Any cited disqualifier rejects it; a fit under 40 of 60 rejects it as not a confirmed fit; a chiropractic-first clinic that would qualify is held for review; otherwise it needs ${settings.promotionThresholdV2} of 100 to be promoted.`
+    ? `A discovery candidate is scored against the active ICP Definition, out of 100. Any cited disqualifier rejects it; a fit under ${FIT_FLOOR} of ${FIT_MAX} rejects it as not a confirmed fit; a chiropractic-first clinic that would qualify is held for review; otherwise it needs ${settings.promotionThresholdV2} of 100 to be promoted.`
     : `A discovery candidate needs ${settings.promotionThreshold} of ${ICP_MAX_SCORE} to be promoted into the pipeline; below that it is rejected.`;
 }
 

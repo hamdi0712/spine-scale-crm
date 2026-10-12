@@ -26,7 +26,7 @@ export default function ApplyScoringModel({
   function flip(next: "v1" | "v2") {
     const message =
       next === "v2"
-        ? "Apply the new scoring model? From the next Process queue run, candidates are scored against the active ICP out of 100 — chiro-first clinics are held, fits under 40 are rejected. Nothing already scored changes."
+        ? "Apply the new scoring model? From the next Process queue run, candidates are scored against the active ICP out of 100 — chiro-first clinics are held, fits under the fit floor are rejected. Nothing already scored changes."
         : "Switch Process queue back to the old A–D scorecard? Nothing already scored changes.";
     if (!confirm(message)) return;
     setError(null);

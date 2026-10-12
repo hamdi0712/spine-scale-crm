@@ -574,12 +574,18 @@ export function buildBreakdownV2(input: BuildInput): IcpBreakdownV2 {
   const notes = [...input.notes];
 
   const disqualifiers = judgeDisqualifiers(icp, evidence, reply, docs);
-  const fit = [
-    serviceEntry(icp, reply, docs),
-    titleEntry(icp, evidence, reply, docs),
-    locationEntry(icp, evidence, reply, docs),
-    sizeEntry(icp, evidence, reply, docs),
-  ];
+  const locations = locationCountFinding(reply, docs);
+  const fit = summaryConsistency(
+    reply?.summary ?? "",
+    [
+      serviceEntry(icp, reply, docs),
+      titleEntry(icp, evidence, reply, docs, locations),
+      locationEntry(icp, evidence, reply, docs),
+      sizeEntry(icp, evidence, reply, docs, locations),
+    ],
+    icp,
+    notes,
+  );
   const signals = [
     triggersEntry(icp, reply, docs),
     budgetEntry(evidence),
@@ -876,15 +882,34 @@ function serviceEntry(
     }
   }
 
+  // A core service named anywhere on the site — usually in the clinic's list
+  // of services, often beside unrelated wellness services — is a core-service
+  // match whether or not the model reported it. Found by a word-for-word scan,
+  // so the quote it is cited with is the site's own line.
+  const found = findCoreServiceInText(icp, docs);
+  if (found) {
+    return entry(
+      "service",
+      FIT_WEIGHTS.serviceCore,
+      `Core service — ${found.tag} — named on the site.`,
+      [found.citation],
+      "computed",
+      null,
+    );
+  }
+
   const adjacent = reply?.adjacentService
     ? {
         tag: matchServiceTag(reply.adjacentService.service, icp.adjacentServices),
         citation: verifyQuote(reply.adjacentService.quote, reply.adjacentService.source, docs),
       }
     : null;
-  const program = reply?.spineProgram
+  const claimedProgram = reply?.spineProgram
     ? verifyQuote(reply.spineProgram.quote, reply.spineProgram.source, docs)
     : null;
+  // Generic back-pain copy is not a program: it has to name something.
+  const program =
+    claimedProgram && isSpecificSpineProgram(claimedProgram) ? claimedProgram : null;
 
   if (adjacent?.tag && adjacent.citation) {
     if (program) {
@@ -900,10 +925,12 @@ function serviceEntry(
     return entry(
       "service",
       0,
-      `General ${adjacent.tag} with no cited spine, disc or back-pain program — not a fit on service.`,
+      claimedProgram
+        ? `General ${adjacent.tag}. The back-pain line cited (“${clip(claimedProgram.quote, 100)}”) is general copy, not a named program, a dedicated service page or a specific modality.`
+        : `General ${adjacent.tag} with no cited spine, disc or back-pain program — not a fit on service.`,
       [adjacent.citation],
       "assist",
-      `general ${adjacent.tag}, no cited spine/disc/back-pain program`,
+      `general ${adjacent.tag}, no specific spine/disc/back-pain program`,
     );
   }
 
@@ -922,6 +949,7 @@ function titleEntry(
   evidence: ScoringEvidence,
   reply: ScoringReply | null,
   docs: EvidenceDoc[],
+  locations: LocationCount | null,
 ): CriterionEntry {
   const onRecord = (evidence.contactTitle ?? "").trim();
   if (onRecord !== "") {
@@ -959,15 +987,31 @@ function titleEntry(
       );
     }
   }
+  // A named doctor at a one- or two-location clinic is, in practice, the
+  // person who decides — so "Dr. Welty, DC" on the site counts.
+  const smallClinic = locations === null || locations.n <= 2;
+  if (smallClinic) {
+    const doctor = findNamedDoctor(reply, docs);
+    if (doctor) {
+      return entry(
+        "title",
+        FIT_WEIGHTS.title,
+        `${doctor.name} is named on the site at a ${locations ? `${locations.n}-location` : "single-address"} clinic — counted as the decision-maker.`,
+        [doctor.citation],
+        doctor.fromModel ? "assist" : "computed",
+        null,
+      );
+    }
+  }
   return entry(
     "title",
     0,
     onRecord !== ""
-      ? `The contact on record is “${onRecord}”, which is not a target title, and no target title was cited on the site.`
-      : "No one with a target title was cited on the record or the site.",
+      ? `The contact on record is “${onRecord}”, which is not a target title, and no named doctor or target title was cited on the site.`
+      : "No named person was cited on the record or the site. This alone cannot sink a clinic: the fit floor is set to clear without it.",
     [],
     "unanswered",
-    "no cited decision-maker",
+    "no named decision-maker",
   );
 }
 
@@ -1023,23 +1067,13 @@ function sizeEntry(
   evidence: ScoringEvidence,
   reply: ScoringReply | null,
   docs: EvidenceDoc[],
+  count: LocationCount | null,
 ): CriterionEntry {
   const band = sizeRangeLabel(icp);
-  const count = reply?.locationCount
-    ? {
-        n: reply.locationCount.count,
-        citation: verifyQuote(reply.locationCount.quote, reply.locationCount.source, docs),
-      }
-    : null;
-  const team: Citation | null =
-    evidence.staffCountRaw !== null && evidence.staffCountRaw >= 2
-      ? { quote: `${evidence.staffCountRaw} staff`, source: SOURCE_LINKEDIN }
-      : reply?.team && (reply.team.providers ?? 0) >= 2
-        ? verifyQuote(reply.team.quote, reply.team.source, docs)
-        : null;
+  const team = teamEvidence(evidence, reply, docs);
 
-  if (!count?.citation) {
-    return entry("size", 0, `No cited location count to place it in the ${band} band.`, team ? [team] : [], "unanswered", "no cited location count");
+  if (!count) {
+    return entry("size", 0, `No cited location count or street address to place it in the ${band} band.`, team ? [team] : [], "unanswered", "no cited location count");
   }
   if (!sizeInRange(count.n, icp)) {
     return entry(
@@ -1047,7 +1081,7 @@ function sizeEntry(
       0,
       `${count.n} location${count.n === 1 ? "" : "s"} — outside the ${band} band.`,
       [count.citation],
-      "assist",
+      count.source,
       `${count.n} locations, outside ${band}`,
     );
   }
@@ -1055,20 +1089,232 @@ function sizeEntry(
     return entry(
       "size",
       0,
-      `${count.n} location${count.n === 1 ? "" : "s"}, inside the band, but no cited team — an unclear single provider earns no size points.`,
+      `${count.n} location${count.n === 1 ? "" : "s"}${count.inferred ? " (one street address, no other locations on the site)" : ""}, inside the band, but no named provider or staff — an unclear single provider earns no size points.`,
       [count.citation],
-      "assist",
-      "no cited team beyond one provider",
+      count.source,
+      "no named provider or staff",
     );
   }
   return entry(
     "size",
     FIT_WEIGHTS.size,
-    `${count.n} location${count.n === 1 ? "" : "s"}, inside the ${band} band, with a team behind it.`,
+    `${count.n} location${count.n === 1 ? "" : "s"}${count.inferred ? " (one street address, no other locations on the site)" : ""}, inside the ${band} band, with named providers or staff.`,
     [count.citation, team],
-    "assist",
+    count.source,
     null,
   );
+}
+
+// ─── Reading the site directly ─────────────────────────────────────────────
+//
+// What the model can miss and the site states plainly. Every one of these
+// returns a quote cut verbatim out of a stored page and run back through
+// verifyQuote, so a fallback is held to exactly the citation rule the model is.
+
+function websiteDocs(docs: EvidenceDoc[]): EvidenceDoc[] {
+  return docs.filter(
+    (d) => /^https?:\/\//i.test(d.source) || d.source === SOURCE_WEBSITE,
+  );
+}
+
+// The line a match sits on, cut to a readable length around it — verbatim, so
+// it verifies as a quote.
+function snippetAround(text: string, index: number, length: number): string {
+  const lineStart = text.lastIndexOf("\n", index) + 1;
+  const lineEndRaw = text.indexOf("\n", index + length);
+  const lineEnd = lineEndRaw === -1 ? text.length : lineEndRaw;
+  let start = lineStart;
+  let end = lineEnd;
+  if (end - start > 220) {
+    start = Math.max(lineStart, index - 100);
+    end = Math.min(lineEnd, index + length + 100);
+    while (start > lineStart && /\S/.test(text[start - 1])) start--;
+    while (end < lineEnd && /\S/.test(text[end])) end++;
+  }
+  // A one-word line — "Decompression" in a bare list of services — is too
+  // short to cite on its own. Take in the list lines either side of it until
+  // the quote says enough to be read, still verbatim.
+  let quote = text.slice(start, end);
+  for (let i = 0; i < 4 && quote.trim().split(/\s+/).length < 4; i++) {
+    const before = text.lastIndexOf("\n", Math.max(0, start - 2));
+    const after = text.indexOf("\n", end + 1);
+    start = before === -1 ? 0 : before + 1;
+    end = after === -1 ? text.length : after;
+    quote = text.slice(start, end);
+  }
+  return quote.replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function findInPages(
+  docs: EvidenceDoc[],
+  pattern: RegExp,
+): { citation: Citation; match: RegExpExecArray } | null {
+  for (const doc of websiteDocs(docs)) {
+    const re = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(doc.text)) !== null) {
+      const quote = snippetAround(doc.text, m.index, m[0].length);
+      const citation = verifyQuote(quote, doc.source, docs);
+      if (citation) return { citation, match: m };
+      if (m[0].length === 0) re.lastIndex++;
+    }
+  }
+  return null;
+}
+
+// Every core service on the ICP, as words to look for — and "decompression"
+// on its own wherever a core service is a kind of decompression, because at a
+// chiropractic, PT or pain clinic that is what the word means.
+export function findCoreServiceInText(
+  icp: IcpDefinitionData,
+  docs: EvidenceDoc[],
+): { tag: string; citation: Citation } | null {
+  const terms: { term: string; tag: string }[] = icp.coreServices.map((tag) => ({ term: tag, tag }));
+  const decompression = icp.coreServices.find((t) => /\bdecompression\b/.test(t));
+  if (decompression && !icp.coreServices.includes("decompression")) {
+    terms.push({ term: "decompression", tag: decompression });
+  }
+  for (const { term, tag } of terms) {
+    const words = term.split(/[\s-]+/).filter(Boolean).map(escapeRegExp);
+    if (words.length === 0) continue;
+    const found = findInPages(docs, new RegExp(`\\b${words.join("[\\s-]+")}\\b`, "i"));
+    if (found) return { tag, citation: found.citation };
+  }
+  return null;
+}
+
+const SPECIFIC_PROGRAM =
+  /\b(program|programme|protocol|decompression|disc|discs|herniat\w*|bulging|sciatica|stenosis|degenerative|flexion[- ]distraction|cox technique|drx\d*|idd therapy|spinal rehab\w*|spine center|spine centre)\b/i;
+const GENERIC_PAIN_COPY =
+  /\b(if you (?:suffer|have|are suffering|struggle)|suffer(?:ing)? from|do you (?:suffer|have|struggle)|struggling with|whether you)\b/i;
+const NAMED_PROGRAM_IN_GENERIC = /\b(program|programme|protocol|decompression|disc treatment)\b/i;
+const CONDITION_PAGE = /\/[^?#]*(back[-_]?pain|sciatica|disc|spine|spinal|herniat)/i;
+
+// A spine, disc or back-pain program has to be something specific: a named
+// program, a page of its own, or a specific modality. "If you suffer from
+// back pain or a spinal condition" is a sentence every clinic site has.
+export function isSpecificSpineProgram(c: Citation): boolean {
+  if (/^https?:\/\//i.test(c.source) && CONDITION_PAGE.test(c.source.replace(/^https?:\/\/[^/]+/i, ""))) {
+    return true;
+  }
+  if (GENERIC_PAIN_COPY.test(c.quote)) return NAMED_PROGRAM_IN_GENERIC.test(c.quote);
+  return SPECIFIC_PROGRAM.test(c.quote);
+}
+
+export interface LocationCount {
+  n: number;
+  citation: Citation;
+  source: CriterionSource;
+  // True when read as one location from a single street address rather than
+  // from a stated count.
+  inferred: boolean;
+}
+
+const STREET_ADDRESS =
+  /\b\d{1,6}\s+(?:[NSEW]\.?\s+)?[A-Za-z0-9.'-]+(?:\s+[A-Za-z0-9.'-]+){0,4}\s+(?:st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|pkwy|parkway|hwy|highway|ct|court|pl|place|pike|cir|circle|trl|trail)\b\.?/i;
+const MULTIPLE_LOCATIONS =
+  /\b(?:\d+|two|three|four|five|six|seven|eight|nine|ten|several|multiple)\s+(?:locations|offices|clinics)\b|\bour locations\b|\bboth (?:locations|offices|clinics)\b|\ball locations\b|\blocations nationwide\b/i;
+
+// How many locations, cited. A stated count first; failing that, one cited
+// street address on a site that says nothing about other locations is one.
+export function locationCountFinding(
+  reply: ScoringReply | null,
+  docs: EvidenceDoc[],
+): LocationCount | null {
+  if (reply?.locationCount) {
+    const citation = verifyQuote(reply.locationCount.quote, reply.locationCount.source, docs);
+    if (citation) return { n: reply.locationCount.count, citation, source: "assist", inferred: false };
+  }
+  const pages = websiteDocs(docs);
+  if (pages.some((d) => MULTIPLE_LOCATIONS.test(d.text))) return null;
+  const fromModel = reply?.location
+    ? verifyQuote(reply.location.quote, reply.location.source, docs)
+    : null;
+  if (fromModel && STREET_ADDRESS.test(fromModel.quote)) {
+    return { n: 1, citation: fromModel, source: "assist", inferred: true };
+  }
+  const found = findInPages(docs, STREET_ADDRESS);
+  return found ? { n: 1, citation: found.citation, source: "computed", inferred: true } : null;
+}
+
+const NAMED_DOCTOR =
+  /\bDr\.?\s+[A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+)?(?:,?\s+(?:D\.?C\.?|DPT|D\.?P\.?T\.?|M\.?D\.?|D\.?O\.?|PT|NP|PA-C))?/;
+
+function findNamedDoctor(
+  reply: ScoringReply | null,
+  docs: EvidenceDoc[],
+): { name: string; citation: Citation; fromModel: boolean } | null {
+  if (reply?.decisionMaker) {
+    const citation = verifyQuote(reply.decisionMaker.quote, reply.decisionMaker.source, docs);
+    const m = citation ? NAMED_DOCTOR.exec(citation.quote) : null;
+    if (citation && m) return { name: m[0].replace(/,\s*$/, ""), citation, fromModel: true };
+  }
+  const found = findInPages(docs, NAMED_DOCTOR);
+  return found ? { name: found.match[0].replace(/,\s*$/, ""), citation: found.citation, fromModel: false } : null;
+}
+
+// Named providers or staff on the site, a LinkedIn headcount of two or more,
+// or the model's cited team.
+function teamEvidence(
+  evidence: ScoringEvidence,
+  reply: ScoringReply | null,
+  docs: EvidenceDoc[],
+): Citation | null {
+  if (evidence.staffCountRaw !== null && evidence.staffCountRaw >= 2) {
+    return { quote: `${evidence.staffCountRaw} staff`, source: SOURCE_LINKEDIN };
+  }
+  if (reply?.team) {
+    const citation = verifyQuote(reply.team.quote, reply.team.source, docs);
+    if (citation) return citation;
+  }
+  return findNamedDoctor(reply, docs)?.citation ?? null;
+}
+
+// ─── The summary has to agree with the scores ──────────────────────────────
+//
+// The model's "Overall fit" sentence is read for the facts it states. Where it
+// states one — a service offered, a single location, a named doctor — the
+// matching criterion may not sit at "no evidence": the fallbacks above have
+// already looked for the quote, and if none was found the criterion is marked
+// for review rather than silently scored as if nothing were said.
+const SUMMARY_CLAIMS: { key: FitKey; pattern: (icp: IcpDefinitionData) => RegExp; said: string }[] = [
+  {
+    key: "service",
+    pattern: (icp) =>
+      new RegExp(
+        `\\b(${[...icp.coreServices, "decompression"].map((t) => t.split(/\s+/).map(escapeRegExp).join("\\s+")).join("|")})\\b`,
+        "i",
+      ),
+    said: "names a core service",
+  },
+  { key: "size", pattern: () => /\b(single|one|1)[- ](location|office|clinic)\b|\bsingle-site\b/i, said: "says it is a single location" },
+  { key: "title", pattern: () => /\bDr\.?\s+[A-Z]/, said: "names a doctor" },
+];
+
+export function summaryConsistency(
+  summary: string,
+  fit: CriterionEntry[],
+  icp: IcpDefinitionData,
+  notes: string[],
+): CriterionEntry[] {
+  if (summary.trim() === "") return fit;
+  return fit.map((e) => {
+    const claim = SUMMARY_CLAIMS.find((c) => c.key === e.key);
+    if (!claim || e.source !== "unanswered" || !claim.pattern(icp).test(summary)) return e;
+    notes.push(
+      `The overall-fit summary ${claim.said}, but no quote for it was found in the stored evidence — ${e.label.toLowerCase()} needs a look by hand.`,
+    );
+    return {
+      ...e,
+      source: "assist",
+      reason: `The summary ${claim.said} (“${clip(summary, 160)}”), but no quote for it was found in the stored evidence, so it earns no points until checked by hand. ${e.reason}`,
+      shortfall: `${e.shortfall ?? "no citation"} — summary disagrees, check by hand`,
+    };
+  });
 }
 
 // ─── Signals ───────────────────────────────────────────────────────────────

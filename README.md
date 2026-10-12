@@ -375,7 +375,7 @@ again.
   3. **Signals, out of 40** — buying triggers found with citations (10 each,
      20 max), the existing budget signal (ads running 10, a healthy review
      count 5), and the existing three automation gaps (4/3/3).
-  4. **Fit floor.** Fit under 40 is *Not a confirmed fit* and rejected with
+  4. **Fit floor.** Fit under 35 is *Not a confirmed fit* and rejected with
      what was missing, whatever the total.
   5. **Chiro hold.** A clinic that would be promoted but whose primary service
      is chiropractic is held as **Held — Tier 2 chiro** instead, with Promote

@@ -441,6 +441,83 @@ const SEEDS: Seed[] = [
     expect: "newly_held",
     expectDiscarded: /absence or a hedge/,
   },
+  // Modelled on two real Compare results, to pin the tuning they prompted.
+  // The site copy is written to match the cases as described, not scraped;
+  // the scripted replies reproduce the misses the real run made.
+  {
+    kind: "candidate",
+    clinicName: "Hands On Wellness Center",
+    status: "PROMOTED",
+    websiteUrl: "https://handsonwellnesscenter.com",
+    websiteNotes: page(
+      "https://handsonwellnesscenter.com/services",
+      "Our Services\nChiropractic Care\nMassage Therapy\nDecompression\nAcupuncture\nIV Nutrition\nMedical Weight Loss\nDr. Amy Harris, DC, and our front desk team welcome you at 1220 Main St, Lancaster, PA 17601.",
+    ),
+    metaAdsSignal: "1 active ad, running 2mo",
+    reviewCount: 31,
+    staffCountRaw: null,
+    location: "Lancaster, PA",
+    old: {
+      packageEconomics: 2,
+      gaps: { icpGapBooking: true, icpGapReviews: true },
+      summary: "A wellness center offering chiropractic and decompression.",
+    },
+    reply: {
+      disqualifiers: [],
+      coreService: null,
+      adjacentService: { service: "chiropractic", quote: "Chiropractic Care", source: "https://handsonwellnesscenter.com/services" },
+      spineProgram: null,
+      primaryService: { service: "other", quote: "Massage Therapy", source: "https://handsonwellnesscenter.com/services" },
+      decisionMaker: null,
+      location: { place: "Lancaster, PA", quote: "1220 Main St, Lancaster, PA 17601", source: "https://handsonwellnesscenter.com/services" },
+      locationCount: null,
+      team: null,
+      buyingTriggers: [],
+      paymentModel: null,
+      gapBooking: { checked: true, reason: "No online scheduling is described." },
+      gapReviews: null,
+      gapRemarketing: null,
+      summary: "A single location wellness center that offers chiropractic care and decompression alongside massage, acupuncture and IV nutrition.",
+    },
+    expect: "unchanged",
+  },
+  {
+    kind: "candidate",
+    clinicName: "360 Rehab & Chiropractic",
+    status: "PROMOTED",
+    websiteUrl: "https://360rehabchiro.com",
+    websiteNotes: page(
+      "https://360rehabchiro.com/",
+      "360 Rehab & Chiropractic provides chiropractic adjustments, rehab exercise and massage. If you suffer from back pain or a spinal condition, we can help you feel better. Dr. Mark Welty, DC sees patients at 455 Oak Ave, Springfield, MO 65804.",
+    ),
+    metaAdsSignal: null,
+    reviewCount: 52,
+    staffCountRaw: null,
+    location: "Springfield, MO",
+    old: {
+      packageEconomics: 2,
+      gaps: { icpGapBooking: true },
+      summary: "Chiro and rehab clinic.",
+    },
+    reply: {
+      disqualifiers: [],
+      coreService: null,
+      adjacentService: { service: "chiropractic", quote: "provides chiropractic adjustments, rehab exercise and massage", source: "https://360rehabchiro.com/" },
+      spineProgram: { quote: "If you suffer from back pain or a spinal condition, we can help you feel better", source: "https://360rehabchiro.com/" },
+      primaryService: { service: "chiropractic", quote: "360 Rehab & Chiropractic provides chiropractic adjustments", source: "https://360rehabchiro.com/" },
+      decisionMaker: null,
+      location: { place: "Springfield, MO", quote: "455 Oak Ave, Springfield, MO 65804", source: "https://360rehabchiro.com/" },
+      locationCount: { count: 1, quote: "455 Oak Ave, Springfield, MO 65804", source: "https://360rehabchiro.com/" },
+      team: null,
+      buyingTriggers: [],
+      paymentModel: null,
+      gapBooking: { checked: true, reason: "No online scheduling is described." },
+      gapReviews: null,
+      gapRemarketing: null,
+      summary: "A single location chiropractic and rehab clinic run by Dr. Mark Welty, with general back-pain copy but no named spine program.",
+    },
+    expect: "newly_rejected",
+  },
   {
     kind: "lead",
     clinicName: "Main Street Back Clinic",
@@ -732,7 +809,38 @@ async function main(): Promise<void> {
     },
     { v1: 5, v2: 60 },
   );
-  check("the second-look sweep reads a v2 rejection on its own scale", flag === null, `fit ${peak.fitTotal}/60 is not a near miss of 40`);
+  check("the second-look sweep reads a v2 rejection on its own scale", flag === null, `fit ${peak.fitTotal}/60 is not a near miss of the floor`);
+
+  // The tuning rules, directly.
+  const { isSpecificSpineProgram, summaryConsistency, emptyBreakdownV2 } = await import("@/lib/icpScoring");
+  check(
+    "generic back-pain copy is not a spine program",
+    !isSpecificSpineProgram({ quote: "If you suffer from back pain or a spinal condition, we can help", source: "https://x.com/" }),
+  );
+  check(
+    "a named program, a modality or a dedicated page is",
+    isSpecificSpineProgram({ quote: "Our 6-week Disc Relief Program", source: "https://x.com/" }) &&
+      isSpecificSpineProgram({ quote: "Flexion-distraction for sciatica", source: "https://x.com/" }) &&
+      isSpecificSpineProgram({ quote: "We can help you feel better", source: "https://x.com/conditions/sciatica" }),
+  );
+  const blankFit = emptyBreakdownV2(icp!, 60, new Date()).fit;
+  const consistencyNotes: string[] = [];
+  const checked = summaryConsistency(
+    "A single location clinic that offers decompression, run by Dr. Lee.",
+    blankFit,
+    icp!,
+    consistencyNotes,
+  );
+  check(
+    "a fact the summary states cannot sit at “no evidence”",
+    ["service", "size", "title"].every((k) => checked.find((e) => e.key === k)?.source === "assist") &&
+      consistencyNotes.length === 3,
+    consistencyNotes.join(" | "),
+  );
+  for (const name of ["Hands On Wellness Center", "360 Rehab & Chiropractic"]) {
+    const b = parseBreakdownV2(rows.find((r) => r.clinicName === name)?.breakdown ?? null)!;
+    console.log(`       ${name}: fit ${b.fitTotal}/60 — ${b.fit.map((e) => `${e.label} ${e.points} (${e.source})`).join(", ")}`);
+  }
 
   // Step 2 reads the pain points as background, and only when there are some.
   const ctx = {
