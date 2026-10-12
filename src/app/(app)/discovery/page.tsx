@@ -142,10 +142,6 @@ export default async function DiscoveryPage({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <h1 className="display text-[32px] font-semibold">Discovery</h1>
-            <p className="helper-text mt-1.5 text-sm text-muted">
-              Scraped clinics waiting to be qualified — nothing reaches the
-              pipeline from here without a score
-            </p>
           </div>
           <PageActions className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
             <Link href="/discovery/rejected" className="btn">
