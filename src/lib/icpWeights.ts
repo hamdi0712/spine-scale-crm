@@ -38,7 +38,13 @@ export const FIT_MAX =
 // Below this, a clinic cannot be promoted whatever its total — it is rejected
 // as "Not a confirmed fit" with what was missing. Signals only rank fits
 // against each other; they never make a fit out of a clinic that is not one.
-export const FIT_FLOOR = 40;
+//
+// 35 rather than 40 so a missing decision-maker can never be what sinks a
+// clinic: clinic-first candidates usually have no contact yet, and a clinic
+// with a cited core service, location and size (35 + 10 + 5 = 50) or an
+// adjacent service with a real spine program (25 + 10 = 35) clears it without
+// the title's 10.
+export const FIT_FLOOR = 35;
 
 // ─── Signals — among fits, which first? ────────────────────────────────────
 
@@ -79,3 +85,64 @@ export const V2_TIER_B_MIN = 60;
 // many points under the bar, or this many under the fit floor.
 export const V2_NEAR_MISS_MARGIN = 10;
 export const V2_FIT_FLOOR_NEAR_MISS = 5;
+
+// ─── The chiro "real program" check ────────────────────────────────────────
+//
+// A clinic whose primary service is chiropractic, and that clears the fit floor
+// and the bar, is promoted only with a real program behind it: at least this
+// many of the five signals below, each with its own citation. Fewer, and it is
+// rejected as "Chiro without a real program". There is no hold.
+export const CHIRO_PROGRAM_MIN_SIGNALS = 2;
+
+// Signal 1 — a page of its own. Matched against the crawled page's URL path.
+export const CHIRO_PROGRAM_PAGE_TERMS = [
+  "decompression",
+  "disc",
+  "sciatica",
+  "avoid-surgery",
+  "avoid_surgery",
+  "avoidsurgery",
+  "surgery-alternative",
+  "non-surgical",
+  "herniated",
+];
+
+// Signal 2 — named equipment. Matched as words anywhere on the site, case
+// insensitive. Add to this list as new tables and lasers turn up.
+export const CHIRO_EQUIPMENT = [
+  "DRX9000",
+  "DRX 9000",
+  "DRX-9000",
+  "DRX9500",
+  "SpineMED",
+  "Spine MED",
+  "Accu-SPINA",
+  "Triton DTS",
+  "Hill DT",
+  "Chattanooga Triton",
+  "IDD Therapy",
+  "Class IV laser",
+  "Class 4 laser",
+  "K-Laser",
+  "LightForce",
+  "Erchonia",
+  "Cox Technic",
+  "Cox flexion-distraction",
+];
+
+// Signal 3 — a consult offer.
+export const CHIRO_CONSULT_PHRASES = [
+  "free consultation",
+  "free consult",
+  "complimentary consultation",
+  "complimentary consult",
+  "free evaluation",
+  "complimentary evaluation",
+  "free exam",
+  "complimentary exam",
+  "see if you qualify",
+  "find out if you qualify",
+  "see if you're a candidate",
+  "see if you are a candidate",
+  "are you a candidate",
+];

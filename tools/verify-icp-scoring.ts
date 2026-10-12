@@ -12,7 +12,8 @@
 // insurance-only PT clinic, a hybrid clinic that lists its insurers, a
 // 12-location PE-backed group, a general sports chiro, a spinal decompression
 // clinic — plus three that exercise the paths those seven do not: a
-// chiropractic-first clinic with a disc program (the Tier 2 hold), a lead with
+// chiropractic-first clinic without a real program and one with (the chiro
+// real-program check), a lead with
 // a Maps listing and no website (the "No website" rule), and a lead nothing was
 // ever gathered for (Failed, not Rejected).
 //
@@ -438,8 +439,132 @@ const SEEDS: Seed[] = [
       gapRemarketing: null,
       summary: "A chiropractic-first clinic with a real disc program.",
     },
-    expect: "newly_held",
+    // Chiro-first and over the bar, but no dedicated page, no equipment, no
+    // consult offer, one named doctor and no ads: 0 of 5 signals.
+    expect: "unchanged",
     expectDiscarded: /absence or a hedge/,
+  },
+  // A chiropractic-first clinic with a real program behind it: a page of its
+  // own, named equipment, a consult offer — three of five signals.
+  {
+    kind: "candidate",
+    clinicName: "Ridgeline Chiropractic",
+    status: "REJECTED",
+    websiteUrl: "https://ridgelinechiro.com",
+    websiteNotes: [
+      page(
+        "https://ridgelinechiro.com/",
+        "Ridgeline Chiropractic is a family chiropractic office in Fort Collins. Dr. Sara Lund, DC, owner, sees patients at 310 College Ave, Fort Collins, CO 80524. Call today to schedule your free consultation.",
+      ),
+      page(
+        "https://ridgelinechiro.com/spinal-decompression",
+        "Non-surgical spinal decompression for herniated and bulging discs. We use the DRX9000 decompression table. See if you qualify for our 20-visit decompression program.",
+      ),
+    ].join("\n\n"),
+    metaAdsSignal: null,
+    reviewCount: 64,
+    staffCountRaw: null,
+    location: "Fort Collins, CO",
+    old: {
+      packageEconomics: 1,
+      gaps: { icpGapBooking: true },
+      summary: "Family chiro.",
+    },
+    reply: {
+      disqualifiers: [],
+      coreService: { service: "spinal decompression", quote: "Non-surgical spinal decompression for herniated and bulging discs", source: "https://ridgelinechiro.com/spinal-decompression" },
+      adjacentService: { service: "chiropractic", quote: "a family chiropractic office in Fort Collins", source: "https://ridgelinechiro.com/" },
+      spineProgram: null,
+      primaryService: { service: "chiropractic", quote: "Ridgeline Chiropractic is a family chiropractic office in Fort Collins", source: "https://ridgelinechiro.com/" },
+      decisionMaker: { name: "Sara Lund", title: "owner", quote: "Dr. Sara Lund, DC, owner, sees patients", source: "https://ridgelinechiro.com/" },
+      location: { place: "Fort Collins, CO", quote: "310 College Ave, Fort Collins, CO 80524", source: "https://ridgelinechiro.com/" },
+      locationCount: null,
+      team: null,
+      buyingTriggers: [],
+      paymentModel: null,
+      gapBooking: { checked: true, reason: "Booking is by phone." },
+      gapReviews: null,
+      gapRemarketing: null,
+      summary: "A chiropractic office with a dedicated decompression page, the DRX9000 and a free consultation offer.",
+    },
+    expect: "newly_promoted",
+  },
+  // Modelled on two real Compare results, to pin the tuning they prompted.
+  // The site copy is written to match the cases as described, not scraped;
+  // the scripted replies reproduce the misses the real run made.
+  {
+    kind: "candidate",
+    clinicName: "Hands On Wellness Center",
+    status: "PROMOTED",
+    websiteUrl: "https://handsonwellnesscenter.com",
+    websiteNotes: page(
+      "https://handsonwellnesscenter.com/services",
+      "Our Services\nChiropractic Care\nMassage Therapy\nDecompression\nAcupuncture\nIV Nutrition\nMedical Weight Loss\nDr. Amy Harris, DC, and our front desk team welcome you at 1220 Main St, Lancaster, PA 17601.",
+    ),
+    metaAdsSignal: "1 active ad, running 2mo",
+    reviewCount: 31,
+    staffCountRaw: null,
+    location: "Lancaster, PA",
+    old: {
+      packageEconomics: 2,
+      gaps: { icpGapBooking: true, icpGapReviews: true },
+      summary: "A wellness center offering chiropractic and decompression.",
+    },
+    reply: {
+      disqualifiers: [],
+      coreService: null,
+      adjacentService: { service: "chiropractic", quote: "Chiropractic Care", source: "https://handsonwellnesscenter.com/services" },
+      spineProgram: null,
+      primaryService: { service: "other", quote: "Massage Therapy", source: "https://handsonwellnesscenter.com/services" },
+      decisionMaker: null,
+      location: { place: "Lancaster, PA", quote: "1220 Main St, Lancaster, PA 17601", source: "https://handsonwellnesscenter.com/services" },
+      locationCount: null,
+      team: null,
+      buyingTriggers: [],
+      paymentModel: null,
+      gapBooking: { checked: true, reason: "No online scheduling is described." },
+      gapReviews: null,
+      gapRemarketing: null,
+      summary: "A single location wellness center that offers chiropractic care and decompression alongside massage, acupuncture and IV nutrition.",
+    },
+    expect: "unchanged",
+  },
+  {
+    kind: "candidate",
+    clinicName: "360 Rehab & Chiropractic",
+    status: "PROMOTED",
+    websiteUrl: "https://360rehabchiro.com",
+    websiteNotes: page(
+      "https://360rehabchiro.com/",
+      "360 Rehab & Chiropractic provides chiropractic adjustments, rehab exercise and massage. If you suffer from back pain or a spinal condition, we can help you feel better. Dr. Mark Welty, DC sees patients at 455 Oak Ave, Springfield, MO 65804.",
+    ),
+    metaAdsSignal: null,
+    reviewCount: 52,
+    staffCountRaw: null,
+    location: "Springfield, MO",
+    old: {
+      packageEconomics: 2,
+      gaps: { icpGapBooking: true },
+      summary: "Chiro and rehab clinic.",
+    },
+    reply: {
+      disqualifiers: [],
+      coreService: null,
+      adjacentService: { service: "chiropractic", quote: "provides chiropractic adjustments, rehab exercise and massage", source: "https://360rehabchiro.com/" },
+      spineProgram: { quote: "If you suffer from back pain or a spinal condition, we can help you feel better", source: "https://360rehabchiro.com/" },
+      primaryService: { service: "chiropractic", quote: "360 Rehab & Chiropractic provides chiropractic adjustments", source: "https://360rehabchiro.com/" },
+      decisionMaker: null,
+      location: { place: "Springfield, MO", quote: "455 Oak Ave, Springfield, MO 65804", source: "https://360rehabchiro.com/" },
+      locationCount: { count: 1, quote: "455 Oak Ave, Springfield, MO 65804", source: "https://360rehabchiro.com/" },
+      team: null,
+      buyingTriggers: [],
+      paymentModel: null,
+      gapBooking: { checked: true, reason: "No online scheduling is described." },
+      gapReviews: null,
+      gapRemarketing: null,
+      summary: "A single location chiropractic and rehab clinic run by Dr. Mark Welty, with general back-pain copy but no named spine program.",
+    },
+    expect: "newly_rejected",
   },
   {
     kind: "lead",
@@ -660,7 +785,7 @@ async function main(): Promise<void> {
 
   // ─── The report, as the compare page groups it ────────────────────────
   console.log("\nThe comparison, grouped");
-  const order = ["newly_rejected", "newly_promoted", "newly_held", "newly_failed", "unchanged"];
+  const order = ["newly_rejected", "newly_promoted", "newly_failed", "unchanged"];
   for (const outcome of order) {
     const group = rows.filter((r) => r.outcome === outcome);
     console.log(`\n  ${outcome} (${group.length})`);
@@ -732,7 +857,72 @@ async function main(): Promise<void> {
     },
     { v1: 5, v2: 60 },
   );
-  check("the second-look sweep reads a v2 rejection on its own scale", flag === null, `fit ${peak.fitTotal}/60 is not a near miss of 40`);
+  check("the second-look sweep reads a v2 rejection on its own scale", flag === null, `fit ${peak.fitTotal}/60 is not a near miss of the floor`);
+
+  // ─── The retired hold: nothing left stranded ──────────────────────────
+  console.log("\nRetired Tier 2 chiro hold");
+  const { resolveHeldCandidates, RETIRED_HELD_STATUS } = await import("@/lib/heldCleanup");
+  const ridgeRow = rows.find((r) => r.clinicName === "Ridgeline Chiropractic")!;
+  const harborRow = rows.find((r) => r.clinicName === "Harbor Chiropractic & Disc Center")!;
+  // Two candidates left in HELD_CHIRO by the old rule, each carrying a
+  // breakdown the hold wrote — the shape a real stranded row has.
+  const asHeld = (raw: string) => {
+    const b = JSON.parse(raw);
+    b.verdict = { ...b.verdict, status: "HELD_CHIRO", kind: "held_chiro", reason: "Held — Tier 2 chiro" };
+    delete b.chiroProgram;
+    return JSON.stringify(b);
+  };
+  for (const row of [ridgeRow, harborRow]) {
+    await prisma.discoveryCandidate.update({
+      where: { id: row.subjectId },
+      data: { status: RETIRED_HELD_STATUS, icpBreakdown: asHeld(row.breakdown!), scoringModel: "v2" },
+    });
+  }
+  const cleaned = await resolveHeldCandidates();
+  check(
+    "held candidates are re-judged under the real-program check, none left held",
+    (await prisma.discoveryCandidate.count({ where: { status: RETIRED_HELD_STATUS } })) === 0,
+    JSON.stringify(cleaned),
+  );
+  const ridge = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: ridgeRow.subjectId } });
+  const harbor = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: harborRow.subjectId } });
+  check("…a chiro with a real program is promoted", ridge.status === "PROMOTED" && ridge.promotedLeadId !== null);
+  check(
+    "…and one without is rejected, with the signals counted",
+    harbor.status === "REJECTED" && /Chiro without a real program \(0 of 5 signals\)/.test(harbor.disqualifiedReason ?? ""),
+    harbor.disqualifiedReason ?? "",
+  );
+
+  // The tuning rules, directly.
+  const { isSpecificSpineProgram, summaryConsistency, emptyBreakdownV2 } = await import("@/lib/icpScoring");
+  check(
+    "generic back-pain copy is not a spine program",
+    !isSpecificSpineProgram({ quote: "If you suffer from back pain or a spinal condition, we can help", source: "https://x.com/" }),
+  );
+  check(
+    "a named program, a modality or a dedicated page is",
+    isSpecificSpineProgram({ quote: "Our 6-week Disc Relief Program", source: "https://x.com/" }) &&
+      isSpecificSpineProgram({ quote: "Flexion-distraction for sciatica", source: "https://x.com/" }) &&
+      isSpecificSpineProgram({ quote: "We can help you feel better", source: "https://x.com/conditions/sciatica" }),
+  );
+  const blankFit = emptyBreakdownV2(icp!, 60, new Date()).fit;
+  const consistencyNotes: string[] = [];
+  const checked = summaryConsistency(
+    "A single location clinic that offers decompression, run by Dr. Lee.",
+    blankFit,
+    icp!,
+    consistencyNotes,
+  );
+  check(
+    "a fact the summary states cannot sit at “no evidence”",
+    ["service", "size", "title"].every((k) => checked.find((e) => e.key === k)?.source === "assist") &&
+      consistencyNotes.length === 3,
+    consistencyNotes.join(" | "),
+  );
+  for (const name of ["Hands On Wellness Center", "360 Rehab & Chiropractic"]) {
+    const b = parseBreakdownV2(rows.find((r) => r.clinicName === name)?.breakdown ?? null)!;
+    console.log(`       ${name}: fit ${b.fitTotal}/60 — ${b.fit.map((e) => `${e.label} ${e.points} (${e.source})`).join(", ")}`);
+  }
 
   // Step 2 reads the pain points as background, and only when there are some.
   const ctx = {

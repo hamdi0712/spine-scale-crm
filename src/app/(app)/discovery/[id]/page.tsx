@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import {
   deleteDiscoveryCandidate,
   promoteDiscoveryCandidate,
-  rejectHeldCandidate,
   requeueDiscoveryCandidate,
   updateDiscoveryCandidate,
 } from "@/lib/actions/discovery";
@@ -66,8 +65,6 @@ export default async function DiscoveryCandidatePage({
   const promote = promoteDiscoveryCandidate.bind(null, candidate.id);
   const remove = deleteDiscoveryCandidate.bind(null, candidate.id);
   const requeue = requeueDiscoveryCandidate.bind(null, candidate.id);
-  const rejectHeld = rejectHeldCandidate.bind(null, candidate.id);
-  const held = candidate.status === "HELD_CHIRO";
   // Read here rather than in the panel: which actor the stage would search
   // with, and whether it is on at all, are settings, and a client component
   // must not pull the module that reads them.
@@ -148,25 +145,13 @@ export default async function DiscoveryCandidatePage({
             <ConfirmForm
               action={promote}
               message={
-                held
-                  ? `Promote ${candidate.clinicName} to the pipeline? It qualified and was held only because its primary service is chiropractic. Its scorecard comes with it and stays editable on the lead.`
-                  : breakdown
-                    ? `Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`
-                    : `Promote ${candidate.clinicName} to the pipeline? It has never been scored, so the lead arrives with an empty ICP scorecard.`
+                breakdown
+                  ? `Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`
+                  : `Promote ${candidate.clinicName} to the pipeline? It has never been scored, so the lead arrives with an empty ICP scorecard.`
               }
-              className={held ? "btn-primary shrink-0" : "btn shrink-0"}
-            >
-              {held ? "Promote" : "Promote anyway"}
-            </ConfirmForm>
-          )}
-          {/* The other half of the Tier 2 chiro hold. */}
-          {held && (
-            <ConfirmForm
-              action={rejectHeld}
-              message={`Reject ${candidate.clinicName}? It moves to the Rejected list with its scoring kept, where Promote anyway still works.`}
               className="btn shrink-0"
             >
-              Reject
+              Promote anyway
             </ConfirmForm>
           )}
           {/* The way back into the queue for a candidate the queue no longer

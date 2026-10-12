@@ -15,6 +15,7 @@ import {
 } from "@/lib/decisionMaker";
 import { IcpTier } from "@/lib/icp";
 import { maxScoreFor } from "@/lib/storedBreakdown";
+import { resolveHeldCandidates } from "@/lib/heldCleanup";
 import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
@@ -67,9 +68,7 @@ function reasonFor(candidate: {
   failureReason: string | null;
 }): string | null {
   if (candidate.status === "FAILED") return candidate.failureReason;
-  if (candidate.status === "REJECTED" || candidate.status === "HELD_CHIRO") {
-    return candidate.disqualifiedReason;
-  }
+  if (candidate.status === "REJECTED") return candidate.disqualifiedReason;
   return null;
 }
 
@@ -86,13 +85,15 @@ export default async function DiscoveryPage({
   // The settings the queue quotes its estimate from — read here so the dialog
   // opens with a number rather than fetching one.
   const settings = await loadPipelineSettings();
-  const [candidates, queued, rejected, held] = await Promise.all([
+  // Anything the retired Tier 2 chiro hold left behind is re-judged under the
+  // real-program check before the list is read, so none is stranded.
+  await resolveHeldCandidates();
+  const [candidates, queued, rejected] = await Promise.all([
     prisma.discoveryCandidate.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.discoveryCandidate.count({
       where: { status: { in: DISCOVERY_QUEUE_STATUSES } },
     }),
     prisma.discoveryCandidate.count({ where: { status: "REJECTED" } }),
-    prisma.discoveryCandidate.count({ where: { status: "HELD_CHIRO" } }),
   ]);
 
   const rows: DiscoveryRow[] = candidates.map((c) => ({
@@ -178,8 +179,8 @@ export default async function DiscoveryPage({
           </PageActions>
         </div>
 
-        {/* Which model the queue scores with, the way to the dry run that
-            decides it, and the Tier 2 chiro hold once there is anything in it.
+        {/* Which model the queue scores with, and the way to the dry run that
+            decides it.
             A strip under the header rather than more buttons in it — that row
             is already full, and these are places to go rather than actions. */}
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
@@ -191,14 +192,6 @@ export default async function DiscoveryPage({
             {settings.scoringModel === "v2" ? "ICP model" : "old A–D model"}
             <span className="text-accent">· Compare scoring →</span>
           </Link>
-          {held > 0 && (
-            <Link
-              href="/discovery/held"
-              className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-purple/30 bg-purple-soft px-3 font-medium text-purple hover:opacity-90"
-            >
-              Held — Tier 2 chiro <span className="num">({held})</span>
-            </Link>
-          )}
         </div>
 
         {summary && (

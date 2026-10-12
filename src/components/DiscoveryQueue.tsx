@@ -385,10 +385,11 @@ function QueueDialog({
                   <li>
                     <span className="num font-medium text-ink">5.</span> Fit
                     under <span className="num">{FIT_FLOOR}</span> is rejected
-                    as not a confirmed fit; a chiropractic-first clinic that
-                    qualifies is held for you; anything else scoring{" "}
+                    as not a confirmed fit. Anything scoring{" "}
                     <span className="num">{settings.promotionThresholdV2}</span>{" "}
-                    or more becomes a lead with its scorecard attached.
+                    or more becomes a lead with its scorecard attached — a
+                    chiropractic-first clinic only with a real program, two of
+                    five cited signals.
                   </li>
                 </>
               ) : (
@@ -547,8 +548,6 @@ function QueueChip({ item }: { item: QueueItem }) {
         ? ["Running…", "bg-accent-soft text-accent"]
         : item.result?.status === "PROMOTED"
           ? ["Promoted", "bg-ok-soft text-ok"]
-          : item.result?.status === "HELD_CHIRO"
-            ? ["Held", "bg-purple-soft text-purple"]
           : item.result?.status === "REJECTED"
             ? ["Rejected", "bg-warn-soft text-warn"]
             : ["Failed", "bg-bad-soft text-bad"];

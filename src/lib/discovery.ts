@@ -44,7 +44,6 @@ export const DISCOVERY_STATUSES = [
   "SCORED",
   "QUALIFIED_NO_CONTACT",
   "PROMOTED",
-  "HELD_CHIRO",
   "REJECTED",
   "FAILED",
 ] as const;
@@ -60,7 +59,6 @@ export const DISCOVERY_STATUS_LABELS: Record<DiscoveryStatus, string> = {
   // records written before that change still read as themselves.
   QUALIFIED_NO_CONTACT: "Qualified — awaiting promotion",
   PROMOTED: "Promoted",
-  HELD_CHIRO: "Held — Tier 2 chiro",
   REJECTED: "Rejected",
   FAILED: "Failed",
 };
@@ -75,10 +73,8 @@ export const DISCOVERY_STATUS_MEANINGS: Record<DiscoveryStatus, string> = {
   QUALIFIED_NO_CONTACT:
     "Scored at or above the bar and held back for a decision maker, which is no longer a condition of promotion — the next queue run puts it through",
   PROMOTED: "Became a lead in the pipeline — by clearing the promotion bar, or by override",
-  HELD_CHIRO:
-    "Qualified under the ICP model, but its primary service is chiropractic — held for you to Promote or Reject, with its payment model on the card",
   REJECTED:
-    "Disqualified, not a confirmed fit, or scored below the bar — kept with its reasoning",
+    "Disqualified, not a confirmed fit, scored below the bar, or a chiro without a real program — kept with its reasoning",
   FAILED:
     "An actor failed, or too little was gathered to attempt the card — either way nothing was scored",
 };
