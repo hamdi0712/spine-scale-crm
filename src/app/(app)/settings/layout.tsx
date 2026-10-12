@@ -20,8 +20,8 @@ export default function SettingsLayout({
       <div className="mb-6">
         <h1 className="display text-[32px] font-semibold">Settings</h1>
         <p className="helper-text mt-1.5 text-sm text-muted">
-          The keys this app calls out with, the chain it runs when it does, and
-          what the copilot is told about your business
+          The keys this app calls out with, the chain it runs when it does, who
+          you are for, and what the copilot is told about your business
         </p>
       </div>
       <div className="mb-8">

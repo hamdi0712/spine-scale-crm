@@ -610,6 +610,12 @@ export interface SequenceContext {
   // they said, and "appreciate that context" with no idea what the context was
   // is the version of this message that gets ignored.
   replyText: string | null;
+  // The active ICP Definition's pain points, as the operator wrote them. Read
+  // by step 2 only, as background: which pain a verified observation is worth
+  // tying to. It is never evidence about this clinic. Null or empty where no
+  // ICP is active or nobody has written any yet, and the prompt is then
+  // exactly what it was before this existed.
+  icpPainPoints?: string | null;
 }
 
 // The salutation for a whole context, so the templates and both prompts read it
@@ -1200,6 +1206,27 @@ function connectionPrompt(ctx: SequenceContext): string {
 
 // ─── Step 2 ────────────────────────────────────────────────────────────────
 
+// The operator's own list of what clinics like this struggle with, from the
+// active ICP Definition. Step 2's observation and its curiosity question are
+// both stronger tied to a pain that is real for this kind of practice — and
+// both are ruined by asserting that pain about a clinic whose evidence does not
+// show it. So it goes in as context with that line drawn in the prompt itself,
+// after the evidence and before the task, and changes nothing else: the
+// templates, the variants and the hard rules below are untouched.
+//
+// It is the operator's text, not scraped copy, so it is not fenced as untrusted
+// — but it is also not evidence, and the prompt says so.
+function painPointsBlock(ctx: SequenceContext): string[] {
+  const text = (ctx.icpPainPoints ?? "").trim();
+  if (text === "") return [];
+  return [
+    "PAIN POINTS FOR THIS KIND OF CLINIC (background from the operator's Ideal Customer Profile, not evidence about this clinic)",
+    `"""\n${truncate(text, 2000)}\n"""`,
+    "Use these only to decide which verified observation is worth making, or which question is worth asking, so it ties to a real pain. They are not facts about this clinic: never state or imply this clinic has one unless the evidence above shows it, and never quote or paraphrase this list to them.",
+    "",
+  ];
+}
+
 // The message that goes out once they accept, and the step this sequence was
 // rewritten around.
 //
@@ -1231,6 +1258,7 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     "CONVERSATION SO FAR",
     conversationBlock(ctx.priorMessages),
     "",
+    ...painPointsBlock(ctx),
     "TASK",
     "They accepted the connection request. This message has one job: earn a genuine reply. It does not close, it does not offer the audit, and it never describes what you do.",
     "",
@@ -1314,6 +1342,7 @@ function firstMessageFallbackPrompt(ctx: SequenceContext): string {
     "CONVERSATION SO FAR",
     conversationBlock(ctx.priorMessages),
     "",
+    ...painPointsBlock(ctx),
     "TASK",
     "A first attempt at this step already decided the evidence will not support a verified pain observation, so no observation-led message is being written. What goes out instead is a curiosity question: no pain point presumed, nothing asserted about how this practice operates. You are asked for the two pieces only the evidence can supply, and the sentences are assembled by the app around them.",
     "",

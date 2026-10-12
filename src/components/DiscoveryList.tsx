@@ -50,7 +50,6 @@ import {
 } from "@/lib/clinicDiscovery";
 import { deleteDiscoveryCandidates } from "@/lib/actions/discovery";
 import {
-  ICP_MAX_SCORE,
   ICP_TIER_ACTIONS,
   ICP_TIER_LABELS,
   ICP_TIER_ORDER,
@@ -89,6 +88,8 @@ export interface DiscoveryRow {
   batchLabel: string | null;
   status: string;
   icpTotal: number | null;
+  // What icpTotal is out of — 10 under the old model, 100 under the ICP model.
+  scoreMax: number;
   icpTier: IcpTier | null;
   // Whichever sentence applies to this row's status, already chosen on the
   // server — the list shows one line of "why" and links to the rest.
@@ -187,7 +188,11 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
           cmp = tierOrder(a.icpTier) - tierOrder(b.icpTier);
           break;
         case "icpTotal":
-          cmp = (a.icpTotal ?? -1) - (b.icpTotal ?? -1);
+          // As a share of each row's own scale, so a 7/10 and a 65/100 sort
+          // where they belong rather than by the bare number.
+          cmp =
+            (a.icpTotal == null ? -1 : a.icpTotal / a.scoreMax) -
+            (b.icpTotal == null ? -1 : b.icpTotal / b.scoreMax);
           break;
         case "createdAt":
           cmp = a.createdAt.localeCompare(b.createdAt);
@@ -643,7 +648,7 @@ export default function DiscoveryList({ rows }: { rows: DiscoveryRow[] }) {
                         {row.icpTotal}
                         <span className="text-xs text-muted">
                           {" "}
-                          / {ICP_MAX_SCORE}
+                          / {row.scoreMax}
                         </span>
                       </>
                     ) : (
@@ -750,7 +755,7 @@ function CandidateCard({
         <IcpScoreBadge
           tier={row.icpTier}
           total={row.icpTotal}
-          max={ICP_MAX_SCORE}
+          max={row.scoreMax}
         />
       </div>
 

@@ -1,7 +1,7 @@
 // The button every AI trigger wears.
 //
 // One control, one meaning: a violet pill with a sparkle on it asks the model
-// something and costs a call. "Suggest remaining scores", "Generate outreach
+// something and costs a call. "Score against the ICP", "Generate outreach
 // hook" and "Process queue" are all this button, and anything added later that
 // spends a model call should be too — reach for this rather than restyling a
 // .btn, so the next one matches without anybody having to remember the recipe.

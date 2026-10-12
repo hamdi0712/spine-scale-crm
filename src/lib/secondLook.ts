@@ -37,6 +37,14 @@
 
 import { DiscoveryBreakdown, triggeredDisqualifiers } from "@/lib/discovery";
 import { ICP_MAX_SCORE } from "@/lib/icp";
+import { IcpBreakdownV2, triggeredHits } from "@/lib/icpScoring";
+import {
+  FIT_FLOOR,
+  FIT_MAX,
+  V2_FIT_FLOOR_NEAR_MISS,
+  V2_MAX_SCORE,
+  V2_NEAR_MISS_MARGIN,
+} from "@/lib/icpWeights";
 
 // How far under the promotion bar still counts as a near miss. One point: at
 // two, a bar of 5 would flag every clinic that scored 3, which is most of the
@@ -75,10 +83,21 @@ export interface SecondLookCandidate {
   disqualified: boolean;
   icpTotal: number | null;
   disqualifiedReason: string | null;
+  // Which framework rejected it. The two keep different scales — 10 and 100 —
+  // and a near miss is a near miss on the scale it was scored on.
+  scoringModel: "v1" | "v2";
   // Parsed from the stored JSON, or null where a candidate carries no
   // breakdown — an older row, or one written before the run finished. Without
-  // it there is no reasoning to weigh, so the model half skips it.
+  // it there is no reasoning to weigh, so the model half skips it. Exactly one
+  // of the two is set on a scored candidate, by which model scored it.
   breakdown: DiscoveryBreakdown | null;
+  breakdownV2?: IcpBreakdownV2 | null;
+}
+
+// The bar on each scale, read from Pipeline Settings by the action.
+export interface SecondLookThresholds {
+  v1: number;
+  v2: number;
 }
 
 export interface SecondLookFlag {
@@ -111,8 +130,10 @@ export type SecondLookResult =
 // was not nearly promoted and saying so would be noise.
 export function computedFlag(
   candidate: SecondLookCandidate,
-  threshold: number,
+  thresholds: SecondLookThresholds,
 ): SecondLookFlag | null {
+  if (candidate.scoringModel === "v2") return computedFlagV2(candidate, thresholds.v2);
+  const threshold = thresholds.v1;
   const total = candidate.icpTotal;
   if (total === null) return null;
 
@@ -144,6 +165,58 @@ export function computedFlag(
   return null;
 }
 
+// The same two rules on the ICP model's scale, plus the third way it rejects:
+// a fit that came in just under the fit floor is as near a miss as a total
+// just under the bar.
+function computedFlagV2(
+  candidate: SecondLookCandidate,
+  threshold: number,
+): SecondLookFlag | null {
+  const b = candidate.breakdownV2;
+  if (!b) return null;
+  if (b.verdict.kind === "disqualified") {
+    if (b.fitTotal >= FIT_FLOOR && b.ungatedTotal >= threshold) {
+      return {
+        flagged: true,
+        source: "computed",
+        reason: `Disqualified, but fit and signals still came to ${b.ungatedTotal}/${V2_MAX_SCORE} (fit ${b.fitTotal}/${FIT_MAX}) — at or above the promotion bar of ${threshold}.`,
+      };
+    }
+    return null;
+  }
+  if (b.verdict.kind === "not_a_fit") {
+    const short = FIT_FLOOR - b.fitTotal;
+    if (short > 0 && short <= V2_FIT_FLOOR_NEAR_MISS) {
+      return {
+        flagged: true,
+        source: "computed",
+        reason: `Fit ${b.fitTotal}/${FIT_MAX} against a fit floor of ${FIT_FLOOR} — ${short} point${short === 1 ? "" : "s"} short.`,
+      };
+    }
+    return null;
+  }
+  if (b.verdict.kind === "below_threshold") {
+    const short = threshold - b.total;
+    if (short > 0 && short <= V2_NEAR_MISS_MARGIN) {
+      return {
+        flagged: true,
+        source: "computed",
+        reason: `Scored ${b.total}/${V2_MAX_SCORE} against a promotion bar of ${threshold} — ${short} point${short === 1 ? "" : "s"} short.`,
+      };
+    }
+  }
+  return null;
+}
+
+// A rejection's score as a fraction of its own scale, so the two models'
+// rejections sort into one list on the same terms.
+function normalizedScore(c: SecondLookCandidate): number {
+  if (c.scoringModel === "v2") {
+    return c.breakdownV2 ? c.breakdownV2.ungatedTotal / V2_MAX_SCORE : -1;
+  }
+  return c.icpTotal === null ? -1 : c.icpTotal / ICP_MAX_SCORE;
+}
+
 // Which candidates are worth asking about: disqualified, carrying reasoning to
 // weigh, and not already flagged by subtraction — there is nothing to buy by
 // paying for a second opinion on a candidate the list is already marking.
@@ -151,16 +224,16 @@ export function computedFlag(
 // Ordered highest score first, the same order the list itself uses, then capped.
 export function selectForReview(
   candidates: SecondLookCandidate[],
-  threshold: number,
+  thresholds: SecondLookThresholds,
 ): { review: SecondLookCandidate[]; deferred: SecondLookCandidate[] } {
   const eligible = candidates
     .filter(
       (c) =>
         c.disqualified &&
-        computedFlag(c, threshold) === null &&
+        computedFlag(c, thresholds) === null &&
         triggeredWithReasons(c).length > 0,
     )
-    .sort((a, b) => (b.icpTotal ?? -1) - (a.icpTotal ?? -1));
+    .sort((a, b) => normalizedScore(b) - normalizedScore(a));
   return {
     review: eligible.slice(0, SECOND_LOOK_MAX_REVIEWED),
     // The ones this run has no opinion about. Named rather than counted,
@@ -175,6 +248,21 @@ export function selectForReview(
 function triggeredWithReasons(
   candidate: SecondLookCandidate,
 ): { label: string; reason: string }[] {
+  if (candidate.scoringModel === "v2") {
+    // The ICP model's hits carry their citation; the auditor reads the quote
+    // alongside the reason, because the quote is what the hit stands on.
+    return (candidate.breakdownV2 ? triggeredHits(candidate.breakdownV2) : [])
+      .filter((d) => d.reason.trim() !== "" || d.citation !== null)
+      .map((d) => ({
+        label: d.label,
+        reason: [
+          d.reason.trim(),
+          d.citation ? `Cited: “${d.citation.quote}” (${d.citation.source}).` : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      }));
+  }
   if (!candidate.breakdown) return [];
   return triggeredDisqualifiers(candidate.breakdown)
     .filter((d) => d.reason.trim() !== "")
@@ -189,7 +277,7 @@ const SYSTEM_PROMPT = [
   "The only question is whether the stated reason actually establishes what it claims. A reason that cites something specific and observed is clear-cut. A reason that hedges, generalises, reads as an assumption, or rests on the absence of evidence rather than on evidence is not.",
   "You are conservative: most automated rejections are correct, and flagging one costs somebody's time. Where the reason plainly establishes the disqualifier, you say so and move on.",
   // The lowercase "json" is load-bearing here exactly as it is in
-  // src/lib/icpAssist.ts — DeepSeek refuses a response_format json_object
+  // src/lib/icpScoringAssist.ts — DeepSeek refuses a response_format json_object
   // request unless the word appears in a prompt.
   "You reply with a single JSON object in exactly the shape requested, and nothing else — your reply is parsed as json, so any prose around it breaks it.",
 ].join(" ");
@@ -210,9 +298,13 @@ function userPrompt(candidates: SecondLookCandidate[]): string {
   const blocks = candidates.map((candidate, i) => {
     const lines = [
       `[${i + 1}] ${candidate.clinicName}`,
-      candidate.icpTotal === null
-        ? "Scored categories: none recorded"
-        : `Scored categories: ${candidate.icpTotal}/${ICP_MAX_SCORE} (scoring continued past the disqualifier, so this is what it would have totalled)`,
+      candidate.scoringModel === "v2"
+        ? candidate.breakdownV2
+          ? `Fit and signals before the disqualifier: ${candidate.breakdownV2.ungatedTotal}/${V2_MAX_SCORE} (fit ${candidate.breakdownV2.fitTotal}/${FIT_MAX}) — what it would have totalled`
+          : "Scored categories: none recorded"
+        : candidate.icpTotal === null
+          ? "Scored categories: none recorded"
+          : `Scored categories: ${candidate.icpTotal}/${ICP_MAX_SCORE} (scoring continued past the disqualifier, so this is what it would have totalled)`,
       "Disqualifiers that fired:",
     ];
     for (const d of triggeredWithReasons(candidate)) {
@@ -317,7 +409,7 @@ export function summariseRun(summary: SecondLookRunSummary): string {
   }
   const parts: string[] = [];
   if (summary.computed > 0) {
-    parts.push(`${summary.computed} scored close to the bar`);
+    parts.push(`${summary.computed} scored close to the bar or the fit floor`);
   }
   if (summary.assisted > 0) {
     parts.push(

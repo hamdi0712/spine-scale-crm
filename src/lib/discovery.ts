@@ -44,6 +44,7 @@ export const DISCOVERY_STATUSES = [
   "SCORED",
   "QUALIFIED_NO_CONTACT",
   "PROMOTED",
+  "HELD_CHIRO",
   "REJECTED",
   "FAILED",
 ] as const;
@@ -59,6 +60,7 @@ export const DISCOVERY_STATUS_LABELS: Record<DiscoveryStatus, string> = {
   // records written before that change still read as themselves.
   QUALIFIED_NO_CONTACT: "Qualified — awaiting promotion",
   PROMOTED: "Promoted",
+  HELD_CHIRO: "Held — Tier 2 chiro",
   REJECTED: "Rejected",
   FAILED: "Failed",
 };
@@ -72,8 +74,11 @@ export const DISCOVERY_STATUS_MEANINGS: Record<DiscoveryStatus, string> = {
   SCORED: "Scored, but neither promoted nor rejected — the next run finishes it",
   QUALIFIED_NO_CONTACT:
     "Scored at or above the bar and held back for a decision maker, which is no longer a condition of promotion — the next queue run puts it through",
-  PROMOTED: "Became a lead in the pipeline — by scoring 5+, or by override",
-  REJECTED: "Disqualified, or scored C-tier — kept with its reasoning",
+  PROMOTED: "Became a lead in the pipeline — by clearing the promotion bar, or by override",
+  HELD_CHIRO:
+    "Qualified under the ICP model, but its primary service is chiropractic — held for you to Promote or Reject, with its payment model on the card",
+  REJECTED:
+    "Disqualified, not a confirmed fit, or scored below the bar — kept with its reasoning",
   FAILED:
     "An actor failed, or too little was gathered to attempt the card — either way nothing was scored",
 };
@@ -275,6 +280,10 @@ export function parseBreakdown(raw: string | null | undefined): DiscoveryBreakdo
     return null;
   }
   const body = parsed as Record<string, unknown>;
+  // A new-model breakdown (src/lib/icpScoring.ts) is not this shape, however
+  // much of it looks alike — it carries a tier too. Read those through
+  // parseStoredBreakdown in src/lib/storedBreakdown.ts instead.
+  if (body.model === "v2") return null;
   const tier = body.tier;
   if (
     tier !== "A" &&
@@ -615,6 +624,8 @@ export interface DiscoveryProcessResult {
   // 9/10", "Rejected: scored C-tier 3/10", "Failed: …".
   headline: string;
   total: number | null;
+  // What the total is out of: 10 under the old model, 100 under the ICP model.
+  max: number | null;
   tier: IcpTier | null;
   promotedLeadId: string | null;
   // What each part of the chain did, for the row that expands under it.

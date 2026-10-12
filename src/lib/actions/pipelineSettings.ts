@@ -13,6 +13,7 @@
 // already been through the queue, which is the point of a stored breakdown.
 
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
 import {
   PIPELINE_STEP_KEYS,
   PipelineSettings,
@@ -22,10 +23,18 @@ import {
   readClinicDiscoveryActorId,
   readDecisionMakerActorId,
   readPromotionThreshold,
+  readPromotionThresholdV2,
 } from "@/lib/pipelineSettings";
-import { savePipelineSettings as write } from "@/lib/pipelineSettingsStore";
+import {
+  loadPipelineSettings,
+  savePipelineSettings as write,
+} from "@/lib/pipelineSettingsStore";
 
 export async function savePipelineSettings(formData: FormData): Promise<void> {
+  // The scoring switch is not on this form. It is thrown from Compare scoring,
+  // after a dry run has been read, so saving the chain here keeps whichever
+  // model is in force rather than resetting it.
+  const current = await loadPipelineSettings();
   const steps = Object.fromEntries(
     PIPELINE_STEP_KEYS.map((key) => [
       key,
@@ -49,6 +58,10 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
       enabled: formData.get("decisionMakerEnabled") === "on",
       actorId: readDecisionMakerActorId(formData.get("decisionMakerActorId")),
     },
+    scoringModel: current.scoringModel,
+    promotionThresholdV2: formData.has("promotionThresholdV2")
+      ? readPromotionThresholdV2(formData.get("promotionThresholdV2"))
+      : current.promotionThresholdV2,
   };
 
   await write(settings);
@@ -57,5 +70,41 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
   // its run from them, and the discovery list is where both are pressed.
   revalidatePath("/settings/pipeline");
   revalidatePath("/discovery");
+  revalidatePath("/discovery/compare");
   revalidatePath("/pipeline");
+}
+
+// "Apply new scoring" — and the way back. The only write of scoringModel in
+// the app. Applying is refused until a comparison run has finished, which is
+// the whole of the gate: the switch exists to be thrown after reading what it
+// would change, not before.
+export async function setScoringModel(model: "v1" | "v2"): Promise<{ ok: boolean; error?: string }> {
+  if (model === "v2") {
+    const finished = await prisma.scoringComparisonRun.findFirst({
+      where: { completedAt: { not: null } },
+      select: { id: true },
+    });
+    if (!finished) {
+      return {
+        ok: false,
+        error: "Run Compare scoring to the end and review it first — the new model is applied only after a dry run.",
+      };
+    }
+    const icp = await prisma.icpDefinition.findFirst({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    if (!icp) {
+      return {
+        ok: false,
+        error: "No ICP Definition is active. Switch one on under Settings → ICP first.",
+      };
+    }
+  }
+  const current = await loadPipelineSettings();
+  await write({ ...current, scoringModel: model });
+  revalidatePath("/settings/pipeline");
+  revalidatePath("/discovery");
+  revalidatePath("/discovery/compare");
+  return { ok: true };
 }

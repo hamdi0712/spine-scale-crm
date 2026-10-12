@@ -26,6 +26,7 @@
 // this module is what both the server and the settings form agree on.
 
 import { ICP_MAX_SCORE } from "@/lib/icp";
+import { DEFAULT_V2_PROMOTION_THRESHOLD, V2_MAX_SCORE } from "@/lib/icpWeights";
 import { normalizeApifyId } from "@/lib/apifyId";
 import { GOOGLE_SEARCH_ACTOR_ID } from "@/lib/googleSearch";
 
@@ -108,6 +109,13 @@ export interface PipelineSettings {
   // (src/lib/decisionMaker.ts). Same shape again, and off for the same reason:
   // it spends actor runs the moment somebody presses the button.
   decisionMaker: PipelineStepSetting;
+  // Which framework Process Queue scores with. "v1" until somebody has read a
+  // Compare scoring dry run and pressed Apply new scoring (src/app/(app)/
+  // discovery/compare) — never switched by the settings form itself.
+  scoringModel: "v1" | "v2";
+  // The ICP model's own bar, out of V2_MAX_SCORE. Read only when
+  // scoringModel is "v2", and by Compare scoring.
+  promotionThresholdV2: number;
 }
 
 // The score a candidate has to reach to be promoted rather than rejected. The
@@ -121,6 +129,10 @@ export const DEFAULT_PROMOTION_THRESHOLD = 5;
 // score is even measured on.
 export const MIN_PROMOTION_THRESHOLD = 0;
 export const MAX_PROMOTION_THRESHOLD = ICP_MAX_SCORE;
+
+// The same bounds on the ICP model's scale, out of 100.
+export const MAX_PROMOTION_THRESHOLD_V2 = V2_MAX_SCORE;
+export { DEFAULT_V2_PROMOTION_THRESHOLD };
 
 // What Clinic-First Discovery runs unless the settings page says otherwise.
 // The Maps crawler is the sensible starting point — it is already in this
@@ -168,6 +180,8 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
     enabled: DEFAULT_DECISION_MAKER_ENABLED,
     actorId: DEFAULT_DECISION_MAKER_ACTOR_ID,
   },
+  scoringModel: "v1",
+  promotionThresholdV2: DEFAULT_V2_PROMOTION_THRESHOLD,
 };
 
 // ─── Reading a row ─────────────────────────────────────────────────────────
@@ -209,6 +223,10 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
       enabled: record.decisionMakerEnabled === true,
       actorId: readDecisionMakerActorId(record.decisionMakerActorId),
     },
+    // Anything but a stored "v2" is the old model: the switch is only ever
+    // thrown on purpose.
+    scoringModel: record.scoringModel === "v2" ? "v2" : "v1",
+    promotionThresholdV2: readPromotionThresholdV2(record.promotionThresholdV2),
   };
 }
 
@@ -251,6 +269,18 @@ export function readPromotionThreshold(raw: unknown): number {
   return rounded;
 }
 
+// The ICP model's bar, held to its own scale the same way.
+export function readPromotionThresholdV2(raw: unknown): number {
+  const n =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && raw.trim() !== ""
+        ? Number(raw)
+        : NaN;
+  if (!Number.isFinite(n)) return DEFAULT_V2_PROMOTION_THRESHOLD;
+  return Math.min(Math.max(Math.round(n), MIN_PROMOTION_THRESHOLD), MAX_PROMOTION_THRESHOLD_V2);
+}
+
 // The settings as the flat columns the table stores. Written here rather than
 // at the call site so the column names live next to the keys they came from.
 export function pipelineSettingsRow(
@@ -267,6 +297,8 @@ export function pipelineSettingsRow(
   row.clinicDiscoveryActorId = settings.clinicDiscovery.actorId;
   row.decisionMakerEnabled = settings.decisionMaker.enabled;
   row.decisionMakerActorId = settings.decisionMaker.actorId;
+  row.scoringModel = settings.scoringModel;
+  row.promotionThresholdV2 = settings.promotionThresholdV2;
   return row;
 }
 
@@ -283,6 +315,8 @@ export function isPipelineStepKey(v: unknown): v is PipelineStepKey {
 export function isDefaultPipelineSettings(settings: PipelineSettings): boolean {
   return (
     settings.promotionThreshold === DEFAULT_PROMOTION_THRESHOLD &&
+    settings.promotionThresholdV2 === DEFAULT_V2_PROMOTION_THRESHOLD &&
+    settings.scoringModel === "v1" &&
     settings.clinicDiscovery.enabled === DEFAULT_CLINIC_DISCOVERY_ENABLED &&
     settings.clinicDiscovery.actorId === DEFAULT_CLINIC_DISCOVERY_ACTOR_ID &&
     settings.decisionMaker.enabled === DEFAULT_DECISION_MAKER_ENABLED &&

@@ -1,7 +1,7 @@
 import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { leadTier } from "@/lib/icp";
+import { leadTier } from "@/lib/leadScore";
 import { FIRST_MESSAGE_MECHANISMS } from "@/lib/outreachSequence";
 import { openerComparison } from "@/lib/outreachSequenceRead";
 import { setMessageMechanism } from "@/lib/actions/outreachSequence";

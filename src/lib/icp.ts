@@ -307,12 +307,9 @@ export function scoreIcp(answers: IcpAnswers): IcpResult {
   };
 }
 
-// A clinic only carries a tier once it has actually been scored — an untouched
-// lead is "not scored", not a C-tier.
-export function leadTier(answers: IcpAnswers): IcpTier | null {
-  if (!answers.icpScoredAt) return null;
-  return scoreIcp(answers).tier;
-}
+// A lead's tier is read through leadTier in src/lib/leadScore.ts, which
+// prefers the ICP model's breakdown where a lead has one and falls back to the
+// answers above where it does not.
 
 // Guards against out-of-range values reaching the total (bad form post, or a
 // category whose options changed after leads were scored).

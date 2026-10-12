@@ -14,7 +14,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconBuildingStore, IconGitBranch, IconKey } from "@tabler/icons-react";
+import {
+  IconBuildingStore,
+  IconGitBranch,
+  IconKey,
+  IconTarget,
+} from "@tabler/icons-react";
 
 export const SETTINGS_SECTIONS = [
   {
@@ -27,7 +32,14 @@ export const SETTINGS_SECTIONS = [
     label: "Pipeline",
     Glyph: IconGitBranch,
   },
-  // Last of the three because it is the newest and the least often opened —
+  // Beside Pipeline because it is the other half of how a candidate is judged:
+  // that page sets the bar, this one says what a fit is.
+  {
+    href: "/settings/icp",
+    label: "ICP",
+    Glyph: IconTarget,
+  },
+  // Last because it is the newest and the least often opened —
   // keys and the enrichment chain are changed while something is being set up,
   // and this is written once and then left alone for months.
   {

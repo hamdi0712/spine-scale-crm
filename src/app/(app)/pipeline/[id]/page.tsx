@@ -9,7 +9,6 @@ import {
   deleteLead,
   markConnectionRequestSent,
   moveLeadStage,
-  saveIcpScorecard,
   updateLead,
 } from "@/lib/actions/leads";
 import { applyEnrichSelection, runLeadEnrichment } from "@/lib/actions/enrich";
@@ -24,14 +23,15 @@ import {
   saveMessageContent,
   setMessageMechanism,
 } from "@/lib/actions/outreachSequence";
-import { suggestIcpScores } from "@/lib/actions/icpAssist";
+import {
+  saveIcpScorecardV2,
+  suggestIcpScoresV2,
+} from "@/lib/actions/icpScorecardV2";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
-import {
-  ICP_SCORING_RULE,
-  leadTier,
-  suggestedStaffSizeScore,
-} from "@/lib/icp";
+import { leadBreakdownV2, leadTier } from "@/lib/leadScore";
+import { loadActiveIcp } from "@/lib/icpDefinitionStore";
+import { emptyBreakdownV2 } from "@/lib/icpScoring";
 import { enrichPlan } from "@/lib/leadEnrich";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { hasAssistEvidence } from "@/lib/icpAssist";
@@ -51,7 +51,8 @@ import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
 import OutreachSequencePanel from "@/components/OutreachSequencePanel";
-import IcpScorecard from "@/components/IcpScorecard";
+import IcpScorecardV2 from "@/components/IcpScorecardV2";
+import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 import StatChip from "@/components/StatChip";
 
@@ -87,12 +88,12 @@ export default async function LeadDetailPage({
   // ordinary stageChangedAt behind it — and the way back out is the stage
   // select in the form below, like any other move.
   const markNoContact = moveLeadStage.bind(null, lead.id, "NO_CONTACT");
-  const saveScorecard = saveIcpScorecard.bind(null, lead.id);
+  const saveScorecard = saveIcpScorecardV2.bind(null, lead.id);
   const markConnectionSent = markConnectionRequestSent.bind(null, lead.id);
   const clearConnectionSent = clearConnectionRequestSent.bind(null, lead.id);
   const runEnrichment = runLeadEnrichment.bind(null, lead.id);
   const applySelection = applyEnrichSelection.bind(null, lead.id);
-  const suggestScores = suggestIcpScores.bind(null, lead.id);
+  const suggestScores = suggestIcpScoresV2.bind(null, lead.id);
   // One bound id for the whole sequence — every action below is scoped to the
   // record whose page this is, and the only id the browser ever names is a
   // message's, which each action matches against this lead's own rows.
@@ -107,13 +108,22 @@ export default async function LeadDetailPage({
     markReplied: markReplied.bind(null, lead.id),
     clearReplied: clearReplied.bind(null, lead.id),
   };
-  const staffSizeSuggestion = suggestedStaffSizeScore(lead.staffCountRaw);
-
   // What an enrichment run would do with this lead as it stands, worked out
   // here so the panel can say which actors it is skipping before it runs
   // anything — including any step turned off in Pipeline Settings, which the
   // plan reads from the same row the run will.
-  const plan = enrichPlan(lead, await loadPipelineSettings());
+  const settings = await loadPipelineSettings();
+  const plan = enrichPlan(lead, settings);
+
+  // The scorecard. The ICP model's card where the lead has one; a blank card
+  // against the active ICP where it does not, to score by hand or with the
+  // assist. The old A–D answers are shown under it, read-only, for any lead
+  // that was scored that way.
+  const storedV2 = leadBreakdownV2(lead);
+  const activeIcp = await loadActiveIcp();
+  const blankV2 = activeIcp
+    ? emptyBreakdownV2(activeIcp, settings.promotionThresholdV2, new Date())
+    : null;
 
   // Enrichment is scraped evidence with a date on it, so it is shown as its
   // own thing rather than mixed into the editable details — a one-line summary
@@ -737,47 +747,32 @@ export default async function LeadDetailPage({
       </section>
 
       <section className="mt-8">
-        <div className="mb-4 flex items-baseline justify-between">
+        <div className="mb-4 flex items-baseline justify-between gap-4">
           <h2 className="display text-xl font-semibold">ICP Scorecard</h2>
           <p className="helper-text max-w-xl text-right text-sm text-muted">
-            {ICP_SCORING_RULE}
+            Fit is judged first; signals only rank fits against each other
           </p>
         </div>
-        <IcpScorecard
-          action={saveScorecard}
-          // Reads the enrichment above and suggests category B and two of the
-          // Automation Gap boxes. Same rule as the staff count below it: the
-          // card pre-selects what comes back and stores none of it until the
-          // card is saved. The same test the action applies decides whether
-          // the button is offered at all.
-          suggestScores={suggestScores}
-          enriched={hasAssistEvidence(lead)}
-          // A staff count that came in with the lead (usually from a CSV
-          // import) suggests category A's band. Computed here, offered by the
-          // card, and stored by nothing until the card is saved.
-          staffSizeSuggestion={
-            staffSizeSuggestion == null || lead.staffCountRaw == null
-              ? null
-              : { staffCount: lead.staffCountRaw, points: staffSizeSuggestion }
-          }
-          values={{
-            icpDqSurgicalPractice: lead.icpDqSurgicalPractice,
-            icpDqSoloNoStaff: lead.icpDqSoloNoStaff,
-            icpDqFranchiseLocked: lead.icpDqFranchiseLocked,
-            icpDqSystemComplete: lead.icpDqSystemComplete,
-            icpDqOutOfRegion: lead.icpDqOutOfRegion,
-            icpStaffSize: lead.icpStaffSize,
-            icpPackageEconomics: lead.icpPackageEconomics,
-            icpBudgetSignal: lead.icpBudgetSignal,
-            icpGapBooking: lead.icpGapBooking,
-            icpGapReviews: lead.icpGapReviews,
-            icpGapRemarketing: lead.icpGapRemarketing,
-            icpNotes: lead.icpNotes,
-            icpScoredAt: lead.icpScoredAt
-              ? lead.icpScoredAt.toISOString()
-              : null,
-          }}
-        />
+        <div className="space-y-4">
+          <IcpScorecardV2
+            // Keyed on what is stored, so a save re-seeds the card from the
+            // saved breakdown rather than keeping the pre-save state.
+            key={lead.icpBreakdownAt?.toISOString() ?? "unscored"}
+            stored={storedV2}
+            blank={blankV2}
+            action={saveScorecard}
+            suggest={activeIcp ? suggestScores : null}
+            enriched={hasAssistEvidence(lead)}
+            activeIcpName={activeIcp?.name ?? null}
+          />
+          {lead.icpScoredAt && (
+            <OldModelScorecard
+              answers={lead}
+              notes={lead.icpNotes}
+              inForce={storedV2 === null}
+            />
+          )}
+        </div>
       </section>
     </div>
   );

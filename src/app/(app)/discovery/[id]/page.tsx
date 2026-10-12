@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import {
   deleteDiscoveryCandidate,
   promoteDiscoveryCandidate,
+  rejectHeldCandidate,
   requeueDiscoveryCandidate,
   updateDiscoveryCandidate,
 } from "@/lib/actions/discovery";
@@ -13,13 +14,14 @@ import {
   DISCOVERY_SOURCE_KIND_MEANINGS,
   readDiscoverySourceKind,
 } from "@/lib/clinicDiscovery";
+import { DISCOVERY_STATUS_MEANINGS, DiscoveryStatus } from "@/lib/discovery";
 import {
-  DISCOVERY_STATUS_MEANINGS,
-  DiscoveryStatus,
-  parseBreakdown,
-} from "@/lib/discovery";
+  OLD_MODEL_LABEL,
+  maxScoreFor,
+  parseStoredBreakdown,
+} from "@/lib/storedBreakdown";
 import { MAX_BATCH_LABEL_LENGTH } from "@/lib/discoveryBatch";
-import { ICP_MAX_SCORE, IcpTier } from "@/lib/icp";
+import { IcpTier } from "@/lib/icp";
 import { fmtDateTime } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES } from "@/lib/timezones";
@@ -28,6 +30,9 @@ import ConfirmForm from "@/components/ConfirmForm";
 import DiscoveryBreakdownView, {
   DiscoveryScoreHeader,
 } from "@/components/DiscoveryBreakdown";
+import IcpBreakdownV2View, {
+  IcpBreakdownV2Header,
+} from "@/components/IcpBreakdownV2View";
 import DecisionMakerPanel from "@/components/DecisionMakerPanel";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import {
@@ -61,13 +66,18 @@ export default async function DiscoveryCandidatePage({
   const promote = promoteDiscoveryCandidate.bind(null, candidate.id);
   const remove = deleteDiscoveryCandidate.bind(null, candidate.id);
   const requeue = requeueDiscoveryCandidate.bind(null, candidate.id);
+  const rejectHeld = rejectHeldCandidate.bind(null, candidate.id);
+  const held = candidate.status === "HELD_CHIRO";
   // Read here rather than in the panel: which actor the stage would search
   // with, and whether it is on at all, are settings, and a client component
   // must not pull the module that reads them.
   const settings = await loadPipelineSettings();
   const pathway = readDiscoverySourceKind(candidate.discoverySource);
 
-  const breakdown = parseBreakdown(candidate.icpBreakdown);
+  // Whichever model scored it. An old breakdown is shown as it was written and
+  // labelled as the old model's; a new one with its citations.
+  const stored = parseStoredBreakdown(candidate.icpBreakdown);
+  const breakdown = stored?.breakdown ?? null;
   const enriched =
     candidate.metaAdsSignal !== null ||
     candidate.reviewCount !== null ||
@@ -91,7 +101,7 @@ export default async function DiscoveryCandidatePage({
             <IcpTierBadge tier={(candidate.icpTier as IcpTier | null) ?? null} />
             {candidate.icpTotal != null && (
               <span className="num text-sm text-muted">
-                {candidate.icpTotal} / {ICP_MAX_SCORE}
+                {candidate.icpTotal} / {maxScoreFor(stored?.model ?? candidate.scoringModel)}
               </span>
             )}
           </div>
@@ -138,13 +148,25 @@ export default async function DiscoveryCandidatePage({
             <ConfirmForm
               action={promote}
               message={
-                breakdown
-                  ? `Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`
-                  : `Promote ${candidate.clinicName} to the pipeline? It has never been scored, so the lead arrives with an empty ICP scorecard.`
+                held
+                  ? `Promote ${candidate.clinicName} to the pipeline? It qualified and was held only because its primary service is chiropractic. Its scorecard comes with it and stays editable on the lead.`
+                  : breakdown
+                    ? `Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`
+                    : `Promote ${candidate.clinicName} to the pipeline? It has never been scored, so the lead arrives with an empty ICP scorecard.`
               }
+              className={held ? "btn-primary shrink-0" : "btn shrink-0"}
+            >
+              {held ? "Promote" : "Promote anyway"}
+            </ConfirmForm>
+          )}
+          {/* The other half of the Tier 2 chiro hold. */}
+          {held && (
+            <ConfirmForm
+              action={rejectHeld}
+              message={`Reject ${candidate.clinicName}? It moves to the Rejected list with its scoring kept, where Promote anyway still works.`}
               className="btn shrink-0"
             >
-              Promote anyway
+              Reject
             </ConfirmForm>
           )}
           {/* The way back into the queue for a candidate the queue no longer
@@ -489,25 +511,36 @@ export default async function DiscoveryCandidatePage({
 
       <section className="mt-8">
         <h2 className="display mb-4 text-xl font-semibold">ICP Scorecard</h2>
-        {breakdown ? (
+        {stored?.model === "v2" ? (
           <div className="card">
-            <DiscoveryScoreHeader breakdown={breakdown} />
-            <DiscoveryBreakdownView breakdown={breakdown} />
+            <IcpBreakdownV2Header breakdown={stored.breakdown} />
+            <IcpBreakdownV2View breakdown={stored.breakdown} />
+            <p className="helper-text border-t border-line/60 px-6 py-4 text-xs leading-relaxed text-muted">
+              The transcript of one run against the ICP Definition as it stood
+              that day, stored as written. The editable scorecard lives on the
+              lead, where every line arrives pre-filled and can be overridden.
+            </p>
+          </div>
+        ) : stored?.model === "v1" ? (
+          <div className="card">
+            <div className="border-b border-line/60 bg-wash/50 px-6 py-2.5">
+              <p className="text-xs font-medium text-muted">{OLD_MODEL_LABEL}</p>
+            </div>
+            <DiscoveryScoreHeader breakdown={stored.breakdown} />
+            <DiscoveryBreakdownView breakdown={stored.breakdown} />
             <p className="helper-text border-t border-line/60 px-6 py-4 text-xs leading-relaxed text-muted">
               This is the transcript of one automated run against the evidence
               it had that day, stored as it was written — it does not re-read
-              itself when the framework changes. The editable scorecard lives on
-              the lead, where every one of these answers arrives pre-filled and
-              can be corrected.
+              itself when the framework changes. Compare scoring shows what the
+              ICP model would make of it.
             </p>
           </div>
         ) : (
           <div className="card px-6 py-8 text-center">
             <p className="text-sm font-medium">Not scored yet</p>
             <p className="helper-text mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted">
-              Scoring happens in “Process queue” — five hard disqualifiers,
-              four categories out of {ICP_MAX_SCORE}, every answer with the
-              sentence behind it. Nothing is scored by hand here, deliberately.
+              Scoring happens in “Process queue”, every answer with the
+              evidence behind it. Nothing is scored by hand here, deliberately.
             </p>
           </div>
         )}
