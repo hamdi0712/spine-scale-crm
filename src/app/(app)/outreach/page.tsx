@@ -1,7 +1,8 @@
 import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { ICP_MAX_SCORE, IcpTier, leadTier, scoreIcp } from "@/lib/icp";
+import { IcpTier } from "@/lib/icp";
+import { leadScore } from "@/lib/leadScore";
 import { fmtDate } from "@/lib/format";
 import { IcpScoreBadge } from "@/components/Badge";
 import Icon from "@/components/Icons";
@@ -35,7 +36,8 @@ export default async function OutreachQueuePage() {
   // the filter runs here rather than in the query — the same derivation the
   // pipeline uses, from the same helper.
   const rows = leads
-    .map((l) => ({
+    .map((l) => ({ l, score: leadScore(l) }))
+    .map(({ l, score }) => ({
       id: l.id,
       clinicName: l.clinicName,
       contactName: l.contactName,
@@ -44,8 +46,10 @@ export default async function OutreachQueuePage() {
       timeZone: l.timeZone,
       email: l.email,
       createdAt: l.createdAt.toISOString(),
-      icpTier: leadTier(l),
-      icpTotal: l.icpScoredAt ? scoreIcp(l).total : null,
+      icpTier: score?.tier ?? null,
+      // Out of 10 or out of 100, by which model scored the lead.
+      icpTotal: score?.total ?? null,
+      icpMax: score?.max ?? null,
     }))
     .filter((l) => l.icpTier !== null && OUTREACH_TIERS.includes(l.icpTier));
 
@@ -116,7 +120,7 @@ export default async function OutreachQueuePage() {
                   <IcpScoreBadge
                     tier={row.icpTier}
                     total={row.icpTotal}
-                    max={ICP_MAX_SCORE}
+                    max={row.icpMax ?? 0}
                   />
                 </div>
               </div>

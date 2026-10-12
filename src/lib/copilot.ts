@@ -45,7 +45,7 @@
 // tradeoff table is answering a person with a deck.
 //
 // Nothing in this file touches the network or the database — it is the prompt,
-// the schemas and the readers, in the same arrangement as src/lib/icpAssist.ts.
+// the schemas and the readers, in the same arrangement as src/lib/icpScoringAssist.ts.
 // The call and the tool loop live in src/lib/actions/copilot.ts.
 
 import type { DeepSeekTool } from "@/lib/deepseek";

@@ -19,7 +19,7 @@
 // not what they look like.
 
 import { CONTACTED_STAGES } from "@/lib/constants";
-import { IcpAnswers, leadTier } from "@/lib/icp";
+import { LeadScoreInput, leadTier } from "@/lib/leadScore";
 
 // ─── Windows ───────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ export interface QualifiedLeads {
 }
 
 export function qualifiedLeads(
-  leads: (IcpAnswers & {
+  leads: (LeadScoreInput & {
     stage: string;
   })[],
 ): QualifiedLeads {

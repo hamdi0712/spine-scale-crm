@@ -39,6 +39,8 @@ import {
   defaultBatchLabel,
 } from "@/lib/discoveryBatch";
 import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
+import { FIT_FLOOR, FIT_MAX, SIGNALS_MAX } from "@/lib/icpWeights";
+import { V2_TIER_BANDS } from "@/lib/icpScoring";
 import { PipelineSettings } from "@/lib/pipelineSettings";
 import CostEstimate from "@/components/CostEstimate";
 import AiButton from "@/components/AiButton";
@@ -215,6 +217,7 @@ function QueueDialog({
           headline:
             "The run could not be reached. Check the server is still up — this candidate is still queued.",
           total: null,
+          max: null,
           tier: null,
           promotedLeadId: null,
           steps: [],
@@ -357,34 +360,69 @@ function QueueDialog({
                 reported one — both saved back, so the next run needn&rsquo;t
                 search again.
               </li>
-              <li>
-                <span className="num font-medium text-ink">2.</span> Score Staff
-                Size Fit and Budget Signal from the data, with no model
-                involved.
-              </li>
-              <li>
-                <span className="num font-medium text-ink">3.</span> Ask
-                DeepSeek for the five hard disqualifiers, Package/Economics, and
-                the three Automation Gap boxes — each keyword pre-checked first,
-                each answered with a reason.
-              </li>
-              <li>
-                <span className="num font-medium text-ink">4.</span> Total it
-                out of {ICP_MAX_SCORE}, band it —{" "}
-                <span className="num">{ICP_TIER_BANDS}</span> — and store the
-                whole breakdown.
-              </li>
-              <li>
-                <span className="num font-medium text-ink">5.</span> Anything
-                scoring{" "}
-                <span className="num">{settings.promotionThreshold}</span> or
-                more becomes a lead with its scorecard pre-filled; anything
-                disqualified or under the bar is rejected with its reasoning
-                kept. An actor that fails outright stops that candidate before
-                anything is scored, and so does evidence too thin to attempt the
-                card — two or more categories with nothing behind them is a
-                Failed with the missing inputs named, not a low score.
-              </li>
+              {settings.scoringModel === "v2" ? (
+                <>
+                  <li>
+                    <span className="num font-medium text-ink">2.</span> Check
+                    there is enough to judge fit. No website copy is Failed, not
+                    rejected — unless the clinic&rsquo;s own Maps listing shows it
+                    has no site.
+                  </li>
+                  <li>
+                    <span className="num font-medium text-ink">3.</span> Ask
+                    DeepSeek for cited findings against the active ICP:
+                    disqualifiers, services, decision-maker, location, size,
+                    buying triggers, payment model and the three automation
+                    gaps. Every quote is checked word for word against the
+                    evidence before it counts.
+                  </li>
+                  <li>
+                    <span className="num font-medium text-ink">4.</span> Any
+                    cited disqualifier scores 0. Otherwise fit out of {FIT_MAX}{" "}
+                    plus signals out of {SIGNALS_MAX}, banded{" "}
+                    <span className="num">{V2_TIER_BANDS}</span>.
+                  </li>
+                  <li>
+                    <span className="num font-medium text-ink">5.</span> Fit
+                    under <span className="num">{FIT_FLOOR}</span> is rejected
+                    as not a confirmed fit; a chiropractic-first clinic that
+                    qualifies is held for you; anything else scoring{" "}
+                    <span className="num">{settings.promotionThresholdV2}</span>{" "}
+                    or more becomes a lead with its scorecard attached.
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li>
+                    <span className="num font-medium text-ink">2.</span> Score Staff
+                    Size Fit and Budget Signal from the data, with no model
+                    involved.
+                  </li>
+                  <li>
+                    <span className="num font-medium text-ink">3.</span> Ask
+                    DeepSeek for the five hard disqualifiers, Package/Economics, and
+                    the three Automation Gap boxes — each keyword pre-checked first,
+                    each answered with a reason.
+                  </li>
+                  <li>
+                    <span className="num font-medium text-ink">4.</span> Total it
+                    out of {ICP_MAX_SCORE}, band it —{" "}
+                    <span className="num">{ICP_TIER_BANDS}</span> — and store the
+                    whole breakdown.
+                  </li>
+                  <li>
+                    <span className="num font-medium text-ink">5.</span> Anything
+                    scoring{" "}
+                    <span className="num">{settings.promotionThreshold}</span> or
+                    more becomes a lead with its scorecard pre-filled; anything
+                    disqualified or under the bar is rejected with its reasoning
+                    kept. An actor that fails outright stops that candidate before
+                    anything is scored, and so does evidence too thin to attempt the
+                    card — two or more categories with nothing behind them is a
+                    Failed with the missing inputs named, not a low score.
+                  </li>
+                </>
+              )}
             </ol>
           )}
 
@@ -405,7 +443,7 @@ function QueueDialog({
                         {item.result.total != null && (
                           <span className="num">
                             {" "}
-                            ({item.result.total}/{ICP_MAX_SCORE})
+                            ({item.result.total}/{item.result.max ?? ICP_MAX_SCORE})
                           </span>
                         )}
                       </p>
@@ -509,6 +547,8 @@ function QueueChip({ item }: { item: QueueItem }) {
         ? ["Running…", "bg-accent-soft text-accent"]
         : item.result?.status === "PROMOTED"
           ? ["Promoted", "bg-ok-soft text-ok"]
+          : item.result?.status === "HELD_CHIRO"
+            ? ["Held", "bg-purple-soft text-purple"]
           : item.result?.status === "REJECTED"
             ? ["Rejected", "bg-warn-soft text-warn"]
             : ["Failed", "bg-bad-soft text-bad"];

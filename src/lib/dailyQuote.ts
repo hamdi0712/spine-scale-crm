@@ -9,7 +9,7 @@
 //
 // Pure. No database, no network, no clock beyond the situation it is handed —
 // the call and the cache live in src/lib/dailyQuoteStore.ts, the same split as
-// src/lib/icpAssist.ts and its action.
+// src/lib/icpScoringAssist.ts and src/lib/icpScoringRun.ts.
 
 // ─── The day, as the model is told it ──────────────────────────────────────
 

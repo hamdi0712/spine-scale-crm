@@ -64,8 +64,14 @@ import {
   DISCOVERY_STATUS_LABELS,
   DISCOVERY_STATUS_MEANINGS,
   DiscoveryStatus,
-  parseBreakdown,
 } from "@/lib/discovery";
+import {
+  OLD_MODEL_LABEL,
+  maxScoreFor,
+  parseStoredBreakdown,
+} from "@/lib/storedBreakdown";
+import { IcpBreakdownV2, PAYMENT_MODEL_LABELS } from "@/lib/icpScoring";
+import { leadBreakdownV2, leadScore, leadScoreText, leadTier } from "@/lib/leadScore";
 import {
   HEALTH_ACTIONS,
   HEALTH_LABELS,
@@ -82,7 +88,6 @@ import {
   ICP_TIER_LABELS,
   ICP_TIER_ORDER,
   IcpTier,
-  leadTier,
   scoreIcp,
 } from "@/lib/icp";
 import { computeMetrics } from "@/lib/kpi";
@@ -269,6 +274,56 @@ function round(n: number | null): number | null {
 
 // The fence around third-party text. Null when a record has none, so a clinic
 // that has never been enriched does not arrive carrying an empty warning.
+// The ICP model's scorecard as the copilot reads it. Every quote is a line of
+// a clinic's own website, so the citations sit inside the untrusted fence with
+// the rest of the scraped copy; the app's own reasoning stays outside it.
+function v2ForCopilot(b: IcpBreakdownV2) {
+  const rows = [...b.fit, ...b.signals];
+  return {
+    model: "ICP model — fit and signals, out of 100",
+    scoredAgainst: b.icp.name,
+    scoredAt: b.scoredAt || null,
+    verdict: b.verdict.reason,
+    total: b.total,
+    tier: b.tier,
+    fit: `${b.fitTotal} of ${b.fit.reduce((sum, r) => sum + r.max, 0)}`,
+    signals: `${b.signalsTotal} of ${b.signals.reduce((sum, r) => sum + r.max, 0)}`,
+    disqualifiersTriggered: b.disqualifiers.filter((d) => d.triggered).map((d) => d.label),
+    criteria: rows.map((r) => ({
+      label: r.label,
+      points: r.points,
+      max: r.max,
+      reason: r.reason,
+      overridden: r.scoredPoints !== undefined,
+    })),
+    primaryService: b.primaryService.service,
+    heldAsTier2Chiro: b.verdict.kind === "held_chiro",
+    paymentModel: PAYMENT_MODEL_LABELS[b.paymentModel.model],
+    summary: b.summary || null,
+    [UNTRUSTED_CONTENT_KEY]: {
+      citations: [
+        ...b.disqualifiers
+          .filter((d) => d.triggered && d.citation)
+          .map((d) => ({ for: d.label, quote: d.citation!.quote, source: d.citation!.source })),
+        ...rows.flatMap((r) =>
+          r.citations.map((c) => ({ for: r.label, quote: c.quote, source: c.source })),
+        ),
+      ],
+    },
+  };
+}
+
+// The promotion rule in force, worded for whichever model the queue runs.
+function promotionRule(settings: {
+  scoringModel: "v1" | "v2";
+  promotionThreshold: number;
+  promotionThresholdV2: number;
+}): string {
+  return settings.scoringModel === "v2"
+    ? `A discovery candidate is scored against the active ICP Definition, out of 100. Any cited disqualifier rejects it; a fit under 40 of 60 rejects it as not a confirmed fit; a chiropractic-first clinic that would qualify is held for review; otherwise it needs ${settings.promotionThresholdV2} of 100 to be promoted.`
+    : `A discovery candidate needs ${settings.promotionThreshold} of ${ICP_MAX_SCORE} to be promoted into the pipeline; below that it is rejected.`;
+}
+
 function scraped(record: {
   websiteNotes: string | null;
   metaAdsSignal: string | null;
@@ -423,10 +478,7 @@ export async function getPipelineLeads(args: {
         stage: stageLabel(lead.stage),
         estValue: lead.estValue,
         icpTier: tierLabel(tierNow),
-        icpScore:
-          lead.icpScoredAt === null
-            ? null
-            : `${scoreIcp(lead).total} of ${ICP_MAX_SCORE}`,
+        icpScore: leadScoreText(lead),
         icpAction: tierNow ? ICP_TIER_ACTIONS[tierNow] : null,
         nextFollowUp: iso(lead.nextFollowUp),
         leadSource: lead.leadSource,
@@ -461,6 +513,8 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
 
   const score = scoreIcp(lead);
   const tier = leadTier(lead);
+  const current = leadScore(lead);
+  const v2 = leadBreakdownV2(lead);
 
   return {
     found: true,
@@ -499,34 +553,44 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
       content: m.content,
     })),
     icp: {
-      scored: lead.icpScoredAt !== null,
-      scoredAt: iso(lead.icpScoredAt),
+      // Which scorecard the tier and total below come from: the ICP model's,
+      // where the lead has one, and the old A–D answers where it does not.
+      scoringModel: current?.model === "v2" ? "ICP model, out of 100" : "old A–D scorecard, out of 10",
+      scored: current !== null,
       tier: tierLabel(tier),
       action: tier ? ICP_TIER_ACTIONS[tier] : null,
-      total: lead.icpScoredAt === null ? null : score.total,
-      maxScore: ICP_MAX_SCORE,
-      disqualified: score.disqualified,
-      // Every disqualifier, not only the triggered ones: "nothing disqualifies
-      // this lead" is an answer, and it needs the full list to be one.
-      disqualifiers: ICP_DISQUALIFIERS.map((d) => ({
-        label: d.label,
-        triggered: lead[d.key],
-      })),
-      categories: ICP_CATEGORIES.map((c) => ({
-        letter: c.letter,
-        title: c.title,
-        score: lead[c.key],
-        max: c.max,
-        // Which band that score is, in the framework's own words, so the model
-        // quotes the scorecard rather than paraphrasing a number.
-        band:
-          c.options.find((o) => o.points === lead[c.key])?.label ??
-          "Not scored",
-      })),
-      // Inverted on purpose — a gap is a point, because a gap is what this
-      // agency is hired to fill.
-      gaps: ICP_GAPS.map((g) => ({ label: g.label, present: lead[g.key] })),
-      notes: lead.icpNotes,
+      total: current?.total ?? null,
+      maxScore: current?.max ?? ICP_MAX_SCORE,
+      icpModelScorecard: v2 ? v2ForCopilot(v2) : null,
+      oldModel: {
+        label: v2 ? OLD_MODEL_LABEL : "The scorecard in force",
+        scored: lead.icpScoredAt !== null,
+        scoredAt: iso(lead.icpScoredAt),
+        total: lead.icpScoredAt === null ? null : score.total,
+        maxScore: ICP_MAX_SCORE,
+        disqualified: score.disqualified,
+        // Every disqualifier, not only the triggered ones: "nothing disqualifies
+        // this lead" is an answer, and it needs the full list to be one.
+        disqualifiers: ICP_DISQUALIFIERS.map((d) => ({
+          label: d.label,
+          triggered: lead[d.key],
+        })),
+        categories: ICP_CATEGORIES.map((c) => ({
+          letter: c.letter,
+          title: c.title,
+          score: lead[c.key],
+          max: c.max,
+          // Which band that score is, in the framework's own words, so the model
+          // quotes the scorecard rather than paraphrasing a number.
+          band:
+            c.options.find((o) => o.points === lead[c.key])?.label ??
+            "Not scored",
+        })),
+        // Inverted on purpose — a gap is a point, because a gap is what this
+        // agency is hired to fill.
+        gaps: ICP_GAPS.map((g) => ({ label: g.label, present: lead[g.key] })),
+        notes: lead.icpNotes,
+      },
     },
     enrichment: {
       enrichedAt: iso(lead.enrichedAt),
@@ -582,7 +646,7 @@ export async function getDiscoveryQueueStatus(): Promise<unknown> {
   );
 
   return {
-    promotionThreshold: `A candidate needs ${settings.promotionThreshold} of ${ICP_MAX_SCORE} to be promoted into the pipeline. Anything below that is rejected.`,
+    promotionThreshold: promotionRule(settings),
     countsByStatus: counts,
     statusMeanings: Object.fromEntries(
       DISCOVERY_STATUSES.map((s) => [
@@ -598,7 +662,7 @@ export async function getDiscoveryQueueStatus(): Promise<unknown> {
       )
       .reduce((s, g) => s + g._count, 0),
     recentCandidates: recent.map((c) => {
-      const breakdown = parseBreakdown(c.icpBreakdown);
+      const breakdown = parseStoredBreakdown(c.icpBreakdown)?.breakdown ?? null;
       return {
         id: c.id,
         clinicName: c.clinicName,
@@ -1317,6 +1381,7 @@ export async function getDiscoveryCandidates(args: {
       location: c.location,
       status: DISCOVERY_STATUS_LABELS[c.status as DiscoveryStatus] ?? c.status,
       icpTotal: c.icpTotal,
+      maxScore: maxScoreFor(c.scoringModel),
       icpTier: c.icpTier,
       disqualified: c.disqualified,
       disqualifiedReason: c.disqualifiedReason,
@@ -1348,7 +1413,8 @@ export async function getDiscoveryCandidateDetail(args: {
     };
   }
 
-  const breakdown = parseBreakdown(candidate.icpBreakdown);
+  const stored = parseStoredBreakdown(candidate.icpBreakdown);
+  const breakdown = stored?.model === "v1" ? stored.breakdown : null;
 
   return {
     found: true,
@@ -1377,7 +1443,8 @@ export async function getDiscoveryCandidateDetail(args: {
     outcome: {
       icpTotal: candidate.icpTotal,
       icpTier: candidate.icpTier,
-      maxScore: ICP_MAX_SCORE,
+      maxScore: maxScoreFor(stored?.model ?? candidate.scoringModel),
+      scoringModel: stored?.model === "v2" ? "ICP model, out of 100" : "old A–D scorecard, out of 10",
       disqualified: candidate.disqualified,
       disqualifiedReason: candidate.disqualifiedReason,
       failureReason: candidate.failureReason,
@@ -1386,8 +1453,11 @@ export async function getDiscoveryCandidateDetail(args: {
     // The transcript of the run that scored it, exactly as it was stored. It is
     // deliberately not recomputed: re-tuning the framework must not rewrite the
     // reason a clinic was rejected last month.
-    scoring: breakdown
+    scoring: stored?.model === "v2"
+      ? v2ForCopilot(stored.breakdown)
+      : breakdown
       ? {
+          label: OLD_MODEL_LABEL,
           scoredAt: breakdown.scoredAt,
           total: breakdown.total,
           tier: breakdown.tier,
@@ -1754,7 +1824,9 @@ export async function getPipelineSettings(): Promise<unknown> {
   return {
     note: "How the enrichment chain is configured right now. A step that is switched off simply does not run, which is the usual reason a lead has no website notes or no ads signal.",
     promotionThreshold: settings.promotionThreshold,
-    promotionRule: `A discovery candidate needs ${settings.promotionThreshold} of ${ICP_MAX_SCORE} to be promoted into the pipeline; below that it is rejected.`,
+    scoringModel: settings.scoringModel === "v2" ? "ICP model (applied)" : "old A–D scorecard (the ICP model has not been applied)",
+    promotionThresholdV2: settings.promotionThresholdV2,
+    promotionRule: promotionRule(settings),
     estimatedCostPerCandidate: fmtEstimate(costPerCandidate(settings)),
     steps: PIPELINE_STEP_KEYS.map((key) => ({
       step: PIPELINE_STEP_LABELS[key],
@@ -2706,10 +2778,7 @@ export async function searchLeads(args: {
         location: lead.location,
         stage: stageLabel(lead.stage),
         icpTier: tierLabel(tierNow),
-        icpScore:
-          lead.icpScoredAt === null
-            ? null
-            : `${scoreIcp(lead).total} of ${ICP_MAX_SCORE}`,
+        icpScore: leadScoreText(lead),
         // The sequence's gates, the same four instants getLeadOutreachLog
         // reports under `marks`. Acceptance is readable here so the common
         // follow-up question does not need a second call.

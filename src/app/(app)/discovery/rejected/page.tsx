@@ -2,13 +2,18 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { promoteDiscoveryCandidate } from "@/lib/actions/discovery";
 import { checkForSecondLooks } from "@/lib/actions/secondLook";
-import { parseBreakdown } from "@/lib/discovery";
-import { ICP_MAX_SCORE, IcpTier } from "@/lib/icp";
+import { IcpTier } from "@/lib/icp";
+import {
+  OLD_MODEL_LABEL,
+  maxScoreFor,
+  parseStoredBreakdown,
+} from "@/lib/storedBreakdown";
 import { fmtDate } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
 import { IcpTierBadge, SecondLookBadge } from "@/components/Badge";
 import ConfirmForm from "@/components/ConfirmForm";
 import DiscoveryBreakdownView from "@/components/DiscoveryBreakdown";
+import IcpBreakdownV2View from "@/components/IcpBreakdownV2View";
 import SecondLookPanel from "@/components/SecondLookPanel";
 
 export const dynamic = "force-dynamic";
@@ -21,16 +26,17 @@ export const dynamic = "force-dynamic";
 // "Rejected — C-tier" and nothing else would give nobody grounds to press the
 // override, which would make the override decorative.
 //
-// Two ways in: a disqualifier fired at Layer 1, or the clinic scored 0–4. The
-// filter separates them, because they are different arguments — one is "this
-// is not the kind of clinic we serve" and the other is "this one is, but not
-// well enough".
+// Two ways in under the old model — a disqualifier fired at Layer 1, or the
+// clinic scored 0–4 — and three under the ICP model, which adds "not a
+// confirmed fit". The filter separates a disqualification from everything
+// else, because they are different arguments — one is "this is not the kind of
+// clinic we serve" and the rest are "not well enough, or not shown to be".
 type Filter = "all" | "disqualified" | "ctier";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All rejected" },
   { key: "disqualified", label: "Disqualified" },
-  { key: "ctier", label: "C-tier" },
+  { key: "ctier", label: "Scored out" },
 ];
 
 export default async function RejectedCandidatesPage({
@@ -124,7 +130,7 @@ export default async function RejectedCandidatesPage({
       ) : (
         <div className="mt-8 space-y-6">
           {candidates.map((candidate) => {
-            const breakdown = parseBreakdown(candidate.icpBreakdown);
+            const stored = parseStoredBreakdown(candidate.icpBreakdown);
             const promote = promoteDiscoveryCandidate.bind(null, candidate.id);
             return (
               // A flagged row wears the same violet-edged glow the sweep's own
@@ -149,7 +155,8 @@ export default async function RejectedCandidatesPage({
                       />
                       {candidate.icpTotal != null && (
                         <span className="num text-sm text-muted">
-                          {candidate.icpTotal} / {ICP_MAX_SCORE}
+                          {candidate.icpTotal} /{" "}
+                          {maxScoreFor(stored?.model ?? candidate.scoringModel)}
                         </span>
                       )}
                       {candidate.secondLookFlagged && (
@@ -192,8 +199,15 @@ export default async function RejectedCandidatesPage({
                     Promote anyway
                   </ConfirmForm>
                 </div>
-                {breakdown ? (
-                  <DiscoveryBreakdownView breakdown={breakdown} />
+                {stored?.model === "v2" ? (
+                  <IcpBreakdownV2View breakdown={stored.breakdown} compact />
+                ) : stored?.model === "v1" ? (
+                  <>
+                    <p className="border-b border-line/60 bg-wash/50 px-6 py-2 text-xs font-medium text-muted">
+                      {OLD_MODEL_LABEL}
+                    </p>
+                    <DiscoveryBreakdownView breakdown={stored.breakdown} />
+                  </>
                 ) : (
                   <p className="px-6 py-5 text-xs leading-relaxed text-muted">
                     No breakdown was stored for this one, so there is nothing to

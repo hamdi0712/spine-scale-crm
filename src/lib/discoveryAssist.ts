@@ -1,8 +1,8 @@
-// The discovery queue's model call — what it is asked, and how the answer is
-// read.
+// The discovery queue's model call under the old A–D scorecard — what it is
+// asked, and how the answer is read. The ICP model's call is in
+// src/lib/icpScoringAssist.ts, and reuses the keyword pre-check below as is.
 //
-// This is the lead scorecard's scoring assist (src/lib/icpAssist.ts) asked a
-// longer question. Same model, same evidence, same rule that it scores what it
+// This was the old lead scorecard's scoring assist asked a longer question. Same model, same evidence, same rule that it scores what it
 // was given and returns null where it cannot: what changes is that a candidate
 // has nobody standing over it, so the queue needs the two things the lead
 // assist leaves to a human — a verdict on the five hard disqualifiers, and the

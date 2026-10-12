@@ -12,6 +12,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { DiscoveryBreakdown, leadScorecardPrefill } from "@/lib/discovery";
+import { IcpBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { isUsTimeZone } from "@/lib/timezones";
 
 // The stage a promoted candidate's lead starts at. An import is the top of the
@@ -27,9 +28,14 @@ export const PROMOTED_LEAD_STAGE = "NEW";
 // A breakdown of null is the honest case where a candidate is promoted before
 // it was ever scored — the lead is created with its fields and an unscored
 // card, which is exactly what it is.
+//
+// Which card the lead gets follows which model scored the candidate. An old
+// breakdown fills the old answer columns, as it always did; a new-model one
+// is stored whole on Lead.icpBreakdown and fills none of them, so the lead's
+// card opens on the Fit / Signals view with every citation the run made.
 export async function promoteToLead(
   candidateId: string,
-  breakdown: DiscoveryBreakdown | null,
+  breakdown: DiscoveryBreakdown | IcpBreakdownV2 | null,
   now: Date,
 ): Promise<string> {
   return prisma.$transaction(async (tx) => {
@@ -79,7 +85,14 @@ export async function promoteToLead(
         // was taken.
         reviewsCheckedAt:
           candidate.reviewCount === null ? null : candidate.enrichedAt,
-        ...(breakdown ? leadScorecardPrefill(breakdown, now) : {}),
+        ...(breakdown === null
+          ? {}
+          : "model" in breakdown && breakdown.model === "v2"
+            ? {
+                icpBreakdown: serializeBreakdownV2(breakdown),
+                icpBreakdownAt: now,
+              }
+            : leadScorecardPrefill(breakdown as DiscoveryBreakdown, now)),
       },
       select: { id: true },
     });

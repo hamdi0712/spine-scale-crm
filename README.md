@@ -10,8 +10,12 @@ are set under **Settings → API Keys** in the app, or in `.env` as
 app calls out anywhere.
 
 The funnel is Discovery → Pipeline → Clients. Everything scraped lands in
-Discovery, gets enriched and scored against the ICP framework there, and only
-what scores 5 or more out of 10 becomes a lead.
+Discovery, gets enriched and scored there, and only what clears the bar
+becomes a lead. Two scoring models exist: the original A–D scorecard (5 or
+more out of 10), and the **ICP model** — fit judged first against an editable
+ICP Definition, signals only ranking fits, out of 100 — which takes over
+Process queue only once it has been dry-run and applied (see *ICP Definition
+and the ICP model* below).
 
 ## Run it locally
 
@@ -162,8 +166,11 @@ again.
   logged — a log of everything is a log of nothing.
 - **Discovery** — the qualification step in front of the pipeline, and the rule
   it exists to enforce: *nothing reaches Pipeline unscored.* Every import lands
-  here as a candidate, not a lead. A candidate becomes a lead by scoring 5 or
-  more out of 10 on the ICP framework, and by nothing else.
+  here as a candidate, not a lead. A candidate becomes a lead by clearing the
+  promotion bar of whichever scoring model is applied — 5 or more out of 10 on
+  the A–D scorecard, or a confirmed fit at 60+ out of 100 on the ICP model —
+  and by nothing else. The steps below describe the A–D scorecard's run; the
+  ICP model's is described in its own section.
 
   The list is the pipeline table's pattern pointed at candidates — search, a
   status filter, sortable columns, a checkbox per row and one in the header,
@@ -332,6 +339,89 @@ again.
   saying what to do about it. Leave the token unset and only the CSV import
   works; nothing else in the app changes.
 
+- **ICP Definition and the ICP model** — who this agency is for, written down
+  once, and a scoring model that judges fit against it first.
+
+  **Settings → ICP** lists every profile (name, an active switch, an edit
+  link); one is active at a time, and switching one on switches the others
+  off. The edit page is three cards: *Basic information* (name, description),
+  *Target criteria* (target titles, core services, adjacent services and target
+  locations as tag lists — type, press + or Enter, remove with the chip's ×;
+  every tag is trimmed, lowercased and kept once — and a size band in
+  **locations**, not employees), and *Messaging context* (pain points, buying
+  triggers, and disqualifiers, one per line). The migration seeds **Primary
+  ICP**, active, with pain points and buying triggers left blank to be written.
+
+  The model (`src/lib/icpScoring.ts`; every weight in `src/lib/icpWeights.ts`):
+
+  1. **The gate.** Each disqualifier line is checked by DeepSeek, which may only
+     flag one with a verbatim quote and the page it came from. The app then
+     checks that quote is word for word in the stored evidence and throws the
+     flag out if it is not, if its reason rests on an absence or a hedge
+     ("couldn't find", "may be", "no mention"), if an insurance-only flag quotes
+     anything short of an explicit insurance-only statement (an insurer list is
+     not one, and nor are missing prices), if a single-provider flag meets a
+     LinkedIn headcount of 2+ or a cited team, or if an outside-the-US flag
+     quotes a US address. *No website* is never the model's call: it fires only
+     when a Google Maps listing exists and no website came from it, LinkedIn or
+     a search. Any surviving hit scores 0 and rejects, with the citation shown.
+     Discarded flags are kept on the breakdown, so the guard can be seen working.
+  2. **Fit, out of 60** — service match 35 (a cited core service; an adjacent
+     service — chiro, PT, pain management — earns 25 only with a cited spine,
+     disc or back-pain program, and nothing without one), decision-maker title
+     10, location 10, size 5 (location count in band *and* a cited team; an
+     unclear single provider is not a disqualifier, it just earns no size
+     points). No citation, no points.
+  3. **Signals, out of 40** — buying triggers found with citations (10 each,
+     20 max), the existing budget signal (ads running 10, a healthy review
+     count 5), and the existing three automation gaps (4/3/3).
+  4. **Fit floor.** Fit under 40 is *Not a confirmed fit* and rejected with
+     what was missing, whatever the total.
+  5. **Chiro hold.** A clinic that would be promoted but whose primary service
+     is chiropractic is held as **Held — Tier 2 chiro** instead, with Promote
+     and Reject on it and its payment model (cash, hybrid, insurance, not
+     stated) and the quote behind it on the card. *Discovery → Held — Tier 2
+     chiro* lists them, filterable by payment model.
+  6. Otherwise promoted at or above the bar (**Settings → Pipeline**, default
+     60). Tiers: A 80+, B 60–79, C below 60.
+
+  Not enough evidence to judge fit at all — no website copy, and no Maps
+  listing confirming there is no site; or a crawl that returned only page
+  titles and earned nothing — is **Failed** and retried, never Rejected. The
+  whole breakdown is stored: every criterion with its points, citations and
+  one-line reason, the ICP it was scored against, and the verdict. Website copy
+  reaches the model inside BEGIN/END UNTRUSTED EVIDENCE markers the system
+  prompt names as data, never instructions.
+
+  **Compare scoring** (*Discovery → Compare scoring*) is the dry run. It
+  rescores every Promoted and Rejected candidate, and every open lead that never
+  came through Discovery, from the enrichment already stored — one DeepSeek
+  call each, no Apify runs, no status changes — and shows the DeepSeek cost,
+  measured off the prompts it would send, before it starts. Results are grouped
+  into newly rejected, newly promoted, newly held as chiro, not enough evidence,
+  and unchanged, each row with its old and new score and status and the reason
+  for the flip. **Apply new scoring** unlocks only after a run has finished
+  with every record scored, and is the only thing that moves Process queue
+  onto the ICP model; it can be switched back. Nothing already scored is
+  rewritten either way: a candidate keeps the breakdown its run produced, and
+  old ones are labelled *Scored under the old model* wherever they show.
+
+  The rejected list and the second-look sweep read both models on their own
+  scales. Step 2 of the outreach sequence reads the active ICP's pain points as
+  background, never as evidence about the clinic; no template or rule changed.
+
+  `tools/verify-icp-scoring.ts` seeds a yoga studio, an education business, an
+  insurance-only PT clinic, a hybrid clinic that lists insurers, a 12-location
+  PE-backed group, a general sports chiro, a spinal decompression clinic, a
+  chiro with a disc program and two bare leads into a scratch database and runs
+  the real comparison against them (scripted model unless `DEEPSEEK_API_KEY` is
+  set):
+
+  ```bash
+  DATABASE_URL="file:$PWD/.verify.db" npx prisma migrate deploy
+  DATABASE_URL="file:$PWD/.verify.db" npx tsx tools/verify-icp-scoring.ts
+  ```
+
 - **Pipeline** — leads as a sortable/filterable table or a drag-and-drop Kanban
   board. **The table is what loads**: it is the view that answers the questions
   asked most often of a pipeline — who is where, what is scored, what is due —
@@ -350,16 +440,17 @@ again.
   lead*.
 
   Each lead has an append-only timestamped activity log and an **ICP
-  scorecard**: five Layer 1 disqualifiers (any one stops the scoring), then
-  four scored categories out of 10 — Staff Size Fit, Package/Economics, Budget
-  Signal, and Automation Gap — banding the lead A-tier (8–10), B-tier (5–7) or
-  C-tier (0–4). The tier shows as a badge on board cards and table rows. Only
-  the raw answers are stored; the total and tier are derived in
-  `src/lib/icp.ts`, so re-tuning the framework needs no migration. A lead
-  promoted out of Discovery arrives with that card already filled in from the
-  scoring run — visible, editable, and not locked — and an enriched lead can
-  have three of those answers suggested by a model at any time, pre-selected,
-  reasoned, and saved by nobody but you (*Suggest remaining scores*, below).
+  scorecard** on the ICP model: the disqualifier gate, then Fit and Signals,
+  every line with its citation, and every line overridable — pick a different
+  point value, tick or clear a disqualifier, mark the clinic chiropractic-first,
+  leave an override note — with the total, tier and verdict worked out live by
+  the same rules the queue uses. A lead promoted under the ICP model arrives
+  with the run's breakdown on it; any other lead starts on a blank card against
+  the active ICP, to score by hand or with *Score against the ICP* (below).
+  A lead scored under the old A–D scorecard keeps those answers, shown
+  read-only underneath as *Scored under the old model*, and they set its tier
+  until it has an ICP-model card of its own (`src/lib/leadScore.ts`). The tier
+  shows as a badge on board cards and table rows.
   Marking a
   lead Won enables one-click **Convert to Client**, which pre-fills a client
   record (including the estimated deal value as the monthly fee), archives the
@@ -439,34 +530,14 @@ again.
   or failed leaves that number older than the run above it. Nothing here
   refreshes itself.
 
-  **Suggest remaining scores**, on the lead's ICP scorecard, is where a model
-  is asked to read one lead's own evidence. It sends what the enrichment run
-  gathered —
-  website notes, the Meta ads signal, the review count — to DeepSeek
-  (`deepseek-v4-flash`) along with the framework's own text, and asks for three
-  things: a Package/Consult Economics score with a one-sentence reason, the two
-  Automation Gap boxes the evidence can speak to (booking widget, review
-  pattern) with the same, and two or three sentences on overall fit. The button
-  is disabled until the lead has been enriched, because without that there is
-  nothing to read and a model asked anyway would write three confident
-  sentences about nothing.
-
-  **It suggests; it never scores.** What comes back is pre-selected on the card
-  with its reasoning printed beside it, in the same brand-tinted note the
-  staff-count suggestion uses, and stored by nothing until somebody presses *Save
-  scorecard* — the server action makes no write at all. A suggestion that
-  landed on top of an answer already there says so (*it replaced the 1 pt you
-  had*), so nothing changes quietly. The reasoning is shown because a score
-  with no reason is not reviewable, which would make the review the button
-  insists on into a formality.
-
-  Three things are deliberately out of its reach. The third Automation Gap box
-  — follow-up/remarketing evidence — is judged on a retargeting pixel and
-  recurring ad creative, neither of which the enrichment run brings back, so it
-  is never suggested. A disqualified lead switches the whole scoring section
-  off, the assist with it. And an answer the evidence cannot support comes back
-  as null and leaves that category exactly as it was, because the prompt asks
-  for null rather than a guess.
+  **Score against the ICP**, on the lead's ICP scorecard, is where a model is
+  asked to read one lead's own evidence. It sends what the enrichment run
+  gathered to DeepSeek (`deepseek-v4-flash`) with the active ICP, exactly as the
+  queue does, and puts the result on the card — every line with its quote —
+  for review. **It suggests; it never scores**: the server action makes no
+  write, and nothing is stored until somebody presses *Save scorecard*. The
+  button is disabled until the lead has been enriched, because without that
+  there is nothing to read.
 
   The DeepSeek key is set the same way the Apify token is — **Settings → API
   Keys** first, `DEEPSEEK_API_KEY` in `.env` as the fallback — and is read only
@@ -474,7 +545,7 @@ again.
   a bearer header. It is never rendered back to the browser in full either. A
   missing key, a rejected one, a key without access to the model, spent credit,
   a rate limit, a request that times out, an answer that arrives cut off, and
-  an answer that isn't in a shape that reads as scores each come back as their
+  an answer that isn't in a shape that reads as findings each come back as their
   own sentence in a red note on the card, with the card left exactly as it was.
   Leave the key unset and the lead scorecard is scored by hand, and the
   discovery queue fails every candidate at step 3 rather than scoring one on

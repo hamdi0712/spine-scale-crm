@@ -23,7 +23,17 @@
 
 import { prisma } from "@/lib/prisma";
 import { recordMilestone } from "@/lib/milestones";
-import { ICP_CATEGORIES, ICP_DISQUALIFIER_KEYS, ICP_GAP_KEYS } from "@/lib/icp";
+import {
+  ICP_CATEGORIES,
+  ICP_DISQUALIFIERS,
+  ICP_DISQUALIFIER_KEYS,
+  ICP_GAP_KEYS,
+} from "@/lib/icp";
+import {
+  addManualDisqualifier,
+  parseBreakdownV2,
+  serializeBreakdownV2,
+} from "@/lib/icpScoring";
 import {
   COPILOT_ACTION_ASKED_FOR_MAX_CHARS,
   COPILOT_ACTION_LABELS,
@@ -586,6 +596,34 @@ async function disqualifyLead(
   if (notes !== "") form.set("icpNotes", notes);
 
   await saveIcpScorecard(leadId, form);
+
+  // A lead scored under the ICP model is tiered off that card, not the old
+  // answers just saved — so the disqualifier goes onto it too, or confirming
+  // this would leave the lead's tier exactly where it was.
+  const scored = await prisma.lead.findUnique({
+    where: { id: leadId },
+    select: { icpBreakdown: true },
+  });
+  const v2 = parseBreakdownV2(scored?.icpBreakdown ?? null);
+  if (v2) {
+    const label =
+      ICP_DISQUALIFIERS.find((d) => d.key === disqualifier)?.label ?? disqualifier;
+    const now = new Date();
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        icpBreakdown: serializeBreakdownV2(
+          addManualDisqualifier(
+            v2,
+            label,
+            reason ? `${reason} (${COPILOT_ACTION_MARKER})` : `Set through the copilot (${COPILOT_ACTION_MARKER}).`,
+            now,
+          ),
+        ),
+        icpBreakdownAt: now,
+      },
+    });
+  }
 }
 
 function clip(value: string | null, max: number): string | null {

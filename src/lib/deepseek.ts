@@ -5,7 +5,7 @@
 // not — sent as a bearer header, and never returned to the browser in any form
 // (see src/lib/appSecretsStore.ts). Nothing in this file may be imported from a
 // client component — its callers are server actions (the lead scorecard's
-// assist in src/lib/actions/icpAssist.ts, the discovery queue in
+// assist in src/lib/actions/icpScorecardV2.ts, the discovery queue in
 // src/lib/actions/discovery.ts, the copilot in src/lib/actions/copilot.ts),
 // and each hands back parsed answers and plain error text and nothing else.
 //
@@ -101,7 +101,7 @@ export async function deepSeekJson({
       // DeepSeek honours this on one condition OpenAI shares: the word
       // "json" has to appear in the prompt or the request is refused. It
       // does — the system prompt and the REPLY FORMAT block in
-      // src/lib/icpAssist.ts both say it — so this is noted rather than
+      // src/lib/icpScoringAssist.ts both say it — so this is noted rather than
       // worked around. Anyone rewriting those prompts needs to keep it.
       response_format: { type: "json_object" },
       max_tokens: maxTokens,

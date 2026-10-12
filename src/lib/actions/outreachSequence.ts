@@ -25,6 +25,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { loadActiveIcp } from "@/lib/icpDefinitionStore";
 import { deepSeekJson } from "@/lib/deepseek";
 import { assistEvidenceLabels, hasAssistEvidence } from "@/lib/icpAssist";
 import {
@@ -162,6 +163,10 @@ export async function generateOutreachStep(
     loomUrl: lead.loomUrl,
     replyText: lead.replyText,
     priorMessages: lead.outreach.map(toDraft),
+    // Step 2 reads the active ICP's pain points as background (see
+    // painPointsBlock in src/lib/outreachSequence.ts); no other step does.
+    icpPainPoints:
+      step === "FIRST_MESSAGE" ? ((await loadActiveIcp())?.painPoints ?? null) : null,
   };
 
   // Step 5's third branch, taken before the evidence check below because it is

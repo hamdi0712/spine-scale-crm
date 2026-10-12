@@ -22,7 +22,9 @@ import {
   DEFAULT_DECISION_MAKER_ACTOR_ID,
   DEFAULT_PIPELINE_SETTINGS,
   DEFAULT_PROMOTION_THRESHOLD,
+  DEFAULT_V2_PROMOTION_THRESHOLD,
   MAX_PROMOTION_THRESHOLD,
+  MAX_PROMOTION_THRESHOLD_V2,
   MIN_PROMOTION_THRESHOLD,
   PIPELINE_STEP_BLURBS,
   PIPELINE_STEP_KEYS,
@@ -35,6 +37,10 @@ import {
   stepCostPerCandidate,
 } from "@/lib/pipelineSettings";
 import { ICP_MAX_SCORE, ICP_TIER_BANDS, tierForScore } from "@/lib/icp";
+import Toggle from "@/components/Toggle";
+import Link from "next/link";
+import { FIT_FLOOR, FIT_MAX, V2_MAX_SCORE } from "@/lib/icpWeights";
+import { V2_TIER_BANDS, v2TierForScore } from "@/lib/icpScoring";
 
 export default function PipelineSettingsForm({
   settings,
@@ -114,13 +120,70 @@ export default function PipelineSettingsForm({
       <section>
         <h2 className="display mb-1 text-xl font-semibold">Promotion threshold</h2>
         <p className="helper-text mb-4 text-sm text-muted">
-          The score a candidate has to reach to become a lead
+          The score a candidate has to reach to become a lead — one bar per
+          scoring model, each on its own scale
         </p>
+        <div className="card mb-4 px-6 py-4">
+          <p className="text-sm">
+            Process queue scores with{" "}
+            <span className="font-medium">
+              {settings.scoringModel === "v2"
+                ? "the ICP model (out of 100)"
+                : "the old A–D scorecard (out of 10)"}
+            </span>
+            .
+          </p>
+          <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
+            The switch is on{" "}
+            <Link href="/discovery/compare" className="text-accent hover:underline">
+              Compare scoring
+            </Link>
+            , after a dry run shows what it would change. Saving this page
+            never changes which model is in force.
+          </p>
+        </div>
+        <div className="card mb-4 p-6">
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <label className="field-label" htmlFor="promotionThresholdV2">
+                ICP model — minimum score, out of {V2_MAX_SCORE}
+              </label>
+              <input
+                id="promotionThresholdV2"
+                name="promotionThresholdV2"
+                type="number"
+                inputMode="numeric"
+                min={MIN_PROMOTION_THRESHOLD}
+                max={MAX_PROMOTION_THRESHOLD_V2}
+                step={1}
+                value={draft.promotionThresholdV2}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    promotionThresholdV2: e.target.value === ""
+                      ? ("" as unknown as number)
+                      : Number(e.target.value),
+                  }))
+                }
+                className="field num w-[120px]"
+              />
+            </div>
+            <p className="helper-text min-w-0 flex-1 text-xs leading-relaxed text-muted">
+              {thresholdMeaningV2(draft.promotionThresholdV2)}
+            </p>
+          </div>
+          <p className="helper-text mt-4 border-t border-line/60 pt-4 text-xs leading-relaxed text-muted">
+            Fit is judged first: a cited disqualifier rejects a candidate, and a
+            fit under <span className="num">{FIT_FLOOR}/{FIT_MAX}</span> rejects
+            it as not a confirmed fit, whatever this is set to. Tiers:{" "}
+            <span className="num">{V2_TIER_BANDS}</span>.
+          </p>
+        </div>
         <div className="card p-6">
           <div className="flex flex-wrap items-end gap-6">
             <div>
               <label className="field-label" htmlFor="promotionThreshold">
-                Minimum score, out of {ICP_MAX_SCORE}
+                Old A–D scorecard — minimum score, out of {ICP_MAX_SCORE}
               </label>
               <input
                 id="promotionThreshold"
@@ -296,7 +359,11 @@ export default function PipelineSettingsForm({
         </div>
       </section>
 
-      <SaveBar draft={draft} stored={settings} onReset={() => setDraft(DEFAULT_PIPELINE_SETTINGS)} />
+      <SaveBar draft={draft} stored={settings} onReset={() =>
+          // The defaults, except the model in force: that switch is not on
+          // this page, and Reset should not appear to throw it.
+          setDraft({ ...DEFAULT_PIPELINE_SETTINGS, scoringModel: settings.scoringModel })
+        } />
     </form>
   );
 }
@@ -376,52 +443,6 @@ function StepRow({
   );
 }
 
-// The switch. Built rather than borrowed: the app has checkboxes and segmented
-// controls but no toggle, and a row of five checkboxes reads as a filter
-// rather than as five things being on. Same 42px-tall rhythm, same accent, and
-// it is a real checkbox underneath so it posts and keys like one.
-function Toggle({
-  name,
-  checked,
-  onChange,
-  label,
-}: {
-  name: string;
-  checked: boolean;
-  onChange: (on: boolean) => void;
-  label: string;
-}) {
-  return (
-    <label className="flex shrink-0 cursor-pointer items-center gap-2.5">
-      <span className="text-xs font-medium text-muted">
-        {checked ? "On" : "Off"}
-      </span>
-      <span className="relative inline-flex">
-        <input
-          type="checkbox"
-          name={name}
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          aria-label={label}
-          className="peer sr-only"
-        />
-        <span
-          aria-hidden
-          className={`block h-[24px] w-[42px] rounded-full border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent/30 ${
-            checked ? "border-accent bg-accent" : "border-line bg-line/70"
-          }`}
-        />
-        <span
-          aria-hidden
-          className={`pointer-events-none absolute top-[3px] h-[18px] w-[18px] rounded-full bg-surface shadow-sm transition-all ${
-            checked ? "left-[21px]" : "left-[3px]"
-          }`}
-        />
-      </span>
-    </label>
-  );
-}
-
 // What the number on screen actually means, in the app's own terms.
 function thresholdMeaning(threshold: number): string {
   if (!Number.isFinite(threshold)) {
@@ -435,6 +456,20 @@ function thresholdMeaning(threshold: number): string {
   }
   const tier = tierForScore(threshold);
   return `A candidate scoring ${threshold} or more becomes a lead; anything under it is rejected with its reasoning kept. ${threshold} is the bottom of ${tier}-tier.`;
+}
+
+// The same sentence on the ICP model's scale.
+function thresholdMeaningV2(threshold: number): string {
+  if (!Number.isFinite(threshold)) {
+    return `Blank saves as ${DEFAULT_V2_PROMOTION_THRESHOLD}, the default.`;
+  }
+  if (threshold <= MIN_PROMOTION_THRESHOLD) {
+    return "Every confirmed fit that clears the disqualifiers is promoted, whatever its signals add up to.";
+  }
+  if (threshold >= MAX_PROMOTION_THRESHOLD_V2) {
+    return `Only a perfect ${MAX_PROMOTION_THRESHOLD_V2}/${MAX_PROMOTION_THRESHOLD_V2} is promoted. Expect almost everything to be rejected.`;
+  }
+  return `A confirmed fit scoring ${threshold} or more becomes a lead (or is held, if it is chiropractic-first); under it, it is rejected with its reasoning kept. ${threshold} is in the ${v2TierForScore(threshold)}-tier band.`;
 }
 
 // Save, and the way back. Reset fills the form with the defaults rather than

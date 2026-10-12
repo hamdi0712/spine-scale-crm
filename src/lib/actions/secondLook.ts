@@ -20,7 +20,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { deepSeekJson } from "@/lib/deepseek";
-import { parseBreakdown } from "@/lib/discovery";
+import { parseStoredBreakdown, readScoringModel } from "@/lib/storedBreakdown";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import {
   SecondLookCandidate,
@@ -44,6 +44,7 @@ export async function checkForSecondLooks(): Promise<SecondLookResult> {
       icpTotal: true,
       disqualifiedReason: true,
       icpBreakdown: true,
+      scoringModel: true,
     },
   });
 
@@ -54,14 +55,24 @@ export async function checkForSecondLooks(): Promise<SecondLookResult> {
     };
   }
 
-  const candidates: SecondLookCandidate[] = rows.map((row) => ({
-    id: row.id,
-    clinicName: row.clinicName,
-    disqualified: row.disqualified,
-    icpTotal: row.icpTotal,
-    disqualifiedReason: row.disqualifiedReason,
-    breakdown: parseBreakdown(row.icpBreakdown),
-  }));
+  const candidates: SecondLookCandidate[] = rows.map((row) => {
+    const stored = parseStoredBreakdown(row.icpBreakdown);
+    return {
+      id: row.id,
+      clinicName: row.clinicName,
+      disqualified: row.disqualified,
+      icpTotal: row.icpTotal,
+      disqualifiedReason: row.disqualifiedReason,
+      scoringModel: stored?.model ?? readScoringModel(row.scoringModel),
+      breakdown: stored?.model === "v1" ? stored.breakdown : null,
+      breakdownV2: stored?.model === "v2" ? stored.breakdown : null,
+    };
+  });
+  // Each rejection is judged against the bar on its own model's scale.
+  const thresholds = {
+    v1: settings.promotionThreshold,
+    v2: settings.promotionThresholdV2,
+  };
 
   // ─── 1. The half that needs no model ─────────────────────────────────────
   //
@@ -70,15 +81,12 @@ export async function checkForSecondLooks(): Promise<SecondLookResult> {
   // threshold that moved since the last sweep changes these answers.
   const flags = new Map<string, SecondLookFlag>();
   for (const candidate of candidates) {
-    const flag = computedFlag(candidate, settings.promotionThreshold);
+    const flag = computedFlag(candidate, thresholds);
     if (flag) flags.set(candidate.id, flag);
   }
 
   // ─── 2. The half that does ───────────────────────────────────────────────
-  const { review, deferred } = selectForReview(
-    candidates,
-    settings.promotionThreshold,
-  );
+  const { review, deferred } = selectForReview(candidates, thresholds);
 
   if (review.length > 0) {
     const { system, user, maxTokens } = buildSecondLookPrompt(review);

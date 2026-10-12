@@ -69,6 +69,12 @@ import {
 } from "@/lib/discoveryAssist";
 import { assistEvidenceLabels, hasAssistEvidence } from "@/lib/icpAssist";
 import { ICP_MAX_SCORE, IcpGapKey } from "@/lib/icp";
+import { loadActiveIcp } from "@/lib/icpDefinitionStore";
+import { scoreWithIcp } from "@/lib/icpScoringRun";
+import { serializeBreakdownV2, triggeredHits } from "@/lib/icpScoring";
+import { FIT_MAX, SIGNALS_MAX, V2_MAX_SCORE } from "@/lib/icpWeights";
+import { parseStoredBreakdown } from "@/lib/storedBreakdown";
+import { PipelineSettings } from "@/lib/pipelineSettings";
 import {
   IMPORT_DEFAULT_STATUS,
   ImportSummary,
@@ -455,6 +461,7 @@ export async function processDiscoveryCandidate(
       clinicName: true,
       batchLabel: true,
       contactName: true,
+      contactTitle: true,
       discoverySource: true,
       companyLinkedinUrl: true,
       facebookUrl: true,
@@ -475,6 +482,7 @@ export async function processDiscoveryCandidate(
       status: "FAILED",
       headline: "No longer here — it was deleted while the queue was running.",
       total: null,
+      max: null,
       tier: null,
       promotedLeadId: null,
       steps: [],
@@ -491,6 +499,7 @@ export async function processDiscoveryCandidate(
       status: "PROMOTED",
       headline: "Already promoted — left alone.",
       total: null,
+      max: null,
       tier: null,
       promotedLeadId: candidate.promotedLeadId,
       steps: [],
@@ -625,6 +634,24 @@ export async function processDiscoveryCandidate(
     );
   }
 
+  // ─── The new model, once it has been applied ─────────────────────────────
+  //
+  // Everything above — enrichment, the actor-failure gate, the nothing-gathered
+  // gate — is shared. From here the two models part: the ICP model judges fit
+  // against the active ICP Definition and is the only one that can hold a
+  // clinic for review. It runs only after somebody has pressed Apply new
+  // scoring (src/app/(app)/discovery/compare).
+  if (settings.scoringModel === "v2") {
+    return scoreCandidateV2({
+      candidate,
+      enriched,
+      websiteUrl: update.websiteUrl ?? candidate.websiteUrl,
+      settings,
+      steps,
+      notes,
+    });
+  }
+
   // ─── 2. What can be computed ─────────────────────────────────────────────
   const staffSize = staffSizeScore(enriched.staffCountRaw);
   const budget = budgetSignalScore(enriched.metaAdsSignal, enriched.reviewCount);
@@ -742,6 +769,7 @@ export async function processDiscoveryCandidate(
       icpTotal: breakdown.total,
       icpTier: breakdown.tier,
       icpBreakdown: serializeBreakdown(breakdown),
+      scoringModel: "v1",
       disqualified: breakdown.tier === "DISQUALIFIED",
       disqualifiedReason: null,
       failureReason: null,
@@ -773,6 +801,7 @@ export async function processDiscoveryCandidate(
       status: "REJECTED",
       headline: reason,
       total: breakdown.total,
+      max: ICP_MAX_SCORE,
       tier: breakdown.tier,
       promotedLeadId: null,
       steps,
@@ -799,6 +828,150 @@ export async function processDiscoveryCandidate(
     status: "PROMOTED",
     headline,
     total: breakdown.total,
+    max: ICP_MAX_SCORE,
+    tier: breakdown.tier,
+    promotedLeadId: leadId,
+    steps,
+  };
+}
+
+// The ICP model's half of one candidate's run: score against the active ICP
+// Definition from the evidence this run just gathered, store the whole
+// breakdown, then reject, hold or promote on its verdict.
+async function scoreCandidateV2({
+  candidate,
+  enriched,
+  websiteUrl,
+  settings,
+  steps,
+  notes,
+}: {
+  candidate: {
+    id: string;
+    clinicName: string;
+    contactName: string | null;
+    contactTitle: string | null;
+    location: string | null;
+  };
+  enriched: {
+    staffCountRaw: number | null;
+    metaAdsSignal: string | null;
+    reviewCount: number | null;
+    websiteNotes: string | null;
+  };
+  websiteUrl: string | null;
+  settings: PipelineSettings;
+  steps: DiscoveryStep[];
+  notes: string[];
+}): Promise<DiscoveryProcessResult> {
+  const id = candidate.id;
+  const icp = await loadActiveIcp();
+  if (!icp) {
+    const reason =
+      "The new scoring model is applied, but no ICP Definition is active. Switch one on under Settings → ICP and run the queue again.";
+    steps.push({ label: "Score against the ICP", status: "failed", detail: reason });
+    return failCandidate(candidate, steps, reason);
+  }
+
+  const now = new Date();
+  const result = await scoreWithIcp({
+    evidence: {
+      clinicName: candidate.clinicName,
+      websiteUrl,
+      websiteNotes: enriched.websiteNotes,
+      metaAdsSignal: enriched.metaAdsSignal,
+      reviewCount: enriched.reviewCount,
+      staffCountRaw: enriched.staffCountRaw,
+      location: candidate.location,
+      contactName: candidate.contactName,
+      contactTitle: candidate.contactTitle,
+    },
+    icp,
+    threshold: settings.promotionThresholdV2,
+    notes,
+    now,
+  });
+
+  if (!result.ok) {
+    steps.push({
+      label: result.failure === "evidence" ? "Evidence check" : "Score against the ICP",
+      status: "failed",
+      detail: result.reason,
+    });
+    return failCandidate(candidate, steps, result.reason);
+  }
+
+  const breakdown = result.breakdown;
+  const discarded = breakdown.disqualifiers.filter((d) => d.discarded !== null).length;
+  steps.push({
+    label: `Score against “${icp.name}”`,
+    status: "ok",
+    detail: [
+      `${triggeredHits(breakdown).length} disqualifier${triggeredHits(breakdown).length === 1 ? "" : "s"} cited`,
+      discarded > 0 ? `${discarded} flag${discarded === 1 ? "" : "s"} discarded by the evidence rules` : null,
+      `fit ${breakdown.fitTotal}/${FIT_MAX}`,
+      `signals ${breakdown.signalsTotal}/${SIGNALS_MAX}`,
+      result.askedModel ? null : "decided from the Maps listing, no model call",
+    ]
+      .filter(Boolean)
+      .join(", "),
+  });
+
+  const gated = breakdown.tier === "DISQUALIFIED";
+  await prisma.discoveryCandidate.update({
+    where: { id },
+    data: {
+      status: "SCORED",
+      icpTotal: breakdown.total,
+      icpTier: breakdown.tier,
+      icpBreakdown: serializeBreakdownV2(breakdown),
+      scoringModel: "v2",
+      disqualified: gated,
+      disqualifiedReason: null,
+      failureReason: null,
+    },
+  });
+
+  const verdict = breakdown.verdict;
+  if (verdict.status === "REJECTED" || verdict.status === "HELD_CHIRO") {
+    await prisma.discoveryCandidate.update({
+      where: { id },
+      data: {
+        status: verdict.status,
+        disqualified: gated,
+        // The one-line reason the lists read without opening the JSON — the
+        // rejection's, or the hold's.
+        disqualifiedReason: verdict.reason,
+        processedAt: now,
+      },
+    });
+    steps.push({ label: "Verdict", status: "warned", detail: verdict.reason });
+    revalidatePath("/discovery");
+    return {
+      id,
+      clinicName: candidate.clinicName,
+      status: verdict.status,
+      headline: verdict.reason,
+      total: breakdown.total,
+      max: V2_MAX_SCORE,
+      tier: breakdown.tier,
+      promotedLeadId: null,
+      steps,
+    };
+  }
+
+  const leadId = await promoteToLead(id, breakdown, now);
+  steps.push({ label: "Verdict", status: "ok", detail: verdict.reason });
+  revalidatePath("/discovery");
+  revalidatePath("/pipeline");
+  revalidatePath("/");
+  return {
+    id,
+    clinicName: candidate.clinicName,
+    status: "PROMOTED",
+    headline: verdict.reason,
+    total: breakdown.total,
+    max: V2_MAX_SCORE,
     tier: breakdown.tier,
     promotedLeadId: leadId,
     steps,
@@ -821,11 +994,13 @@ export async function promoteDiscoveryCandidate(id: string) {
     redirect(`/pipeline/${candidate.promotedLeadId}`);
   }
 
-  const breakdown = parseBreakdown(candidate.icpBreakdown);
-  const leadId = await promoteToLead(id, breakdown, new Date());
+  // Whichever model scored it, the lead arrives with that model's card.
+  const stored = parseStoredBreakdown(candidate.icpBreakdown);
+  const leadId = await promoteToLead(id, stored?.breakdown ?? null, new Date());
 
   revalidatePath("/discovery");
   revalidatePath("/discovery/rejected");
+  revalidatePath("/discovery/held");
   revalidatePath("/pipeline");
   revalidatePath("/");
   redirect(`/pipeline/${leadId}`);
@@ -856,6 +1031,7 @@ async function failCandidate(
     status: "FAILED",
     headline: reason,
     total: null,
+    max: null,
     tier: null,
     promotedLeadId: null,
     steps,
@@ -925,6 +1101,7 @@ export async function requeueDiscoveryCandidate(id: string) {
       icpTotal: null,
       icpTier: null,
       icpBreakdown: null,
+      scoringModel: null,
       disqualified: false,
       disqualifiedReason: null,
       failureReason: null,
@@ -971,6 +1148,22 @@ export async function rejectDiscoveryCandidate(id: string, reason: string) {
   revalidatePath("/discovery");
   revalidatePath("/discovery/rejected");
   revalidatePath(`/discovery/${id}`);
+}
+
+// The Reject half of the Tier 2 chiro hold. A held candidate is a decision
+// left to a person; this is them making it, with the reason saying so. It
+// goes through the same write as any other rejection by hand.
+export async function rejectHeldCandidate(id: string) {
+  const candidate = await prisma.discoveryCandidate.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!candidate || candidate.status !== "HELD_CHIRO") return;
+  await rejectDiscoveryCandidate(
+    id,
+    "Rejected by hand from the Tier 2 chiro hold.",
+  );
+  revalidatePath("/discovery/held");
 }
 
 // ─── Bulk actions from the discovery table ─────────────────────────────────

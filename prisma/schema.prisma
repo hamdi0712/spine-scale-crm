@@ -151,6 +151,10 @@ model DiscoveryCandidate {
   //   QUALIFIED_NO_CONTACT
   //             — scored at or above the bar, but nobody is named to talk to
   //   REJECTED  — disqualified, or scored C-tier
+  //   HELD_CHIRO
+  //             — new scoring model only: a confirmed fit whose primary
+  //               service is chiropractic, held for a person's Promote or
+  //               Reject rather than promoted automatically
   //   FAILED    — an actor failed outright, or two or more scored categories
   //                had no evidence to attempt them on; nothing was scored
   status String @default("PENDING")
@@ -164,6 +168,13 @@ model DiscoveryCandidate {
   // the one thing this flow must never do.
   icpTotal Int?
   icpTier  String? // A | B | C | DISQUALIFIED
+
+  // Which framework wrote the verdict above: "v1" — the old 10-point A–D
+  // scorecard in src/lib/icp.ts — or "v2", the ICP Definition model out of 100
+  // in src/lib/icpScoring.ts. Null until scored. It is what tells a reader
+  // whether icpTotal is out of 10 or out of 100, and which shape icpBreakdown
+  // is in; every row scored before the new model existed was backfilled "v1".
+  scoringModel String?
 
   // The whole reasoning behind that total, as JSON: every disqualifier with
   // the reason it did or didn't fire, every category with its points and a
@@ -388,6 +399,19 @@ model Lead {
 
   icpScoredAt DateTime? // null = never scored; drives whether a tier badge shows
   icpNotes    String?
+
+  // The new scoring model's scorecard (src/lib/icpScoring.ts), as JSON: the
+  // disqualifier gate, Fit and Signals, each criterion with its points, its
+  // citation and a one-line reason, plus any override somebody saved. Null on
+  // a lead never scored under the new model.
+  //
+  // It sits beside the old answer columns above rather than replacing them.
+  // Those are kept, read-only, and shown as "Scored under the old model"; a
+  // lead that has this column is tiered off it (leadTier in src/lib/icp.ts),
+  // and one that does not keeps the tier its old answers give it.
+  icpBreakdown   String?
+  icpBreakdownAt DateTime?
+
   copilotActions CopilotAction[]
 }
 
@@ -890,7 +914,116 @@ model PipelineSettings {
   // here, because re-tiering every clinic in the app is not a setting.
   promotionThreshold Int @default(5)
 
+  // Which framework "Process queue" scores with: "v1", the old 10-point A–D
+  // scorecard, or "v2", the ICP Definition model out of 100. Stays "v1" until
+  // somebody has run Compare scoring and pressed Apply new scoring — the switch
+  // is a decision made after reading a dry run, never a default.
+  scoringModel String @default("v1")
+
+  // The new model's promotion bar, out of 100. Its own column rather than a
+  // reinterpretation of the one above, so neither model's bar is ever read on
+  // the other's scale and switching back is a toggle rather than a re-entry.
+  promotionThresholdV2 Int @default(60)
+
   updatedAt DateTime @updatedAt
+}
+
+// One Ideal Customer Profile — who this agency is for, written by the operator
+// and read by the new scoring model (src/lib/icpScoring.ts) and by step 2 of
+// the outreach sequence.
+//
+// The criteria are lists, and SQLite has no array column, so each list is a
+// JSON array of strings, normalised on the way in (trimmed, lowercased,
+// de-duplicated — src/lib/icpDefinition.ts) and read through the same module
+// so a hand-edited row cannot hand the scorer something that is not a list.
+//
+// One is active at a time. That is held by the only two writes that can set
+// isActive (src/lib/actions/icpDefinition.ts), each of which clears every
+// other row in the same transaction; a database with none active scores
+// nothing under the new model and says so.
+model IcpDefinition {
+  id          String  @id @default(cuid())
+  name        String
+  description String  @default("")
+  isActive    Boolean @default(false)
+
+  targetTitles     String @default("[]") // JSON string[]
+  coreServices     String @default("[]") // JSON string[]
+  adjacentServices String @default("[]") // JSON string[]
+  targetLocations  String @default("[]") // JSON string[]
+
+  // In locations, not employees. Either may be null for "no bound".
+  sizeMin Int?
+  sizeMax Int?
+
+  // Messaging context, as the operator wrote it. Pain points reach step 2 of
+  // the outreach sequence; buying triggers are what the Signals half scores;
+  // disqualifiers are one per line, and each line is one gate.
+  painPoints     String @default("")
+  buyingTriggers String @default("")
+  disqualifiers  String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// One run of "Compare scoring" — the dry run that rescores what has already
+// been decided under the new model, from stored enrichment only, and changes no
+// status. Kept so the results can be read after the run, and so "Apply new
+// scoring" can require that a finished one exists.
+model ScoringComparisonRun {
+  id String @id @default(cuid())
+
+  // The active ICP and the bar the run scored against, captured at the start
+  // so a run read next week says what it was measured with.
+  icpDefinitionId String?
+  icpName         String
+  threshold       Int
+
+  subjects     Int
+  estimatedUsd Float
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  rows ScoringComparison[]
+}
+
+// One clinic in a comparison run: what it was, what the new model makes of it,
+// and why that differs. Nothing in here is read by the queue, the pipeline or
+// promotion — it is a report.
+model ScoringComparison {
+  id    String               @id @default(cuid())
+  runId String
+  run   ScoringComparisonRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  // "candidate" or "lead", and that record's id. Not a foreign key: deleting a
+  // candidate should not quietly rewrite a report about it.
+  subjectKind String
+  subjectId   String
+  clinicName  String
+
+  oldStatus String
+  oldScore  Int?
+  oldMax    Int?
+  oldTier   String?
+
+  newStatus String // PROMOTED | REJECTED | HELD_CHIRO | FAILED
+  newScore  Int?
+  newTier   String?
+
+  // newly_rejected | newly_promoted | newly_held | newly_failed | unchanged
+  outcome    String
+  flipReason String?
+
+  breakdown String? // the v2 breakdown JSON this verdict came from
+  error     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([runId, outcome])
 }
 
 // The credentials the app calls out with — one row, same singleton shape as

@@ -14,6 +14,7 @@ import {
   isDecisionMakerConfidence,
 } from "@/lib/decisionMaker";
 import { IcpTier } from "@/lib/icp";
+import { maxScoreFor } from "@/lib/storedBreakdown";
 import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
@@ -66,7 +67,9 @@ function reasonFor(candidate: {
   failureReason: string | null;
 }): string | null {
   if (candidate.status === "FAILED") return candidate.failureReason;
-  if (candidate.status === "REJECTED") return candidate.disqualifiedReason;
+  if (candidate.status === "REJECTED" || candidate.status === "HELD_CHIRO") {
+    return candidate.disqualifiedReason;
+  }
   return null;
 }
 
@@ -83,12 +86,13 @@ export default async function DiscoveryPage({
   // The settings the queue quotes its estimate from — read here so the dialog
   // opens with a number rather than fetching one.
   const settings = await loadPipelineSettings();
-  const [candidates, queued, rejected] = await Promise.all([
+  const [candidates, queued, rejected, held] = await Promise.all([
     prisma.discoveryCandidate.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.discoveryCandidate.count({
       where: { status: { in: DISCOVERY_QUEUE_STATUSES } },
     }),
     prisma.discoveryCandidate.count({ where: { status: "REJECTED" } }),
+    prisma.discoveryCandidate.count({ where: { status: "HELD_CHIRO" } }),
   ]);
 
   const rows: DiscoveryRow[] = candidates.map((c) => ({
@@ -109,6 +113,7 @@ export default async function DiscoveryPage({
     batchLabel: c.batchLabel,
     status: c.status,
     icpTotal: c.icpTotal,
+    scoreMax: maxScoreFor(c.scoringModel),
     // The tier is stored on a candidate rather than derived, so it is read
     // back the same way — see the note at the top of src/lib/discovery.ts.
     icpTier: (c.icpTier as IcpTier | null) ?? null,
@@ -137,10 +142,6 @@ export default async function DiscoveryPage({
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="min-w-0">
             <h1 className="display text-[32px] font-semibold">Discovery</h1>
-            <p className="helper-text mt-1.5 text-sm text-muted">
-              Scraped clinics waiting to be qualified — nothing reaches the
-              pipeline from here without a score
-            </p>
           </div>
           <PageActions className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
             <Link href="/discovery/rejected" className="btn">
@@ -175,6 +176,29 @@ export default async function DiscoveryPage({
               settings={settings}
             />
           </PageActions>
+        </div>
+
+        {/* Which model the queue scores with, the way to the dry run that
+            decides it, and the Tier 2 chiro hold once there is anything in it.
+            A strip under the header rather than more buttons in it — that row
+            is already full, and these are places to go rather than actions. */}
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+          <Link
+            href="/discovery/compare"
+            className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-line bg-surface px-3 text-ink-soft hover:bg-wash/70"
+          >
+            <span className="text-muted">Scoring:</span>
+            {settings.scoringModel === "v2" ? "ICP model" : "old A–D model"}
+            <span className="text-accent">· Compare scoring →</span>
+          </Link>
+          {held > 0 && (
+            <Link
+              href="/discovery/held"
+              className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-purple/30 bg-purple-soft px-3 font-medium text-purple hover:opacity-90"
+            >
+              Held — Tier 2 chiro <span className="num">({held})</span>
+            </Link>
+          )}
         </div>
 
         {summary && (

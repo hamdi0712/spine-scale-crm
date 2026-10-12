@@ -16,7 +16,7 @@
 import { prisma } from "@/lib/prisma";
 import { addDays } from "@/lib/dailyChecklist";
 import { CONTACTED_STAGES } from "@/lib/constants";
-import { leadTier } from "@/lib/icp";
+import { leadScore } from "@/lib/leadScore";
 import {
   DAILY_KPI_SETTINGS_ID,
   DailyKpiCounts,
@@ -89,9 +89,17 @@ export async function loadDailyKpiRange(
       // it scored on the same day — counting both would count one clinic
       // twice. The tier is derived rather than stored, the way it is
       // everywhere else in the app (src/lib/icp.ts).
+      //
+      // A lead scored under the ICP model is dated by when that card was saved
+      // (icpBreakdownAt), the same way an old card is dated by icpScoredAt.
       prisma.lead.findMany({
-        where: { icpScoredAt: inRange, candidate: { is: null } },
+        where: {
+          candidate: { is: null },
+          OR: [{ icpScoredAt: inRange }, { icpBreakdownAt: inRange }],
+        },
         select: {
+          icpBreakdown: true,
+          icpBreakdownAt: true,
           icpScoredAt: true,
           icpDqSurgicalPractice: true,
           icpDqSoloNoStaff: true,
@@ -185,8 +193,10 @@ export async function loadDailyKpiRange(
 
   for (const c of candidates) count(c.processedAt, "qualifiedLeads");
   for (const lead of scoredLeads) {
-    const tier = leadTier({ ...lead, icpScoredAt: lead.icpScoredAt });
-    if (tier === "A" || tier === "B") count(lead.icpScoredAt, "qualifiedLeads");
+    const score = leadScore(lead);
+    if (score && (score.tier === "A" || score.tier === "B")) {
+      count(score.model === "v2" ? lead.icpBreakdownAt : lead.icpScoredAt, "qualifiedLeads");
+    }
   }
   for (const l of messaged) count(l.stageChangedAt, "messagesSent");
   for (const l of replies) count(l.repliedAt, "repliesReceived");
