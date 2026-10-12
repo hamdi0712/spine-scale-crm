@@ -24,7 +24,7 @@ import { ICP_GAPS, ICP_GAP_GUIDANCE, IcpGapKey } from "@/lib/icp";
 // More of the site than the other prompts send: the crawl now reads six pages
 // with their menus kept, and the scorer is the one call that needs the whole
 // service list. ~6k input tokens at most, a fraction of a cent.
-const SCORING_NOTES_MAX_CHARS = 24000;
+export const SCORING_NOTES_MAX_CHARS = 24000;
 import {
   IcpDefinitionData,
   buyingTriggerLines,

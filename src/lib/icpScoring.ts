@@ -33,7 +33,7 @@
 // rejected clinic is gone.
 
 import { budgetSignalScore, hasActiveAds } from "@/lib/discovery";
-import { isProgramLink, isProgramPageUrl, parseLinks } from "@/lib/websiteCrawl";
+import { isProgramPageUrl, parseLinks, programLinks, providerNameFromLink, isGenericLinkText } from "@/lib/websiteCrawl";
 import { GapPrecheck, precheckNote } from "@/lib/discoveryAssist";
 import { ICP_GAPS, IcpGapKey, IcpTier } from "@/lib/icp";
 import {
@@ -1338,6 +1338,18 @@ function wordsPattern(phrase: string): string {
     .join("[\\s-]*");
 }
 
+// "Dr. Trista Shelton, DC", "Trista Shelton" and "Dr. Shelton" are one
+// person: same surname, and one name's words all inside the other's.
+function sameName(a: string, b: string): boolean {
+  const words = (n: string) =>
+    n.toLowerCase().replace(/,.*$/, "").replace(/\bdr\b\.?/g, " ").replace(/[^a-z ]+/g, " ").split(/\s+/).filter(Boolean);
+  const wa = words(a);
+  const wb = words(b);
+  if (wa.length === 0 || wb.length === 0 || wa[wa.length - 1] !== wb[wb.length - 1]) return false;
+  const [short, long] = wa.length <= wb.length ? [wa, wb] : [wb, wa];
+  return short.every((w) => long.includes(w));
+}
+
 export function chiroProgramCheck(
   evidence: ScoringEvidence,
   reply: ScoringReply | null,
@@ -1368,9 +1380,7 @@ export function chiroProgramCheck(
     }
   }
   if (page.length === 0) {
-    const link = parseLinks(evidence.websiteLinks ?? null).find(
-      (l) => l.text.trim() !== "" && isProgramLink(l),
-    );
+    const link = programLinks(parseLinks(evidence.websiteLinks ?? null))[0];
     if (link) {
       page = [{ quote: link.text, source: link.url }];
       pageReason = `The site links to a dedicated page (found on ${link.page || "a crawled page"}).`;
@@ -1410,6 +1420,14 @@ export function chiroProgramCheck(
         const citation = verifyQuote(snippetAround(doc.text, m.index, m[0].length), doc.source, docs);
         if (citation) names.set(name, citation);
       }
+    }
+    // A provider's own page linked from the site (/doctors/dr-trista-shelton/)
+    // names them as surely as a line of copy does, cited with the link.
+    for (const link of parseLinks(evidence.websiteLinks ?? null)) {
+      const name = providerNameFromLink(link);
+      if (!name) continue;
+      if (Array.from(names.keys()).some((n) => sameName(n, name))) continue;
+      names.set(name, { quote: isGenericLinkText(link.text) ? name : link.text, source: link.url });
     }
     if (names.size >= 2) team = Array.from(names.values()).slice(0, 3);
   }

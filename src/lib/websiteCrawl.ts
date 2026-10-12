@@ -241,3 +241,73 @@ export function isProgramLink(link: Pick<WebsiteLink, "text" | "url">): boolean 
 export function isProgramPageUrl(url: string): boolean {
   return isProgramLink({ text: "", url });
 }
+
+// ─── Junk links ────────────────────────────────────────────────────────────
+
+// Link text that says nothing about where it goes: accessibility skips, menu
+// toggles, "read more" buttons, bare punctuation. A link like that cannot be
+// cited as evidence even when its URL happens to name a program.
+const GENERIC_LINK_TEXT = new Set([
+  "skip to main content",
+  "skip to content",
+  "skip to navigation",
+  "skip",
+  "menu",
+  "open menu",
+  "close menu",
+  "toggle navigation",
+  "close",
+  "search",
+  "close search",
+  "open search",
+  "learn more",
+  "read more",
+  "more",
+  "click here",
+  "here",
+  "view more",
+  "see more",
+  "details",
+  "next",
+  "previous",
+  "back to top",
+]);
+
+export function isGenericLinkText(text: string): boolean {
+  const t = text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  return t === "" || GENERIC_LINK_TEXT.has(t);
+}
+
+// A link back to the page it sits on (an in-page anchor, the logo on the home
+// page): it is not evidence of another page.
+export function isSelfLink(link: WebsiteLink): boolean {
+  return link.page !== "" && normalizePage(link.url) === normalizePage(link.page);
+}
+
+// The links that count for the "dedicated page" signal: meaningful text, a
+// different page, and a program named in the text or URL.
+export function programLinks(links: WebsiteLink[]): WebsiteLink[] {
+  return links.filter((l) => !isGenericLinkText(l.text) && !isSelfLink(l) && isProgramLink(l));
+}
+
+// ─── Provider links ────────────────────────────────────────────────────────
+
+// A link to one provider's own page — /doctors/dr-trista-shelton/,
+// /our-team/jane-doe-dc — named from the URL slug.
+const PROVIDER_PATH = /\/(?:doctors?|providers?|our-doctors|our-team|team|staff|meet-the-team|meet-our-team|chiropractors?|physicians?)\/([a-z]+(?:-[a-z]+){1,4})\/?$/i;
+const CREDENTIAL_SLUGS = new Set(["dc", "md", "do", "dpt", "pt", "np", "pa", "lac", "dr", "doctor"]);
+
+export function providerNameFromLink(link: Pick<WebsiteLink, "url">): string | null {
+  let path = "";
+  try {
+    path = decodeURIComponent(new URL(link.url).pathname);
+  } catch {
+    return null;
+  }
+  const m = path.match(PROVIDER_PATH);
+  if (!m) return null;
+  const parts = m[1].toLowerCase().split("-").filter((p) => !CREDENTIAL_SLUGS.has(p));
+  if (parts.length < 2 || parts.length > 3) return null;
+  const name = parts.map((p) => p[0].toUpperCase() + p.slice(1)).join(" ");
+  return /^dr-/i.test(m[1]) ? `Dr. ${name}` : name;
+}

@@ -38,16 +38,20 @@
 // to the database — this reads and prints.
 
 import { crawlDiagnostics, crawledText, linksFromTable, EnrichTable } from "../src/lib/leadEnrich";
+import { readFileSync, writeFileSync } from "node:fs";
 import { itemsToTable } from "../src/lib/apify";
 import { DEFAULT_ACTOR_IDS } from "../src/lib/pipelineSettings";
 import { mergeTables } from "../src/lib/websiteCrawlRun";
+import { chiroProgramCheck, evidenceDocs } from "../src/lib/icpScoring";
+import { SCORING_NOTES_MAX_CHARS } from "../src/lib/icpScoringAssist";
 import {
   DEFAULT_WEBSITE_CRAWL_PAGES,
   choosePagesToFollow,
   crawlInput,
   dedupeLinks,
-  isProgramLink,
+  programLinks,
   readWebsiteCrawlPages,
+  serializeLinks,
 } from "../src/lib/websiteCrawl";
 
 const API_BASE = "https://api.apify.com/v2";
@@ -57,9 +61,22 @@ const RUN_TIMEOUT_SECONDS = 180;
 // chrome survived the crawl.
 const NAV_HINTS = ["home", "about", "contact", "services", "privacy", "copyright", "©", "book", "schedule"];
 
+// --save writes every pass's raw items to a file; --replay reads them back
+// instead of calling Apify, so the reading and scoring logic can be re-run on
+// the same crawl for free.
+let replay: [string, unknown[]][] | null = null;
+const recorded: Record<string, unknown[]> = {};
+
 async function run(token: string, actorId: string, input: object, maxItems: number, label: string) {
   console.log(`\n── ${label}: input sent ─────────────────────────────────────`);
   console.log(JSON.stringify(input, null, 2));
+  if (replay) {
+    const next = replay.shift();
+    if (!next) throw new Error("The replay file has no more passes than this.");
+    console.log(`(replayed from file: ${next[0]})`);
+    recorded[label] = next[1];
+    return itemsToTable(next[1], maxItems);
+  }
   const endpoint =
     `${API_BASE}/acts/${encodeURIComponent(actorId)}/run-sync-get-dataset-items` +
     `?timeout=${RUN_TIMEOUT_SECONDS}&maxItems=${maxItems}&limit=${maxItems}`;
@@ -74,6 +91,7 @@ async function run(token: string, actorId: string, input: object, maxItems: numb
     process.exit(1);
   }
   const items = (await response.json()) as unknown[];
+  recorded[label] = items;
   console.log(`\n── ${label}: raw items (text/markdown truncated) ──────────────`);
   console.log(
     JSON.stringify(
@@ -95,15 +113,23 @@ async function run(token: string, actorId: string, input: object, maxItems: numb
 }
 
 async function main() {
-  const url = process.argv[2];
+  const flags = process.argv.slice(2).filter((a) => a.startsWith("--"));
+  const positional = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const savePath = flags.find((f) => f.startsWith("--save="))?.slice(7) ?? null;
+  const replayPath = flags.find((f) => f.startsWith("--replay="))?.slice(9) ?? null;
+  if (replayPath) {
+    const saved = JSON.parse(readFileSync(replayPath, "utf8")) as Record<string, unknown[]>;
+    replay = Object.entries(saved);
+  }
+  const url = positional[0];
   if (!url) {
-    console.error("Usage: npx tsx tools/inspect-website-crawl.ts <website-url> [pages] [actor-id]");
+    console.error("Usage: npx tsx tools/inspect-website-crawl.ts <website-url> [pages] [actor-id] [--save=crawl.json | --replay=crawl.json]");
     process.exit(1);
   }
-  const pages = process.argv[3] ? readWebsiteCrawlPages(process.argv[3]) : DEFAULT_WEBSITE_CRAWL_PAGES;
-  const actorId = process.argv[4] ?? DEFAULT_ACTOR_IDS.websiteContent;
+  const pages = positional[1] ? readWebsiteCrawlPages(positional[1]) : DEFAULT_WEBSITE_CRAWL_PAGES;
+  const actorId = positional[2] ?? DEFAULT_ACTOR_IDS.websiteContent;
 
-  const token = await readToken();
+  const token = replay ? "replay" : await readToken();
   if (!token) {
     console.error(
       "No Apify token. Set APIFY_API_TOKEN, or point DATABASE_URL at the app's database if the key is saved on the Settings page.",
@@ -152,7 +178,11 @@ async function main() {
   }
 
   const links = dedupeLinks(linksFromTable(table));
-  const program = links.filter((l) => l.text.trim() !== "" && isProgramLink(l));
+  if (savePath && !replay) {
+    writeFileSync(savePath, JSON.stringify(recorded));
+    console.log(`\n(saved the raw crawl to ${savePath} — re-run with --replay=${savePath} for free)`);
+  }
+  const program = programLinks(links);
   console.log("\n── All links stored as websiteLinks ────────────────────────");
   console.log(`${links.length} links${links.length === 0 ? " — NONE: links are not coming through, signal 1 cannot use them" : ""}`);
   console.log("\n── Links that would count for the 'dedicated page' signal ──");
@@ -167,6 +197,18 @@ async function main() {
     console.log(notes.slice(0, 2000));
     if (notes.length > 2000) console.log("\n… (truncated for this printout)");
   }
+
+  // The five chiro program signals, scored on this crawl alone — no ads data,
+  // no model reply, so the team signal reads named doctors from copy and links.
+  const evidence = { clinicName: "", websiteNotes: notes, websiteLinks: serializeLinks(links), metaAdsSignal: null, reviewCount: null };
+  const check = chiroProgramCheck(evidence as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(evidence as Parameters<typeof evidenceDocs>[0]));
+  console.log("\n── Chiro program signals (ads not checked here) ────────────");
+  console.log(`websiteNotes: ${notes?.length ?? 0} characters (scoring reads the first ${SCORING_NOTES_MAX_CHARS})`);
+  for (const sig of check.signals) {
+    console.log(`  ${sig.found ? "YES" : "no "}  ${sig.label} — ${sig.reason}`);
+    for (const c of sig.citations) console.log(`         [${c.quote.slice(0, 120)}] ${c.source}`);
+  }
+  console.log(`  ${check.count} of 5 (needs ${check.required})`);
 }
 
 // The app's own token lookup when a database is reachable, the environment

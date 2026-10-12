@@ -33,6 +33,7 @@ import {
   dedupeLinks,
   linksFromMarkdown,
   parseLinks,
+  isProgramPageUrl,
   serializeLinks,
 } from "@/lib/websiteCrawl";
 import { parseCount } from "@/lib/discoveryImport";
@@ -878,18 +879,51 @@ const MIN_META_NOTES_CHARS = 60;
 // Exported for tools/inspect-website-crawl.ts, which runs a real crawl against
 // one URL and prints both the raw items and what this makes of them.
 export function crawledText(table: EnrichTable): string | null {
-  const parts: string[] = [];
-  for (let i = 0; i < table.rows.length && parts.length < WEBSITE_NOTES_MAX_PAGES; i++) {
+  const pages: { url: string; text: string }[] = [];
+  for (let i = 0; i < table.rows.length && pages.length < WEBSITE_NOTES_MAX_PAGES; i++) {
     const text = cell(table, i, CRAWLED_TEXT_FIELDS);
     // Thin bodies are held back rather than dropped: if no page on the site
     // clears the bar, the best of them is still better than the meta fallback,
     // and the fallback is still better than nothing.
     if (text.length < MIN_PAGE_TEXT_CHARS) continue;
-    parts.push(labelled(cell(table, i, CRAWLED_URL_FIELDS), text));
+    pages.push({ url: cell(table, i, CRAWLED_URL_FIELDS), text });
   }
 
-  if (parts.length === 0) return thinCrawlText(table);
-  return capped(parts.join("\n\n"));
+  if (pages.length === 0) return thinCrawlText(table);
+  return capped(
+    withoutSharedChrome(pages)
+      // Program pages first, so the cap never cuts the page that matters most.
+      .map((p, i) => ({ ...p, i, program: p.url !== "" && isProgramPageUrl(p.url) }))
+      .sort((a, b) => Number(b.program) - Number(a.program) || a.i - b.i)
+      .map((p) => labelled(p.url, p.text))
+      .join("\n\n"),
+  );
+}
+
+// The menu, header and footer are kept by the crawl (for the links), and they
+// repeat on every page — across six pages, often half the text. A line that
+// appears on two or more pages is the site's chrome, not that page's copy:
+// it is kept once, on the first page, and dropped from the rest. The links in
+// it are stored separately on websiteLinks.
+export function withoutSharedChrome(pages: { url: string; text: string }[]): { url: string; text: string }[] {
+  if (pages.length < 2) return pages;
+  const key = (line: string) => line.trim().replace(/\s+/g, " ").toLowerCase();
+  const seenOn = new Map<string, number>();
+  for (const page of pages) {
+    for (const k of Array.from(new Set(page.text.split("\n").map(key).filter((k) => k !== "")))) {
+      seenOn.set(k, (seenOn.get(k) ?? 0) + 1);
+    }
+  }
+  return pages.map((page, index) => {
+    if (index === 0) return page;
+    const kept = page.text
+      .split("\n")
+      .filter((line) => (seenOn.get(key(line)) ?? 0) < 2)
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    return { url: page.url, text: kept };
+  });
 }
 
 // Every link on every crawled page, read out of the crawler's markdown, with

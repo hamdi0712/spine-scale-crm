@@ -962,6 +962,43 @@ async function main(): Promise<void> {
       viaLink?.found === true && viaLink.citations[0]?.source === "https://ridgechiro.com/spinal-decompression",
       viaLink?.reason ?? "",
     );
+    const { programLinks, providerNameFromLink } = await import("../src/lib/websiteCrawl");
+    const { withoutSharedChrome } = await import("../src/lib/leadEnrich");
+    const junk = programLinks([
+      { text: "Skip to main content", url: "https://x.com/spinal-decompression#main", page: "https://x.com/" },
+      { text: "Learn more", url: "https://x.com/disc-herniation/", page: "https://x.com/" },
+      { text: "–", url: "https://x.com/sciatica/", page: "https://x.com/" },
+      { text: "Spinal Decompression", url: "https://x.com/spinal-decompression/", page: "https://x.com/spinal-decompression/" },
+      { text: "Spinal Decompression", url: "https://x.com/spinal-decompression/", page: "https://x.com/" },
+    ]);
+    check("generic-text and self links are ignored for signal 1", junk.length === 1 && junk[0].page === "https://x.com/", JSON.stringify(junk));
+    check(
+      "a provider's name is read from a doctor-page URL",
+      providerNameFromLink({ url: "https://x.com/doctors/dr-trista-shelton/" }) === "Dr. Trista Shelton" &&
+        providerNameFromLink({ url: "https://x.com/our-team/jane-doe-dc" }) === "Jane Doe" &&
+        providerNameFromLink({ url: "https://x.com/doctors/" }) === null,
+    );
+    const teamEvidence = {
+      ...evidence,
+      websiteNotes: "[https://ridgechiro.com/]\nMeet Dr. Shelton, our lead chiropractor.",
+      websiteLinks: JSON.stringify([
+        { text: "Dr. Trista Shelton", url: "https://ridgechiro.com/doctors/dr-trista-shelton/", page: home },
+        { text: "Learn more", url: "https://ridgechiro.com/doctors/dr-ken-ortiz/", page: home },
+      ]),
+    };
+    const team = chiroProgramCheck(teamEvidence as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(teamEvidence as Parameters<typeof evidenceDocs>[0])).signals.find((x) => x.key === "team");
+    check(
+      "doctor-page links count as team evidence, one person counted once",
+      team?.found === true && team.citations.some((c) => c.source.endsWith("/dr-ken-ortiz/") && c.quote === "Dr. Ken Ortiz"),
+      JSON.stringify(team?.citations),
+    );
+    const oneDoc = chiroProgramCheck({ ...teamEvidence, websiteLinks: JSON.stringify([{ text: "Dr. Trista Shelton", url: "https://ridgechiro.com/doctors/dr-trista-shelton/", page: home }]) } as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(teamEvidence as Parameters<typeof evidenceDocs>[0])).signals.find((x) => x.key === "team");
+    check("…and 'Dr. Shelton' in copy plus her own page link is still one provider", oneDoc?.found === false);
+    const stripped = withoutSharedChrome([
+      { url: "https://x.com/", text: "Home\nServices\nWelcome to the clinic." },
+      { url: "https://x.com/a", text: "Home\nServices\nAbout page copy." },
+    ]);
+    check("menu lines repeated across pages are kept once", stripped[0].text.includes("Services") && stripped[1].text === "About page copy.");
     const noLinks = chiroProgramCheck({ ...evidence, websiteLinks: null } as Parameters<typeof chiroProgramCheck>[0], null, docs).signals.find((x) => x.key === "page");
     check("…and without stored links it does not", noLinks?.found === false);
   }
