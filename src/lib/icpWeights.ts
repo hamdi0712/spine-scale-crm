@@ -116,6 +116,9 @@ export const CHIRO_EQUIPMENT = [
   "Class IV laser",
   "Class 4 laser",
   "K-Laser",
+  "deep tissue laser",
+  "high-intensity laser",
+  "high intensity laser",
   "LightForce",
   "Erchonia",
   "Cox Technic",
@@ -137,4 +140,9 @@ export const CHIRO_CONSULT_PHRASES = [
   "see if you're a candidate",
   "see if you are a candidate",
   "are you a candidate",
+  // New-patient offers are the same invitation in through the door.
+  "new patient special",
+  "new patient exam",
+  "new patient offer",
+  "first visit special",
 ];

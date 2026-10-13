@@ -336,6 +336,14 @@ export function normalizeForMatch(text: string): string {
 
 const URL_LINE = /^https?:\/\/\S+$/;
 
+function siteHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 // The crawler stores each page as its URL on a line of its own followed by the
 // page's text (labelled() in src/lib/leadEnrich.ts). Split back along those
 // lines, so a quote is cited to the page it was actually read off.
@@ -347,8 +355,18 @@ export function websitePages(
   if (text === "") return [];
   const pages: { source: string; lines: string[] }[] = [];
   let current: { source: string; lines: string[] } = { source: fallbackSource, lines: [] };
+  // A page's URL line opens the note or follows a blank line, and is on the
+  // clinic's own site. A bare link inside a page's text — a YouTube video, a
+  // booking widget — is that page's content, not a new page, and must not
+  // become the source of what is around it.
+  let site: string | null = null;
+  let previousBlank = true;
   for (const line of text.split(/\r?\n/)) {
-    if (URL_LINE.test(line.trim())) {
+    const blank = line.trim() === "";
+    const wasBlank = previousBlank;
+    previousBlank = blank;
+    if (wasBlank && URL_LINE.test(line.trim()) && (site === null || siteHost(line.trim()) === site)) {
+      site ??= siteHost(line.trim());
       if (current.lines.join("").trim() !== "") pages.push(current);
       current = { source: line.trim(), lines: [] };
       continue;

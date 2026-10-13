@@ -994,6 +994,26 @@ async function main(): Promise<void> {
     );
     const oneDoc = chiroProgramCheck({ ...teamEvidence, websiteLinks: JSON.stringify([{ text: "Dr. Trista Shelton", url: "https://ridgechiro.com/doctors/dr-trista-shelton/", page: home }]) } as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(teamEvidence as Parameters<typeof evidenceDocs>[0])).signals.find((x) => x.key === "team");
     check("…and 'Dr. Shelton' in copy plus her own page link is still one provider", oneDoc?.found === false);
+    const { websitePages } = await import("../src/lib/icpScoring");
+    const split = websitePages(
+      "https://www.handson.test/\nMeet our doctors\nhttps://www.youtube.com/watch?v=hu3AB9ZKoFI\nDr. Trista Shelton and Dr. Ken Ortiz\n\nhttps://handson.test/about/\nAbout us",
+      "Clinic website",
+    );
+    check(
+      "a bare YouTube line inside a page is not a new page source",
+      split.length === 2 && split[0].source === "https://www.handson.test/" && split[0].text.includes("Dr. Trista Shelton") && split[1].source === "https://handson.test/about/",
+      JSON.stringify(split.map((p) => p.source)),
+    );
+    const offerEvidence = {
+      clinicName: "Hands On",
+      websiteNotes: "https://handson.test/\nClaim our $75 New Patient Special today.\nWe treat pain with a deep tissue laser and spinal care.",
+      websiteLinks: null,
+      metaAdsSignal: null,
+      reviewCount: null,
+    };
+    const offer = chiroProgramCheck(offerEvidence as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(offerEvidence as Parameters<typeof evidenceDocs>[0])).signals;
+    check("'$75 New Patient Special' counts as a consult offer", offer.find((x) => x.key === "consult")?.found === true);
+    check("'deep tissue laser' counts as named equipment", offer.find((x) => x.key === "equipment")?.found === true);
     const stripped = withoutSharedChrome([
       { url: "https://x.com/", text: "Home\nServices\nWelcome to the clinic." },
       { url: "https://x.com/a", text: "Home\nServices\nAbout page copy." },
