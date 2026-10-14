@@ -58,6 +58,8 @@ import {
   parseStep2BumpReply,
   step2BumpNote,
   stepLock,
+  FirstMessageVariant,
+  inventedStatsReason,
 } from "@/lib/outreachSequence";
 import {
   OutreachStepResult,
@@ -365,6 +367,51 @@ export async function generateOutreachStep(
     };
   }
 
+  // The invented-stats gate (inventedStatsReason). A variant that fails it is
+  // dropped and the call is made once more; the second answer can only fill
+  // the variants the first one failed on. A variant that fails twice is not
+  // saved, and if that leaves nothing, the step says so rather than saving it
+  // or quietly falling through to the curiosity opener.
+  const rejected = new Map<FirstMessageVariant, string>();
+  const screen = (variants: typeof parsed.variants) => {
+    for (const v of FIRST_MESSAGE_VARIANTS) {
+      const content = variants[v];
+      if (content === null) continue;
+      const why = inventedStatsReason(content, ctx.evidence);
+      if (why !== null) {
+        rejected.set(v, why);
+        variants[v] = null;
+      }
+    }
+  };
+  screen(parsed.variants);
+  if (rejected.size > 0) {
+    trace(debug, `invented-stats gate rejected ${Array.from(rejected.keys()).join(", ")}; regenerating once`);
+    const failedFirst = new Set(rejected.keys());
+    rejected.clear();
+    const again = await deepSeekJson({ system, user, maxTokens: SEQUENCE_MAX_TOKENS });
+    const second = again.ok ? parseFirstMessageReply(again.content) : null;
+    if (second) {
+      screen(second.variants);
+      for (const v of Array.from(failedFirst)) {
+        if (second.variants[v] !== null) parsed.variants[v] = second.variants[v];
+        else if (!rejected.has(v)) rejected.set(v, "the second attempt did not write it");
+      }
+    } else {
+      for (const v of Array.from(failedFirst)) rejected.set(v, "the second attempt failed");
+    }
+    const anyClean = FIRST_MESSAGE_VARIANTS.some((v) => parsed.variants[v] !== null);
+    if (!anyClean) {
+      return {
+        ok: false,
+        error: `Couldn't write a clean opener: ${Array.from(rejected.entries())
+          .map(([v, why]) => `variant ${v}, ${why}`)
+          .join("; ")}. Nothing has been saved.`,
+        debug,
+      };
+    }
+  }
+
   // Whichever of the three came back usable. A variant the evidence could not
   // support comes back null and is simply not written — two options that are
   // both true beat three where one is filler.
@@ -435,10 +482,13 @@ async function generateCuriosityFallback({
   ctx,
   basedOn,
   debug,
+  attempt = 1,
 }: {
   leadId: string;
   ctx: SequenceContext;
   basedOn: string[];
+  // The invented-stats gate allows one regeneration.
+  attempt?: number;
   // TEMPORARY, see trace() above. Carried in rather than started here so the
   // trace reads as one path through the step rather than two.
   debug: string[];
@@ -516,6 +566,12 @@ async function generateCuriosityFallback({
       "neither curiosity variant could be grounded, so the step was left unfilled",
     );
     return { ok: true, step, written: 0, fromTemplate: false, basedOn, debug };
+  }
+  const dirty = inventedStatsReason(chosen.content, ctx.evidence);
+  if (dirty !== null) {
+    trace(debug, `invented-stats gate rejected the curiosity opener: ${dirty}`);
+    if (attempt < 2) return await generateCuriosityFallback({ leadId, ctx, basedOn, debug, attempt: attempt + 1 });
+    return { ok: false, error: `Couldn't write a clean opener: ${dirty}. Nothing has been saved.`, debug };
   }
   trace(debug, `writing one message, mechanism=${chosen.mechanism}`);
 

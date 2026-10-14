@@ -1326,7 +1326,8 @@ function firstMessagePrompt(ctx: SequenceContext): string {
     "Write up to three versions, so the person sending can choose. Each is a different pain, and each is only written where this clinic's evidence actually supports it. Do not force one the evidence does not support.",
     "",
     "VARIANT A, funnel capture. Use ONLY where advertising or paid traffic is evidenced AND the landing or booking flow shows a specific weakness you can name.",
-    `  "Thanks for connecting, ${address}. Noticed ${clinic} is running <ads or traffic> to the <verified> page, but the booking step looks form-only, no calendar. That's usually where a chunk of paid leads never make it to a consult. Is that something you're already on top of, or worth me sending what I'd flag?"`,
+    `  "Thanks for connecting, ${address}. Noticed ${clinic} is running <ads or traffic> to the <verified> page, and the booking step looks form-only, no calendar. Curious, do most of those leads end up on the schedule, or is that something worth a second look?"`,
+    "  No claim about what happens to those leads and no figure: the observation, then the question.",
     "  Name only the advertising and the booking weakness the evidence actually shows. If the evidence does not show what the booking step looks like, this variant is null.",
     ads === ""
       ? "  THERE IS NO ADVERTISING EVIDENCE FOR THIS CLINIC. Return null for A. Writing it would mean inventing an ad."
@@ -1708,6 +1709,46 @@ export function readObservation(raw: unknown): string | null {
     return null;
   }
   return text;
+}
+
+// The gate on every step 2 message, after the model has written it — the
+// same idea as readFollowUpObservation, aimed at invented stats and
+// comparisons. The prompt forbids them; this makes sure. A message is rejected
+// for a percentage, a dollar figure, "most clinics", "usually", "on average",
+// "typically", a comparison to other clinics, or any number that is not this
+// clinic's review count, part of its name, or inside a quote that is word for
+// word on its own site.
+export function inventedStatsReason(
+  message: string,
+  evidence: Pick<IcpAssistEvidence, "clinicName" | "websiteNotes" | "reviewCount">,
+): string | null {
+  const text = message.replace(/\s+/g, " ");
+  const banned: [RegExp, string][] = [
+    [/%|\bper\s?cent\b/i, "a percentage"],
+    [/\$\s?\d|\b\d+(\.\d+)?\s?k\b|\bdollars?\b/i, "a dollar figure"],
+    [/\bmost\s+(clinics|practices|offices|chiropractors|chiros|doctors|providers|people|patients)\b/i, "\"most clinics\""],
+    [/\busually\b/i, "\"usually\""],
+    [/\bon\s+average\b/i, "\"on average\""],
+    [/\btypical(ly)?\b/i, "\"typically\""],
+    [/\b(clinics|practices|offices)\s+(your|of\s+your)\s+size\b|\b(other|similar)\s+(clinics|practices|offices)\b|\bthan\s+most\b|\bcompared\s+(to|with)\b|\bthe\s+average\b/i, "a comparison to other clinics"],
+  ];
+  for (const [re, what] of banned) if (re.test(text)) return `it uses ${what}`;
+
+  // Numbers: drop what is allowed, then anything left is invented.
+  const norm = (t: string) => t.toLowerCase().replace(/[“”"‘’']/g, "").replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
+  const notes = norm(evidence.websiteNotes ?? "");
+  let rest = text;
+  for (const m of Array.from(text.matchAll(/[“"]([^”"]{3,300})[”"]/g))) {
+    if (notes.includes(norm(m[1]))) rest = rest.replace(m[0], " ");
+  }
+  const name = evidence.clinicName.trim();
+  if (name !== "") rest = rest.split(name).join(" ");
+  for (const m of Array.from(rest.matchAll(/\d[\d,]*(\.\d+)?/g))) {
+    const n = Number(m[0].replace(/,/g, ""));
+    if (evidence.reviewCount != null && n === evidence.reviewCount) continue;
+    return `it uses the number ${m[0]}, which is not the review count or a quote from the site`;
+  }
+  return null;
 }
 
 // The clause the follow-up is built around.

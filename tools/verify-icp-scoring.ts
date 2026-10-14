@@ -1162,6 +1162,39 @@ async function main(): Promise<void> {
     check("the curiosity fallback gets the same filtered list", !fb.includes("Paid leads go cold") && fb.includes("No-shows after the first consult"));
   }
 
+  // The invented-stats gate on generated step 2 messages.
+  {
+    const { inventedStatsReason, curiosityProcessNote, curiosityPainSignalNote } = await import("../src/lib/outreachSequence");
+    const ev = {
+      clinicName: "360 Rehab & Chiropractic",
+      websiteNotes: "https://r.test/\nWe reply to every message within 24-48 hours. Open 7 days.",
+      reviewCount: 18,
+    };
+    const bad: [string, string][] = [
+      ["percent", "Noticed you run ads. Around 30% of those leads never book, worth a look?"],
+      ["dollar", "At $3k a case, is follow-up on your radar?"],
+      ["k figure", "That's 2-6k a case, already handled?"],
+      ["most clinics", "Most clinics lose a few here. Already handled?"],
+      ["usually", "That's usually where leads slip. Worth a look?"],
+      ["on average", "On average that step drops leads. Worth a look?"],
+      ["typically", "Typically that step drops leads. Worth a look?"],
+      ["clinics your size", "Clinics your size see this a lot. Already handled?"],
+      ["stray number", "Do 2 or 3 of those leads end up on the schedule?"],
+      ["unquoted site number", "You reply within 24-48 hours, is that the front desk?"],
+    ];
+    for (const [label, msg] of bad) check(`gate rejects: ${label}`, inventedStatsReason(msg, ev) !== null, inventedStatsReason(msg, ev) ?? "passed");
+    const good: [string, string][] = [
+      ["review count", "Saw 360 Rehab & Chiropractic has 18 Google reviews. Is asking for reviews something that runs automatically?"],
+      ["quoted site text", "Saw the contact page says “We reply to every message within 24-48 hours.” With a lot on the front desk's plate, is that hard to keep up?"],
+      ["Variant A shape", "Thanks for connecting, Dr. Lee. Noticed 360 Rehab & Chiropractic is running ads to the decompression page, and the booking step looks form-only, no calendar. Curious, do most of those leads end up on the schedule, or is that something worth a second look?"],
+      ["curiosity process", curiosityProcessNote({ address: "Dr. Lee", detail: "decompression and laser care" })],
+      ["curiosity pain signal", curiosityPainSignalNote({ address: "Dr. Lee", clinicName: ev.clinicName })],
+    ];
+    for (const [label, msg] of good) check(`gate passes: ${label}`, inventedStatsReason(msg, ev) === null, inventedStatsReason(msg, ev) ?? "");
+    const prompt = buildStepPrompt("FIRST_MESSAGE", { evidence: { ...ev, metaAdsSignal: "2 active ads, running 3mo" }, contactName: null, contactTitle: null, loomUrl: null, priorMessages: [], replyText: null } as never).user;
+    check("Variant A is a question with no 'usually' claim", !prompt.includes("chunk of paid leads") && prompt.includes("end up on the schedule"));
+  }
+
   await prisma.$disconnect();
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
   process.exit(failures === 0 ? 0 : 1);
