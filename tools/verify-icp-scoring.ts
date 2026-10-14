@@ -1187,7 +1187,7 @@ async function main(): Promise<void> {
       ["review count", "Saw 360 Rehab & Chiropractic has 18 Google reviews. Is asking for reviews something that runs automatically?"],
       ["quoted site text", "Saw the contact page says “We reply to every message within 24-48 hours.” With a lot on the front desk's plate, is that hard to keep up?"],
       ["Variant A shape", "Thanks for connecting, Dr. Lee. Noticed 360 Rehab & Chiropractic is running ads to the decompression page, and the booking step looks form-only, no calendar. Curious, do most of those leads end up on the schedule, or is that something worth a second look?"],
-      ["curiosity process", curiosityProcessNote({ address: "Dr. Lee", detail: "decompression and laser care" })],
+      ["curiosity process", curiosityProcessNote({ address: "Dr. Lee", detail: "decompression and laser care" }) ?? ""],
       ["curiosity pain signal", curiosityPainSignalNote({ address: "Dr. Lee", clinicName: ev.clinicName })],
     ];
     for (const [label, msg] of good) check(`gate passes: ${label}`, inventedStatsReason(msg, ev) === null, inventedStatsReason(msg, ev) ?? "");
