@@ -1023,6 +1023,87 @@ async function main(): Promise<void> {
     check("…and without stored links it does not", noLinks?.found === false);
   }
 
+  // Buying triggers: strength tags, dates on time-based triggers, no ads.
+  {
+    const { parseBuyingTrigger, showsRecency } = await import("../src/lib/icpDefinition");
+    const { triggersEntry, evidenceDocs, triggerId } = await import("../src/lib/icpScoring");
+    const { choosePagesToFollow } = await import("../src/lib/websiteCrawl");
+    const strong = parseBuyingTrigger("Hiring a new associate doctor [strong]");
+    check("[strong] is 10, tag removed from the label", strong.points === 10 && strong.label === "Hiring a new associate doctor" && strong.timeBased);
+    check("[medium] and untagged are 5", parseBuyingTrigger("[medium] Opened a new location").points === 5 && parseBuyingTrigger("Cash-pay pricing posted").points === 5);
+    check("an ads trigger is recognised as one", parseBuyingTrigger("Running Facebook ads [strong]").aboutAds);
+    check("dates and newness read as recency", showsRecency("Seminar on March 12, 2026") && showsRecency("Now hiring a front desk") && showsRecency("Coming soon: DRX9000") && showsRecency("Workshop 11/04/26"));
+    check("…a bare mention does not", !showsRecency("We hold seminars for the community") && !showsRecency("Join our team of caring staff"));
+
+    const icp = {
+      buyingTriggers: [
+        "Hiring front desk or associate [strong]",
+        "Hosts back pain seminars [medium]",
+        "New decompression device [strong]",
+        "Running Meta ads [strong]",
+        "Posts cash-pay pricing",
+      ].join("\n"),
+    };
+    const ev = {
+      clinicName: "Trigger Test",
+      websiteNotes: [
+        "https://tt.test/",
+        "Now hiring: front desk coordinator and associate chiropractor.",
+        "We host back pain seminars for the community.",
+        "Our decompression table helps patients.",
+        "Initial visit $75, packages from $900.",
+      ].join("\n"),
+      metaAdsSignal: "Active ads: 3 running since 2026-09-01",
+      reviewCount: null,
+    };
+    const docs = evidenceDocs(ev as Parameters<typeof evidenceDocs>[0]);
+    const claim = (i: number, quote: string, source = "https://tt.test/") => ({ id: triggerId(i), quote, source, reason: "x" });
+    const reply = {
+      buyingTriggers: [
+        claim(0, "Now hiring: front desk coordinator and associate chiropractor."),
+        claim(1, "We host back pain seminars for the community."),
+        claim(2, "Our decompression table helps patients."),
+        claim(3, "Active ads: 3 running since 2026-09-01", "Meta ads signal"),
+        claim(4, "Initial visit $75, packages from $900."),
+      ],
+    };
+    const t = triggersEntry(icp as never, reply as never, docs);
+    const labels = (t.parts ?? []).map((p) => `${p.label}=${p.points}`);
+    check(
+      "hiring with 'now' scores 10, undated seminar and device 0, ads 0, untagged 5 → 15",
+      t.points === 15 && labels.length === 2 && labels.includes("Hiring front desk or associate=10") && labels.includes("Posts cash-pay pricing=5"),
+      `${t.points}: ${labels.join(", ")}`,
+    );
+    const capped = triggersEntry(
+      { buyingTriggers: "A [strong]\nB [strong]\nC [strong]" } as never,
+      { buyingTriggers: [claim(0, "Now hiring: front desk coordinator and associate chiropractor."), claim(1, "We host back pain seminars for the community."), claim(2, "Initial visit $75, packages from $900.")] } as never,
+      docs,
+    );
+    check("triggers still cap at 20", capped.points === 20, `${capped.points}`);
+
+    const home = "https://tt.test/";
+    const L = (text: string, path: string) => ({ text, url: `https://tt.test${path}`, page: home });
+    const menu = [
+      L("About Us", "/about/"),
+      L("Services", "/services/"),
+      L("Spinal Decompression", "/spinal-decompression/"),
+      L("Sciatica", "/sciatica/"),
+      L("Disc Herniation", "/disc-herniation/"),
+      L("Back Pain", "/back-pain/"),
+      L("Spine Care", "/spine/"),
+      L("Careers", "/careers/"),
+      L("Contact", "/contact/"),
+    ];
+    const five = choosePagesToFollow(menu, home, 5);
+    check(
+      "one of the five follow slots goes to a careers/about page; program pages take the rest",
+      five.length === 5 && five[4] === "https://tt.test/about/" && five.slice(0, 4).every((u) => /decompression|sciatica|disc|back-pain/.test(u)),
+      five.join(", "),
+    );
+    check("with one slot, the program page keeps it", choosePagesToFollow(menu, home, 1)[0] === "https://tt.test/spinal-decompression/");
+    check("no trigger page linked, no slot held", choosePagesToFollow(menu.filter((l) => !/about|careers/.test(l.url)), home, 5).length === 5);
+  }
+
   // Step 2 reads the pain points as background, and only when there are some.
   const ctx = {
     evidence: { clinicName: "Summit", websiteNotes: "x", metaAdsSignal: null, reviewCount: null },

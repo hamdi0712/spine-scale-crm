@@ -180,6 +180,59 @@ export function buyingTriggerLines(
   return lines(icp.buyingTriggers);
 }
 
+// One buying trigger line, read for its strength tag. "[strong]" is worth
+// TRIGGER_POINTS.strong, "[medium]" — or no tag — TRIGGER_POINTS.medium. The
+// tag is taken off the label the scorer and the card show.
+export const TRIGGER_POINTS = { strong: 10, medium: 5 } as const;
+export type TriggerStrength = keyof typeof TRIGGER_POINTS;
+
+export interface BuyingTrigger {
+  label: string;
+  strength: TriggerStrength;
+  points: number;
+  // Hiring, a new location, provider or device, a seminar: only news while it
+  // is new, so it scores only with a date or "new / now / coming soon".
+  timeBased: boolean;
+  // A trigger about running ads. Ads are scored in Budget Signal and the chiro
+  // program check; a trigger line about them never scores a second time.
+  aboutAds: boolean;
+}
+
+const STRENGTH_TAG = /\[\s*(strong|medium)\s*\]/i;
+const TIME_BASED_TRIGGER = /\b(hir(e|es|ed|ing)|jobs?|careers?|recruit\w*|open(ed|ing)|expan\w*|seminars?|workshops?|webinars?|events?|talks?|lunch\s+(and|&)\s+learn)\b|\b(new|added|adding|another)\b[\w\s-]{0,40}\b(locations?|offices?|clinics?|providers?|doctors?|chiropractors?|associates?|devices?|equipment|machines?|tables?|lasers?|technology|staff)\b/i;
+const AD_TRIGGER = /\b(ads?|advertis\w*|meta|facebook|instagram|ppc|google\s+ads)\b/i;
+
+export function parseBuyingTrigger(line: string): BuyingTrigger {
+  const tag = line.match(STRENGTH_TAG);
+  const strength: TriggerStrength = tag && tag[1].toLowerCase() === "strong" ? "strong" : "medium";
+  const label = line.replace(STRENGTH_TAG, "").replace(/\s{2,}/g, " ").trim();
+  return {
+    label,
+    strength,
+    points: TRIGGER_POINTS[strength],
+    timeBased: TIME_BASED_TRIGGER.test(label),
+    aboutAds: AD_TRIGGER.test(label),
+  };
+}
+
+export function buyingTriggers(icp: Pick<IcpDefinitionData, "buyingTriggers">): BuyingTrigger[] {
+  return buyingTriggerLines(icp).map(parseBuyingTrigger);
+}
+
+// What a time-based trigger's quote must show to count: a visible date, or
+// explicit newness. "We offer seminars" is not a trigger; "Seminar — March 12"
+// or "Now hiring" is.
+const MONTH = "(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
+const VISIBLE_DATE = new RegExp(
+  `\\b(${MONTH}\\s+\\d{1,2}(st|nd|rd|th)?(,?\\s+20\\d\\d)?|\\d{1,2}\\s+${MONTH}|${MONTH}\\s+20\\d\\d|\\d{1,2}[/.-]\\d{1,2}[/.-](20)?\\d\\d|20\\d\\d-\\d\\d-\\d\\d|(19|20)\\d\\d)\\b`,
+  "i",
+);
+const NEWNESS = /\b(new|newly|now|coming\s+soon|just\s+(opened|joined|arrived|added|launched)|grand\s+opening|opening\s+soon|upcoming)\b/i;
+
+export function showsRecency(quote: string): boolean {
+  return VISIBLE_DATE.test(quote) || NEWNESS.test(quote);
+}
+
 // ─── Reading a row ─────────────────────────────────────────────────────────
 
 export function readIcpDefinition(row: {

@@ -28,6 +28,7 @@ export const SCORING_NOTES_MAX_CHARS = 24000;
 import {
   IcpDefinitionData,
   buyingTriggerLines,
+  parseBuyingTrigger,
   disqualifierLines,
   sizeRangeLabel,
 } from "@/lib/icpDefinition";
@@ -99,7 +100,11 @@ function userPrompt(
   const triggerLines =
     triggers.length === 0
       ? "  (none defined — return an empty list)"
-      : triggers.map((t, i) => `  ${triggerId(i)} — ${t}`).join("\n");
+      : triggers
+          .map((line) => parseBuyingTrigger(line))
+          .map((t, i) => (t.aboutAds ? null : `  ${triggerId(i)} — ${t.label}${t.timeBased ? " (only with a date or new / now / coming soon wording in the quote)" : ""}`))
+          .filter((l): l is string => l !== null)
+          .join("\n");
 
   return [
     `CLINIC: ${evidence.clinicName}`,
@@ -142,7 +147,7 @@ function userPrompt(
     "7. location — the clinic's address or city and state, as written.",
     "8. locationCount — how many clinic locations it has, from an address list or a statement such as \"our three offices\". One street address with nothing on the site suggesting other locations is 1 — quote the address.",
     "9. team — named providers or staff on the site (clinicians named, \"our team\", front-desk staff). providers is the number of clinicians you can count, or null.",
-    "10. buyingTriggers — the triggers above that the evidence shows.",
+    "10. buyingTriggers — the triggers above that the website shows. Quote the words that show it, including the date or the new / now / coming soon wording where the trigger asks for it. Never cite the Meta ads data here — ads are scored elsewhere.",
     `11. paymentModel — "cash" (self-pay or packages only), "hybrid" (insurance accepted AND a cash, self-pay or package option stated), or "insurance" (an explicit insurance-only statement). An insurer list alone is not "insurance" — return null unless you can quote one of those three.`,
     `12. The three automation gaps. ${ICP_GAP_GUIDANCE} true means the gap is present.`,
     ...ICP_GAPS.map((g) => `    ${gapId(g.key)} — ${g.label}${g.signal ? ` (${g.signal})` : ""}`),
