@@ -186,7 +186,7 @@ export default function IcpDefinitionForm({
               onChange={(e) => setBuyingTriggers(e.target.value)}
               maxLength={ICP_LONG_TEXT_MAX}
               rows={5}
-              placeholder="One per line. Each one found on a clinic, with a citation, scores in Signals."
+              placeholder="One per line. Tag [strong] (10 pts) or [medium] (5 pts, the default). Hiring, new location / provider / device and seminars count only with a date or new / now / coming soon wording. Ads are never a trigger."
               className="field leading-relaxed"
             />
           </div>

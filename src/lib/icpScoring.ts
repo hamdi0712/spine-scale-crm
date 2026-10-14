@@ -38,7 +38,9 @@ import { GapPrecheck, precheckNote } from "@/lib/discoveryAssist";
 import { ICP_GAPS, IcpGapKey, IcpTier } from "@/lib/icp";
 import {
   IcpDefinitionData,
-  buyingTriggerLines,
+  buyingTriggers,
+  showsRecency,
+  TRIGGER_POINTS,
   disqualifierLines,
   sizeInRange,
   sizeRangeLabel,
@@ -1514,33 +1516,41 @@ export function summaryConsistency(
 
 // ─── Signals ───────────────────────────────────────────────────────────────
 
-function triggersEntry(
+export function triggersEntry(
   icp: IcpDefinitionData,
   reply: ScoringReply | null,
   docs: EvidenceDoc[],
 ): CriterionEntry {
-  const lines = buyingTriggerLines(icp);
+  const lines = buyingTriggers(icp);
   if (lines.length === 0) {
     return entry("triggers", 0, "The active ICP lists no buying triggers yet, so there is nothing to find.", [], "unanswered", "no triggers defined");
   }
   const parts: CriterionPart[] = [];
   const seen = new Set<string>();
+  // Ads are Budget Signal's and the chiro program check's; a quote from the
+  // ads data is never a trigger, whatever line it is claimed for.
+  const pageDocs = docs.filter((d) => d.source !== SOURCE_ADS);
   for (const found of reply?.buyingTriggers ?? []) {
     const index = lines.findIndex((_, i) => triggerId(i) === found.id);
     if (index === -1 || seen.has(found.id)) continue;
-    const citation = verifyQuote(found.quote, found.source, docs);
+    const trigger = lines[index];
+    if (trigger.aboutAds) continue;
+    const citation = verifyQuote(found.quote, found.source, pageDocs);
     if (!citation) continue;
+    // Time-based triggers: no date and no "new / now / coming soon" in the
+    // cited words is 0, not partial.
+    if (trigger.timeBased && !showsRecency(citation.quote)) continue;
     seen.add(found.id);
     parts.push({
-      label: lines[index],
-      points: SIGNAL_WEIGHTS.buyingTriggerEach,
-      max: SIGNAL_WEIGHTS.buyingTriggerEach,
+      label: trigger.label,
+      points: trigger.points,
+      max: trigger.points,
       reason: clip((found.reason ?? "").trim(), 200),
       citation,
     });
   }
   const points = Math.min(
-    parts.length * SIGNAL_WEIGHTS.buyingTriggerEach,
+    parts.reduce((sum, p) => sum + p.points, 0),
     SIGNAL_WEIGHTS.buyingTriggersMax,
   );
   return entry(
@@ -1785,7 +1795,7 @@ export function allowedPoints(key: CriterionKey): number[] {
       values.add(CRITERION_MAX[key]);
       break;
     case "triggers":
-      for (let p = SIGNAL_WEIGHTS.buyingTriggerEach; p <= SIGNAL_WEIGHTS.buyingTriggersMax; p += SIGNAL_WEIGHTS.buyingTriggerEach) {
+      for (let p = TRIGGER_POINTS.medium; p <= SIGNAL_WEIGHTS.buyingTriggersMax; p += TRIGGER_POINTS.medium) {
         values.add(p);
       }
       break;

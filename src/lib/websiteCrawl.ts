@@ -191,10 +191,36 @@ function normalizePage(url: string): string {
   }
 }
 
+// Pages where buying triggers show up — a job post, a new provider, an event.
+export const TRIGGER_PAGE_TERMS = [
+  "career",
+  "careers",
+  "job",
+  "jobs",
+  "hiring",
+  "employment",
+  "about",
+  "about us",
+  "team",
+  "our team",
+  "meet the team",
+  "staff",
+  "news",
+  "blog",
+  "events",
+  "event",
+  "seminar",
+  "seminars",
+  "workshops",
+];
+
 // The pages to read after the home page: on the clinic's own site, not files
-// or account pages, each once — priority links first, then the rest in the
+// or account pages, each once — program links first, then the rest in the
 // order the home page lists them (which is the menu's order, usually the
-// clinic's own idea of what matters).
+// clinic's own idea of what matters). When there are two or more slots, one
+// is kept for a careers / jobs / about / team / news / events page if the
+// home page links to one, so hiring, new-provider and seminar triggers have a
+// page to be seen on.
 export function choosePagesToFollow(
   links: WebsiteLink[],
   homeUrl: string,
@@ -206,6 +232,7 @@ export function choosePagesToFollow(
   const seen = new Set<string>([home]);
   const priority: string[] = [];
   const rest: string[] = [];
+  let reserved: string | undefined;
   for (const link of links) {
     if (host(link.url) !== site) continue;
     if (SKIP_EXTENSIONS.test(new URL(link.url).pathname) || SKIP_PATHS.test(link.url)) continue;
@@ -213,9 +240,14 @@ export function choosePagesToFollow(
     if (seen.has(key)) continue;
     seen.add(key);
     const path = decodeURIComponent(new URL(link.url).pathname);
-    (mentions(`${link.text} ${path}`, PRIORITY_LINK_TERMS) ? priority : rest).push(link.url);
+    const said = `${link.text} ${path.replace(/[-_/]+/g, " ")}`;
+    if (mentions(said, PRIORITY_LINK_TERMS)) priority.push(link.url);
+    else if (count >= 2 && reserved === undefined && mentions(said, TRIGGER_PAGE_TERMS)) reserved = link.url;
+    else rest.push(link.url);
   }
-  return [...priority, ...rest].slice(0, count);
+  const pool = [...priority, ...rest];
+  const picked = pool.slice(0, count - (reserved ? 1 : 0));
+  return reserved ? [...picked, reserved] : picked;
 }
 
 // ─── The chiro "dedicated page" signal, from a link ────────────────────────
