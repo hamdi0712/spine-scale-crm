@@ -41,6 +41,7 @@ export async function suggestIcpScoresV2(leadId: string): Promise<V2SuggestResul
       clinicName: true,
       websiteUrl: true,
       websiteNotes: true,
+      websiteLinks: true,
       metaAdsSignal: true,
       reviewCount: true,
       staffCountRaw: true,

@@ -523,6 +523,21 @@ again.
   as a full crawl. A site that refuses the crawl outright still stores nothing,
   which is the honest answer.
 
+  **Which pages are read, and the links.** The crawl runs in two passes: the
+  home page alone, then up to (page limit − 1) links off it on the clinic's own
+  site — links whose URL or text mentions decompression, disc, sciatica, back
+  pain, spine or avoiding surgery first. The page limit is *Pages per site* on
+  Settings → Pipeline (default 6; the crawler bills per page). Nav, header and
+  footer are kept rather than stripped, and every link on every crawled page
+  (text and URL) is stored on `websiteLinks` next to `websiteNotes`. The chiro
+  "dedicated page" signal accepts a cited link whose text or URL names
+  decompression, disc, sciatica or avoiding surgery, so a program page linked
+  in the menu counts even when it was not one of the pages read.
+  **Re-crawl website** in Discovery's selection bar re-runs only this crawler
+  for the selected candidates and replaces their notes and links — no other
+  actors, no rescoring, no status change. `tools/inspect-website-crawl.ts`
+  runs the same two passes and prints the links found and picked.
+
   A scraped headcount is stored as `staffCountRaw`, deliberately alongside the
   scorecard's 0–2 Staff Size Fit band rather than instead of it. On a lead it
   **suggests** a band (3–15 = 2, 2 or 16–20 = 1, 1 or 20+ = 0), pre-selected

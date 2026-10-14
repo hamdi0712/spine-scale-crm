@@ -924,6 +924,105 @@ async function main(): Promise<void> {
     console.log(`       ${name}: fit ${b.fitTotal}/60 — ${b.fit.map((e) => `${e.label} ${e.points} (${e.source})`).join(", ")}`);
   }
 
+  // Links: read off the crawler's markdown, chosen to follow, and counted for
+  // the chiro "dedicated page" signal when that page itself was not crawled.
+  {
+    const { linksFromMarkdown, choosePagesToFollow, isProgramLink, serializeLinks } = await import("../src/lib/websiteCrawl");
+    const { chiroProgramCheck, evidenceDocs } = await import("../src/lib/icpScoring");
+    const home = "https://ridgechiro.com/";
+    const md = [
+      "[Home](/) [About Us](/about) [Spinal Decompression](/spinal-decompression) [Blog](/blog)",
+      "[Discount plans](/discount) [Discover more](/discover) ![logo](/logo.png)",
+      "[Sciatica Relief](https://ridgechiro.com/sciatica/) [Facebook](https://facebook.com/ridge) [Brochure](/b.pdf)",
+      "© 2026 Ridge Chiropractic · [Privacy](/privacy)",
+    ].join("\n");
+    const links = linksFromMarkdown(md, home);
+    check("links come out of markdown with absolute URLs", links.some((l) => l.text === "Spinal Decompression" && l.url === "https://ridgechiro.com/spinal-decompression"));
+    check("an image is not a link", !links.some((l) => l.url.endsWith("/logo.png")));
+    const follow = choosePagesToFollow(links, home, 3);
+    check(
+      "priority links are followed first, off-site and files skipped",
+      follow[0] === "https://ridgechiro.com/spinal-decompression" && follow[1] === "https://ridgechiro.com/sciatica/" && !follow.some((u) => u.includes("facebook") || u.endsWith(".pdf")),
+      follow.join(", "),
+    );
+    check("'discount' and 'discover' are not 'disc'", !isProgramLink({ text: "Discount plans", url: "https://x.com/discount" }) && !isProgramLink({ text: "Discover more", url: "https://x.com/discover" }));
+    check("'avoid surgery' and a /disc-herniation URL are program links", isProgramLink({ text: "Avoid Surgery", url: "https://x.com/a" }) && isProgramLink({ text: "Learn", url: "https://x.com/disc-herniation" }));
+
+    const evidence = {
+      clinicName: "Ridge Chiropractic",
+      websiteNotes: "[https://ridgechiro.com/]\nWelcome to Ridge Chiropractic, family care in Boise.",
+      websiteLinks: serializeLinks(links),
+      metaAdsSignal: null,
+      reviewCount: null,
+    };
+    const docs = evidenceDocs(evidence as Parameters<typeof evidenceDocs>[0]);
+    const viaLink = chiroProgramCheck(evidence as Parameters<typeof chiroProgramCheck>[0], null, docs).signals.find((x) => x.key === "page");
+    check(
+      "a program page linked in the nav but never crawled counts for signal 1",
+      viaLink?.found === true && viaLink.citations[0]?.source === "https://ridgechiro.com/spinal-decompression",
+      viaLink?.reason ?? "",
+    );
+    const { programLinks, providerNameFromLink } = await import("../src/lib/websiteCrawl");
+    const { withoutSharedChrome } = await import("../src/lib/leadEnrich");
+    const junk = programLinks([
+      { text: "Skip to main content", url: "https://x.com/spinal-decompression#main", page: "https://x.com/" },
+      { text: "Learn more", url: "https://x.com/disc-herniation/", page: "https://x.com/" },
+      { text: "–", url: "https://x.com/sciatica/", page: "https://x.com/" },
+      { text: "Spinal Decompression", url: "https://x.com/spinal-decompression/", page: "https://x.com/spinal-decompression/" },
+      { text: "Spinal Decompression", url: "https://x.com/spinal-decompression/", page: "https://x.com/" },
+    ]);
+    check("generic-text and self links are ignored for signal 1", junk.length === 1 && junk[0].page === "https://x.com/", JSON.stringify(junk));
+    check(
+      "a provider's name is read from a doctor-page URL",
+      providerNameFromLink({ url: "https://x.com/doctors/dr-trista-shelton/" }) === "Dr. Trista Shelton" &&
+        providerNameFromLink({ url: "https://x.com/our-team/jane-doe-dc" }) === "Jane Doe" &&
+        providerNameFromLink({ url: "https://x.com/doctors/" }) === null,
+    );
+    const teamEvidence = {
+      ...evidence,
+      websiteNotes: "[https://ridgechiro.com/]\nMeet Dr. Shelton, our lead chiropractor.",
+      websiteLinks: JSON.stringify([
+        { text: "Dr. Trista Shelton", url: "https://ridgechiro.com/doctors/dr-trista-shelton/", page: home },
+        { text: "Learn more", url: "https://ridgechiro.com/doctors/dr-ken-ortiz/", page: home },
+      ]),
+    };
+    const team = chiroProgramCheck(teamEvidence as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(teamEvidence as Parameters<typeof evidenceDocs>[0])).signals.find((x) => x.key === "team");
+    check(
+      "doctor-page links count as team evidence, one person counted once",
+      team?.found === true && team.citations.some((c) => c.source.endsWith("/dr-ken-ortiz/") && c.quote === "Dr. Ken Ortiz"),
+      JSON.stringify(team?.citations),
+    );
+    const oneDoc = chiroProgramCheck({ ...teamEvidence, websiteLinks: JSON.stringify([{ text: "Dr. Trista Shelton", url: "https://ridgechiro.com/doctors/dr-trista-shelton/", page: home }]) } as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(teamEvidence as Parameters<typeof evidenceDocs>[0])).signals.find((x) => x.key === "team");
+    check("…and 'Dr. Shelton' in copy plus her own page link is still one provider", oneDoc?.found === false);
+    const { websitePages } = await import("../src/lib/icpScoring");
+    const split = websitePages(
+      "https://www.handson.test/\nMeet our doctors\nhttps://www.youtube.com/watch?v=hu3AB9ZKoFI\nDr. Trista Shelton and Dr. Ken Ortiz\n\nhttps://handson.test/about/\nAbout us",
+      "Clinic website",
+    );
+    check(
+      "a bare YouTube line inside a page is not a new page source",
+      split.length === 2 && split[0].source === "https://www.handson.test/" && split[0].text.includes("Dr. Trista Shelton") && split[1].source === "https://handson.test/about/",
+      JSON.stringify(split.map((p) => p.source)),
+    );
+    const offerEvidence = {
+      clinicName: "Hands On",
+      websiteNotes: "https://handson.test/\nClaim our $75 New Patient Special today.\nWe treat pain with a deep tissue laser and spinal care.",
+      websiteLinks: null,
+      metaAdsSignal: null,
+      reviewCount: null,
+    };
+    const offer = chiroProgramCheck(offerEvidence as Parameters<typeof chiroProgramCheck>[0], null, evidenceDocs(offerEvidence as Parameters<typeof evidenceDocs>[0])).signals;
+    check("'$75 New Patient Special' counts as a consult offer", offer.find((x) => x.key === "consult")?.found === true);
+    check("'deep tissue laser' counts as named equipment", offer.find((x) => x.key === "equipment")?.found === true);
+    const stripped = withoutSharedChrome([
+      { url: "https://x.com/", text: "Home\nServices\nWelcome to the clinic." },
+      { url: "https://x.com/a", text: "Home\nServices\nAbout page copy." },
+    ]);
+    check("menu lines repeated across pages are kept once", stripped[0].text.includes("Services") && stripped[1].text === "About page copy.");
+    const noLinks = chiroProgramCheck({ ...evidence, websiteLinks: null } as Parameters<typeof chiroProgramCheck>[0], null, docs).signals.find((x) => x.key === "page");
+    check("…and without stored links it does not", noLinks?.found === false);
+  }
+
   // Step 2 reads the pain points as background, and only when there are some.
   const ctx = {
     evidence: { clinicName: "Summit", websiteNotes: "x", metaAdsSignal: null, reviewCount: null },

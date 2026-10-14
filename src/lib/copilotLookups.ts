@@ -244,7 +244,7 @@ const BODY_MAX_CHARS = 1200;
 const UPCOMING_DAYS = 7;
 
 // How much of a website crawl to pass on. The crawler stores up to 20k
-// characters across three pages; a question about a clinic is answered by the
+// characters across the crawled pages; a question about a clinic is answered by the
 // first page of it, and the rest is a blog that would crowd out every other
 // lookup in the conversation.
 const SCRAPED_NOTES_MAX_CHARS = 1500;

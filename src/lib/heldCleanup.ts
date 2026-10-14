@@ -55,6 +55,7 @@ export async function resolveHeldCandidates(now = new Date()): Promise<HeldClean
       clinicName: c.clinicName,
       websiteUrl: c.websiteUrl,
       websiteNotes: c.websiteNotes,
+      websiteLinks: c.websiteLinks,
       metaAdsSignal: c.metaAdsSignal,
       reviewCount: c.reviewCount,
       staffCountRaw: c.staffCountRaw,

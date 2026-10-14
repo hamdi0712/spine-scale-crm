@@ -18,6 +18,7 @@ import { maxScoreFor } from "@/lib/storedBreakdown";
 import { resolveHeldCandidates } from "@/lib/heldCleanup";
 import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
+import { stepCostPerCandidate } from "@/lib/pipelineSettings";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
 import DiscoveryList, { DiscoveryRow } from "@/components/DiscoveryList";
 import DiscoverySelectionProvider from "@/components/DiscoverySelection";
@@ -230,7 +231,7 @@ export default async function DiscoveryPage({
           </div>
         ) : (
           <div className="mt-8">
-            <DiscoveryList rows={rows} />
+            <DiscoveryList rows={rows} recrawlCostPerClinic={stepCostPerCandidate("websiteContent", settings)} />
           </div>
         )}
       </div>

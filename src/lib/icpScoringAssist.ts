@@ -21,7 +21,10 @@
 
 import { GapPrecheck, precheckGaps } from "@/lib/discoveryAssist";
 import { ICP_GAPS, ICP_GAP_GUIDANCE, IcpGapKey } from "@/lib/icp";
-import { ASSIST_NOTES_MAX_CHARS } from "@/lib/icpAssist";
+// More of the site than the other prompts send: the crawl now reads six pages
+// with their menus kept, and the scorer is the one call that needs the whole
+// service list. ~6k input tokens at most, a fraction of a cent.
+export const SCORING_NOTES_MAX_CHARS = 24000;
 import {
   IcpDefinitionData,
   buyingTriggerLines,
@@ -176,7 +179,7 @@ function evidenceBlock(evidence: ScoringEvidence): string {
     `Website (${(evidence.websiteUrl ?? "").trim() || "no URL on record"}) — crawled pages, each under its own URL line:`,
     notes === ""
       ? "(not gathered — no website copy on this record)"
-      : `"""\n${truncate(notes, ASSIST_NOTES_MAX_CHARS)}\n"""`,
+      : `"""\n${truncate(notes, SCORING_NOTES_MAX_CHARS)}\n"""`,
     "",
     `${SOURCE_ADS}: ${ads === "" ? "(not gathered)" : ads}`,
     `Google review count: ${evidence.reviewCount === null ? "(not gathered)" : evidence.reviewCount}`,

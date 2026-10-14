@@ -33,6 +33,7 @@
 // rejected clinic is gone.
 
 import { budgetSignalScore, hasActiveAds } from "@/lib/discovery";
+import { isProgramPageUrl, parseLinks, programLinks, providerNameFromLink, isGenericLinkText } from "@/lib/websiteCrawl";
 import { GapPrecheck, precheckNote } from "@/lib/discoveryAssist";
 import { ICP_GAPS, IcpGapKey, IcpTier } from "@/lib/icp";
 import {
@@ -47,7 +48,6 @@ import {
   CHIRO_CONSULT_PHRASES,
   CHIRO_EQUIPMENT,
   CHIRO_PROGRAM_MIN_SIGNALS,
-  CHIRO_PROGRAM_PAGE_TERMS,
   FIT_FLOOR,
   FIT_MAX,
   FIT_WEIGHTS,
@@ -74,6 +74,10 @@ export interface ScoringEvidence {
   location: string | null;
   contactName: string | null;
   contactTitle: string | null;
+  // JSON [{ text, url, page }] — every link on the crawled pages, where the
+  // crawl stored them (src/lib/websiteCrawl.ts). Absent on records crawled
+  // before links were kept.
+  websiteLinks?: string | null;
 }
 
 // A claim and where it was read. `source` is a page URL for anything off the
@@ -332,6 +336,14 @@ export function normalizeForMatch(text: string): string {
 
 const URL_LINE = /^https?:\/\/\S+$/;
 
+function siteHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
 // The crawler stores each page as its URL on a line of its own followed by the
 // page's text (labelled() in src/lib/leadEnrich.ts). Split back along those
 // lines, so a quote is cited to the page it was actually read off.
@@ -343,8 +355,18 @@ export function websitePages(
   if (text === "") return [];
   const pages: { source: string; lines: string[] }[] = [];
   let current: { source: string; lines: string[] } = { source: fallbackSource, lines: [] };
+  // A page's URL line opens the note or follows a blank line, and is on the
+  // clinic's own site. A bare link inside a page's text — a YouTube video, a
+  // booking widget — is that page's content, not a new page, and must not
+  // become the source of what is around it.
+  let site: string | null = null;
+  let previousBlank = true;
   for (const line of text.split(/\r?\n/)) {
-    if (URL_LINE.test(line.trim())) {
+    const blank = line.trim() === "";
+    const wasBlank = previousBlank;
+    previousBlank = blank;
+    if (wasBlank && URL_LINE.test(line.trim()) && (site === null || siteHost(line.trim()) === site)) {
+      site ??= siteHost(line.trim());
       if (current.lines.join("").trim() !== "") pages.push(current);
       current = { source: line.trim(), lines: [] };
       continue;
@@ -1334,6 +1356,18 @@ function wordsPattern(phrase: string): string {
     .join("[\\s-]*");
 }
 
+// "Dr. Trista Shelton, DC", "Trista Shelton" and "Dr. Shelton" are one
+// person: same surname, and one name's words all inside the other's.
+function sameName(a: string, b: string): boolean {
+  const words = (n: string) =>
+    n.toLowerCase().replace(/,.*$/, "").replace(/\bdr\b\.?/g, " ").replace(/[^a-z ]+/g, " ").split(/\s+/).filter(Boolean);
+  const wa = words(a);
+  const wb = words(b);
+  if (wa.length === 0 || wb.length === 0 || wa[wa.length - 1] !== wb[wb.length - 1]) return false;
+  const [short, long] = wa.length <= wb.length ? [wa, wb] : [wb, wa];
+  return short.every((w) => long.includes(w));
+}
+
 export function chiroProgramCheck(
   evidence: ScoringEvidence,
   reply: ScoringReply | null,
@@ -1347,22 +1381,27 @@ export function chiroProgramCheck(
     reason,
   });
 
-  // 1. A page of its own: the crawled page's URL names it, cited with a line
-  // from that page.
-  const pagePattern = new RegExp(
-    `(${CHIRO_PROGRAM_PAGE_TERMS.map(escapeRegExp).join("|")})`,
-    "i",
-  );
+  // 1. A page of its own: a crawled page whose URL names it, cited with a
+  // line from that page — or, where that page was not among the pages read, a
+  // link to it on any page that was (menu, footer, button), cited with the
+  // link's own text and target.
   let page: Citation[] = [];
+  let pageReason = "A page of the site is dedicated to it.";
   for (const doc of websiteDocs(docs)) {
     if (!/^https?:\/\//i.test(doc.source)) continue;
-    const path = doc.source.replace(/^https?:\/\/[^/]+/i, "");
-    if (!pagePattern.test(path)) continue;
+    if (!isProgramPageUrl(doc.source)) continue;
     const firstLine = doc.text.split(/\n/).map((l) => l.trim()).find((l) => l.split(/\s+/).length >= 4);
     const citation = firstLine ? verifyQuote(clip(firstLine, 300).replace(/…$/, ""), doc.source, docs) : null;
     if (citation) {
       page = [citation];
       break;
+    }
+  }
+  if (page.length === 0) {
+    const link = programLinks(parseLinks(evidence.websiteLinks ?? null))[0];
+    if (link) {
+      page = [{ quote: link.text, source: link.url }];
+      pageReason = `The site links to a dedicated page (found on ${link.page || "a crawled page"}).`;
     }
   }
 
@@ -1400,6 +1439,14 @@ export function chiroProgramCheck(
         if (citation) names.set(name, citation);
       }
     }
+    // A provider's own page linked from the site (/doctors/dr-trista-shelton/)
+    // names them as surely as a line of copy does, cited with the link.
+    for (const link of parseLinks(evidence.websiteLinks ?? null)) {
+      const name = providerNameFromLink(link);
+      if (!name) continue;
+      if (Array.from(names.keys()).some((n) => sameName(n, name))) continue;
+      names.set(name, { quote: isGenericLinkText(link.text) ? name : link.text, source: link.url });
+    }
     if (names.size >= 2) team = Array.from(names.values()).slice(0, 3);
   }
 
@@ -1409,7 +1456,7 @@ export function chiroProgramCheck(
     : [];
 
   const signals = [
-    signal("page", page, page.length ? "A page of the site is dedicated to it." : "No crawled page is dedicated to decompression, disc, sciatica or avoiding surgery."),
+    signal("page", page, page.length ? pageReason : "No crawled page, and no link on one, is dedicated to decompression, disc, sciatica or avoiding surgery."),
     signal("equipment", equipment ? [equipment.citation] : [], equipment ? `Names ${equipment.match[0]}.` : "No named table or laser on the site."),
     signal("consult", consult ? [consult.citation] : [], consult ? "Offers a consult." : "No consult offer on the site."),
     signal("team", team, team.length ? "Two or more providers or staff are named." : "Fewer than two named providers or staff."),
