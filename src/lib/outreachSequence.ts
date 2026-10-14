@@ -38,6 +38,7 @@
 // readers live here, and src/lib/actions/outreachSequence.ts makes the calls.
 
 import { IcpAssistEvidence, ASSIST_NOTES_MAX_CHARS } from "@/lib/icpAssist";
+import { hasActiveAds, HEALTHY_REVIEW_COUNT } from "@/lib/discovery";
 
 // ─── The steps ─────────────────────────────────────────────────────────────
 
@@ -1207,22 +1208,82 @@ function connectionPrompt(ctx: SequenceContext): string {
 // ─── Step 2 ────────────────────────────────────────────────────────────────
 
 // The operator's own list of what clinics like this struggle with, from the
-// active ICP Definition. Step 2's observation and its curiosity question are
-// both stronger tied to a pain that is real for this kind of practice — and
-// both are ruined by asserting that pain about a clinic whose evidence does not
-// show it. So it goes in as context with that line drawn in the prompt itself,
-// after the evidence and before the task, and changes nothing else: the
-// templates, the variants and the hard rules below are untouched.
+// active ICP Definition, cut down to what this clinic's evidence can carry.
+//
+//   A line marked "(only if ads are running)" is dropped unless the Meta ads
+//   data shows active ads for this clinic — it is not shown at all.
+//   The part after the dash ("No-shows - $3k a month walking out the door") is
+//   the operator's background on why it matters. It goes in labelled internal,
+//   and the prompt forbids quoting or paraphrasing it.
+//   The hints this clinic's evidence does show (phone-only booking, a 24-48
+//   hour reply promise, no reminder mentioned, active ads, a low review count)
+//   are worked out here, not left to the model, and it is told to pick exactly
+//   one pain backed by one of them, or none.
 //
 // It is the operator's text, not scraped copy, so it is not fenced as untrusted
 // — but it is also not evidence, and the prompt says so.
+const ADS_ONLY_PAIN = /\(\s*only\s+if\s+ads\s+(are\s+)?running\s*\)/i;
+
+export interface PainLine {
+  pain: string;
+  background: string | null;
+}
+
+export function painLinesFor(text: string | null | undefined, adsRunning: boolean): PainLine[] {
+  const out: PainLine[] = [];
+  for (const raw of (text ?? "").split(/\r?\n/)) {
+    let line = raw.replace(/^\s*(?:[-*•–]|\d+[.)])\s*/, "").trim();
+    if (line === "") continue;
+    if (ADS_ONLY_PAIN.test(line)) {
+      if (!adsRunning) continue;
+      line = line.replace(ADS_ONLY_PAIN, "").replace(/\s{2,}/g, " ").trim();
+    }
+    const split = line.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+    out.push(split ? { pain: split[1].trim(), background: split[2].trim() } : { pain: line, background: null });
+  }
+  return out;
+}
+
+// What this clinic's own evidence hints at, in words the prompt can show. Each
+// is something a pain can be tied to; nothing else can.
+export function painEvidenceHints(evidence: IcpAssistEvidence): string[] {
+  const notes = evidence.websiteNotes ?? "";
+  const hints: string[] = [];
+  if (hasActiveAds(evidence.metaAdsSignal)) hints.push("Active Meta ads are running.");
+  const onlineBooking = /\b(book|schedule|request)\s+(online|now|an?\s+appointment\s+online)|online\s+(booking|scheduling)|calendly|janeapp|jane\.app|zocdoc|chirotouch|schedulicity|acuity/i.test(notes);
+  const phone = /\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b|\bcall\s+(us|now|today)\b/i.test(notes);
+  if (phone && !onlineBooking) hints.push("Booking looks phone-only: a phone number or 'call us', and no online booking on the pages read.");
+  const slowReply = notes.match(/[^\n.]*\b(within\s+)?(24\s*(-|–|to)\s*48|48|24)\s*(business\s+)?hours?\b[^\n.]*/i);
+  if (slowReply) hints.push(`The site promises a reply window: "${slowReply[0].trim().slice(0, 160)}"`);
+  if (notes.trim() !== "" && !/\b(reminders?|confirmations?|text\s+(alerts?|messages?))\b/i.test(notes)) {
+    hints.push("No appointment reminder or confirmation is mentioned on the pages read.");
+  }
+  if (evidence.reviewCount != null && evidence.reviewCount < HEALTHY_REVIEW_COUNT) {
+    hints.push(`${evidence.reviewCount} Google reviews.`);
+  }
+  return hints;
+}
+
 function painPointsBlock(ctx: SequenceContext): string[] {
-  const text = (ctx.icpPainPoints ?? "").trim();
-  if (text === "") return [];
+  const pains = painLinesFor(ctx.icpPainPoints, hasActiveAds(ctx.evidence.metaAdsSignal));
+  if (pains.length === 0) return [];
+  const hints = painEvidenceHints(ctx.evidence);
   return [
     "PAIN POINTS FOR THIS KIND OF CLINIC (background from the operator's Ideal Customer Profile, not evidence about this clinic)",
-    `"""\n${truncate(text, 2000)}\n"""`,
-    "Use these only to decide which verified observation is worth making, or which question is worth asking, so it ties to a real pain. They are not facts about this clinic: never state or imply this clinic has one unless the evidence above shows it, and never quote or paraphrase this list to them.",
+    `"""\n${truncate(
+      pains
+        .map((p, i) => `P${i + 1}. ${p.pain}${p.background ? `\n    INTERNAL BACKGROUND, never quote or paraphrase: ${p.background}` : ""}`)
+        .join("\n"),
+      2000,
+    )}\n"""`,
+    "WHAT THIS CLINIC'S EVIDENCE HINTS AT",
+    hints.length === 0 ? "  Nothing. No pain above has evidence on this clinic." : hints.map((h) => `  - ${h}`).join("\n"),
+    "",
+    "How to use them:",
+    "  - Pick exactly ONE pain per message, and only one that a hint listed just above supports. Name the hint in the internal note. If no hint supports any pain, use none of them.",
+    "  - The INTERNAL BACKGROUND text is for you only. Never quote it, paraphrase it, or turn it into a claim, a cost, a figure or a comparison in the message.",
+    "  - Raise the pain as a question, never as a statement about this clinic. The only fact you may state is the review count, as a plain number, never compared to other clinics.",
+    "  - Never blame staff. Frame anything about follow-up or response time as how much is on the front desk's plate, never as staff dropping, missing or losing leads.",
     "",
   ];
 }
@@ -1272,12 +1333,12 @@ function firstMessagePrompt(ctx: SequenceContext): string {
       : `  The advertising evidence you have is exactly this and nothing more: "${ads}"`,
     "",
     "VARIANT B, idle equipment or program spend. Use ONLY where the evidence shows a real investment (a decompression table, a laser, a named program, a dedicated service page) AND a specific gap in what happens after the lead arrives.",
-    `  "Thanks for connecting, ${address}. Noticed ${clinic} has the program built out, but <the specific verified gap>. At $2-6k a case, that gap usually costs more than the ad spend itself. Already on your radar, or worth sending what I'd change first?"`,
-    "  The $2-6k figure is this clinic's own published or widely known case range for this kind of care, and it is the one number allowed in this message. Do not add any other number, and do not claim what this clinic in particular earns or loses.",
+    `  "Thanks for connecting, ${address}. Noticed ${clinic} has the program built out. Curious what happens after someone asks about it, <a question about the specific verified gap>? Already on your radar, or worth sending what I'd change first?"`,
+    "  No figures in this message: no case value, no cost, no comparison to ad spend or to other clinics. Ask about the gap; do not claim what it costs.",
     "",
     "VARIANT C, no-show and missed-call follow-up. Use ONLY where the evidence points at a front-desk-dependent flow (a phone number as the main call to action, a contact form, hours, a request-a-call step) and no automated reminder or follow-up is visible.",
-    `  "Thanks for connecting, ${address}. Noticed ${clinic}'s booking flow doesn't look like it has an automated no-show or missed-call follow-up, most clinics your size lose 1-2 cases a month right there. Already handled on your end, or worth me sending what I found?"`,
-    "  This is the one place the \"most clinics your size\" phrasing is allowed, because it is the template's own wording. Do not extend it, do not put a revenue figure on it, and do not say this clinic is losing anything.",
+    `  "Thanks for connecting, ${address}. Looking at ${clinic}'s booking flow, I couldn't tell how no-shows and missed calls get followed up. With a lot on the front desk's plate, is that something that runs automatically? Already handled on your end, or worth me sending what I found?"`,
+    "  No figures and no comparisons: never \"most clinics your size\", never a number of cases, never a revenue figure, and never say this clinic is losing anything.",
     "  Never state that a reminder, confirmation or follow-up does not exist. Say what the public-facing flow does not appear to show.",
     "",
     "HARD RULES for all three:",

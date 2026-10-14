@@ -615,7 +615,7 @@ async function main(): Promise<void> {
   const { leadTier } = await import("@/lib/leadScore");
   const { saveIcpScorecardV2 } = await import("@/lib/actions/icpScorecardV2");
   const { computedFlag } = await import("@/lib/secondLook");
-  const { buildStepPrompt } = await import("@/lib/outreachSequence");
+  const { buildStepPrompt, buildFirstMessageFallbackPrompt } = await import("@/lib/outreachSequence");
 
   const stub = useRealModel
     ? null
@@ -1124,6 +1124,43 @@ async function main(): Promise<void> {
     "no other step reads them",
     !buildStepPrompt("CONNECTION", { ...ctx, icpPainPoints: "No-shows" }).user.includes("PAIN POINTS"),
   );
+
+  // Step 2 pain points: ads-only lines, one evidenced pain, internal cost text,
+  // no staff blame, asked not stated, and the templates without invented stats.
+  {
+    const { painEvidenceHints } = await import("../src/lib/outreachSequence");
+    const pains = [
+      "Paid leads go cold before a consult - $2k a lead wasted (only if ads are running)",
+      "No-shows after the first consult - roughly 3 cases a month",
+      "Slow replies to web enquiries",
+    ].join("\n");
+    const base = { contactName: null, contactTitle: null, loomUrl: null, priorMessages: [], replyText: null, icpPainPoints: pains };
+    const clinic = (name: string, websiteNotes: string, metaAdsSignal: string | null, reviewCount: number | null) => ({
+      ...base,
+      evidence: { clinicName: name, websiteNotes, metaAdsSignal, reviewCount },
+    });
+    const withAds = clinic("Ads Clinic", "https://a.test/\nBook online with Jane. Text reminders before every visit.", "2 active ads, running 3mo", 80);
+    const noAds = clinic("Quiet Clinic", "https://q.test/\nBook online with Jane. Text reminders before every visit.", null, 80);
+    const slow = clinic("Form Clinic", "https://f.test/\nSend us a message and we'll reply within 24-48 hours. Book online anytime. We send text reminders.", null, 80);
+    const none = clinic("Blank Clinic", "https://b.test/\nBook online with Jane. Text reminders before every visit.", null, null);
+
+    const pAds = buildStepPrompt("FIRST_MESSAGE", withAds as never).user;
+    const pNoAds = buildStepPrompt("FIRST_MESSAGE", noAds as never).user;
+    const pSlow = buildStepPrompt("FIRST_MESSAGE", slow as never).user;
+    const pNone = buildStepPrompt("FIRST_MESSAGE", none as never).user;
+
+    check("ads clinic: the ads-only pain is shown, marker removed", pAds.includes("Paid leads go cold before a consult") && !/only if ads/i.test(pAds));
+    check("ads clinic: active ads is its evidence hint", painEvidenceHints(withAds.evidence).some((h) => h.startsWith("Active Meta ads")));
+    check("no-ads clinic: the ads-only pain is gone from the prompt entirely", !pNoAds.includes("Paid leads go cold"));
+    check("24-48 hours note: shown as the clinic's hint, quoted", pSlow.includes('reply within 24-48 hours'));
+    check("no-evidence clinic: told no pain has evidence", pNone.includes("Nothing. No pain above has evidence on this clinic."), painEvidenceHints(none.evidence).join(" | "));
+    check("cost text is labelled internal and never-to-quote", pAds.includes("INTERNAL BACKGROUND, never quote or paraphrase: roughly 3 cases a month"));
+    check("exactly one evidenced pain, asked as a question, no staff blame", pAds.includes("Pick exactly ONE pain") && pAds.includes("Raise the pain as a question") && pAds.includes("front desk's plate"));
+    check("review count only as a plain number, never compared", pAds.includes("review count, as a plain number, never compared"));
+    check("Variant B and C stats are gone", !/2-6k|ad spend itself|1-2 cases|clinics your size lose/.test(pAds), "");
+    const fb = buildFirstMessageFallbackPrompt(noAds as never).user;
+    check("the curiosity fallback gets the same filtered list", !fb.includes("Paid leads go cold") && fb.includes("No-shows after the first consult"));
+  }
 
   await prisma.$disconnect();
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
