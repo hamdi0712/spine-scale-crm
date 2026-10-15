@@ -2,6 +2,7 @@ import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
+import { CONTACTED_LEADS_WHERE, OPEN_LEADS_WHERE } from "@/lib/liveLeadWhere";
 import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_SHORT_LABELS,
@@ -92,7 +93,7 @@ export default async function DashboardPage() {
       },
     }),
     prisma.lead.findMany({
-      where: { archived: false, stage: { in: [...OPEN_STAGES] } },
+      where: OPEN_LEADS_WHERE,
     }),
     // No lower bound: anything still marked Scheduled whose time has passed
     // is overdue, not gone. Archived leads have been closed out, so their
@@ -101,7 +102,7 @@ export default async function DashboardPage() {
       where: {
         status: "SCHEDULED",
         scheduledAt: { lte: dayEnd },
-        OR: [{ leadId: null }, { lead: { archived: false } }],
+        OR: [{ leadId: null }, { lead: { archived: false, scoringRejectedAt: null } }],
       },
       orderBy: { scheduledAt: "asc" },
       include: { lead: true, client: true },
@@ -117,6 +118,8 @@ export default async function DashboardPage() {
       where: {
         status: { in: OPEN_TASK_STATUSES },
         dueDate: { not: null, lte: utcDayEnd },
+        // A task on a lead flagged by new scoring is hidden with the lead.
+        OR: [{ leadId: null }, { lead: { scoringRejectedAt: null } }],
       },
       orderBy: { dueDate: "asc" },
       include: {
@@ -145,7 +148,7 @@ export default async function DashboardPage() {
     // whatever happened to the lead since. No date bound: this card is an
     // all-time total of everyone approached, so a count is all it needs.
     prisma.lead.count({
-      where: { stage: { in: [...CONTACTED_STAGES] } },
+      where: CONTACTED_LEADS_WHERE,
     }),
     // The discovery calls on this month's calendar. Counted off the call log
     // rather than off a lead's stage: a stage cannot be un-set when a call is

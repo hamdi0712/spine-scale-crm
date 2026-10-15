@@ -1,6 +1,7 @@
 import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { PIPELINE_DEFAULT_WHERE, PIPELINE_SCORING_REJECTED_WHERE } from "@/lib/liveLeadWhere";
 import { leadTier } from "@/lib/leadScore";
 import { FIRST_MESSAGE_MECHANISMS } from "@/lib/outreachSequence";
 import { openerComparison } from "@/lib/outreachSequenceRead";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: { view?: string };
+  searchParams: { view?: string; scoring?: string };
 }) {
   // The table is what loads. It is the view that answers the questions asked
   // most often of a pipeline — who is where, what is scored, what is due — and
@@ -27,10 +28,16 @@ export default async function PipelinePage({
       : searchParams.view === "untagged"
         ? "untagged"
         : "table";
-  const leads = await prisma.lead.findMany({
-    where: { archived: false },
-    orderBy: { updatedAt: "desc" },
-  });
+  // Leads flagged "Rejected by new scoring" are out of the default view and
+  // found with their own filter (see src/lib/liveLeadWhere.ts).
+  const scoringRejected = searchParams.scoring === "rejected";
+  const [leads, scoringRejectedCount] = await Promise.all([
+    prisma.lead.findMany({
+      where: scoringRejected ? PIPELINE_SCORING_REJECTED_WHERE : PIPELINE_DEFAULT_WHERE,
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.lead.count({ where: PIPELINE_SCORING_REJECTED_WHERE }),
+  ]);
 
   // Every first message that has actually gone out, with the reply mark from
   // the lead it went to. Two questions come off this one read: which kind of
@@ -99,7 +106,7 @@ export default async function PipelinePage({
           <div className="segment">
             <Link
               href="/pipeline"
-              className={`segment-item ${view === "table" ? "segment-item-on" : ""}`}
+              className={`segment-item ${view === "table" && !scoringRejected ? "segment-item-on" : ""}`}
             >
               Table
             </Link>
@@ -120,6 +127,16 @@ export default async function PipelinePage({
                 <span className="num ml-1 opacity-70">{untagged.length}</span>
               </Link>
             )}
+            {(scoringRejectedCount > 0 || scoringRejected) && (
+              <Link
+                href="/pipeline?scoring=rejected"
+                className={`segment-item ${scoringRejected ? "segment-item-on" : ""}`}
+              >
+                <span className="max-md:hidden">Rejected by new scoring</span>
+                <span className="md:hidden">Rejected</span>{" "}
+                <span className="num ml-1 opacity-70">{scoringRejectedCount}</span>
+              </Link>
+            )}
           </div>
           {/* Imports live in Discovery now — nothing lands in the pipeline
               without a score, so bulk-adding straight to it is gone. */}
@@ -135,6 +152,27 @@ export default async function PipelinePage({
           </PageActions>
         </div>
       </div>
+
+      {scoringRejected && (
+        <div className="card mb-4 px-5 py-4 text-xs leading-relaxed max-md:px-3">
+          <p className="font-medium">Rejected by new scoring</p>
+          <p className="helper-text mt-0.5 text-muted">
+            Flagged when new scoring was applied to existing records. They are
+            hidden from the default view, Outreach and the dashboard until the
+            apply is reverted in Settings → Pipeline.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {leads.map((l) => (
+              <li key={l.id} className="break-words">
+                <Link href={`/pipeline/${l.id}`} className="font-medium hover:underline">
+                  {l.clinicName}
+                </Link>
+                <span className="text-muted"> — {l.scoringRejectedReason ?? "no reason recorded"}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <OpenerScoreboard comparison={comparison} />
 

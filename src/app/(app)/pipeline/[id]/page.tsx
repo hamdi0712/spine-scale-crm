@@ -143,6 +143,16 @@ export default async function LeadDetailPage({
 
   return (
     <div>
+      {lead.scoringRejectedAt && (
+        <div className="card mb-4 border-bad/40 px-5 py-3 text-xs leading-relaxed max-md:px-3">
+          <p className="font-medium text-bad">Rejected by new scoring</p>
+          <p className="text-muted">
+            {lead.scoringRejectedReason ?? "No reason recorded."} Hidden from the
+            default Pipeline view, Outreach and the dashboard until the apply is
+            reverted in Settings → Pipeline.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <Link href="/pipeline" className="text-sm text-accent hover:underline">

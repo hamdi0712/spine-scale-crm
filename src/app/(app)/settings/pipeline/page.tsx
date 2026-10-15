@@ -2,6 +2,17 @@ import { savePipelineSettings } from "@/lib/actions/pipelineSettings";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { isDefaultPipelineSettings } from "@/lib/pipelineSettings";
 import PipelineSettingsForm from "@/components/PipelineSettingsForm";
+import ApplyScoringToExisting, { HistoryRow } from "@/components/ApplyScoringToExisting";
+import { scoringApplicationHistory } from "@/lib/scoringApplication";
+
+function list<T>(raw: string | null): T[] {
+  try {
+    const v = raw ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +27,19 @@ export const dynamic = "force-dynamic";
 // title and the "back to" link are gone because the layout above supplies both.
 export default async function PipelineSettingsPage() {
   const settings = await loadPipelineSettings();
+  const history: HistoryRow[] = (await scoringApplicationHistory()).map((h) => ({
+    id: h.id,
+    appliedAt: h.appliedAt.toISOString(),
+    revertedAt: h.revertedAt?.toISOString() ?? null,
+    promoted: h.promoted,
+    rejected: h.rejected,
+    flagged: h.flagged,
+    protected: h.protected,
+    stale: h.stale,
+    protectedList: list(h.protectedList),
+    staleList: list(h.staleList),
+    revertKeptList: list(h.revertKeptList),
+  }));
 
   return (
     <div>
@@ -49,6 +73,8 @@ export default async function PipelineSettingsPage() {
           </p>
         )}
       </div>
+
+      <ApplyScoringToExisting model={settings.scoringModel} history={history} />
 
       <PipelineSettingsForm settings={settings} save={savePipelineSettings} />
     </div>

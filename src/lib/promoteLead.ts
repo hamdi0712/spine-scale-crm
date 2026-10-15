@@ -10,6 +10,7 @@
 // One promotion path, so a lead created by the queue and a lead created after
 // a decision maker turned up are the same record made the same way.
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DiscoveryBreakdown, leadScorecardPrefill } from "@/lib/discovery";
 import { IcpBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
@@ -38,7 +39,19 @@ export async function promoteToLead(
   breakdown: DiscoveryBreakdown | IcpBreakdownV2 | null,
   now: Date,
 ): Promise<string> {
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction((tx) => promoteWithin(tx, candidateId, breakdown, now));
+}
+
+// The same promotion inside a transaction somebody else opened — the apply in
+// src/lib/scoringApplication.ts, which promotes many candidates and snapshots
+// them in one transaction.
+export async function promoteWithin(
+  tx: Prisma.TransactionClient,
+  candidateId: string,
+  breakdown: DiscoveryBreakdown | IcpBreakdownV2 | null,
+  now: Date,
+): Promise<string> {
+  {
     const candidate = await tx.discoveryCandidate.findUniqueOrThrow({
       where: { id: candidateId },
     });
@@ -108,5 +121,5 @@ export async function promoteToLead(
     });
 
     return lead.id;
-  });
+  }
 }
