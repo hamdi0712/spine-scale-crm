@@ -8,6 +8,9 @@ import { openerComparison } from "@/lib/outreachSequenceRead";
 import { setMessageMechanism } from "@/lib/actions/outreachSequence";
 import KanbanBoard, { KanbanLead } from "@/components/KanbanBoard";
 import LeadTable from "@/components/LeadTable";
+import { RecrawlOldLeads } from "@/components/LeadRecrawl";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
+import { stepCostPerCandidate } from "@/lib/pipelineSettings";
 import MechanismPicker from "@/components/MechanismPicker";
 import OpenerScoreboard from "@/components/OpenerScoreboard";
 
@@ -31,6 +34,7 @@ export default async function PipelinePage({
   // Leads flagged "Rejected by new scoring" are out of the default view and
   // found with their own filter (see src/lib/liveLeadWhere.ts).
   const scoringRejected = searchParams.scoring === "rejected";
+  const recrawlCost = stepCostPerCandidate("websiteContent", await loadPipelineSettings());
   const [leads, scoringRejectedCount] = await Promise.all([
     prisma.lead.findMany({
       where: scoringRejected ? PIPELINE_SCORING_REJECTED_WHERE : PIPELINE_DEFAULT_WHERE,
@@ -182,7 +186,10 @@ export default async function PipelinePage({
         ) : view === "untagged" ? (
           <UntaggedFirstMessages rows={untagged} />
         ) : (
-          <LeadTable leads={serialized} />
+          <>
+            {!scoringRejected && <RecrawlOldLeads costPerClinic={recrawlCost} />}
+            <LeadTable leads={serialized} recrawlCostPerClinic={recrawlCost} />
+          </>
         )}
       </div>
     </div>

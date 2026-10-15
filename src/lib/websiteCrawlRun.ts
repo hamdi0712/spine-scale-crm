@@ -18,7 +18,14 @@
 // pass that fails keeps the home page rather than losing the run.
 
 import { runApifySync } from "@/lib/apify";
-import { EnrichTable, linksFromTable } from "@/lib/leadEnrich";
+import {
+  ENRICH_ACTORS,
+  EnrichTable,
+  crawlDiagnostics,
+  linksFromTable,
+  sanitizeEnrichUpdate,
+} from "@/lib/leadEnrich";
+import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { PipelineSettings } from "@/lib/pipelineSettings";
 import { choosePagesToFollow, crawlInput } from "@/lib/websiteCrawl";
 
@@ -99,4 +106,40 @@ export function mergeTables(a: EnrichTable, b: EnrichTable): EnrichTable {
       return i === -1 ? "" : row[i] ?? "";
     }));
   return { headers, rows: [...realign(a), ...realign(b)] };
+}
+
+// The re-crawl both "Re-crawl website" actions run — Discovery's for
+// candidates and Pipeline's for leads: the crawler alone, under the current
+// settings, read the way an enrichment reads it. Writes nothing; the caller
+// stores the notes and links on its own record. A crawl that reads nothing is
+// an error, so the stored notes are never replaced with nothing.
+export type RecrawlRead =
+  | { ok: true; websiteNotes: string; websiteLinks: string | null; pages: number; links: number; note: string | null }
+  | { ok: false; error: string };
+
+export async function recrawlWebsite(websiteUrl: string): Promise<RecrawlRead> {
+  const settings = await loadPipelineSettings();
+  if (!settings.steps.websiteContent.enabled) {
+    return { ok: false, error: "The Website Content Crawler is turned off in Settings → Pipeline." };
+  }
+  let crawl: WebsiteCrawlResult;
+  try {
+    crawl = await runWebsiteCrawl(websiteUrl, settings);
+  } catch {
+    return { ok: false, error: "The crawl could not be reached." };
+  }
+  if (!crawl.ok) return { ok: false, error: crawl.error };
+  const actor = ENRICH_ACTORS.find((a) => a.key === "websiteContent")!;
+  const read = sanitizeEnrichUpdate(actor.read(crawl.table));
+  if (read.websiteNotes === undefined) {
+    return { ok: false, error: `The crawl ran but read nothing — ${crawlDiagnostics(crawl.table)}. The stored notes were kept.` };
+  }
+  return {
+    ok: true,
+    websiteNotes: read.websiteNotes,
+    websiteLinks: read.websiteLinks ?? null,
+    pages: crawl.table.rows.length,
+    links: read.websiteLinks ? (JSON.parse(read.websiteLinks) as unknown[]).length : 0,
+    note: crawl.note,
+  };
 }

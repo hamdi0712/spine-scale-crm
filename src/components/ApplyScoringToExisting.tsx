@@ -156,11 +156,12 @@ export default function ApplyScoringToExisting({
         <div className="mt-4 rounded-lg border border-line p-4 max-md:p-3">
           <p className="text-sm font-medium">Apply this?</p>
           <p className="mt-1 text-xs text-muted">From the comparison finished {fmt(String(plan.runCompletedAt))}.</p>
-          <ul className="num mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+          <ul className="num mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-5">
             <li><span className="font-semibold">{plan.promote.length}</span> promoted</li>
             <li><span className="font-semibold">{plan.reject.length}</span> rejected</li>
             <li><span className="font-semibold">{plan.flag.length}</span> leads flagged</li>
             <li><span className="font-semibold">{plan.protectedLeads.length}</span> protected</li>
+            <li><span className="font-semibold">{(plan.insufficient ?? []).length}</span> not enough evidence</li>
           </ul>
           {plan.stale.length > 0 && (
             <p className={`mt-2 text-xs leading-relaxed ${plan.staleWarning ? "text-bad" : "text-muted"}`}>
@@ -170,7 +171,8 @@ export default function ApplyScoringToExisting({
           )}
           <EntryList title="Promoted" entries={plan.promote} />
           <EntryList title="Rejected" entries={plan.reject} />
-          <EntryList title="Leads flagged" entries={plan.flag} />
+          <EntryList title="Leads flagged — on cited evidence (a disqualifier or a cited non-fit)" entries={plan.flag} />
+          <EntryList title="Not enough evidence — left as they are, not rejected or flagged" entries={plan.insufficient ?? []} />
           <EntryList title="Protected — review these yourself" entries={plan.protectedLeads} />
           <StaleList entries={plan.stale} />
           <p className="mt-3 text-xs text-muted">Process Queue switches to the new model. Everything is snapshotted and can be reverted.</p>
