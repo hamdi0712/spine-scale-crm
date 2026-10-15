@@ -5,7 +5,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { ApplicationPlan, KeptEntry, PlanEntry } from "@/lib/scoringApplication";
+import type { ApplicationPlan, KeptEntry, PlanEntry, StaleEntry } from "@/lib/scoringApplication";
 import {
   applyScoringToExisting,
   previewScoringApplication,
@@ -22,7 +22,7 @@ export interface HistoryRow {
   protected: number;
   stale: number;
   protectedList: PlanEntry[];
-  staleList: PlanEntry[];
+  staleList: StaleEntry[];
   revertKeptList: KeptEntry[];
 }
 
@@ -41,6 +41,37 @@ function EntryList({ title, entries }: { title: string; entries: { clinicName: s
         {entries.map((e, i) => (
           <li key={i} className="list-disc break-words leading-relaxed text-muted">
             <span className="font-medium text-ink-soft">{e.clinicName}</span> — {e.reason}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+// Each skipped record with what changed: the field, what the comparison saw,
+// what it is now, and when. Open by default — it is the list that explains a
+// count somebody did not expect.
+function StaleList({ entries, open = true }: { entries: StaleEntry[]; open?: boolean }) {
+  if (entries.length === 0) return null;
+  return (
+    <details className="mt-2 text-xs" open={open}>
+      <summary className="cursor-pointer text-ink-soft">
+        Skipped, changed since the comparison ({entries.length})
+      </summary>
+      <ul className="mt-1.5 max-h-80 space-y-1.5 overflow-y-auto pl-4">
+        {entries.map((e) => (
+          <li key={`${e.kind}-${e.id}`} className="list-disc break-words leading-relaxed text-muted">
+            <span className="font-medium text-ink-soft">{e.clinicName || "(no name)"}</span>{" "}
+            <span className="opacity-70">({e.kind})</span>
+            <ul className="mt-0.5">
+              {(e.changes ?? []).map((c, i) => (
+                <li key={i}>
+                  {c.field}: <span className="text-ink-soft">{c.compared}</span> → <span className="text-ink-soft">{c.current}</span>
+                  {c.at ? <span className="opacity-70"> · {fmt(c.at)}</span> : null}
+                </li>
+              ))}
+              {(!e.changes || e.changes.length === 0) && <li>{e.reason}</li>}
+            </ul>
           </li>
         ))}
       </ul>
@@ -141,7 +172,7 @@ export default function ApplyScoringToExisting({
           <EntryList title="Rejected" entries={plan.reject} />
           <EntryList title="Leads flagged" entries={plan.flag} />
           <EntryList title="Protected — review these yourself" entries={plan.protectedLeads} />
-          <EntryList title="Skipped, changed since the comparison" entries={plan.stale} />
+          <StaleList entries={plan.stale} />
           <p className="mt-3 text-xs text-muted">Process Queue switches to the new model. Everything is snapshotted and can be reverted.</p>
           <div className="mt-3 flex gap-2">
             <button type="button" className="btn-primary" disabled={pending} onClick={apply}>
@@ -182,7 +213,7 @@ export default function ApplyScoringToExisting({
                   {h.stale > 0 ? ` · ${h.stale} skipped` : ""}
                 </p>
                 <EntryList title="Protected" entries={h.protectedList} />
-                <EntryList title="Skipped" entries={h.staleList} />
+                <StaleList entries={h.staleList} open={false} />
                 <EntryList title="Left as you left them on revert" entries={h.revertKeptList} />
               </li>
             ))}

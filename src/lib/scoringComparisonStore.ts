@@ -42,7 +42,7 @@ const EVIDENCE_SELECT = {
 const CANDIDATE_WHERE = { status: { in: ["PROMOTED", "REJECTED"] } };
 const LEAD_WHERE = { archived: false, candidate: { is: null } };
 
-function candidateStanding(c: {
+export function candidateStanding(c: {
   status: string;
   icpTotal: number | null;
   icpTier: string | null;
@@ -61,7 +61,7 @@ function candidateStanding(c: {
   };
 }
 
-function leadStanding(lead: Parameters<typeof leadScore>[0]): OldStanding {
+export function leadStanding(lead: Parameters<typeof leadScore>[0]): OldStanding {
   const score = leadScore(lead);
   return {
     status: "PROMOTED",
@@ -73,7 +73,7 @@ function leadStanding(lead: Parameters<typeof leadScore>[0]): OldStanding {
   };
 }
 
-const LEAD_SCORE_SELECT = {
+export const LEAD_SCORE_SELECT = {
   icpScoredAt: true,
   icpBreakdown: true,
   icpDqSurgicalPractice: true,

@@ -32,6 +32,8 @@ import { prisma } from "@/lib/prisma";
 import { LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { promoteWithin } from "@/lib/promoteLead";
 import { parseBreakdownV2 } from "@/lib/icpScoring";
+import { OldStanding } from "@/lib/scoringComparison";
+import { LEAD_SCORE_SELECT, candidateStanding, leadStanding } from "@/lib/scoringComparisonStore";
 import { loadPipelineSettings, savePipelineSettings } from "@/lib/pipelineSettingsStore";
 
 // Discovery Call Booked and everything after it. Lost and No Contact are not
@@ -57,6 +59,19 @@ export interface PromoteEntry extends PlanEntry {
 
 export type RejectEntry = PromoteEntry;
 
+// A record skipped because it changed since the comparison: which field, what
+// the comparison saw, what it is now, and when it changed where that is known.
+export interface StaleChange {
+  field: string;
+  compared: string;
+  current: string;
+  at: string | null;
+}
+
+export interface StaleEntry extends PlanEntry {
+  changes: StaleChange[];
+}
+
 export interface FlagEntry extends PlanEntry {
   leadId: string;
 }
@@ -68,7 +83,7 @@ export interface ApplicationPlan {
   reject: RejectEntry[];
   flag: FlagEntry[];
   protectedLeads: PlanEntry[];
-  stale: PlanEntry[];
+  stale: StaleEntry[];
   staleShare: number;
   staleWarning: boolean;
 }
@@ -97,6 +112,45 @@ function protectionReason(lead: GuardLead): string | null {
 
 function verdictReason(row: { flipReason: string | null; breakdown: string | null }, fallback: string): string {
   return parseBreakdownV2(row.breakdown)?.verdict.reason ?? row.flipReason ?? fallback;
+}
+
+// What changed on a record since the comparison read it, comparing only what
+// decides the verdict: its status, its score and tier, and its evidence (the
+// website notes and links, ads, reviews and the rest of the enrichment, which
+// are re-gathered together and stamp enrichedAt). updatedAt is not compared —
+// it moves on writes that change none of these.
+//
+// The comparison row stores the old standing as its display label
+// ("Rejected", "Promoted (ICP model)", "In the pipeline (B-tier)") and its
+// score and tier, so the current record is read back into the same shape.
+function changesSince(
+  row: { oldStatus: string; oldScore: number | null; oldTier: string | null },
+  runStartedAt: Date,
+  now: OldStanding,
+  enrichedAt: Date | null,
+  updatedAt: Date,
+  rawStatus: string | null,
+): StaleChange[] {
+  const changes: StaleChange[] = [];
+  const saved = updatedAt.toISOString();
+  const statusNow = rawStatus !== null && rawStatus !== "PROMOTED" && rawStatus !== "REJECTED" ? rawStatus.toLowerCase() : now.label;
+  if (statusNow !== row.oldStatus) {
+    changes.push({ field: "status", compared: row.oldStatus, current: statusNow, at: saved });
+  }
+  if ((now.score ?? null) !== (row.oldScore ?? null)) {
+    changes.push({ field: "score", compared: String(row.oldScore ?? "none"), current: String(now.score ?? "none"), at: saved });
+  }
+  if ((now.tier ?? null) !== (row.oldTier ?? null)) {
+    changes.push({ field: "tier", compared: row.oldTier ?? "none", current: now.tier ?? "none", at: saved });
+  }
+  if (enrichedAt && enrichedAt > runStartedAt) {
+    changes.push({ field: "website notes, links and enrichment", compared: "as compared", current: "re-gathered", at: enrichedAt.toISOString() });
+  }
+  return changes;
+}
+
+function describeChange(c: StaleChange): string {
+  return `${c.field}: ${c.compared} → ${c.current}`;
 }
 
 export async function latestFinishedRun() {
@@ -133,7 +187,13 @@ export async function planApplication(): Promise<PlanResult> {
 
   const flagOrProtect = (lead: GuardLead, reason: string, kind: "candidate" | "lead", subjectId: string) => {
     if (lead.scoringRejectedAt) {
-      plan.stale.push({ kind, id: subjectId, clinicName: lead.clinicName, reason: "already flagged by new scoring" });
+      plan.stale.push({
+        kind,
+        id: subjectId,
+        clinicName: lead.clinicName,
+        reason: "already flagged by new scoring",
+        changes: [{ field: "Rejected by new scoring", compared: "not flagged", current: "flagged", at: lead.scoringRejectedAt.toISOString() }],
+      });
       return;
     }
     const guard = protectionReason(lead);
@@ -144,19 +204,34 @@ export async function planApplication(): Promise<PlanResult> {
     plan.flag.push({ kind, id: subjectId, leadId: lead.id, clinicName: lead.clinicName, reason });
   };
 
+  const stale = (kind: "candidate" | "lead", id: string, clinicName: string, changes: StaleChange[]) =>
+    plan.stale.push({ kind, id, clinicName, changes, reason: changes.map(describeChange).join("; ") });
+
   for (const row of rows) {
     const breakdown = parseBreakdownV2(row.breakdown);
     if (row.subjectKind === "candidate") {
       const c = await prisma.discoveryCandidate.findUnique({
         where: { id: row.subjectId },
-        select: { id: true, clinicName: true, status: true, promotedLead: { select: LEAD_GUARD_SELECT } },
+        select: {
+          id: true,
+          clinicName: true,
+          status: true,
+          icpTotal: true,
+          icpTier: true,
+          scoringModel: true,
+          disqualifiedReason: true,
+          enrichedAt: true,
+          updatedAt: true,
+          promotedLead: { select: LEAD_GUARD_SELECT },
+        },
       });
       if (!c) {
-        plan.stale.push({ kind: "candidate", id: row.subjectId, clinicName: row.clinicName, reason: "deleted since the comparison" });
+        stale("candidate", row.subjectId, row.clinicName, [{ field: "record", compared: "present", current: "deleted", at: null }]);
         continue;
       }
-      if (c.status !== row.oldStatus) {
-        plan.stale.push({ kind: "candidate", id: c.id, clinicName: c.clinicName, reason: `now ${c.status.toLowerCase()}, was ${row.oldStatus.toLowerCase()} when compared` });
+      const changes = changesSince(row, run.startedAt, candidateStanding(c), c.enrichedAt, c.updatedAt, c.status);
+      if (changes.length > 0) {
+        stale("candidate", c.id, c.clinicName, changes);
         continue;
       }
       if (row.outcome === "newly_promoted") {
@@ -181,9 +256,17 @@ export async function planApplication(): Promise<PlanResult> {
     }
 
     if (row.outcome !== "newly_rejected") continue;
-    const lead = await prisma.lead.findUnique({ where: { id: row.subjectId }, select: LEAD_GUARD_SELECT });
+    const lead = await prisma.lead.findUnique({
+      where: { id: row.subjectId },
+      select: { ...LEAD_GUARD_SELECT, ...LEAD_SCORE_SELECT, enrichedAt: true, updatedAt: true },
+    });
     if (!lead) {
-      plan.stale.push({ kind: "lead", id: row.subjectId, clinicName: row.clinicName, reason: "deleted since the comparison" });
+      stale("lead", row.subjectId, row.clinicName, [{ field: "record", compared: "present", current: "deleted", at: null }]);
+      continue;
+    }
+    const changes = changesSince(row, run.startedAt, leadStanding(lead), lead.enrichedAt, lead.updatedAt, null);
+    if (changes.length > 0) {
+      stale("lead", lead.id, lead.clinicName, changes);
       continue;
     }
     flagOrProtect(lead, verdictReason(row, "Rejected by new scoring."), "lead", lead.id);

@@ -84,12 +84,20 @@ async function main(): Promise<void> {
   await candidate("Elm Chiro (unchanged)", "REJECTED");
 
   const run = await prisma.scoringComparisonRun.create({
-    data: { icpName: "Primary ICP", threshold: 60, subjects: 12, estimatedUsd: 0, completedAt: new Date("2026-10-10") },
+    data: { icpName: "Primary ICP", threshold: 60, subjects: 12, estimatedUsd: 0, startedAt: new Date(Date.now() - 60_000), completedAt: new Date(Date.now() - 30_000) },
   });
-  const row = (subjectKind: string, subjectId: string, clinicName: string, oldStatus: string, newStatus: string, outcome: string, flipReason: string | null) =>
-    prisma.scoringComparison.create({
-      data: { runId: run.id, subjectKind, subjectId, clinicName, oldStatus, newStatus, outcome, flipReason, newScore: newStatus === "PROMOTED" ? 78 : 41, newTier: newStatus === "PROMOTED" ? "B" : "C" },
+  // Rows written exactly as Compare scoring writes them: the old standing as
+  // its display label, with its score and tier, read off the record.
+  const { candidateStanding, leadStanding, LEAD_SCORE_SELECT } = await import("../src/lib/scoringComparisonStore");
+  const row = async (subjectKind: string, subjectId: string, clinicName: string, _old: string, newStatus: string, outcome: string, flipReason: string | null) => {
+    const old =
+      subjectKind === "candidate"
+        ? candidateStanding(await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: subjectId } }))
+        : leadStanding(await prisma.lead.findUniqueOrThrow({ where: { id: subjectId }, select: LEAD_SCORE_SELECT }));
+    return prisma.scoringComparison.create({
+      data: { runId: run.id, subjectKind, subjectId, clinicName, oldStatus: old.label, oldScore: old.score, oldMax: old.max, oldTier: old.tier, newStatus, outcome, flipReason, newScore: newStatus === "PROMOTED" ? 78 : 41, newTier: newStatus === "PROMOTED" ? "B" : "C" },
     });
+  };
   await row("candidate", cNew1.id, cNew1.clinicName, "REJECTED", "PROMOTED", "newly_promoted", null);
   await row("candidate", cNew2.id, cNew2.clinicName, "REJECTED", "PROMOTED", "newly_promoted", null);
   await row("candidate", cRej.id, cRej.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Not a confirmed fit: no core service found.");
@@ -102,6 +110,10 @@ async function main(): Promise<void> {
   await row("lead", lLost.id, lLost.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Out of region.");
   // Promoted by hand after the comparison ran: stale.
   await prisma.discoveryCandidate.update({ where: { id: cStale.id }, data: { status: "PROMOTED" } });
+  // Touched by an automatic write that changes nothing that matters (the
+  // kind of write that moves updatedAt): not stale.
+  await prisma.discoveryCandidate.update({ where: { id: cNew2.id }, data: { secondLookAt: new Date() } });
+  await prisma.lead.update({ where: { id: lContacted.id }, data: { timeZone: "America/Chicago" } });
 
   // ─── The live numbers ────────────────────────────────────────────────────
   async function counts() {
@@ -143,7 +155,11 @@ async function main(): Promise<void> {
     p.protectedLeads.some((e) => e.id === lReplied.id) && !p.flag.some((e) => e.leadId === lReplied.id));
   check("discovery-call and call-logged leads are protected; Lost is not",
     p.protectedLeads.some((e) => e.id === lDiscovery.id) && p.protectedLeads.some((e) => e.id === lCall.id) && p.flag.some((e) => e.leadId === lLost.id));
-  check("a candidate promoted by hand since the comparison is skipped as stale", p.stale.some((e) => e.id === cStale.id));
+  const staleHand = p.stale.find((e) => e.id === cStale.id);
+  check("a candidate promoted by hand since the comparison is skipped, naming the field",
+    staleHand?.clinicName === cStale.clinicName && staleHand.changes.some((c) => c.field === "status" && c.compared === "Rejected" && c.current === "Promoted" && c.at !== null),
+    JSON.stringify(staleHand?.changes));
+  check("a write that changes no scoring or status field is not stale", !p.stale.some((e) => e.id === cNew2.id || e.id === lContacted.id));
   check("1 stale of 10 is not over 10%, so no warning", !p.staleWarning);
 
   const applied = await applyScoring();
@@ -191,6 +207,18 @@ async function main(): Promise<void> {
   );
   check("no lead is left flagged after either revert", afterRevert2["Rejected by new scoring"] === 0);
   check("Process Queue is back on the old model", afterRevert2["Process Queue model"] === "v1");
+
+  // A re-crawl after the comparison makes a record stale, and enough of them
+  // trip the >10% warning.
+  await prisma.discoveryCandidate.update({ where: { id: cRej.id }, data: { enrichedAt: new Date(), websiteNotes: "re-crawled" } });
+  const p3 = await planApplication();
+  if (!p3.ok) throw new Error(p3.error);
+  const recrawled = p3.plan.stale.find((e) => e.id === cRej.id);
+  check("a re-crawl after the comparison is stale, with the field and when",
+    recrawled?.changes.some((c) => c.field.startsWith("website notes") && c.at !== null) === true, JSON.stringify(recrawled?.changes));
+  check("more than 10% stale shows the warning", p3.plan.staleWarning, `${Math.round(p3.plan.staleShare * 100)}%`);
+  console.log("\n  Skipped list as the confirm screen shows it:");
+  for (const e of p3.plan.stale) console.log(`    ${e.clinicName} (${e.kind}): ${e.changes.map((c) => `${c.field} ${c.compared} → ${c.current}${c.at ? ` at ${c.at}` : ""}`).join("; ")}`);
 
   const history = await prisma.scoringApplication.findMany({ orderBy: { appliedAt: "asc" } });
   check("history keeps both applications, both reverted", history.length === 2 && history.every((h) => h.revertedAt !== null));
