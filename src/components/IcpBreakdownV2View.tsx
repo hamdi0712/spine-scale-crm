@@ -36,6 +36,7 @@ const SOURCE_CLS: Record<CriterionSource, string> = {
 export const VERDICT_CLS: Record<V2VerdictKind, string> = {
   disqualified: "border-bad/30 bg-bad-soft/60",
   not_a_fit: "border-warn/30 bg-warn-soft/60",
+  insufficient_evidence: "border-line bg-wash/60",
   below_threshold: "border-line bg-wash/60",
   chiro_no_program: "border-warn/30 bg-warn-soft/60",
   promoted: "border-ok/30 bg-ok-soft/60",
@@ -44,6 +45,7 @@ export const VERDICT_CLS: Record<V2VerdictKind, string> = {
 export const VERDICT_TITLES: Record<V2VerdictKind, string> = {
   disqualified: "Disqualified at the gate",
   not_a_fit: "Not a confirmed fit",
+  insufficient_evidence: "Not enough evidence",
   below_threshold: "A fit, below the bar",
   chiro_no_program: "Chiro without a real program",
   promoted: "Qualified",

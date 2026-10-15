@@ -75,6 +75,12 @@ export async function resolveHeldCandidates(now = new Date()): Promise<HeldClean
     if (breakdown.verdict.status === "PROMOTED") {
       await promoteToLead(c.id, breakdown, now);
       result.promoted.push(c.clinicName);
+    } else if (breakdown.verdict.status === "INSUFFICIENT") {
+      await prisma.discoveryCandidate.update({
+        where: { id: c.id },
+        data: { status: "FAILED", failureReason: breakdown.verdict.reason, processedAt: now },
+      });
+      result.rejected.push(c.clinicName);
     } else {
       await prisma.discoveryCandidate.update({
         where: { id: c.id },

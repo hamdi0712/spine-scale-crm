@@ -15,6 +15,7 @@ import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
 import { IcpTierBadge, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
+import { useLeadRecrawl } from "@/components/LeadRecrawl";
 
 type SortKey =
   | "clinicName"
@@ -24,7 +25,14 @@ type SortKey =
   | "nextFollowUp"
   | "createdAt";
 
-export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
+export default function LeadTable({
+  leads,
+  recrawlCostPerClinic = 0,
+}: {
+  leads: KanbanLead[];
+  recrawlCostPerClinic?: number;
+}) {
+  const recrawl = useLeadRecrawl(recrawlCostPerClinic);
   const [query, setQuery] = useState("");
   // "ACTIVE" rather than "ALL": the list opens on the clinics there is
   // something to do about, which is every stage except the holding one. No
@@ -241,6 +249,7 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
       {/* Rides the top of the viewport while a long list scrolls under it, so
           the actions stay with the selection instead of with the header row
           that made it. Nothing renders at all until something is chosen. */}
+      {recrawl.panel}
       {chosen.length > 0 && (
         // On a phone the bar docks to the bottom of the screen, just above
         // the tab bar, where a thumb already is.
@@ -266,6 +275,20 @@ export default function LeadTable({ leads }: { leads: KanbanLead[] }) {
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={() =>
+                void recrawl.run(
+                  chosen.map((l) => ({ id: l.id, clinicName: l.clinicName })),
+                  `selected lead${chosen.length === 1 ? "" : "s"}`,
+                )
+              }
+              disabled={pending || recrawl.running}
+              className="btn disabled:cursor-not-allowed disabled:opacity-50 max-md:px-3"
+            >
+              <span className="max-md:hidden">Re-crawl website</span>
+              <span className="md:hidden">Re-crawl</span>
+            </button>
             <button
               type="button"
               onClick={bulkDelete}

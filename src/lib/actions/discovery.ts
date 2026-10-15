@@ -33,7 +33,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
-import { runWebsiteCrawl } from "@/lib/websiteCrawlRun";
+import { recrawlWebsite } from "@/lib/websiteCrawlRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { deepSeekJson } from "@/lib/deepseek";
 import {
@@ -939,6 +939,28 @@ async function scoreCandidateV2({
   });
 
   const verdict = breakdown.verdict;
+  // Thin evidence is not a rejection: the candidate is marked Failed — "Not
+  // enough evidence" — with its scores kept, the same standing as a run that
+  // could not score it, so a re-crawl and a re-run can still promote it.
+  if (verdict.status === "INSUFFICIENT") {
+    await prisma.discoveryCandidate.update({
+      where: { id },
+      data: { status: "FAILED", failureReason: verdict.reason, processedAt: now },
+    });
+    steps.push({ label: "Verdict", status: "warned", detail: verdict.reason });
+    revalidatePath("/discovery");
+    return {
+      id,
+      clinicName: candidate.clinicName,
+      status: "FAILED",
+      headline: verdict.reason,
+      total: breakdown.total,
+      max: V2_MAX_SCORE,
+      tier: breakdown.tier,
+      promotedLeadId: null,
+      steps,
+    };
+  }
   if (verdict.status === "REJECTED") {
     await prisma.discoveryCandidate.update({
       where: { id },
@@ -1179,48 +1201,14 @@ export async function recrawlCandidateWebsite(id: string): Promise<RecrawlResult
   if (url === "") {
     return { ok: false, clinicName: candidate.clinicName, error: "No website URL on this candidate." };
   }
-  const settings = await loadPipelineSettings();
-  if (!settings.steps.websiteContent.enabled) {
-    return {
-      ok: false,
-      clinicName: candidate.clinicName,
-      error: "The Website Content Crawler is turned off in Settings → Pipeline.",
-    };
-  }
-
-  let crawl;
-  try {
-    crawl = await runWebsiteCrawl(url, settings);
-  } catch {
-    return { ok: false, clinicName: candidate.clinicName, error: "The crawl could not be reached." };
-  }
-  if (!crawl.ok) return { ok: false, clinicName: candidate.clinicName, error: crawl.error };
-
-  const actor = ENRICH_ACTORS.find((a) => a.key === "websiteContent")!;
-  const read = sanitizeEnrichUpdate(actor.read(crawl.table));
-  if (read.websiteNotes === undefined) {
-    return {
-      ok: false,
-      clinicName: candidate.clinicName,
-      error: `The crawl ran but read nothing — ${crawlDiagnostics(crawl.table)}. The stored notes were kept.`,
-    };
-  }
+  const read = await recrawlWebsite(url);
+  if (!read.ok) return { ok: false, clinicName: candidate.clinicName, error: read.error };
   await prisma.discoveryCandidate.update({
     where: { id },
-    data: {
-      websiteNotes: read.websiteNotes,
-      websiteLinks: read.websiteLinks ?? null,
-      enrichedAt: new Date(),
-    },
+    data: { websiteNotes: read.websiteNotes, websiteLinks: read.websiteLinks, enrichedAt: new Date() },
   });
   revalidatePath(`/discovery/${id}`);
-  return {
-    ok: true,
-    clinicName: candidate.clinicName,
-    pages: crawl.table.rows.length,
-    links: read.websiteLinks ? (JSON.parse(read.websiteLinks) as unknown[]).length : 0,
-    note: crawl.note,
-  };
+  return { ok: true, clinicName: candidate.clinicName, pages: read.pages, links: read.links, note: read.note };
 }
 
 // ─── Bulk actions from the discovery table ─────────────────────────────────

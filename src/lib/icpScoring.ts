@@ -226,10 +226,14 @@ export interface DisqualifierHit {
   scoredTriggered?: boolean;
 }
 
-export type V2Status = "PROMOTED" | "REJECTED";
+// INSUFFICIENT: the fit floor was missed because nothing was found, not
+// because anything cited showed a non-fit. Not a rejection — "Not enough
+// evidence", the same standing as a run that could not score at all.
+export type V2Status = "PROMOTED" | "REJECTED" | "INSUFFICIENT";
 export type V2VerdictKind =
   | "disqualified"
   | "not_a_fit"
+  | "insufficient_evidence"
   | "below_threshold"
   | "chiro_no_program"
   | "promoted";
@@ -637,7 +641,7 @@ export function buildBreakdownV2(input: BuildInput): IcpBreakdownV2 {
   const fit = summaryConsistency(
     reply?.summary ?? "",
     [
-      serviceEntry(icp, reply, docs),
+      serviceEntry(icp, reply, docs, evidence.clinicName),
       titleEntry(icp, evidence, reply, docs, locations),
       locationEntry(icp, evidence, reply, docs),
       sizeEntry(icp, evidence, reply, docs, locations),
@@ -700,7 +704,7 @@ export function finish(b: Unfinished, threshold: number): IcpBreakdownV2 {
   });
   const tier: IcpTier = gated
     ? "DISQUALIFIED"
-    : verdict.kind === "not_a_fit" || verdict.kind === "chiro_no_program"
+    : verdict.kind === "not_a_fit" || verdict.kind === "insufficient_evidence" || verdict.kind === "chiro_no_program"
       ? "C"
       : v2TierForScore(total);
   return { ...b, fitTotal, signalsTotal, ungatedTotal, total, tier, verdict };
@@ -750,6 +754,19 @@ function decideVerdict(args: {
     const missing = args.fit
       .filter((e) => e.shortfall !== null)
       .map((e) => `${e.label.toLowerCase()} (${e.shortfall})`);
+    // A rejection needs positive evidence: a fit criterion that scored 0 on
+    // something cited (general chiropractic on a crawled services page with no
+    // program, say). Missing the floor only because nothing was found — no
+    // cited service, no named person, no location count — is thin evidence.
+    const citedNonFit = args.fit.filter((e) => e.points === 0 && e.citations.length > 0);
+    if (citedNonFit.length === 0) {
+      return {
+        ...base,
+        status: "INSUFFICIENT",
+        kind: "insufficient_evidence",
+        reason: `Not enough evidence — fit ${args.fitTotal}/${FIT_MAX}, needs ${FIT_FLOOR}, and nothing cited shows a non-fit. Not found: ${missing.join("; ") || "cited evidence for the fit criteria"}.`,
+      };
+    }
     return {
       ...base,
       status: "REJECTED",
@@ -932,10 +949,18 @@ function entry(
   };
 }
 
+const NAME_CORE_SERVICE = /\b(spinal\s+decompression|decompression|discs?)\b/i;
+
+export function coreServiceInName(clinicName: string): string | null {
+  const m = clinicName.match(NAME_CORE_SERVICE);
+  return m ? m[1].toLowerCase().replace(/\s+/g, " ") : null;
+}
+
 function serviceEntry(
   icp: IcpDefinitionData,
   reply: ScoringReply | null,
   docs: EvidenceDoc[],
+  clinicName: string,
 ): CriterionEntry {
   if (reply?.coreService) {
     const tag = matchServiceTag(reply.coreService.service, icp.coreServices);
@@ -963,6 +988,21 @@ function serviceEntry(
       FIT_WEIGHTS.serviceCore,
       `Core service — ${found.tag} — named on the site.`,
       [found.citation],
+      "computed",
+      null,
+    );
+  }
+
+  // The clinic's own name. "HOH Spinal Decompression", "West Valley Auto
+  // Injury Disc and Spine": a clinic that puts the service in its name offers
+  // it. Cited with the name. "Spine" alone is not enough.
+  const named = coreServiceInName(clinicName);
+  if (named) {
+    return entry(
+      "service",
+      FIT_WEIGHTS.serviceCore,
+      `Core service — ${named} — in the clinic's name.`,
+      [{ quote: clinicName, source: SOURCE_CLINIC_NAME }],
       "computed",
       null,
     );

@@ -69,6 +69,8 @@ export function comparisonOutcome(
 ): ComparisonOutcome {
   if (!next.ok) return "newly_failed";
   const status = next.breakdown.verdict.status;
+  // Thin evidence is "not enough evidence to judge", never a rejection.
+  if (status === "INSUFFICIENT") return "newly_failed";
   if (status === "REJECTED" && old.status === "PROMOTED") return "newly_rejected";
   if (status === "PROMOTED" && old.status === "REJECTED") return "newly_promoted";
   return "unchanged";
@@ -95,6 +97,8 @@ export function newStatusLabel(next: NewStanding): string {
   switch (next.breakdown.verdict.status) {
     case "PROMOTED":
       return "Promoted";
+    case "INSUFFICIENT":
+      return "Not enough evidence";
     default:
       return next.breakdown.verdict.kind === "not_a_fit"
         ? "Rejected — not a confirmed fit"

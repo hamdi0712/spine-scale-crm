@@ -44,6 +44,13 @@ const resolveFilename = (Module as unknown as { _resolveFilename: Resolver })._r
 };
 
 let failures = 0;
+
+// A breakdown with its fit entries changed, re-judged by finish().
+function finishWith<B extends { fit: unknown[]; verdict: { threshold: number } }>(b: B, change: (fit: B["fit"]) => B["fit"]): B {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { finish } = require("../src/lib/icpScoring");
+  return finish({ ...b, fit: change(b.fit) }, b.verdict.threshold);
+}
 function check(label: string, passed: boolean, detail = ""): void {
   if (!passed) failures += 1;
   console.log(`  ${passed ? "ok  " : "FAIL"} ${label}${detail === "" ? "" : ` — ${detail}`}`);
@@ -1193,6 +1200,47 @@ async function main(): Promise<void> {
     for (const [label, msg] of good) check(`gate passes: ${label}`, inventedStatsReason(msg, ev) === null, inventedStatsReason(msg, ev) ?? "");
     const prompt = buildStepPrompt("FIRST_MESSAGE", { evidence: { ...ev, metaAdsSignal: "2 active ads, running 3mo" }, contactName: null, contactTitle: null, loomUrl: null, priorMessages: [], replyText: null } as never).user;
     check("Variant A is a question with no 'usually' claim", !prompt.includes("chunk of paid leads") && prompt.includes("end up on the schedule"));
+  }
+
+  // Service match from the clinic's name, and thin evidence is not a rejection.
+  {
+    const { buildBreakdownV2, coreServiceInName } = await import("../src/lib/icpScoring");
+    const icpNow = (await loadActiveIcp())!;
+    for (const name of ["HOH Spinal Decompression", "Renton Spinal Decompression @ Clark Chiropractic", "West Valley Auto Injury Disc and Spine"]) {
+      check(`'${name}' names a core service`, coreServiceInName(name) !== null, coreServiceInName(name) ?? "none");
+    }
+    check("'Spine' alone does not", coreServiceInName("Northwest Spine Center") === null && coreServiceInName("Discovery Chiropractic") === null);
+
+    const build = (clinicName: string, websiteNotes: string | null) =>
+      buildBreakdownV2({
+        icp: icpNow,
+        evidence: { clinicName, websiteNotes, websiteUrl: websiteNotes ? "https://x.test/" : null, metaAdsSignal: null, reviewCount: null } as never,
+        reply: null,
+        precheck: null,
+        threshold: 60,
+        evidenceLabels: [],
+        notes: [],
+        now: new Date(),
+      });
+    const hoh = build("HOH Spinal Decompression", null);
+    const service = hoh.fit.find((e) => e.key === "service");
+    check(
+      "a name with 'Spinal Decompression' is a cited core-service match, citing the name",
+      service?.points === 35 && service.citations[0]?.source === "Clinic name" && service.citations[0]?.quote === "HOH Spinal Decompression",
+      `${service?.points} ${JSON.stringify(service?.citations)}`,
+    );
+
+    const thin = build("Northwest Spine Center", "https://x.test/\nWelcome to our clinic. Call us today.");
+    check(
+      "nothing found → 'Not enough evidence', not rejected",
+      thin.verdict.status === "INSUFFICIENT" && thin.verdict.kind === "insufficient_evidence",
+      thin.verdict.reason,
+    );
+    // A cited non-fit (general chiropractic, cited, with no program) is a rejection.
+    const general = finishWith(thin, (fit) =>
+      fit.map((e) => (e.key === "service" ? { ...e, points: 0, citations: [{ quote: "Family chiropractic care for all ages", source: "https://x.test/services" }], source: "assist" as const } : e)),
+    );
+    check("a cited non-fit is still rejected", general.verdict.status === "REJECTED" && general.verdict.kind === "not_a_fit", general.verdict.reason);
   }
 
   await prisma.$disconnect();

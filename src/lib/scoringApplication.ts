@@ -31,7 +31,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { promoteWithin } from "@/lib/promoteLead";
-import { parseBreakdownV2 } from "@/lib/icpScoring";
+import { finish, parseBreakdownV2 } from "@/lib/icpScoring";
 import { OldStanding } from "@/lib/scoringComparison";
 import { LEAD_SCORE_SELECT, candidateStanding, leadStanding } from "@/lib/scoringComparisonStore";
 import { loadPipelineSettings, savePipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -83,6 +83,9 @@ export interface ApplicationPlan {
   reject: RejectEntry[];
   flag: FlagEntry[];
   protectedLeads: PlanEntry[];
+  // Missed the fit floor only because nothing was found. Left exactly as they
+  // are: not rejected, not flagged. Re-crawl and re-run Compare to judge them.
+  insufficient: PlanEntry[];
   stale: StaleEntry[];
   staleShare: number;
   staleWarning: boolean;
@@ -102,8 +105,13 @@ const LEAD_GUARD_SELECT = {
 
 type GuardLead = Prisma.LeadGetPayload<{ select: typeof LEAD_GUARD_SELECT }>;
 
-function protectionReason(lead: GuardLead): string | null {
+// A message sent this recently means follow-ups are due, and they live in
+// Today's Focus — a flag would hide them.
+export const RECENT_OUTREACH_DAYS = 30;
+
+function protectionReason(lead: GuardLead, recentlyMessaged: Set<string>): string | null {
   if (lead.repliedAt) return "a reply is recorded";
+  if (recentlyMessaged.has(lead.id)) return `an outreach message was sent in the last ${RECENT_OUTREACH_DAYS} days`;
   if (lead._count.calls > 0) return "a call is logged";
   if ((PROTECTED_STAGES as readonly string[]).includes(lead.stage)) return `it is at ${LEAD_STAGE_LABELS[lead.stage as LeadStage] ?? lead.stage}`;
   if (lead.archived) return "it has been converted to a client";
@@ -111,7 +119,8 @@ function protectionReason(lead: GuardLead): string | null {
 }
 
 function verdictReason(row: { flipReason: string | null; breakdown: string | null }, fallback: string): string {
-  return parseBreakdownV2(row.breakdown)?.verdict.reason ?? row.flipReason ?? fallback;
+  const stored = parseBreakdownV2(row.breakdown);
+  return (stored ? finish(stored, stored.verdict.threshold).verdict.reason : null) ?? row.flipReason ?? fallback;
 }
 
 // What changed on a record since the comparison read it, comparing only what
@@ -169,9 +178,18 @@ export async function planApplication(): Promise<PlanResult> {
     return { ok: false, error: "There is no finished Compare scoring run. Run one to the end first — this applies its results." };
   }
   const rows = await prisma.scoringComparison.findMany({
-    where: { runId: run.id, outcome: { in: ["newly_promoted", "newly_rejected"] } },
+    where: { runId: run.id, outcome: { in: ["newly_promoted", "newly_rejected", "newly_failed"] } },
     orderBy: { createdAt: "asc" },
   });
+  const recentlyMessaged = new Set(
+    (
+      await prisma.outreachMessage.findMany({
+        where: { sentAt: { gte: new Date(Date.now() - RECENT_OUTREACH_DAYS * 86_400_000) } },
+        select: { leadId: true },
+        distinct: ["leadId"],
+      })
+    ).map((m) => m.leadId),
+  );
 
   const plan: ApplicationPlan = {
     runId: run.id,
@@ -180,6 +198,7 @@ export async function planApplication(): Promise<PlanResult> {
     reject: [],
     flag: [],
     protectedLeads: [],
+    insufficient: [],
     stale: [],
     staleShare: 0,
     staleWarning: false,
@@ -196,7 +215,7 @@ export async function planApplication(): Promise<PlanResult> {
       });
       return;
     }
-    const guard = protectionReason(lead);
+    const guard = protectionReason(lead, recentlyMessaged);
     if (guard) {
       plan.protectedLeads.push({ kind: "lead", id: lead.id, clinicName: lead.clinicName, reason: `${guard}. New scoring would reject it: ${reason}` });
       return;
@@ -208,7 +227,29 @@ export async function planApplication(): Promise<PlanResult> {
     plan.stale.push({ kind, id, clinicName, changes, reason: changes.map(describeChange).join("; ") });
 
   for (const row of rows) {
-    const breakdown = parseBreakdownV2(row.breakdown);
+    if (row.outcome === "newly_failed") {
+      plan.insufficient.push({
+        kind: row.subjectKind === "lead" ? "lead" : "candidate",
+        id: row.subjectId,
+        clinicName: row.clinicName,
+        reason: `${row.oldStatus} today. ${row.flipReason ?? "Not enough evidence to judge."}`,
+      });
+      continue;
+    }
+    // The stored breakdown re-judged under the current verdict rules (no
+    // model call — finish() only re-totals and re-decides), so a comparison
+    // run before the thin-evidence rule cannot flag a thin-evidence record.
+    const stored = parseBreakdownV2(row.breakdown);
+    const breakdown = stored ? finish(stored, stored.verdict.threshold) : null;
+    if (row.outcome === "newly_rejected" && breakdown?.verdict.status === "INSUFFICIENT") {
+      plan.insufficient.push({
+        kind: row.subjectKind === "lead" ? "lead" : "candidate",
+        id: row.subjectId,
+        clinicName: row.clinicName,
+        reason: `${row.oldStatus} today. ${breakdown.verdict.reason}`,
+      });
+      continue;
+    }
     if (row.subjectKind === "candidate") {
       const c = await prisma.discoveryCandidate.findUnique({
         where: { id: row.subjectId },

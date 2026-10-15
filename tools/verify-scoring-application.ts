@@ -74,6 +74,12 @@ async function main(): Promise<void> {
   await prisma.call.create({ data: { leadId: lCall.id, type: "DISCOVERY", status: "COMPLETED", scheduledAt: new Date("2026-10-02") } });
   const lLost = await lead("Birch Clinic (lost)", { stage: "LOST" });
   await lead("Maple Health (unchanged)");
+  const lMessaged = await lead("Aspen Chiro (messaged 5 days ago)", { stage: "CONTACTED" });
+  await prisma.outreachMessage.create({
+    data: { leadId: lMessaged.id, step: "FIRST_MESSAGE", content: "Thanks for connecting.", sentAt: new Date(Date.now() - 5 * 86_400_000) },
+  });
+  const lThinOld = await lead("Willow Wellness (thin evidence, old comparison)");
+  const lFailed = await lead("Spruce Chiro (not enough evidence)");
 
   const cNew1 = await candidate("River Decompression (newly promoted)", "REJECTED");
   const cNew2 = await candidate("Lakeside Disc Center (newly promoted)", "REJECTED");
@@ -108,6 +114,22 @@ async function main(): Promise<void> {
   await row("lead", lDiscovery.id, lDiscovery.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Not a confirmed fit.");
   await row("lead", lCall.id, lCall.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Not a confirmed fit.");
   await row("lead", lLost.id, lLost.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Out of region.");
+  await row("lead", lMessaged.id, lMessaged.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Not a confirmed fit.");
+  await row("lead", lFailed.id, lFailed.clinicName, "PROMOTED", "FAILED", "newly_failed", "Not enough evidence — nothing cited.");
+  // A rejection stored by a comparison run before the thin-evidence rule: its
+  // breakdown has nothing cited, so it re-judges to "Not enough evidence".
+  {
+    const { buildBreakdownV2, serializeBreakdownV2 } = await import("../src/lib/icpScoring");
+    const { loadActiveIcp } = await import("../src/lib/icpDefinitionStore");
+    const thin = buildBreakdownV2({
+      icp: (await loadActiveIcp())!,
+      evidence: { clinicName: lThinOld.clinicName, websiteNotes: "https://w.test/\nWelcome. Call us today.", websiteUrl: "https://w.test/", metaAdsSignal: null, reviewCount: null } as never,
+      reply: null, precheck: null, threshold: 60, evidenceLabels: [], notes: [], now: new Date(),
+    });
+    const asOldRejection = { ...thin, verdict: { ...thin.verdict, status: "REJECTED" as const, kind: "not_a_fit" as const, reason: "Not a confirmed fit — fit 0/60." } };
+    const created = await row("lead", lThinOld.id, lThinOld.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Not a confirmed fit.");
+    await prisma.scoringComparison.update({ where: { id: created.id }, data: { breakdown: serializeBreakdownV2(asOldRejection) } });
+  }
   // Promoted by hand after the comparison ran: stale.
   await prisma.discoveryCandidate.update({ where: { id: cStale.id }, data: { status: "PROMOTED" } });
   // Touched by an automatic write that changes nothing that matters (the
@@ -149,8 +171,14 @@ async function main(): Promise<void> {
   if (!planned.ok) throw new Error(planned.error);
   const p = planned.plan;
   console.log(`  Confirm screen: ${p.promote.length} promoted, ${p.reject.length} rejected, ${p.flag.length} leads flagged, ${p.protectedLeads.length} protected, ${p.stale.length} skipped (${Math.round(p.staleShare * 100)}% stale${p.staleWarning ? " — warning shown" : ""})`);
-  check("confirm counts: 2 promoted, 1 rejected, 3 flagged, 3 protected, 1 stale",
-    p.promote.length === 2 && p.reject.length === 1 && p.flag.length === 3 && p.protectedLeads.length === 3 && p.stale.length === 1);
+  check("confirm counts: 2 promoted, 1 rejected, 3 flagged, 4 protected, 2 not enough evidence, 1 stale",
+    p.promote.length === 2 && p.reject.length === 1 && p.flag.length === 3 && p.protectedLeads.length === 4 && p.insufficient.length === 2 && p.stale.length === 1,
+    `${p.promote.length}/${p.reject.length}/${p.flag.length}/${p.protectedLeads.length}/${p.insufficient.length}/${p.stale.length}`);
+  check("a lead messaged in the last 30 days is protected", p.protectedLeads.some((e) => e.id === lMessaged.id && /last 30 days/.test(e.reason)));
+  check("'not enough evidence' is its own group, never flagged",
+    p.insufficient.some((e) => e.id === lFailed.id) && !p.flag.some((e) => e.leadId === lFailed.id));
+  check("a thin-evidence rejection from an older comparison is re-judged as not enough evidence",
+    p.insufficient.some((e) => e.id === lThinOld.id) && !p.flag.some((e) => e.leadId === lThinOld.id));
   check("the lead with a reply is protected, not flagged",
     p.protectedLeads.some((e) => e.id === lReplied.id) && !p.flag.some((e) => e.leadId === lReplied.id));
   check("discovery-call and call-logged leads are protected; Lost is not",
@@ -160,7 +188,7 @@ async function main(): Promise<void> {
     staleHand?.clinicName === cStale.clinicName && staleHand.changes.some((c) => c.field === "status" && c.compared === "Rejected" && c.current === "Promoted" && c.at !== null),
     JSON.stringify(staleHand?.changes));
   check("a write that changes no scoring or status field is not stale", !p.stale.some((e) => e.id === cNew2.id || e.id === lContacted.id));
-  check("1 stale of 10 is not over 10%, so no warning", !p.staleWarning);
+  check("1 stale of 11 is not over 10%, so no warning", !p.staleWarning);
 
   const applied = await applyScoring();
   if (!applied.ok) throw new Error(applied.error);
@@ -180,7 +208,7 @@ async function main(): Promise<void> {
   const again = await applyScoring();
   if (!again.ok) throw new Error(again.error);
   check("re-apply after a revert uses the same comparison and the same counts",
-    again.promoted === 2 && again.rejected === 1 && again.flagged === 3 && again.protected === 3);
+    again.promoted === 2 && again.rejected === 1 && again.flagged === 3 && again.protected === 4);
   const river = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: cNew1.id } });
   await prisma.outreachMessage.create({
     data: { leadId: river.promotedLeadId!, step: "CONNECTION", content: "Hi, saw your decompression page.", sentAt: new Date(Date.now() + 1000) },
