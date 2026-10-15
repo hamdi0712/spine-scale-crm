@@ -1,6 +1,7 @@
 import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { OUTREACH_QUEUE_WHERE } from "@/lib/liveLeadWhere";
 import { IcpTier } from "@/lib/icp";
 import { leadScore } from "@/lib/leadScore";
 import { fmtDate } from "@/lib/format";
@@ -28,7 +29,7 @@ const OUTREACH_TIERS: IcpTier[] = ["A", "B"];
 
 export default async function OutreachQueuePage() {
   const leads = await prisma.lead.findMany({
-    where: { archived: false, stage: "NEW" },
+    where: OUTREACH_QUEUE_WHERE,
     orderBy: { createdAt: "desc" },
   });
 

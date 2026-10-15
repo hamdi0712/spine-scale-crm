@@ -418,7 +418,17 @@ model Lead {
   icpBreakdown   String?
   icpBreakdownAt DateTime?
 
+  // Rejected by new scoring: set by "Apply new scoring to existing records"
+  // on a lead the ICP model rejects. A flag, not a stage — the lead stays
+  // where it was, hidden from the default Pipeline view, Outreach Queue,
+  // Today's Focus and the dashboard counts while it is set. Cleared by revert.
+  scoringRejectedAt     DateTime?
+  scoringRejectedReason String?
+  scoringApplicationId  String?
+
   copilotActions CopilotAction[]
+
+  @@index([scoringRejectedAt])
 }
 
 // One drafted message in a lead's outreach sequence.
@@ -1584,4 +1594,48 @@ model CopilotAction {
   error      String?
 
   @@index([status, createdAt])
+}
+
+// One "Apply new scoring to existing records": what a finished Compare
+// scoring run changed on real records, with everything needed to put it back.
+model ScoringApplication {
+  id              String    @id @default(cuid())
+  comparisonRunId String
+  appliedAt       DateTime  @default(now())
+  revertedAt      DateTime?
+  // The model Process Queue used before the apply, restored by revert.
+  previousModel   String
+  promoted        Int
+  rejected        Int
+  flagged         Int
+  protected       Int
+  stale           Int
+  // JSON lists for the summaries: protected leads, stale records, and on
+  // revert the records left as they were because they changed after apply.
+  protectedList   String?
+  staleList       String?
+  revertKeptList  String?
+
+  items ScoringApplicationItem[]
+
+  @@index([appliedAt])
+}
+
+// One record the apply touched. before/after are JSON of the snapshotted
+// fields; a record is restored on revert only while it still reads as after.
+model ScoringApplicationItem {
+  id            String             @id @default(cuid())
+  applicationId String
+  application   ScoringApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  subjectKind   String // candidate | lead
+  subjectId     String
+  clinicName    String
+  action        String // promoted | rejected | flagged
+  before        String
+  after         String
+  // The record's updatedAt right after the apply wrote it.
+  afterUpdatedAt DateTime
+  createdLeadId String?
+
+  @@index([applicationId])
 }
