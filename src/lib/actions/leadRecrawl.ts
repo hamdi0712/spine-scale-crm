@@ -8,11 +8,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { recrawlWebsite } from "@/lib/websiteCrawlRun";
+import { recrawlWebsite, whenRecrawlLands } from "@/lib/websiteCrawlRun";
 
 export type LeadRecrawlResult =
   | { ok: true; clinicName: string; pages: number; links: number; note: string | null }
-  | { ok: false; clinicName: string; error: string };
+  | { ok: false; clinicName: string; error: string; pending?: boolean; capacity?: boolean };
 
 export async function recrawlLeadWebsite(id: string): Promise<LeadRecrawlResult> {
   const lead = await prisma.lead.findUnique({ where: { id }, select: { clinicName: true, websiteUrl: true } });
@@ -20,11 +20,16 @@ export async function recrawlLeadWebsite(id: string): Promise<LeadRecrawlResult>
   const url = (lead.websiteUrl ?? "").trim();
   if (url === "") return { ok: false, clinicName: lead.clinicName, error: "No website URL on this lead." };
   const read = await recrawlWebsite(url);
-  if (!read.ok) return { ok: false, clinicName: lead.clinicName, error: read.error };
-  await prisma.lead.update({
-    where: { id },
-    data: { websiteNotes: read.websiteNotes, websiteLinks: read.websiteLinks, enrichedAt: new Date() },
+  const stored = whenRecrawlLands(read, async (r) => {
+    await prisma.lead.update({
+      where: { id },
+      data: { websiteNotes: r.websiteNotes, websiteLinks: r.websiteLinks, enrichedAt: new Date() },
+    });
   });
+  if (!read.ok) {
+    return { ok: false, clinicName: lead.clinicName, error: read.error, pending: read.later !== undefined, capacity: read.capacity };
+  }
+  await stored;
   revalidatePath(`/pipeline/${id}`);
   return { ok: true, clinicName: lead.clinicName, pages: read.pages, links: read.links, note: read.note };
 }

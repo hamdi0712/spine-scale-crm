@@ -47,7 +47,8 @@ export const APIFY_MIN_CHARGE_USD = 0.5;
 export const APIFY_RUN_TIMEOUT_SECONDS = 120;
 const APIFY_CLIENT_TIMEOUT_MS = (APIFY_RUN_TIMEOUT_SECONDS + 15) * 1000;
 
-const API_BASE = "https://api.apify.com/v2";
+// Overridable only so tools/verify-recrawl.ts can point it at a local fake.
+const API_BASE = process.env.APIFY_API_BASE || "https://api.apify.com/v2";
 
 export async function runApifySync({
   kind,
@@ -73,6 +74,103 @@ export async function runApifySync({
   maxItems?: number;
   maxTotalChargeUsd?: number;
 }): Promise<ApifyFetchResult> {
+  const prep = await prepareRun({ kind, id, input, maxItems, maxTotalChargeUsd });
+  if (!prep.ok) return prep;
+  const { token, actorId, parsedInput, cap } = prep;
+  const path = kind === "task" ? "actor-tasks" : "acts";
+  const url =
+    `${API_BASE}/${path}/${encodeURIComponent(actorId)}/run-sync-get-dataset-items` +
+    `?timeout=${APIFY_RUN_TIMEOUT_SECONDS}&${cap}&limit=${maxItems}`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        // Bearer rather than ?token= so the credential never lands in a URL,
+        // where proxies and server logs would keep a copy of it.
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(parsedInput),
+      signal: AbortSignal.timeout(APIFY_CLIENT_TIMEOUT_MS),
+      cache: "no-store",
+    });
+  } catch (err) {
+    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      return { ok: false, error: timeoutMessage() };
+    }
+    return {
+      ok: false,
+      error:
+        "Could not reach Apify. Check the server's network connection and try again.",
+    };
+  }
+
+  if (!response.ok) {
+    return { ok: false, error: (await errorMessage(response, kind)).message };
+  }
+
+  let items: unknown;
+  try {
+    items = await response.json();
+  } catch {
+    return {
+      ok: false,
+      error: "Apify returned something that is not JSON. Try the run again.",
+    };
+  }
+  if (!Array.isArray(items)) {
+    return {
+      ok: false,
+      error: "Apify returned no dataset for that run.",
+    };
+  }
+  if (items.length === 0) {
+    return {
+      ok: false,
+      error:
+        "The run finished but its dataset is empty. Check the input parameters — a search that matches nothing returns no items.",
+    };
+  }
+
+  const table = itemsToTable(items, maxItems);
+  if (table.headers.length === 0) {
+    return {
+      ok: false,
+      error:
+        "The run returned items with no fields to map. Check that this actor outputs one object per record.",
+    };
+  }
+  return {
+    ok: true,
+    label: `${table.rows.length} item${table.rows.length === 1 ? "" : "s"} from ${actorId}`,
+    headers: table.headers,
+    rows: table.rows,
+  };
+}
+
+
+// Everything a run needs before it can be sent — the token, the actor id in
+// the form the API takes, the parsed input, and the cap — shared by the
+// one-call run above and the started-then-checked run below, so both refuse
+// the same bad input with the same words.
+async function prepareRun({
+  kind,
+  id,
+  input,
+  maxItems,
+  maxTotalChargeUsd,
+}: {
+  kind: ApifySourceKind;
+  id: string;
+  input: string;
+  maxItems: number;
+  maxTotalChargeUsd?: number;
+}): Promise<
+  | { ok: true; token: string; actorId: string; parsedInput: unknown; cap: string }
+  | { ok: false; error: string }
+> {
   // Database first, .env second — see src/lib/appSecretsStore.ts. Read per run
   // rather than once at import, so a token changed on the Settings page applies
   // to the very next actor call without a restart.
@@ -130,77 +228,7 @@ export async function runApifySync({
     maxTotalChargeUsd === undefined
       ? `maxItems=${maxItems}`
       : `maxTotalChargeUsd=${chargeCap(maxTotalChargeUsd)}`;
-  const path = kind === "task" ? "actor-tasks" : "acts";
-  const url =
-    `${API_BASE}/${path}/${encodeURIComponent(actorId)}/run-sync-get-dataset-items` +
-    `?timeout=${APIFY_RUN_TIMEOUT_SECONDS}&${cap}&limit=${maxItems}`;
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        // Bearer rather than ?token= so the credential never lands in a URL,
-        // where proxies and server logs would keep a copy of it.
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(parsedInput),
-      signal: AbortSignal.timeout(APIFY_CLIENT_TIMEOUT_MS),
-      cache: "no-store",
-    });
-  } catch (err) {
-    if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
-      return { ok: false, error: timeoutMessage() };
-    }
-    return {
-      ok: false,
-      error:
-        "Could not reach Apify. Check the server's network connection and try again.",
-    };
-  }
-
-  if (!response.ok) {
-    return { ok: false, error: await errorMessage(response, kind) };
-  }
-
-  let items: unknown;
-  try {
-    items = await response.json();
-  } catch {
-    return {
-      ok: false,
-      error: "Apify returned something that is not JSON. Try the run again.",
-    };
-  }
-  if (!Array.isArray(items)) {
-    return {
-      ok: false,
-      error: "Apify returned no dataset for that run.",
-    };
-  }
-  if (items.length === 0) {
-    return {
-      ok: false,
-      error:
-        "The run finished but its dataset is empty. Check the input parameters — a search that matches nothing returns no items.",
-    };
-  }
-
-  const table = itemsToTable(items, maxItems);
-  if (table.headers.length === 0) {
-    return {
-      ok: false,
-      error:
-        "The run returned items with no fields to map. Check that this actor outputs one object per record.",
-    };
-  }
-  return {
-    ok: true,
-    label: `${table.rows.length} item${table.rows.length === 1 ? "" : "s"} from ${actorId}`,
-    headers: table.headers,
-    rows: table.rows,
-  };
+  return { ok: true, token, actorId, parsedInput, cap };
 }
 
 // The cost ceiling as Apify will take it: never below the platform minimum,
@@ -222,7 +250,7 @@ function timeoutMessage(): string {
 async function errorMessage(
   response: Response,
   kind: ApifySourceKind,
-): Promise<string> {
+): Promise<{ message: string; code: ApifyErrorCode | null }> {
   let type = "";
   let detail = "";
   try {
@@ -235,6 +263,13 @@ async function errorMessage(
     // A non-JSON body tells us nothing beyond the status code.
   }
   const suffix = detail ? ` Apify said: ${detail}` : "";
+  const code = errorCode(response.status, type, detail);
+  return { message: describe(), code };
+
+  function describe(): string {
+  if (code === "capacity") {
+    return `Apify is at this account's limit for runs at once or memory, so the run was not started yet.${suffix}`;
+  }
 
   if (response.status === 401 || type.includes("token")) {
     return `Apify rejected the API token. Check it under Settings → API Keys — it may be mistyped, revoked, or from another account.${suffix}`;
@@ -257,6 +292,151 @@ async function errorMessage(
     return `The run failed to start — Apify would not accept that input. Check the parameters against the ${kind}'s input schema.${suffix}`;
   }
   return `The ${kind} run failed (HTTP ${response.status}).${suffix}`;
+  }
+}
+
+// A failure worth telling apart from the rest: the account's concurrency or
+// memory limit, which clears as other runs finish (back off and try again),
+// and a run that ran out of time.
+export type ApifyErrorCode = "capacity" | "timeout";
+
+function errorCode(status: number, type: string, detail: string): ApifyErrorCode | null {
+  const t = `${type} ${detail}`.toLowerCase();
+  if (
+    status === 429 ||
+    /memory[- ]limit|concurrent|too many (runs|requests)|rate[- ]limit|actor-memory-limit-exceeded|max(imum)? (number of )?(concurrent|parallel)/.test(t)
+  ) {
+    return "capacity";
+  }
+  if (status === 408) return "timeout";
+  return null;
+}
+
+// ─── Start a run, then check on it ─────────────────────────────────────────
+//
+// The one-call run above holds a single request open for up to two minutes
+// and gives up after that — and an actor that is still working when the
+// request gives up goes on running, and billing, with its result thrown away.
+// This starts the run, then asks after it until it ends, however long that
+// takes up to the run's own time limit, and reads its dataset once it has.
+// A run that hits its time limit is a real timeout; whatever pages it did
+// read are still returned.
+//
+// The bulk re-crawls use this; nothing else does yet.
+
+export type ApifyRunResult =
+  | { ok: true; label: string; headers: string[]; rows: string[][]; timedOut: boolean; runId: string }
+  | { ok: false; error: string; code: ApifyErrorCode | null; runId: string | null };
+
+const TERMINAL = new Set(["SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED"]);
+const POLL_WAIT_SECONDS = 30;
+
+export async function runApifyActor({
+  kind,
+  id,
+  input,
+  maxItems = MAX_IMPORT_ROWS,
+  maxTotalChargeUsd,
+  // The actor's own time limit on Apify's side. Past it, Apify stops the run
+  // and it is a real timeout.
+  runTimeoutSeconds,
+}: {
+  kind: ApifySourceKind;
+  id: string;
+  input: string;
+  maxItems?: number;
+  maxTotalChargeUsd?: number;
+  runTimeoutSeconds: number;
+}): Promise<ApifyRunResult> {
+  const prep = await prepareRun({ kind, id, input, maxItems, maxTotalChargeUsd });
+  if (!prep.ok) return { ...prep, code: null, runId: null };
+  const { token, actorId, parsedInput, cap } = prep;
+  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+  const path = kind === "task" ? "actor-tasks" : "acts";
+
+  let started: Response;
+  try {
+    started = await fetch(
+      `${API_BASE}/${path}/${encodeURIComponent(actorId)}/runs?timeout=${runTimeoutSeconds}&${cap}`,
+      { method: "POST", headers, body: JSON.stringify(parsedInput), cache: "no-store", signal: AbortSignal.timeout(60_000) },
+    );
+  } catch {
+    return { ok: false, error: "Could not reach Apify to start the run. Check the server's network connection and try again.", code: null, runId: null };
+  }
+  if (!started.ok) {
+    const e = await errorMessage(started, kind);
+    return { ok: false, error: e.message, code: e.code, runId: null };
+  }
+  const first = ((await started.json().catch(() => null)) as { data?: ApifyRun } | null)?.data;
+  if (!first?.id) return { ok: false, error: "Apify started the run but did not say which one.", code: null, runId: null };
+  let run: ApifyRun = first;
+
+  // Asked after with a long-poll — Apify holds each request until the run ends
+  // or the wait runs out — until it ends, or until well past its own limit.
+  const giveUpAt = Date.now() + (runTimeoutSeconds + 120) * 1000;
+  let unreachable = 0;
+  while (!TERMINAL.has(run.status) && Date.now() < giveUpAt) {
+    try {
+      const r: Response = await fetch(`${API_BASE}/actor-runs/${run.id}?waitForFinish=${POLL_WAIT_SECONDS}`, {
+        headers,
+        cache: "no-store",
+        signal: AbortSignal.timeout((POLL_WAIT_SECONDS + 30) * 1000),
+      });
+      const next: ApifyRun | null | undefined = r.ok ? ((await r.json().catch(() => null)) as { data?: ApifyRun } | null)?.data : null;
+      if (next?.status) {
+        run = next;
+        unreachable = 0;
+      } else if (++unreachable >= 5) {
+        break;
+      }
+    } catch {
+      if (++unreachable >= 5) break;
+      await new Promise((res) => setTimeout(res, 5_000));
+    }
+  }
+
+  if (!TERMINAL.has(run.status)) {
+    return { ok: false, error: `Apify run ${run.id} could not be followed to the end.`, code: "timeout", runId: run.id };
+  }
+  const timedOut = run.status === "TIMED-OUT";
+  if (run.status === "FAILED" || run.status === "ABORTED") {
+    return { ok: false, error: `The run ${run.status === "FAILED" ? "failed" : "was aborted"} on Apify (run ${run.id}).`, code: null, runId: run.id };
+  }
+
+  let items: unknown;
+  try {
+    const r = await fetch(`${API_BASE}/datasets/${run.defaultDatasetId}/items?clean=true&format=json&limit=${maxItems}`, {
+      headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(60_000),
+    });
+    items = r.ok ? await r.json() : null;
+  } catch {
+    items = null;
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    return timedOut
+      ? { ok: false, error: `The run hit its ${runTimeoutSeconds}-second limit on Apify before reading anything.`, code: "timeout", runId: run.id }
+      : { ok: false, error: "The run finished but its dataset is empty.", code: null, runId: run.id };
+  }
+  const table = itemsToTable(items, maxItems);
+  if (table.headers.length === 0) {
+    return { ok: false, error: "The run returned items with no fields to map.", code: null, runId: run.id };
+  }
+  return {
+    ok: true,
+    label: `${table.rows.length} item${table.rows.length === 1 ? "" : "s"} from ${actorId}`,
+    headers: table.headers,
+    rows: table.rows,
+    timedOut,
+    runId: run.id,
+  };
+}
+
+interface ApifyRun {
+  id: string;
+  status: string;
+  defaultDatasetId: string;
 }
 
 // Dataset items are JSON objects whose shape is the actor's business, not

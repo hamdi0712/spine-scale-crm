@@ -27,7 +27,12 @@
 
 import { ICP_MAX_SCORE } from "@/lib/icp";
 import { DEFAULT_V2_PROMOTION_THRESHOLD, V2_MAX_SCORE } from "@/lib/icpWeights";
-import { DEFAULT_WEBSITE_CRAWL_PAGES, readWebsiteCrawlPages } from "@/lib/websiteCrawl";
+import {
+  DEFAULT_RECRAWL_CONCURRENCY,
+  DEFAULT_WEBSITE_CRAWL_PAGES,
+  readRecrawlConcurrency,
+  readWebsiteCrawlPages,
+} from "@/lib/websiteCrawl";
 import { normalizeApifyId } from "@/lib/apifyId";
 import { GOOGLE_SEARCH_ACTOR_ID } from "@/lib/googleSearch";
 
@@ -119,6 +124,8 @@ export interface PipelineSettings {
   promotionThresholdV2: number;
   // How many pages of a clinic's site the crawler reads (src/lib/websiteCrawl.ts).
   websiteCrawlPages: number;
+  // Bulk re-crawls: how many clinics at once.
+  recrawlConcurrency: number;
 }
 
 // The score a candidate has to reach to be promoted rather than rejected. The
@@ -186,6 +193,7 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   scoringModel: "v1",
   promotionThresholdV2: DEFAULT_V2_PROMOTION_THRESHOLD,
   websiteCrawlPages: DEFAULT_WEBSITE_CRAWL_PAGES,
+  recrawlConcurrency: DEFAULT_RECRAWL_CONCURRENCY,
 };
 
 // ─── Reading a row ─────────────────────────────────────────────────────────
@@ -232,6 +240,7 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
     scoringModel: record.scoringModel === "v2" ? "v2" : "v1",
     promotionThresholdV2: readPromotionThresholdV2(record.promotionThresholdV2),
     websiteCrawlPages: readWebsiteCrawlPages(record.websiteCrawlPages),
+    recrawlConcurrency: readRecrawlConcurrency(record.recrawlConcurrency),
   };
 }
 
@@ -305,6 +314,7 @@ export function pipelineSettingsRow(
   row.scoringModel = settings.scoringModel;
   row.promotionThresholdV2 = settings.promotionThresholdV2;
   row.websiteCrawlPages = settings.websiteCrawlPages;
+  row.recrawlConcurrency = settings.recrawlConcurrency;
   return row;
 }
 
@@ -324,6 +334,7 @@ export function isDefaultPipelineSettings(settings: PipelineSettings): boolean {
     settings.promotionThresholdV2 === DEFAULT_V2_PROMOTION_THRESHOLD &&
     settings.scoringModel === "v1" &&
     settings.websiteCrawlPages === DEFAULT_WEBSITE_CRAWL_PAGES &&
+    settings.recrawlConcurrency === DEFAULT_RECRAWL_CONCURRENCY &&
     settings.clinicDiscovery.enabled === DEFAULT_CLINIC_DISCOVERY_ENABLED &&
     settings.clinicDiscovery.actorId === DEFAULT_CLINIC_DISCOVERY_ACTOR_ID &&
     settings.decisionMaker.enabled === DEFAULT_DECISION_MAKER_ENABLED &&

@@ -37,7 +37,10 @@ import {
   stepUnits,
 } from "@/lib/pipelineSettings";
 import {
+  DEFAULT_RECRAWL_CONCURRENCY,
   DEFAULT_WEBSITE_CRAWL_PAGES,
+  MAX_RECRAWL_CONCURRENCY,
+  MIN_RECRAWL_CONCURRENCY,
   MAX_WEBSITE_CRAWL_PAGES,
   MIN_WEBSITE_CRAWL_PAGES,
 } from "@/lib/websiteCrawl";
@@ -105,6 +108,10 @@ export default function PipelineSettingsForm({
               crawlPages={draft.websiteCrawlPages}
               onCrawlPages={(pages) =>
                 setDraft((prev) => ({ ...prev, websiteCrawlPages: pages }))
+              }
+              recrawlConcurrency={draft.recrawlConcurrency}
+              onRecrawlConcurrency={(n) =>
+                setDraft((prev) => ({ ...prev, recrawlConcurrency: n }))
               }
             />
           ))}
@@ -384,12 +391,16 @@ function StepRow({
   onChange,
   crawlPages,
   onCrawlPages,
+  recrawlConcurrency,
+  onRecrawlConcurrency,
 }: {
   stepKey: PipelineStepKey;
   step: { enabled: boolean; actorId: string };
   onChange: (patch: Partial<{ enabled: boolean; actorId: string }>) => void;
   crawlPages: number;
   onCrawlPages: (pages: number) => void;
+  recrawlConcurrency: number;
+  onRecrawlConcurrency: (n: number) => void;
 }) {
   const units = stepUnits(stepKey, { websiteCrawlPages: Number(crawlPages) || 0 });
   const rate = PIPELINE_STEP_RATES[stepKey];
@@ -459,6 +470,27 @@ function StepRow({
             />
           </div>
         )}
+        {stepKey === "websiteContent" && (
+          <div>
+            <label className="field-label" htmlFor="recrawlConcurrency">
+              Re-crawls at once
+            </label>
+            <input
+              id="recrawlConcurrency"
+              name="recrawlConcurrency"
+              type="number"
+              inputMode="numeric"
+              min={MIN_RECRAWL_CONCURRENCY}
+              max={MAX_RECRAWL_CONCURRENCY}
+              step={1}
+              value={recrawlConcurrency}
+              onChange={(e) =>
+                onRecrawlConcurrency(e.target.value === "" ? ("" as unknown as number) : Number(e.target.value))
+              }
+              className="field num w-[96px]"
+            />
+          </div>
+        )}
         <p className="num shrink-0 pb-2.5 text-xs text-muted">
           ~{fmtEstimate(rate.usdPerUnit * units).replace("~", "")} ·{" "}
           {units} {rate.unit}
@@ -471,7 +503,9 @@ function StepRow({
           page — decompression, disc, sciatica, back pain, spine, avoiding
           surgery — before anything else. Menus and footers are kept, and every
           link is stored for the scoring to cite. Default{" "}
-          {DEFAULT_WEBSITE_CRAWL_PAGES}.
+          {DEFAULT_WEBSITE_CRAWL_PAGES}. Bulk re-crawls run{" "}
+          {DEFAULT_RECRAWL_CONCURRENCY} clinics at once by default (up to{" "}
+          {MAX_RECRAWL_CONCURRENCY}); the cost is the same, only faster.
         </p>
       )}
 

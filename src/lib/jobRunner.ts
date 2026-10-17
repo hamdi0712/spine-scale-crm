@@ -10,9 +10,10 @@
 // the page polls that row (src/app/api/jobs/route.ts). Navigating away and
 // back, refreshing, or opening a second tab all read the same truth.
 //
-// What it does not change is any job: the item function, its order, one at a
-// time, Stop finishing the item in flight — all as before. This is the status
-// layer around them.
+// What it does not change is any job: the item function, its order, Stop
+// finishing what is in flight. Jobs run one at a time unless they ask for
+// more (the re-crawls do, from Settings → Pipeline); a service limit on work
+// at once backs a run off to fewer and retries the item.
 //
 // Server-only, and not a "use server" module: launchJob takes functions.
 //
@@ -48,6 +49,10 @@ export interface JobItemResult {
   // The job's full result for this item, for a view of its own (Process
   // queue's per-step list). Stored as JSON.
   result?: unknown;
+  // Not this item's failure: the service is at its limit for work at once.
+  // The runner takes one worker away, waits, and runs the item again rather
+  // than recording it.
+  backoff?: boolean;
 }
 
 export interface JobSpec<T extends JobItem> {
@@ -57,6 +62,9 @@ export interface JobSpec<T extends JobItem> {
   href: string;
   items: T[];
   work: (item: T) => Promise<JobItemResult>;
+  // How many items run at once. Omitted (or 1) runs them one at a time, in
+  // order, exactly as before; the re-crawls pass the setting.
+  concurrency?: number;
   // Asked after every item, with every result so far. A string stops the run
   // there, and becomes its note.
   halt?: (results: JobItemResult[]) => string | null;
@@ -108,6 +116,12 @@ export async function launchJob<T extends JobItem>(spec: JobSpec<T>): Promise<La
   return { ok: true, id: run.id };
 }
 
+// How many times one item is put back for the service's limit before it is
+// recorded as failed, and how long to wait before each try.
+const MAX_BACKOFFS = 4;
+// JOB_BACKOFF_MS in the environment is for tools/verify-recrawl.ts.
+const BACKOFF_MS = Number(process.env.JOB_BACKOFF_MS) || 15_000;
+
 async function drive<T extends JobItem>(id: string, spec: JobSpec<T>): Promise<void> {
   const beat = setInterval(() => {
     void prisma.jobRun
@@ -119,26 +133,62 @@ async function drive<T extends JobItem>(id: string, spec: JobSpec<T>): Promise<v
   const results: JobItemResult[] = [];
   let status: JobStatus = "finished";
   let halted: string | null = null;
+  let gone = false;
 
-  try {
-    for (let i = 0; i < spec.items.length; i++) {
-      const item = spec.items[i];
+  // The items still to take, in order. One taken by a worker is in flight
+  // until its result is recorded; Stop and a halt only keep workers from
+  // taking more, so whatever is in flight finishes.
+  const queue = spec.items.map((item) => ({ item, backoffs: 0 }));
+  const inFlight: string[] = [];
+  let limit = Math.max(1, Math.floor(spec.concurrency ?? 1));
+  let seq = 0;
+  let ending = false;
+
+  const currentLine = () =>
+    inFlight.length === 0 ? null : inFlight.length === 1 ? inFlight[0] : `${inFlight[0]} +${inFlight.length - 1} more`;
+
+  async function worker(slot: number): Promise<void> {
+    while (!ending) {
+      // A worker above the current limit stops taking work: that is how a
+      // backoff runs fewer at once.
+      if (slot >= limit) return;
+      const next = queue.shift();
+      if (!next) return;
       const row = await prisma.jobRun.findUnique({ where: { id }, select: { stopRequested: true } });
-      if (!row) return; // deleted underneath us
-      if (row.stopRequested) {
-        status = "stopped";
-        break;
+      if (!row) {
+        gone = true;
+        ending = true;
+        return;
       }
-      await prisma.jobRun.update({
-        where: { id },
-        data: { current: item.name, heartbeatAt: new Date() },
-      });
+      if (row.stopRequested) {
+        queue.unshift(next);
+        status = "stopped";
+        ending = true;
+        return;
+      }
+      inFlight.push(next.item.name);
+      await prisma.jobRun.update({ where: { id }, data: { current: currentLine(), heartbeatAt: new Date() } });
 
       let result: JobItemResult;
       try {
-        result = await spec.work(item);
+        result = await spec.work(next.item);
       } catch {
         result = { outcome: "error", detail: "The server hit an error on this one." };
+      }
+      inFlight.splice(inFlight.indexOf(next.item.name), 1);
+
+      if (result.backoff && next.backoffs < MAX_BACKOFFS) {
+        next.backoffs++;
+        limit = Math.max(1, Math.min(limit, inFlight.length + 1) - 1);
+        queue.unshift(next);
+        await prisma.jobRun
+          .update({ where: { id }, data: { current: currentLine() ?? `Waiting to retry ${next.item.name}`, heartbeatAt: new Date() } })
+          .catch(() => {});
+        await new Promise((res) => setTimeout(res, BACKOFF_MS * next.backoffs));
+        continue;
+      }
+      if (result.backoff) {
+        result = { ...result, outcome: "error", detail: `${result.detail} (still at the limit after ${MAX_BACKOFFS} tries)` };
       }
       results.push(result);
 
@@ -146,9 +196,9 @@ async function drive<T extends JobItem>(id: string, spec: JobSpec<T>): Promise<v
         prisma.jobRunItem.create({
           data: {
             runId: id,
-            seq: i,
-            subjectId: item.id,
-            name: item.name,
+            seq: seq++,
+            subjectId: next.item.id,
+            name: next.item.name,
             outcome: result.outcome,
             detail: result.detail,
             result: result.result === undefined ? null : JSON.stringify(result.result),
@@ -160,20 +210,31 @@ async function drive<T extends JobItem>(id: string, spec: JobSpec<T>): Promise<v
             done: { increment: 1 },
             succeeded: { increment: result.outcome === "error" ? 0 : 1 },
             failed: { increment: result.outcome === "error" ? 1 : 0 },
-            spentUsd: { increment: item.estimateUsd ?? 0 },
+            spentUsd: { increment: next.item.estimateUsd ?? 0 },
+            current: currentLine(),
             heartbeatAt: new Date(),
           },
         }),
       ]);
 
-      halted = spec.halt?.(results) ?? null;
-      if (halted) {
+      const halt = spec.halt?.(results) ?? null;
+      if (halt && !halted) {
+        halted = halt;
         status = "stopped";
-        break;
+        ending = true;
       }
     }
+  }
 
-    let note = halted;
+  try {
+    const workers = Math.min(limit, Math.max(1, spec.items.length));
+    await Promise.all(Array.from({ length: workers }, (_, slot) => worker(slot)));
+    // A worker that backed off above the new limit leaves its item queued;
+    // if every other worker had already run out, finish the list one at a time.
+    while (queue.length > 0 && !ending) await worker(0);
+    if (gone) return; // deleted underneath us
+
+    let note: string | null = halted;
     if (spec.finish) {
       try {
         note = (await spec.finish({ status, halted })) ?? note;

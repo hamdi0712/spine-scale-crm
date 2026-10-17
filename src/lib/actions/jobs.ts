@@ -29,6 +29,12 @@ import { ICP_MAX_SCORE } from "@/lib/icp";
 // ─── Re-crawl website ──────────────────────────────────────────────────────
 
 function recrawlLine(r: RecrawlResult): JobItemResult {
+  // Apify's limit on runs at once or memory: not this clinic's failure. The
+  // runner backs off to fewer at once and runs it again.
+  if (!r.ok && r.capacity) return { outcome: "error", detail: r.error, backoff: true };
+  // Still running on Apify when the wait ran out. Not cancelled and not
+  // thrown away: its pages are saved to the record when it finishes.
+  if (!r.ok && r.pending) return { outcome: "warn", detail: r.error };
   if (!r.ok) return { outcome: "error", detail: r.error };
   const parts = [`${r.pages} page${r.pages === 1 ? "" : "s"}`, `${r.links} link${r.links === 1 ? "" : "s"}`];
   // A note means the crawl read less than it set out to — the home page only,
@@ -57,6 +63,7 @@ export async function startCandidateRecrawl(ids: string[]): Promise<LaunchResult
     verb: "Re-crawling",
     href: "/discovery",
     items,
+    concurrency: settings.recrawlConcurrency,
     work: async (item) => recrawlLine(await recrawlCandidateWebsite(item.id)),
   });
 }
@@ -84,6 +91,7 @@ export async function startLeadRecrawl(
     verb: "Re-crawling",
     href: "/pipeline",
     items,
+    concurrency: settings.recrawlConcurrency,
     work: async (item) => recrawlLine(await recrawlLeadWebsite(item.id)),
   });
 }

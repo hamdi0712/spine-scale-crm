@@ -30,6 +30,17 @@ export const DEFAULT_WEBSITE_CRAWL_PAGES = 6;
 export const MIN_WEBSITE_CRAWL_PAGES = 1;
 export const MAX_WEBSITE_CRAWL_PAGES = 12;
 
+// How many clinics a bulk re-crawl crawls at once.
+export const DEFAULT_RECRAWL_CONCURRENCY = 4;
+export const MIN_RECRAWL_CONCURRENCY = 1;
+export const MAX_RECRAWL_CONCURRENCY = 8;
+
+export function readRecrawlConcurrency(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return DEFAULT_RECRAWL_CONCURRENCY;
+  return Math.min(Math.max(Math.round(n), MIN_RECRAWL_CONCURRENCY), MAX_RECRAWL_CONCURRENCY);
+}
+
 export function readWebsiteCrawlPages(raw: unknown): number {
   const n =
     typeof raw === "number"

@@ -34,7 +34,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
-import { recrawlWebsite } from "@/lib/websiteCrawlRun";
+import { recrawlWebsite, whenRecrawlLands } from "@/lib/websiteCrawlRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { deepSeekJson } from "@/lib/deepseek";
 import {
@@ -1183,7 +1183,9 @@ export async function rejectDiscoveryCandidate(id: string, reason: string) {
 
 export type RecrawlResult =
   | { ok: true; clinicName: string; pages: number; links: number; note: string | null }
-  | { ok: false; clinicName: string; error: string };
+  // pending: still running on Apify, and will be saved when it finishes.
+  // capacity: Apify's limit on runs at once or memory — try again with fewer.
+  | { ok: false; clinicName: string; error: string; pending?: boolean; capacity?: boolean };
 
 // Runs the Website Content Crawler alone, under the current crawl settings,
 // and replaces the stored website notes and links with what it read. Nothing
@@ -1203,11 +1205,16 @@ export async function recrawlCandidateWebsite(id: string): Promise<RecrawlResult
     return { ok: false, clinicName: candidate.clinicName, error: "No website URL on this candidate." };
   }
   const read = await recrawlWebsite(url);
-  if (!read.ok) return { ok: false, clinicName: candidate.clinicName, error: read.error };
-  await prisma.discoveryCandidate.update({
-    where: { id },
-    data: { websiteNotes: read.websiteNotes, websiteLinks: read.websiteLinks, enrichedAt: new Date() },
+  const stored = whenRecrawlLands(read, async (r) => {
+    await prisma.discoveryCandidate.update({
+      where: { id },
+      data: { websiteNotes: r.websiteNotes, websiteLinks: r.websiteLinks, enrichedAt: new Date() },
+    });
   });
+  if (!read.ok) {
+    return { ok: false, clinicName: candidate.clinicName, error: read.error, pending: read.later !== undefined, capacity: read.capacity };
+  }
+  await stored;
   revalidatePath(`/discovery/${id}`);
   return { ok: true, clinicName: candidate.clinicName, pages: read.pages, links: read.links, note: read.note };
 }
