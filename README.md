@@ -223,17 +223,18 @@ again.
   candidate, every Failed one from last time, and anything a closed tab left
   part-way through — oldest first.
 
-  **It runs in the tab, in the foreground, while you watch it.** There is no
-  job runner in this app and the dialog does not pretend otherwise: it says so
-  before it starts anything, and pressing the button opens a plan rather than
-  starting a run. Each candidate is four actor runs and a model call billed to
-  live accounts, so a queue of forty is a real spend and the person pressing
-  the button is the one who should decide to make it. Close the tab, navigate
-  away, or sleep the machine and the queue stops after whatever candidate is in
-  flight; everything it never reached is exactly as it was, and pressing it
-  again picks up where it left off. *Stop after this one* does the same
-  deliberately — the candidate in flight finishes on the server, because its
-  actors are already running.
+  **It runs on the server, one candidate at a time, while you can watch it.**
+  Pressing the button opens a plan rather than starting a run, and the dialog
+  says what it will cost before anything is spent: each candidate is four actor
+  runs and a model call billed to live accounts, so a queue of forty is a real
+  spend and the person pressing the button is the one who should decide to make
+  it. Once started, the loop lives in the server process, not the tab — close
+  the dialog, navigate away, refresh, or watch it from another tab, and it
+  carries on (see *Long-running jobs* below). Shut the server down or let the
+  Mac sleep and the queue stops after whatever candidate is in flight;
+  everything it never reached is exactly as it was, and pressing it again picks
+  up where it left off. *Stop after this one* does the same deliberately — the
+  candidate in flight finishes, because its actors are already running.
 
   Per candidate, in order:
 
@@ -875,6 +876,50 @@ again.
     draws its Tabler glyph as before. The banner keeps a gradient underneath
     its photograph, so a missing file is never a broken image.
 
+## Long-running jobs
+
+Four things in the app work through a list one item at a time and can take
+minutes to an hour: **Re-crawl website** from Discovery's or Pipeline's
+selection bar, **Re-crawl all leads crawled before…** on Pipeline, **Compare
+scoring**, and **Process queue**. They share one progress experience
+(`src/components/JobProgress.tsx`), and one status layer underneath it.
+
+- **The loop runs on the server.** Pressing Start asks a server action
+  (`src/lib/actions/jobs.ts`) to start the run; the loop then lives in the
+  Node process (`src/lib/jobRunner.ts`), calling the same per-item function
+  the page used to call in turn — same order, one at a time, Stop finishing
+  the item in flight. After every item it writes the run's job id, total,
+  done, succeeded, failed, current item, start time and status to a `JobRun`
+  row, and each finished item to `JobRunItem`.
+- **Pages poll it.** `GET /api/jobs` is read every second while anything runs
+  (every five otherwise). Leaving the page and coming back, refreshing, or
+  opening a second tab all show the run as it really stands.
+- **"Did not finish" means the server said so.** The runner beats a heartbeat
+  every five seconds. A run is only closed as interrupted when the process
+  driving it is gone *and* the heartbeat has been quiet for 45 seconds — a
+  restarted server, or a Mac that slept. A slow item is never mistaken for a
+  dead run.
+- **The panel**: a brand-blue bar that eases between updates with a shimmer
+  while live, a counting "23 of 210" with the percentage, the current item,
+  succeeded / failed / elapsed / time left / estimated cost so far, the last six
+  items with a one-line result each, and a finish state with a summary and the
+  full list of failures. The cost is the estimate the confirmation quoted,
+  counted up item by item — neither Apify nor DeepSeek reports a per-run bill
+  back to the app.
+- **Anywhere in the app**: the browser tab reads `(23/210) Re-crawling…`, and a
+  pill at the top of the sidebar (the top bar on a phone) opens the panel from
+  any page. A finished run stays there for half an hour, and on its own page
+  until dismissed.
+- **Reduced motion** turns off the shimmer, the slide-ins and the counting; the
+  numbers simply change.
+
+Because the loop lives in the server process, **keep the Mac awake until a run
+finishes** — the panel says so while one runs. To try the panel without
+spending anything, `npm run dev`, sign in, and run
+`fetch("/api/jobs/demo", { method: "POST" })` from the browser console: a
+seeded run of twenty made-up clinics with two failures and a warning. The demo
+route answers 404 in production.
+
 ## On a phone or tablet
 
 The desktop layout (1024px and up) is the app as designed; everything that
@@ -920,6 +965,11 @@ The app is built so the move is a datasource swap, not a rewrite:
 6. **Deploy.** The build script already runs `prisma migrate deploy` before
    `next build`, so the schema is applied on deploy. (Prisma Client generation
    runs via the `postinstall` hook.)
+
+Note: the long-running jobs (above) need a server process that outlives the
+request that started them, which a serverless deploy does not give. On Vercel
+they would need a queue or a long-running worker instead; locally, `npm run dev`
+or `npm start` is that process.
 
 Note: keep using SQLite locally or point local `.env` at the same Postgres —
 either works, but they are separate databases; data doesn't sync between them.

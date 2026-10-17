@@ -48,11 +48,9 @@ import {
   DISCOVERY_SOURCE_KIND_MEANINGS,
   DiscoverySourceKind,
 } from "@/lib/clinicDiscovery";
-import {
-  deleteDiscoveryCandidates,
-  recrawlCandidateWebsite,
-} from "@/lib/actions/discovery";
-import { useRouter } from "next/navigation";
+import { deleteDiscoveryCandidates } from "@/lib/actions/discovery";
+import { startCandidateRecrawl } from "@/lib/actions/jobs";
+import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import { fmtEstimate } from "@/lib/pipelineSettings";
 import {
   ICP_TIER_ACTIONS,
@@ -119,8 +117,8 @@ export default function DiscoveryList({
   // for the estimate "Re-crawl website" quotes before it spends anything.
   recrawlCostPerClinic?: number;
 }) {
-  const router = useRouter();
-  const [recrawl, setRecrawl] = useState<{ done: number; total: number; current: string | null; failed: string[]; summary: string | null } | null>(null);
+  // The bulk re-crawl runs on the server; this is its latest run, polled.
+  const recrawl = useJobRun("discovery-recrawl");
   const [view, setView] = useState<"cards" | "table">("cards");
   const phone = useIsPhone();
   const [query, setQuery] = useState("");
@@ -281,26 +279,14 @@ export default function DiscoveryList({
     ) {
       return;
     }
-    const failed: string[] = [];
-    let wrote = 0;
-    for (let i = 0; i < targets.length; i++) {
-      setRecrawl({ done: i, total: targets.length, current: targets[i].clinicName, failed, summary: null });
-      try {
-        const result = await recrawlCandidateWebsite(targets[i].id);
-        if (result.ok) wrote++;
-        else failed.push(`${result.clinicName}: ${result.error}`);
-      } catch {
-        failed.push(`${targets[i].clinicName}: the server could not be reached`);
-      }
+    // One at a time on the server, the order they were ticked; the panel
+    // below polls it, so leaving the page does not stop it.
+    const started = await startCandidateRecrawl(targets.map((t) => t.id)).catch(() => null);
+    if (!started || !started.ok) {
+      alert(started?.error ?? "The re-crawl could not be started. Check the server is still up.");
+      return;
     }
-    setRecrawl({
-      done: targets.length,
-      total: targets.length,
-      current: null,
-      failed,
-      summary: `Re-crawled ${wrote} of ${targets.length}.${failed.length > 0 ? ` ${failed.length} failed.` : ""}`,
-    });
-    router.refresh();
+    recrawl.track(started.id);
   }
 
   function bulkDelete() {
@@ -518,7 +504,7 @@ export default function DiscoveryList({
             <button
               type="button"
               onClick={() => void bulkRecrawl()}
-              disabled={pending || (recrawl !== null && recrawl.summary === null)}
+              disabled={pending || recrawl.running}
               className="btn disabled:cursor-not-allowed disabled:opacity-50 max-md:px-3"
             >
               <span className="max-md:hidden">Re-crawl website</span>
@@ -550,28 +536,7 @@ export default function DiscoveryList({
         </div>
       )}
 
-      {recrawl && (
-        <div className="card mb-3 px-4 py-3 text-xs leading-relaxed max-md:px-3">
-          <div className="flex items-start justify-between gap-3">
-            <p className="min-w-0 text-ink-soft">
-              {recrawl.summary ??
-                `Re-crawling ${recrawl.done + 1} of ${recrawl.total}${recrawl.current ? ` — ${recrawl.current}` : ""}…`}
-            </p>
-            {recrawl.summary !== null && (
-              <button type="button" className="btn-ghost shrink-0 px-2 py-0.5 text-xs" onClick={() => setRecrawl(null)}>
-                Dismiss
-              </button>
-            )}
-          </div>
-          {recrawl.failed.length > 0 && (
-            <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-bad">
-              {recrawl.failed.map((f, i) => (
-                <li key={i} className="break-words">{f}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      <JobProgressFor source="discovery-recrawl" className="mb-3" />
 
       {view === "cards" || phone ? (
         <>

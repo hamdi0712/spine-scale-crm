@@ -1639,3 +1639,68 @@ model ScoringApplicationItem {
 
   @@index([applicationId])
 }
+
+// A long-running job — a bulk re-crawl, Compare scoring, Process queue — and
+// how far it has got. The run itself lives in the server process
+// (src/lib/jobRunner.ts); this row is what every page polls, so leaving the
+// page, refreshing or opening another tab shows the run as it really stands.
+//
+// heartbeatAt is touched every few seconds while the loop is alive. A row
+// still marked running whose heartbeat has gone quiet belongs to a server that
+// stopped (a restart, the Mac asleep long enough to drop it), and is read as
+// "did not finish" — the only way that label is ever shown.
+model JobRun {
+  id     String @id @default(cuid())
+  kind   String // recrawl-candidates | recrawl-leads | compare-scoring | process-queue | demo
+  // Which button started it, so two panels on one page (Pipeline's selection
+  // bar and its "crawled before" card) each show only their own run.
+  source String
+  // The verb for the current item and the tab title: "Re-crawling".
+  verb   String
+  // The page the run belongs to, for the header pill's "Open" link.
+  href   String
+  status String @default("running") // running | finished | stopped | interrupted
+
+  total     Int
+  done      Int     @default(0)
+  succeeded Int     @default(0)
+  failed    Int     @default(0)
+  current   String?
+
+  // Estimate-based cost: the whole run, and the share of it already spent.
+  // Null for a run that spends nothing.
+  estimatedUsd Float?
+  spentUsd     Float  @default(0)
+
+  stopRequested Boolean   @default(false)
+  // A closing sentence of the job's own, when it has one to add — Compare
+  // scoring's "a partial run does not unlock Apply".
+  note          String?
+  startedAt     DateTime  @default(now())
+  heartbeatAt   DateTime  @default(now())
+  finishedAt    DateTime?
+  dismissedAt   DateTime?
+
+  items JobRunItem[]
+
+  @@index([status])
+  @@index([startedAt])
+}
+
+// One finished item in a run, in the order it finished: its outcome (ok,
+// warn or error), a one-line result, and, where the job has one, the full
+// result as JSON for its own richer view.
+model JobRunItem {
+  id        String   @id @default(cuid())
+  runId     String
+  run       JobRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  seq       Int
+  subjectId String
+  name      String
+  outcome   String // ok | warn | error
+  detail    String
+  result    String?
+  at        DateTime @default(now())
+
+  @@index([runId, seq])
+}

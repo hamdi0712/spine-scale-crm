@@ -29,6 +29,7 @@ import ImanAvatar from "@/components/ImanAvatar";
 import { LogoIconChip } from "@/components/Logo";
 import Sheet from "@/components/Sheet";
 import ThemeToggle from "@/components/ThemeToggle";
+import { JobPill } from "@/components/JobProgress";
 import {
   activeHref,
   COPILOT,
@@ -107,6 +108,7 @@ export function MobileTopBar() {
             <span className="display text-[20px] font-semibold text-ink">Spine Scale</span>
           </Link>
           <div className="flex-1" />
+          <JobPill variant="topbar" />
           {/* PageActions portals the ⋯ button in here. */}
           <div id={TOPBAR_ACTIONS_ID} className="flex shrink-0 items-center" />
         </div>
@@ -137,6 +139,7 @@ export function MobileTopBar() {
         >
           {title}
         </div>
+        <JobPill variant="topbar" />
         {/* PageActions portals the ⋯ button in here. */}
         <div id={TOPBAR_ACTIONS_ID} className="flex shrink-0 items-center" />
       </div>

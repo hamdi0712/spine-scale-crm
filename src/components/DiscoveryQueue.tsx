@@ -1,20 +1,14 @@
 "use client";
 
-// Process queue — the discovery chain, run in front of you.
+// Process queue — the discovery chain, run on the server while you watch.
 //
-// This is the one long-running thing in the app, and the design decision
-// behind it is stated rather than hidden: it runs here, in this tab, one
-// candidate at a time, for as long as the tab stays open. There is no job
-// runner and this does not pretend to be one. The dialog says so before it
-// starts anything, because a queue of forty candidates is forty enrichment
-// runs and forty model calls billed to live accounts, and the person pressing
-// the button is the one who should decide to spend that.
-//
-// So, unlike "Enrich this lead", opening this does not start it. The press
-// opens a plan — what is queued, what it will cost in time, what closing the
-// tab does — and a second press starts it. Everything after that is one server
-// call per candidate, awaited in turn, with the result of each shown as it
-// lands and the ones behind it still waiting.
+// Opening this does not start it. The press opens a plan — what is queued,
+// what it will cost, what to keep running — and a second press starts it.
+// Everything after that is one server call per candidate, awaited in turn, by
+// the job runner (src/lib/jobRunner.ts) rather than by this tab: leaving the
+// page, refreshing it or closing the dialog does not stop the run, and the
+// progress panel (JobProgress.tsx) shows each result as it lands, here, on
+// the Discovery page, and behind the header pill on any page.
 //
 // What it runs is either everything pending or exactly what was ticked on the
 // list below. Selection is the list's, shared through DiscoverySelection —
@@ -25,8 +19,7 @@
 // the server (its four actors are already running), and nothing after it
 // starts. Every candidate the queue never reached is exactly as it was.
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   DISCOVERY_STATUS_LABELS,
@@ -34,10 +27,6 @@ import {
   DiscoveryStep,
   DiscoveryStepStatus,
 } from "@/lib/discovery";
-import {
-  BATCH_QUEUE_DESCRIPTION,
-  defaultBatchLabel,
-} from "@/lib/discoveryBatch";
 import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
 import { FIT_FLOOR, FIT_MAX, SIGNALS_MAX } from "@/lib/icpWeights";
 import { V2_TIER_BANDS } from "@/lib/icpScoring";
@@ -47,32 +36,22 @@ import AiButton from "@/components/AiButton";
 import { createPortal } from "react-dom";
 import useDialogMotion from "@/components/useDialogMotion";
 import { useDiscoverySelection } from "@/components/DiscoverySelection";
+import { JobProgressPanel, useJobRun } from "@/components/JobProgress";
 
-interface QueueItem {
-  id: string;
-  clinicName: string;
-  state: "waiting" | "running" | "done";
-  result: DiscoveryProcessResult | null;
-}
+type StartQueue = (
+  selectedIds: string[] | null,
+) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+
 
 export default function DiscoveryQueue({
-  loadQueue,
-  loadSelected,
-  process,
+  start,
   queued,
   settings,
 }: {
-  loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
-  // The same read, narrowed to ticked candidates. Given the ids rather than
-  // the rows, so the queue is still re-read on the server at the moment the
-  // run starts rather than trusted from a page that may be an hour old.
-  loadSelected: (
-    ids: string[],
-  ) => Promise<{ id: string; clinicName: string }[]>;
-  process: (
-    id: string,
-    runBatchLabel?: string | null,
-  ) => Promise<DiscoveryProcessResult>;
+  // Starts the run on the server: the ticked ids, or null for the whole
+  // pending queue. The queue is re-read there at the moment it starts rather
+  // than trusted from a page that may be an hour old.
+  start: StartQueue;
   // What the page counted when it rendered. Only ever a label on the button —
   // the queue itself is re-read at the moment it starts, because a list that
   // has sat open for an hour is not the queue any more.
@@ -89,12 +68,14 @@ export default function DiscoveryQueue({
   // the chain has work to do on; without one it is the whole pending queue,
   // as counted by the page.
   const count = scoped ? selectedQueueable.length : queued;
+  const { job } = useJobRun("process-queue");
+  const running = job?.status === "running";
 
   return (
     <>
       <AiButton
         onClick={() => setOpen(true)}
-        disabled={count === 0}
+        disabled={count === 0 && !running}
         title={
           scoped
             ? "Run the chain on the candidates you have selected"
@@ -102,15 +83,21 @@ export default function DiscoveryQueue({
         }
         className="disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Process queue{scoped && " (selected)"}
-        {count > 0 && <span className="num">({count})</span>}
+        {running && job ? (
+          <span className="num">
+            Processing {job.done}/{job.total}
+          </span>
+        ) : (
+          <>
+            Process queue{scoped && " (selected)"}
+            {count > 0 && <span className="num">({count})</span>}
+          </>
+        )}
       </AiButton>
       {open && (
         <QueueDialog
-          loadQueue={loadQueue}
-          loadSelected={loadSelected}
+          start={start}
           selectedIds={scoped ? selectedQueueable : null}
-          process={process}
           queued={count}
           settings={settings}
           onClose={() => setOpen(false)}
@@ -121,130 +108,91 @@ export default function DiscoveryQueue({
 }
 
 function QueueDialog({
-  loadQueue,
-  loadSelected,
+  start,
   selectedIds,
-  process,
   queued,
   settings,
   onClose,
 }: {
-  loadQueue: () => Promise<{ id: string; clinicName: string }[]>;
-  loadSelected: (
-    ids: string[],
-  ) => Promise<{ id: string; clinicName: string }[]>;
+  start: StartQueue;
   // The ticked candidates, or null for the whole pending queue. Captured when
   // the dialog opened: a selection that changed underneath a plan somebody is
   // reading is not a plan they agreed to.
   selectedIds: string[] | null;
-  process: (
-    id: string,
-    runBatchLabel?: string | null,
-  ) => Promise<DiscoveryProcessResult>;
   queued: number;
   settings: PipelineSettings;
   onClose: () => void;
 }) {
-  const router = useRouter();
   // Opening is CSS; closing has to be sequenced, or the dialog would be
   // unmounted mid-fade. `close` plays the exit and then calls onClose —
   // every dismissal below goes through it rather than through onClose.
   const { close, scrimClass, dialogClass } = useDialogMotion(onClose);
-  const [phase, setPhase] = useState<"planning" | "running" | "finished">(
-    "planning",
+  const { job, track } = useJobRun("process-queue");
+  // The run this dialog is showing: one already live when it opened, or the
+  // one started from it. An old finished run is not this dialog's business —
+  // opening it again is for planning the next one.
+  const [runId, setRunId] = useState<string | null>(
+    job?.status === "running" ? job.id : null,
   );
-  const [items, setItems] = useState<QueueItem[]>([]);
+  const shown = job && job.id === runId ? job : null;
+  const phase: "planning" | "running" | "finished" = !shown
+    ? "planning"
+    : shown.status === "running"
+      ? "running"
+      : "finished";
   const [error, setError] = useState<string | null>(null);
-  const [stopping, setStopping] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [results, setResults] = useState<DiscoveryProcessResult[] | null>(null);
 
-  // Read by the loop between candidates. A ref rather than state because the
-  // loop is a single async function that captured its state on the way in —
-  // it needs the value as it stands now, not as it stood when it started.
-  const stopRequested = useRef(false);
-
-  const start = useCallback(async () => {
+  const begin = useCallback(async () => {
     setError(null);
-    setStopping(false);
-    stopRequested.current = false;
-
-    let queue: { id: string; clinicName: string }[];
-    try {
-      queue = selectedIds ? await loadSelected(selectedIds) : await loadQueue();
-    } catch {
-      setError(
-        "The queue could not be read. Check the server is still up and try again.",
-      );
+    setResults(null);
+    setStarting(true);
+    const started = await start(selectedIds).catch(() => ({
+      ok: false as const,
+      error: "The queue could not be started. Check the server is still up and try again.",
+    }));
+    setStarting(false);
+    if (!started.ok) {
+      setError(started.error);
       return;
     }
-    if (queue.length === 0) {
-      setItems([]);
-      setPhase("finished");
-      return;
-    }
+    setRunId(started.id);
+    track(started.id);
+  }, [start, selectedIds, track]);
 
-    setItems(
-      queue.map((c) => ({ ...c, state: "waiting" as const, result: null })),
-    );
-    setPhase("running");
+  // Once the run is over, every candidate's full result — the per-step lines
+  // and the links — for the list under the panel.
+  const finishedId = phase === "finished" ? runId : null;
+  useEffect(() => {
+    if (!finishedId) return;
+    let cancelled = false;
+    fetch(`/api/jobs/results?id=${encodeURIComponent(finishedId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { results: { result: unknown }[] } | null) => {
+        if (cancelled || !body) return;
+        setResults(
+          body.results
+            .map((r) => r.result as DiscoveryProcessResult | null)
+            .filter((r): r is DiscoveryProcessResult => r !== null),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [finishedId]);
 
-    // One batch for this run, dated now, generated once rather than per
-    // candidate — otherwise a queue that took two hours over midnight would
-    // file its candidates under two different days. It only ever fills a gap
-    // on a candidate that arrived without a batch; every import stamps its own.
-    const runBatchLabel = defaultBatchLabel(
-      new Date(),
-      BATCH_QUEUE_DESCRIPTION,
-    );
-
-    // One at a time, awaited. In parallel this would finish sooner and cost
-    // the same, but four actor runs times eight candidates at once is a shape
-    // of spending nobody can watch — and watching it is the point.
-    for (const candidate of queue) {
-      if (stopRequested.current) break;
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === candidate.id ? { ...item, state: "running" } : item,
-        ),
-      );
-      let result: DiscoveryProcessResult;
-      try {
-        result = await process(candidate.id, runBatchLabel);
-      } catch {
-        result = {
-          id: candidate.id,
-          clinicName: candidate.clinicName,
-          status: "FAILED",
-          headline:
-            "The run could not be reached. Check the server is still up — this candidate is still queued.",
-          total: null,
-          max: null,
-          tier: null,
-          promotedLeadId: null,
-          steps: [],
-        };
-      }
-      setItems((prev) =>
-        prev.map((item) =>
-          item.id === candidate.id ? { ...item, state: "done", result } : item,
-        ),
-      );
-    }
-
-    setPhase("finished");
-    // The list behind the dialog is showing statuses this just changed.
-    router.refresh();
-  }, [loadQueue, loadSelected, selectedIds, process, router]);
-
-  // Escape closes, like the dialog it looks like — but not while the queue is
-  // running. A stray keypress must not look like it stopped something that is
-  // still spending money on the server.
+  // Escape closes, like the dialog it looks like. Closing never stops a run —
+  // it carries on on the server, and the header pill and the Discovery page
+  // keep showing it.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && phase !== "running") close();
+      if (e.key === "Escape") close();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [close, phase]);
+  }, [close]);
 
   // The page behind a modal should not scroll under it.
   useEffect(() => {
@@ -255,13 +203,11 @@ function QueueDialog({
     };
   }, []);
 
-  const done = items.filter((i) => i.state === "done");
-  const tally = {
-    promoted: done.filter((i) => i.result?.status === "PROMOTED").length,
-    rejected: done.filter((i) => i.result?.status === "REJECTED").length,
-    failed: done.filter((i) => i.result?.status === "FAILED").length,
+  const tally = results && {
+    promoted: results.filter((r) => r.status === "PROMOTED").length,
+    rejected: results.filter((r) => r.status === "REJECTED").length,
+    failed: results.filter((r) => r.status === "FAILED").length,
   };
-  const unreached = items.filter((i) => i.state === "waiting").length;
 
   // Portalled to <body>: on a phone this dialog can be opened from a page's
   // ⋯ actions sheet (PageActions), which hides itself as the dialog opens.
@@ -269,7 +215,7 @@ function QueueDialog({
     <div
       className={`${scrimClass} dialog-scrim fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-ink/25 p-4 sm:p-8`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && phase !== "running") close();
+        if (e.target === e.currentTarget) close();
       }}
     >
       <div
@@ -292,7 +238,6 @@ function QueueDialog({
           <button
             type="button"
             onClick={close}
-            disabled={phase === "running"}
             aria-label="Close"
             className="btn-ghost h-[34px] shrink-0 px-3 text-base leading-none disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -304,23 +249,22 @@ function QueueDialog({
           {/* The one thing this dialog must say, and it says it first. */}
           <div className="helper-text rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
             <p className="text-sm font-medium text-ink">
-              This runs here, in this tab, while you watch it
+              This runs on the server — keep your Mac awake until it finishes
             </p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
-              It is not a background job. Each candidate takes an actor run per
-              enabled step and a model call, in turn, so a few minutes each is
-              normal. Close this tab, navigate away, or put the machine to sleep
-              and the queue stops after whatever candidate is in flight —
-              everything it never reached stays exactly as it is, and pressing
-              this again picks up where it left off.
+              Each candidate takes an actor run per enabled step and a model
+              call, in turn, so a few minutes each is normal. Closing this
+              dialog, leaving the page or refreshing does not stop it — the
+              header shows its progress from any page. Shut the app down or let
+              the Mac sleep and the queue stops after whatever candidate is in
+              flight; everything it never reached stays exactly as it is, and
+              pressing this again picks up where it left off.
             </p>
           </div>
-          {/* The same warning on a phone, in one line and in the terms a
-              phone fails in: the screen locking or another app taking over
-              is what stops the run there. */}
+          {/* The same warning on a phone, in one line. The run is on the
+              server, so it is the Mac, not this screen, that has to stay up. */}
           <p className="md:hidden rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3 text-sm font-medium text-ink">
-            Keep this screen open until it finishes — locking your phone or
-            switching apps can stop the run.
+            Keep your Mac awake until this finishes — this screen can lock.
           </p>
 
           {error && (
@@ -339,7 +283,7 @@ function QueueDialog({
               queue as actually read once it has been — the second is the real
               number, and it is the one left on screen afterwards. */}
           <CostEstimate
-            candidates={phase === "planning" ? queued : items.length}
+            candidates={shown ? shown.total : queued}
             settings={settings}
           />
 
@@ -427,108 +371,102 @@ function QueueDialog({
             </ol>
           )}
 
-          {items.length > 0 && (
+          {shown && <JobProgressPanel job={shown} className="!shadow-none" />}
+
+          {/* Every candidate's full result, once the run is over: the steps,
+              and the way to the lead or the candidate. */}
+          {phase === "finished" && results && results.length > 0 && (
             <ul className="divide-y divide-line/60 rounded-[10px] border border-line">
-              {items.map((item) => (
-                <li key={item.id} className="px-4 py-3.5">
+              {results.map((result) => (
+                <li key={result.id} className="px-4 py-3.5">
                   <div className="flex items-center justify-between gap-3">
                     <p className="min-w-0 truncate text-sm font-medium">
-                      {item.clinicName}
+                      {result.clinicName}
                     </p>
-                    <QueueChip item={item} />
+                    <QueueChip result={result} />
                   </div>
-                  {item.result && (
-                    <>
-                      <p className="mt-1 text-xs leading-relaxed text-muted">
-                        {item.result.headline}
-                        {item.result.total != null && (
-                          <span className="num">
-                            {" "}
-                            ({item.result.total}/{item.result.max ?? ICP_MAX_SCORE})
-                          </span>
-                        )}
-                      </p>
-                      {item.result.steps.length > 0 && (
-                        <ul className="mt-1.5 space-y-1">
-                          {item.result.steps.map((step, i) => (
-                            <StepLine key={i} step={step} />
-                          ))}
-                        </ul>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {item.result.promotedLeadId && (
-                          <Link
-                            href={`/pipeline/${item.result.promotedLeadId}`}
-                            className="text-xs text-accent hover:underline"
-                          >
-                            Open the lead →
-                          </Link>
-                        )}
-                        <Link
-                          href={`/discovery/${item.id}`}
-                          className="text-xs text-accent hover:underline"
-                        >
-                          Open the candidate →
-                        </Link>
-                      </div>
-                    </>
+                  <p className="mt-1 text-xs leading-relaxed text-muted">
+                    {result.headline}
+                    {result.total != null && (
+                      <span className="num">
+                        {" "}
+                        ({result.total}/{result.max ?? ICP_MAX_SCORE})
+                      </span>
+                    )}
+                  </p>
+                  {result.steps.length > 0 && (
+                    <ul className="mt-1.5 space-y-1">
+                      {result.steps.map((step, i) => (
+                        <StepLine key={i} step={step} />
+                      ))}
+                    </ul>
                   )}
-                  {item.state === "running" && (
-                    <p className="mt-1 text-xs leading-relaxed text-muted">
-                      Running the chain — four actors and a model call, in turn.
-                    </p>
-                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {result.promotedLeadId && (
+                      <Link
+                        href={`/pipeline/${result.promotedLeadId}`}
+                        className="text-xs text-accent hover:underline"
+                      >
+                        Open the lead →
+                      </Link>
+                    )}
+                    <Link
+                      href={`/discovery/${result.id}`}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      Open the candidate →
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
 
-          {phase === "finished" && (
+          {phase === "finished" && tally && shown && (
             <p className="num text-xs leading-relaxed text-muted">
-              {items.length === 0
-                ? selectedIds
-                  ? "Nothing was run — every candidate you selected has already been through the chain."
-                  : "Nothing was queued — every candidate has already been through the chain."
-                : `${done.length} processed — ${tally.promoted} promoted, ${tally.rejected} rejected, ${tally.failed} failed.`}
-              {unreached > 0 &&
-                ` ${unreached} not reached, still queued for next time.`}
+              {`${results?.length ?? 0} processed — ${tally.promoted} promoted, ${tally.rejected} rejected, ${tally.failed} failed.`}
+              {shown.total - shown.done > 0 &&
+                ` ${shown.total - shown.done} not reached, still queued for next time.`}
             </p>
           )}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-line/60 px-6 py-4">
           {phase === "running" ? (
-            <button
-              type="button"
-              onClick={() => {
-                stopRequested.current = true;
-                setStopping(true);
-              }}
-              disabled={stopping}
-              className="btn disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {stopping ? "Stopping after this one…" : "Stop after this one"}
-            </button>
+            /* Stop is on the panel above, with the progress it stops. */
+            <span className="text-xs text-muted">
+              Closing this won&rsquo;t stop the run.
+            </span>
           ) : phase === "finished" ? (
             /* Run again stays the plain button it has always been: once the
                batch has finished the emphasis belongs to Done, and a lit AI
                pill beside it would fight over that. */
-            <button type="button" onClick={() => void start()} className="btn">
+            <button
+              type="button"
+              onClick={() => void begin()}
+              disabled={starting}
+              className="btn disabled:cursor-not-allowed disabled:opacity-50"
+            >
               Run again
             </button>
           ) : (
             /* Start is the press that actually spends the model calls — the
                dialog above it is the plan, this is the commit — so it wears
                the AI button in place of the primary one. */
-            <AiButton onClick={() => void start()}>Start</AiButton>
+            <AiButton
+              onClick={() => void begin()}
+              disabled={starting}
+              className="disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {starting ? "Starting…" : "Start"}
+            </AiButton>
           )}
           <button
             type="button"
             onClick={close}
-            disabled={phase === "running"}
-            className={`${phase === "finished" ? "btn-primary" : "btn-ghost"} disabled:cursor-not-allowed disabled:opacity-40`}
+            className={phase === "planning" ? "btn-ghost" : "btn-primary"}
           >
-            {phase === "running" ? "Running…" : "Done"}
+            {phase === "running" ? "Close" : "Done"}
           </button>
         </div>
       </div>
@@ -539,24 +477,18 @@ function QueueDialog({
 
 // Where this candidate got to, in one word. Same colour convention the
 // enrichment panel uses: green for a result, amber for one that landed
-// somewhere short of it, red for a failure, neutral for not started.
-function QueueChip({ item }: { item: QueueItem }) {
+// somewhere short of it, red for a failure.
+function QueueChip({ result }: { result: DiscoveryProcessResult }) {
   const [label, cls]: [string, string] =
-    item.state === "waiting"
-      ? ["Queued", "bg-line/70 text-muted"]
-      : item.state === "running"
-        ? ["Running…", "bg-accent-soft text-accent"]
-        : item.result?.status === "PROMOTED"
-          ? ["Promoted", "bg-ok-soft text-ok"]
-          : item.result?.status === "REJECTED"
-            ? ["Rejected", "bg-warn-soft text-warn"]
-            : ["Failed", "bg-bad-soft text-bad"];
+    result.status === "PROMOTED"
+      ? ["Promoted", "bg-ok-soft text-ok"]
+      : result.status === "REJECTED"
+        ? ["Rejected", "bg-warn-soft text-warn"]
+        : ["Failed", "bg-bad-soft text-bad"];
   return (
     <span
       className={`inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-medium ${cls}`}
-      title={
-        item.result ? DISCOVERY_STATUS_LABELS[item.result.status] : undefined
-      }
+      title={DISCOVERY_STATUS_LABELS[result.status]}
     >
       {label}
     </span>

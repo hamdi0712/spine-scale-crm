@@ -4,6 +4,7 @@ import { useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import { MobileTabBar, MobileTopBar } from "@/components/MobileNav";
 import useMediaQuery from "@/components/useMediaQuery";
+import { JobsProvider } from "@/components/JobProgress";
 
 // Three shells for three widths, and the desktop one is the app as it always
 // was:
@@ -21,7 +22,11 @@ import useMediaQuery from "@/components/useMediaQuery";
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const tablet = useMediaQuery("(min-width: 768px) and (max-width: 1023px)");
+  // JobsProvider wraps the whole shell, so a long-running job's progress —
+  // the header pill, the tab title, each page's panel — survives moving
+  // between pages (JobProgress.tsx).
   return (
+    <JobsProvider>
     <div>
       <Sidebar collapsed={collapsed || tablet} onToggle={() => setCollapsed((c) => !c)} />
       <MobileTopBar />
@@ -34,5 +39,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       </main>
       <MobileTabBar />
     </div>
+    </JobsProvider>
   );
 }

@@ -1900,3 +1900,128 @@ tbody tr {
     -ms-overflow-style: none;
   }
 }
+
+/* ─── Job progress ────────────────────────────────────────────────────────
+   The long-running jobs' panel (src/components/JobProgress.tsx): a bulk
+   re-crawl, Compare scoring, Process queue. Everything here is in the brand
+   blue — the AI violet stays on the buttons that start a model call, not on
+   the wait that follows.
+
+   The bar's fill is the one place in the app that eases over longer than
+   --motion-slow. A progress bar that jumps 160ms at a time reads as a series
+   of steps; one that glides over --motion-progress between polls reads as
+   work flowing. Same curve as everything else, so it still lands the way the
+   rest of the app lands. */
+:root {
+  --motion-progress: 700ms;
+}
+.job-bar {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgb(var(--c-line) / 0.7);
+}
+.job-bar-fill {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  background: rgb(var(--c-accent));
+  transition: width var(--motion-progress) var(--motion-ease);
+}
+/* A soft band of light travelling along the filled part while the run is
+   live — the "still working" signal for the minutes between items. */
+.job-bar-live .job-bar-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.38) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: job-shimmer 1.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.dark .job-bar-live .job-bar-fill::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.22) 50%,
+    transparent 100%
+  );
+}
+@keyframes job-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* The current item changing, and a finished item arriving at the top of the
+   activity list: a fade, and for the list a few pixels of travel from above. */
+.job-fade-in {
+  animation: motion-fade-in var(--motion-slow) var(--motion-ease) both;
+}
+@keyframes job-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.job-item-in {
+  animation: job-item-in 240ms var(--motion-ease) both;
+}
+
+/* The finish: a ring and a check that draw themselves in, once. */
+.job-check-ring {
+  stroke-dasharray: 63;
+  stroke-dashoffset: 63;
+  animation: job-draw 420ms var(--motion-ease) forwards;
+}
+.job-check-tick {
+  stroke-dasharray: 14;
+  stroke-dashoffset: 14;
+  animation: job-draw 260ms var(--motion-ease) 300ms forwards;
+}
+@keyframes job-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* The header pill's dot, breathing while a run is live. */
+@keyframes job-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.job-pulse {
+  animation: job-pulse 1.6s ease-in-out infinite;
+}
+
+/* Reduced motion: plain updates. The blanket override above already makes
+   every animation instant; these go further, because a shimmer or a pulse
+   run once in 1ms is a flash, and the drawn check must simply be there. */
+@media (prefers-reduced-motion: reduce) {
+  .job-bar-live .job-bar-fill::after {
+    display: none;
+  }
+  .job-pulse {
+    animation: none;
+  }
+  .job-check-ring,
+  .job-check-tick {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}

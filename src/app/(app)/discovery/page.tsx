@@ -1,12 +1,8 @@
 import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import {
-  addDiscoveryCandidateByName,
-  discoveryQueue,
-  discoveryQueueSelected,
-  processDiscoveryCandidate,
-} from "@/lib/actions/discovery";
+import { addDiscoveryCandidateByName } from "@/lib/actions/discovery";
+import { startQueueJob } from "@/lib/actions/jobs";
 import { DISCOVERY_QUEUE_STATUSES } from "@/lib/discovery";
 import { readDiscoverySourceKind } from "@/lib/clinicDiscovery";
 import {
@@ -20,6 +16,7 @@ import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { stepCostPerCandidate } from "@/lib/pipelineSettings";
 import DiscoveryQueue from "@/components/DiscoveryQueue";
+import { JobProgressFor } from "@/components/JobProgress";
 import DiscoveryList, { DiscoveryRow } from "@/components/DiscoveryList";
 import DiscoverySelectionProvider from "@/components/DiscoverySelection";
 
@@ -171,9 +168,7 @@ export default async function DiscoveryPage({
               (/discovery/import) and in the empty state below, where somebody
               with nothing in Discovery is looking for a way in. */}
             <DiscoveryQueue
-              loadQueue={discoveryQueue}
-              loadSelected={discoveryQueueSelected}
-              process={processDiscoveryCandidate}
+              start={startQueueJob}
               queued={queued}
               settings={settings}
             />
@@ -194,6 +189,10 @@ export default async function DiscoveryPage({
             <span className="text-accent">· Compare scoring →</span>
           </Link>
         </div>
+
+        {/* Process queue's run, live or just finished, for when its dialog
+            is closed — the run carries on on the server either way. */}
+        <JobProgressFor source="process-queue" className="mt-4" />
 
         {summary && (
           <div className="mt-6 rounded-[10px] border border-ok/30 bg-ok-soft/60 px-4 py-3">

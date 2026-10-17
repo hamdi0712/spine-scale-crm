@@ -1,26 +1,20 @@
 "use client";
 
-// Re-crawling Pipeline leads' websites, one at a time, with the Apify estimate
-// confirmed first. Used by the Pipeline table's selection bar and by the
-// "Re-crawl all leads crawled before…" card.
+// Re-crawling Pipeline leads' websites, one at a time on the server, with the
+// Apify estimate confirmed first. Used by the Pipeline table's selection bar
+// and by the "Re-crawl all leads crawled before…" card, each with a panel of
+// its own (source tells their runs apart).
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { fmtEstimate } from "@/lib/pipelineSettings";
-import { CrawlTarget, leadsCrawledBefore, recrawlLeadWebsite } from "@/lib/actions/leadRecrawl";
+import { CrawlTarget, leadsCrawledBefore } from "@/lib/actions/leadRecrawl";
+import { startLeadRecrawl } from "@/lib/actions/jobs";
+import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 
-interface Progress {
-  done: number;
-  total: number;
-  current: string | null;
-  failed: string[];
-  summary: string | null;
-}
+type RecrawlSource = "pipeline-recrawl-selected" | "pipeline-recrawl-before";
 
-export function useLeadRecrawl(costPerClinic: number) {
-  const router = useRouter();
-  const [progress, setProgress] = useState<Progress | null>(null);
-  const running = progress !== null && progress.summary === null;
+export function useLeadRecrawl(costPerClinic: number, source: RecrawlSource = "pipeline-recrawl-selected") {
+  const { running, track } = useJobRun(source);
 
   async function run(targets: CrawlTarget[], what: string) {
     if (targets.length === 0 || running) return;
@@ -31,50 +25,18 @@ export function useLeadRecrawl(costPerClinic: number) {
     ) {
       return;
     }
-    const failed: string[] = [];
-    let wrote = 0;
-    for (let i = 0; i < targets.length; i++) {
-      setProgress({ done: i, total: targets.length, current: targets[i].clinicName, failed, summary: null });
-      try {
-        const r = await recrawlLeadWebsite(targets[i].id);
-        if (r.ok) wrote++;
-        else failed.push(`${r.clinicName}: ${r.error}`);
-      } catch {
-        failed.push(`${targets[i].clinicName}: the server could not be reached`);
-      }
+    const started = await startLeadRecrawl(
+      targets.map((t) => t.id),
+      source,
+    ).catch(() => null);
+    if (!started || !started.ok) {
+      alert(started?.error ?? "The re-crawl could not be started. Check the server is still up.");
+      return;
     }
-    setProgress({
-      done: targets.length,
-      total: targets.length,
-      current: null,
-      failed,
-      summary: `Re-crawled ${wrote} of ${targets.length}.${failed.length > 0 ? ` ${failed.length} failed.` : ""}`,
-    });
-    router.refresh();
+    track(started.id);
   }
 
-  const panel = progress ? (
-    <div className="card mb-3 px-4 py-3 text-xs leading-relaxed max-md:px-3">
-      <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 text-ink-soft">
-          {progress.summary ??
-            `Re-crawling ${progress.done + 1} of ${progress.total}${progress.current ? ` — ${progress.current}` : ""}…`}
-        </p>
-        {progress.summary !== null && (
-          <button type="button" className="btn-ghost shrink-0 px-2 py-0.5 text-xs" onClick={() => setProgress(null)}>
-            Dismiss
-          </button>
-        )}
-      </div>
-      {progress.failed.length > 0 && (
-        <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-bad">
-          {progress.failed.map((f, i) => (
-            <li key={i} className="break-words">{f}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  ) : null;
+  const panel = <JobProgressFor source={source} className="mb-3" />;
 
   return { run, running, panel };
 }
@@ -82,7 +44,7 @@ export function useLeadRecrawl(costPerClinic: number) {
 // "Re-crawl all leads crawled before [date]": for leads still on the old
 // 3-page crawl.
 export function RecrawlOldLeads({ costPerClinic }: { costPerClinic: number }) {
-  const { run, running, panel } = useLeadRecrawl(costPerClinic);
+  const { run, running } = useLeadRecrawl(costPerClinic, "pipeline-recrawl-before");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [found, setFound] = useState<CrawlTarget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +98,7 @@ export function RecrawlOldLeads({ costPerClinic }: { costPerClinic: number }) {
         )}
         {error && <span className="text-xs text-bad">{error}</span>}
       </div>
-      {panel && <div className="mt-2">{panel}</div>}
+      <JobProgressFor source="pipeline-recrawl-before" className="mt-2" />
     </div>
   );
 }
