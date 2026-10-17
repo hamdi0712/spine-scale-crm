@@ -945,6 +945,8 @@ model PipelineSettings {
   // home page, then the links most likely to be a program page first
   // (src/lib/websiteCrawl.ts). Billed per page.
   websiteCrawlPages Int @default(6)
+  // How many re-crawls a bulk "Re-crawl website" runs at once (1–8).
+  recrawlConcurrency Int @default(4)
 
   updatedAt DateTime @updatedAt
 }

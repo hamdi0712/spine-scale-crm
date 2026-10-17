@@ -25,7 +25,7 @@ import {
   readPromotionThreshold,
   readPromotionThresholdV2,
 } from "@/lib/pipelineSettings";
-import { readWebsiteCrawlPages } from "@/lib/websiteCrawl";
+import { readRecrawlConcurrency, readWebsiteCrawlPages } from "@/lib/websiteCrawl";
 import {
   loadPipelineSettings,
   savePipelineSettings as write,
@@ -66,6 +66,9 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
     websiteCrawlPages: formData.has("websiteCrawlPages")
       ? readWebsiteCrawlPages(formData.get("websiteCrawlPages"))
       : current.websiteCrawlPages,
+    recrawlConcurrency: formData.has("recrawlConcurrency")
+      ? readRecrawlConcurrency(formData.get("recrawlConcurrency"))
+      : current.recrawlConcurrency,
   };
 
   await write(settings);
