@@ -8,6 +8,7 @@ import Icon from "@/components/Icons";
 import ImanAvatar from "@/components/ImanAvatar";
 import { LogoIconChip } from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
+import { JobPill } from "@/components/JobProgress";
 import {
   activeHref,
   COPILOT,
@@ -72,6 +73,10 @@ export default function Sidebar({
             className={`h-4 w-4 ${collapsed ? "rotate-180" : ""}`}
           />
         </button>
+      </div>
+      {/* A long-running job, while one runs — on every page. */}
+      <div className={collapsed ? "flex justify-center pb-1" : "px-3 pb-1"}>
+        <JobPill variant={collapsed ? "rail" : "sidebar"} />
       </div>
       {!collapsed && (
         <div className="px-6 pb-2 pt-2 text-xs font-medium tracking-[0.02em] text-muted">

@@ -3,18 +3,19 @@
 // Discovery — the import that feeds it, and the queue that empties it.
 //
 // The queue is the whole point of this file, and one property of it is worth
-// stating before the code: it runs one candidate per call, in the foreground,
-// while somebody watches. There is no job runner in this app and this does not
-// pretend to be one. The browser asks for the queue, then calls
-// processDiscoveryCandidate once per candidate and shows each result as it
-// lands; closing the tab stops the queue after whatever candidate is in flight,
-// and every candidate it never reached is still Pending for next time.
+// stating before the code: it runs one candidate per call, in turn, where
+// somebody can watch. processDiscoveryCandidate is called once per candidate
+// by the job runner (src/lib/jobRunner.ts, started from
+// src/lib/actions/jobs.ts), and the progress panel shows each result as it
+// lands. Stopping — or the server going away — ends the queue after whatever
+// candidate is in flight, and every candidate it never reached is still
+// Pending for next time.
 //
-// That is a deliberate choice rather than a shortcut. Each candidate costs four
-// actor runs and a model call against live accounts, and a queue that empties
-// itself in the background is a queue that can spend a day's credit while
-// nobody is looking at it. The UI says so in as many words.
-//
+// Nothing starts it but a press, after the dialog has quoted its cost. Each
+// candidate costs four actor runs and a model call against live accounts, and
+// the run's progress, spend so far and a Stop button stay on screen — in the
+// header, on any page — for as long as it runs.
+
 // The chain per candidate is fixed and in order: enrich, compute what can be
 // computed, ask the model for the rest, combine, then promote or reject. It
 // only ever moves forward — a candidate is processed from the top each time

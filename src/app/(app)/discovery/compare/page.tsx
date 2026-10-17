@@ -16,11 +16,7 @@ import {
   latestComparisonRun,
   loadComparisonSubjects,
 } from "@/lib/scoringComparisonStore";
-import {
-  compareOneSubject,
-  finishScoringComparison,
-  startScoringComparison,
-} from "@/lib/actions/scoringComparison";
+import { startComparisonJob } from "@/lib/actions/jobs";
 import { setScoringModel } from "@/lib/actions/pipelineSettings";
 import { fmtDateTime } from "@/lib/format";
 import { IcpTierBadge } from "@/components/Badge";
@@ -136,9 +132,7 @@ export default async function CompareScoringPage() {
           estimate={estimate}
           subjects={subjects.length}
           disabledReason={disabledReason}
-          start={startScoringComparison}
-          compareOne={compareOneSubject}
-          finish={finishScoringComparison}
+          start={startComparisonJob}
         />
 
         <ApplyScoringModel
