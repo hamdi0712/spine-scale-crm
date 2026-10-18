@@ -86,6 +86,8 @@ export interface ApplicationPlan {
   // Missed the fit floor only because nothing was found. Left exactly as they
   // are: not rejected, not flagged. Re-crawl and re-run Compare to judge them.
   insufficient: PlanEntry[];
+  // Leads un-flagged by hand ("Un-flag (keep this lead)"): never flagged again.
+  kept: PlanEntry[];
   stale: StaleEntry[];
   staleShare: number;
   staleWarning: boolean;
@@ -100,6 +102,7 @@ const LEAD_GUARD_SELECT = {
   archived: true,
   repliedAt: true,
   scoringRejectedAt: true,
+  scoringKeptAt: true,
   _count: { select: { calls: true } },
 } as const;
 
@@ -199,12 +202,23 @@ export async function planApplication(): Promise<PlanResult> {
     flag: [],
     protectedLeads: [],
     insufficient: [],
+    kept: [],
     stale: [],
     staleShare: 0,
     staleWarning: false,
   };
 
   const flagOrProtect = (lead: GuardLead, reason: string, kind: "candidate" | "lead", subjectId: string) => {
+    // Un-flagged by hand: a manual override no apply reverses.
+    if (lead.scoringKeptAt) {
+      plan.kept.push({
+        kind: "lead",
+        id: lead.id,
+        clinicName: lead.clinicName,
+        reason: `you un-flagged it on ${lead.scoringKeptAt.toISOString().slice(0, 10)}. New scoring would reject it: ${reason}`,
+      });
+      return;
+    }
     if (lead.scoringRejectedAt) {
       plan.stale.push({
         kind,
@@ -544,8 +558,9 @@ export async function revertScoring(applicationId: string): Promise<RevertResult
             kept.push({ kind: "lead", id: item.subjectId, clinicName: item.clinicName, reason: "deleted after the apply" });
             continue;
           }
-          const edited =
-            !sameSnapshot(after, pick(lead, LEAD_FIELDS)) || lead.updatedAt.getTime() !== item.afterUpdatedAt.getTime()
+          const edited = lead.scoringKeptAt
+            ? "you un-flagged it, so it stays as you left it"
+            : !sameSnapshot(after, pick(lead, LEAD_FIELDS)) || lead.updatedAt.getTime() !== item.afterUpdatedAt.getTime()
               ? "it was edited after the apply"
               : await leadWorkedOnSince(tx, lead.id, app.appliedAt);
           // The flag is the apply's own change, so it comes off either way —
@@ -629,4 +644,18 @@ export async function scoringApplicationHistory(limit = 10) {
       revertKeptList: true,
     },
   });
+}
+
+// "Un-flag (keep this lead)": the flag comes off and the lead is marked kept
+// by hand. Every later apply skips it (plan.kept) and a revert leaves it as it
+// is. It is a manual override, recorded with its time.
+export async function unflagLead(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const lead = await prisma.lead.findUnique({ where: { id }, select: { scoringRejectedAt: true } });
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  if (!lead.scoringRejectedAt) return { ok: false, error: "That lead is not flagged." };
+  await prisma.lead.update({
+    where: { id },
+    data: { scoringRejectedAt: null, scoringRejectedReason: null, scoringApplicationId: null, scoringKeptAt: new Date() },
+  });
+  return { ok: true };
 }

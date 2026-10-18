@@ -1,4 +1,5 @@
 import PageActions from "@/components/PageActions";
+import UnflagLeadButton from "@/components/UnflagLeadButton";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -151,6 +152,7 @@ export default async function LeadDetailPage({
             default Pipeline view, Outreach and the dashboard until the apply is
             reverted in Settings → Pipeline.
           </p>
+          <UnflagLeadButton leadId={lead.id} />
         </div>
       )}
       <div className="flex flex-wrap items-start justify-between gap-4">

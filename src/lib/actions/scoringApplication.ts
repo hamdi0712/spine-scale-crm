@@ -11,6 +11,7 @@ import {
   applyScoring,
   planApplication,
   revertScoring,
+  unflagLead,
 } from "@/lib/scoringApplication";
 
 function refresh() {
@@ -34,5 +35,12 @@ export async function applyScoringToExisting(): Promise<ApplyResult> {
 export async function revertScoringApplication(id: string): Promise<RevertResult> {
   const result = await revertScoring(id);
   refresh();
+  return result;
+}
+
+export async function unflagScoringRejectedLead(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const result = await unflagLead(id);
+  refresh();
+  revalidatePath(`/pipeline/${id}`);
   return result;
 }

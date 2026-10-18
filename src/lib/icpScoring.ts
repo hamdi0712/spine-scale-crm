@@ -457,6 +457,45 @@ export function verifyQuote(
 const ABSENCE_OR_HEDGE =
   /\b(no mention|not mentioned|does(?:n't| not) (?:say|state|mention|list|show|appear|offer|include)|did(?:n't| not) find|could(?:n't| not) find|can(?:not|'t) find|unable to find|not found|no evidence|no indication|unclear|not clear|appears? to|seems? to|likely|probably|possibly|presumably|may be|might be|suggests?|implies|implying|no pricing|no prices|not listed|absence of)\b/i;
 
+// A quote that says the clinic does NOT do the thing: "No MedPay auto claim
+// processing", "We do not accept liens". It can never be the evidence that it
+// does. The negation has to govern the disqualifier's own subject — within a
+// few words before one of its terms — so "No appointment necessary at <a
+// franchise>" still reads as the franchise it names. (Insurance-only and
+// single-provider are read by their own rules, where "no cash" or "no other
+// staff" is the claim itself.)
+const NEGATION = /^(no|not|non|never|none|without|dont|doesnt|didnt|isnt|arent|cannot|cant|wont|unable)$/;
+const STOP = new Set(["the", "and", "for", "with", "that", "this", "only", "based", "practice", "clinic", "clinics", "care"]);
+const PI_TERMS = ["pi", "personal", "injury", "injuries", "lien", "liens", "attorney", "attorneys", "lawyer", "medpay", "auto", "accident", "accidents", "claim", "claims", "settlement"];
+
+export function isNegatedQuote(quote: string, label: string, kind: string = "general"): boolean {
+  const words = (t: string) =>
+    t.toLowerCase().replace(/[’']/g, "").split(/[^a-z0-9]+/).filter(Boolean);
+  const terms = new Set([
+    ...words(label).filter((w) => w.length > 2 && !STOP.has(w)),
+    ...(kind === "pi_lien" ? PI_TERMS : []),
+  ]);
+  const q = words(quote);
+  for (let i = 0; i < q.length; i++) {
+    if (!NEGATION.test(q[i])) continue;
+    for (let j = i + 1; j <= i + 3 && j < q.length; j++) {
+      if (terms.has(q[j]) || terms.has(q[j].replace(/s$/, ""))) return true;
+    }
+  }
+  return false;
+}
+
+// Personal injury as the main business, not one option among others: "we
+// only treat auto accident injuries", "a personal injury chiropractic clinic",
+// "we specialize in car accident injuries". "We accept liens" or "we work with
+// attorneys" beside regular care is one payment route, not the business.
+const PI_MAIN_BUSINESS =
+  /\b(only|exclusively|solely|primarily|specializ\w*|speciali[sz]e|dedicated to|focus(?:ed|es)? (?:on|exclusively)|devoted to)\b[^.]{0,60}\b(personal[\s-]injury|auto|car|accident|whiplash|lien|attorney|pi)\b|\b(personal[\s-]injury|auto[\s-]accident|car[\s-]accident|auto[\s-]injury)\s+(chiropract\w*|clinic|center|centre|practice|specialists?)\b/i;
+
+export function isPiMainBusiness(quote: string): boolean {
+  return PI_MAIN_BUSINESS.test(quote);
+}
+
 export function isAbsenceOrHedge(reason: string): boolean {
   return ABSENCE_OR_HEDGE.test(reason);
 }
@@ -474,6 +513,7 @@ export function isExplicitInsuranceOnly(quote: string): boolean {
 type DisqualifierKind =
   | "no_website"
   | "insurance_only"
+  | "pi_lien"
   | "single_provider"
   | "outside_us"
   | "general";
@@ -488,6 +528,7 @@ export function disqualifierKind(label: string): DisqualifierKind {
     return "insurance_only";
   }
   if (/\b(single provider|one provider|solo practi\w*)\b/i.test(label)) return "single_provider";
+  if (/\b(pi|personal[\s-]injury|liens?|lien[\s-]based|attorneys?|auto[\s-]accident|medpay)\b/i.test(label)) return "pi_lien";
   if (/\boutside (?:the )?(?:us|u\.s\.?|usa|united states)\b/i.test(label)) return "outside_us";
   return "general";
 }
@@ -884,6 +925,18 @@ function judgeDisqualifiers(
         `Flagged on reasoning that rests on an absence or a hedge (“${clip(reason, 120)}”) — not finding something is never a hit.`,
       );
     }
+    if ((kind === "general" || kind === "pi_lien" || kind === "outside_us") && isNegatedQuote(citation.quote, label, kind)) {
+      return clear(
+        "Not triggered.",
+        `Flagged, but the quote says the clinic does not do this (“${clip(citation.quote, 120)}”) — a negation is never a hit.`,
+      );
+    }
+    if (kind === "pi_lien" && !isPiMainBusiness(citation.quote)) {
+      return clear(
+        "Not triggered.",
+        `Flagged, but the quote does not show personal injury as the main business (“${clip(citation.quote, 120)}”). Accepting liens or working with attorneys beside regular care is one option, not a PI practice.`,
+      );
+    }
     if (kind === "insurance_only" && !isExplicitInsuranceOnly(citation.quote)) {
       return clear(
         "Not triggered.",
@@ -949,7 +1002,7 @@ function entry(
   };
 }
 
-const NAME_CORE_SERVICE = /\b(spinal\s+decompression|decompression|discs?)\b/i;
+const NAME_CORE_SERVICE = /\b(spinal\s+decompression|decompression|non[\s-]?surgical\s+spine|discs?)\b/i;
 
 export function coreServiceInName(clinicName: string): string | null {
   const m = clinicName.match(NAME_CORE_SERVICE);
@@ -1437,6 +1490,15 @@ export function chiroProgramCheck(
     if (citation) {
       page = [citation];
       break;
+    }
+  }
+  // The clinic's own name: "HOH Spinal Decompression", "Non-Surgical Spine
+  // Care Center" name the program as plainly as a page of its own does.
+  if (page.length === 0) {
+    const named = coreServiceInName(evidence.clinicName);
+    if (named) {
+      page = [{ quote: evidence.clinicName, source: SOURCE_CLINIC_NAME }];
+      pageReason = `The clinic's name names the program (${named}).`;
     }
   }
   if (page.length === 0) {
