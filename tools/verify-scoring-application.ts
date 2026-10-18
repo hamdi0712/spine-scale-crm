@@ -248,8 +248,29 @@ async function main(): Promise<void> {
   console.log("\n  Skipped list as the confirm screen shows it:");
   for (const e of p3.plan.stale) console.log(`    ${e.clinicName} (${e.kind}): ${e.changes.map((c) => `${c.field} ${c.compared} → ${c.current}${c.at ? ` at ${c.at}` : ""}`).join("; ")}`);
 
+  // Un-flag (keep this lead): a manual override later applies and reverts respect.
+  console.log("\nUn-flag a flagged lead, then re-apply and revert");
+  const { unflagLead } = await import("../src/lib/scoringApplication");
+  const third = await applyScoring();
+  if (!third.ok) throw new Error(third.error);
+  const flaggedNow = await prisma.lead.findUniqueOrThrow({ where: { id: lContacted.id } });
+  check("the lead is flagged by the apply", flaggedNow.scoringRejectedAt !== null);
+  const un = await unflagLead(lContacted.id);
+  const afterUn = await prisma.lead.findUniqueOrThrow({ where: { id: lContacted.id } });
+  check("Un-flag removes the flag and records the override", un.ok && afterUn.scoringRejectedAt === null && afterUn.scoringKeptAt !== null);
+  const rev3 = await revertScoring(third.applicationId);
+  if (!rev3.ok) throw new Error(rev3.error);
+  const afterRev = await prisma.lead.findUniqueOrThrow({ where: { id: lContacted.id } });
+  check("a revert leaves the un-flagged lead as you left it, and lists it",
+    afterRev.scoringRejectedAt === null && afterRev.scoringKeptAt !== null && rev3.kept.some((k) => k.id === lContacted.id && /un-flagged/.test(k.reason)),
+    rev3.kept.find((k) => k.id === lContacted.id)?.reason);
+  const p4 = await planApplication();
+  if (!p4.ok) throw new Error(p4.error);
+  check("the next apply skips it, under 'kept by you'",
+    p4.plan.kept.some((e) => e.id === lContacted.id) && !p4.plan.flag.some((e) => e.leadId === lContacted.id));
+
   const history = await prisma.scoringApplication.findMany({ orderBy: { appliedAt: "asc" } });
-  check("history keeps both applications, both reverted", history.length === 2 && history.every((h) => h.revertedAt !== null));
+  check("history keeps every application, all reverted", history.length === 3 && history.every((h) => h.revertedAt !== null));
 
   await prisma.$disconnect();
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);

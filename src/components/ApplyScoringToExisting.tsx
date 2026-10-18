@@ -173,6 +173,7 @@ export default function ApplyScoringToExisting({
           <EntryList title="Rejected" entries={plan.reject} />
           <EntryList title="Leads flagged — on cited evidence (a disqualifier or a cited non-fit)" entries={plan.flag} />
           <EntryList title="Not enough evidence — left as they are, not rejected or flagged" entries={plan.insufficient ?? []} />
+          <EntryList title="Kept by you — un-flagged by hand, skipped" entries={plan.kept ?? []} />
           <EntryList title="Protected — review these yourself" entries={plan.protectedLeads} />
           <StaleList entries={plan.stale} />
           <p className="mt-3 text-xs text-muted">Process Queue switches to the new model. Everything is snapshotted and can be reverted.</p>

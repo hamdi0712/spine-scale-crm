@@ -895,8 +895,8 @@ async function main(): Promise<void> {
   const harbor = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: harborRow.subjectId } });
   check("…a chiro with a real program is promoted", ridge.status === "PROMOTED" && ridge.promotedLeadId !== null);
   check(
-    "…and one without is rejected, with the signals counted",
-    harbor.status === "REJECTED" && /Chiro without a real program \(0 of 5 signals\)/.test(harbor.disqualifiedReason ?? ""),
+    "…and one without is rejected, with the signals counted (its name, '& Disc Center', is signal 1 — still short of 2)",
+    harbor.status === "REJECTED" && /Chiro without a real program \(1 of 5 signals\)/.test(harbor.disqualifiedReason ?? ""),
     harbor.disqualifiedReason ?? "",
   );
 
@@ -1241,6 +1241,45 @@ async function main(): Promise<void> {
       fit.map((e) => (e.key === "service" ? { ...e, points: 0, citations: [{ quote: "Family chiropractic care for all ages", source: "https://x.test/services" }], source: "assist" as const } : e)),
     );
     check("a cited non-fit is still rejected", general.verdict.status === "REJECTED" && general.verdict.kind === "not_a_fit", general.verdict.reason);
+  }
+
+  // Review fixes: name as program signal, negated quotes, PI as the main business.
+  {
+    const { buildBreakdownV2, chiroProgramCheck, evidenceDocs, dqId } = await import("../src/lib/icpScoring");
+    const { disqualifierLines } = await import("../src/lib/icpDefinition");
+    const icpNow = (await loadActiveIcp())!;
+    const piIndex = disqualifierLines(icpNow).findIndex((l) => /lien/i.test(l));
+    check("the seeded ICP has a PI/lien disqualifier", piIndex !== -1, disqualifierLines(icpNow)[piIndex] ?? "none");
+
+    for (const name of ["HOH Spinal Decompression", "Renton Spinal Decompression @ Clark Chiropractic", "Non-Surgical Spine Care Center"]) {
+      const ev = { clinicName: name, websiteNotes: "https://x.test/\nWelcome to our clinic.", websiteLinks: null, metaAdsSignal: null, reviewCount: null };
+      const page = chiroProgramCheck(ev as never, null, evidenceDocs(ev as never)).signals.find((x) => x.key === "page");
+      check(`'${name}' counts as the dedicated-program signal, citing the name`,
+        page?.found === true && page.citations[0]?.source === "Clinic name" && page.citations[0]?.quote === name, page?.reason);
+    }
+
+    const pi = (quote: string, clinicName: string) => {
+      const notes = `https://x.test/\n${quote}\nWe offer chiropractic adjustments and spinal decompression.`;
+      const b = buildBreakdownV2({
+        icp: icpNow,
+        evidence: { clinicName, websiteNotes: notes, websiteUrl: "https://x.test/", metaAdsSignal: null, reviewCount: null } as never,
+        reply: {
+          disqualifiers: [{ id: dqId(piIndex), quote, source: "https://x.test/", reason: "The clinic is PI/lien based." }],
+          coreService: null, adjacentService: null, spineProgram: null, primaryService: null, decisionMaker: null,
+          location: null, locationCount: null, team: null, buyingTriggers: [], paymentModel: null, gaps: {}, summary: "",
+        } as never,
+        precheck: null, threshold: 60, evidenceLabels: [], notes: [], now: new Date(),
+      });
+      return b.disqualifiers[piIndex];
+    };
+    const buffalo = pi("No MedPay auto claim processing.", "Buffalo Spine & Sport");
+    check("Buffalo: 'No MedPay auto claim processing.' does not trigger PI/lien", buffalo.triggered === false, buffalo.discarded ?? "");
+    const milpitas = pi("We accept liens and work with attorneys.", "Milpitas Spine");
+    check("Milpitas: accepting liens beside regular care does not trigger PI/lien", milpitas.triggered === false, milpitas.discarded ?? "");
+    const pa = pi("We also treat personal injury patients and work with your attorney.", "PA Pain & Rehab");
+    check("PA Pain & Rehab: PI as one option does not trigger", pa.triggered === false, pa.discarded ?? "");
+    const real = pi("We are a personal injury chiropractic clinic — we only treat auto accident injuries.", "Crash Injury Chiro");
+    check("PI stated as the main business still triggers", real.triggered === true, real.reason);
   }
 
   await prisma.$disconnect();

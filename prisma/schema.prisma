@@ -425,6 +425,9 @@ model Lead {
   scoringRejectedAt     DateTime?
   scoringRejectedReason String?
   scoringApplicationId  String?
+  // Un-flagged by hand ("Un-flag (keep this lead)"): a manual override that
+  // every later apply skips and every revert leaves alone.
+  scoringKeptAt         DateTime?
 
   copilotActions CopilotAction[]
 
