@@ -1,20 +1,31 @@
 import type { Metadata, Viewport } from "next";
-import { Caveat, Inter, IBM_Plex_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 
-// Inter carries all UI text, numerals included. Requesting the optical-size
-// axis alongside weight ships the variable font's display cut, which the
-// header tier opts into via `font-optical-sizing` (see .display in globals).
-const inter = Inter({
-  subsets: ["latin"],
-  axes: ["opsz"],
+// All three faces are self-hosted from ./fonts, so nothing contacts Google
+// Fonts at build or dev startup (that request timed out on some networks and
+// dropped the whole UI to system fonts). The files are the exact latin-subset
+// woff2s Google serves for the same requests next/font/google used to make;
+// re-fetch from fonts.googleapis.com/css2 if a face ever needs updating.
+
+// Inter carries all UI text, numerals included. The file is the variable font
+// with the optical-size axis (opsz 14–32) alongside weight (100–900), which
+// ships the display cut the header tier opts into via `font-optical-sizing`
+// (see .display in globals).
+const inter = localFont({
+  src: [{ path: "./fonts/inter-latin-opsz-wght.woff2", weight: "100 900", style: "normal" }],
+  display: "swap",
   variable: "--font-sans",
 });
 
-const plexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
+const plexMono = localFont({
+  src: [
+    { path: "./fonts/ibm-plex-mono-latin-400.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/ibm-plex-mono-latin-500.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/ibm-plex-mono-latin-600.woff2", weight: "600", style: "normal" },
+  ],
+  display: "swap",
   variable: "--font-mono",
 });
 
@@ -22,10 +33,14 @@ const plexMono = IBM_Plex_Mono({
 // It is deliberately not available as a general option — a second lettering
 // style loose in a CRM is how a design system stops being one — and it is
 // loaded here rather than in the feature because next/font wants to hoist the
-// declaration and put the preload in <head>.
-const caveat = Caveat({
-  subsets: ["latin"],
-  weight: ["600", "700"],
+// declaration and put the preload in <head>. Caveat is a variable font, so
+// both weights come from the one file, declared at 600 and 700 only.
+const caveat = localFont({
+  src: [
+    { path: "./fonts/caveat-latin-wght.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/caveat-latin-wght.woff2", weight: "700", style: "normal" },
+  ],
+  display: "swap",
   variable: "--font-hand",
 });
 
