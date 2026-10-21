@@ -147,6 +147,11 @@ export default async function PipelinePage({
           {/* On a phone these two go into the top bar's ⋯ menu; the view
               toggle stays, because it is how the page is read. */}
           <PageActions className="contents">
+            {/* A plain link rather than a Link: it is a file download, not a
+                page, and the route answers with an attachment. */}
+            <a href="/api/pipeline/export" download className="btn">
+              Export for review
+            </a>
             <Link href="/discovery" className="btn">
               Discovery
             </Link>
