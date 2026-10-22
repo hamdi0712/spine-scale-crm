@@ -941,6 +941,114 @@ never matches it.
   add-to-home-screen app. There is deliberately no service worker — every page
   needs the live server.
 
+## Claude connector (remote MCP server)
+
+`/api/mcp` is a remote MCP server (Streamable HTTP, official TypeScript SDK)
+that claude.ai can add as a custom connector, so the pipeline can be asked
+about from Claude itself.
+
+**What it exposes.** Thirteen of the Copilot's own lookups, read-only:
+`getPipelineLeads` (paged), `searchLeads` (with the connection-status
+filter), `getLeadDetail`, `getLeadOutreachLog`, `getOutreachFunnelSummary`,
+`getDiscoveryQueueStatus`, `getClientHealthSummary`, `getTasks`,
+`getDailyChecklistStatus`, `getDailyKpiStatus`, `getActivityTrend`,
+`getBusinessHoursStatus` and `getMonkModeStatus`. Nothing is re-implemented:
+the names, descriptions and argument schemas are the Copilot's
+(`COPILOT_TOOLS` in `src/lib/copilot.ts`), and every call goes through the
+Copilot's dispatcher (`runCopilotTool` in `src/lib/copilotLookups.ts`), so
+the caps, the paging and the results are identical. `proposeAction` and the
+other lookups are not on the list and are refused by the server
+(`src/lib/mcpServer.ts`).
+
+**Untrusted text.** Scraped website copy, review counts and prospect replies
+arrive nested under `untrustedScrapedContent` with the same warning the
+Copilot sees, because they are the same results. The Copilot's system prompt
+rule about that key is restated as the MCP server's instructions.
+
+**Sign-in.** OAuth 2.1 the way claude.ai expects it: protected-resource and
+authorization-server metadata under `/.well-known/`, dynamic client
+registration, the authorization code flow with PKCE (S256 only), and
+rotating refresh tokens (`src/lib/mcpOAuth.ts`). The authorize step is the
+app's sign-in card asking for the app password, every time — registration is
+open to anyone who can reach the URL, so a silent consent would let any
+registered client collect a code. Five wrong passwords in 15 minutes pause
+it. Codes, tokens and client secrets are stored as SHA-256 hashes in the
+database; access tokens last an hour, refresh tokens 30 days. Changing
+`APP_PASSWORD` cuts every connector off, the same way it signs the browser
+out. **Settings → Connectors** lists each connected client with a Revoke
+button, and **Revoke all connector access** deletes every client, code and
+token at once.
+
+Redirect URIs are limited to claude.ai, claude.com and loopback (Claude
+Desktop, Claude Code and the MCP Inspector). Add others with
+`MCP_OAUTH_REDIRECT_ORIGINS` in `.env`.
+
+**What the public URL reaches.** Requests that come in through Tailscale
+Funnel (Tailscale marks them with a `Tailscale-Funnel-Request` header it
+does not let clients forge; anything addressed to a `*.ts.net` name counts
+too) get `/api/mcp`, the OAuth routes, the sign-in page and the static files
+that page draws with. Every other path answers **404**, with or without a
+session cookie — `/login` and the server actions included — so the public
+URL is not a way into the CRM. The one exception is Next's image optimizer,
+which runs before middleware; it only ever returns images from `public/`.
+Locally nothing changes: every page and API route still needs the normal
+login. The rules are in `src/lib/mcpPublic.ts` and `src/middleware.ts`.
+
+### Exposing it with Tailscale Funnel (on the Mac)
+
+1. Install Tailscale from https://tailscale.com/download/mac and sign in. If
+   you use the App Store build, put the CLI on your path from the Tailscale
+   menu → **Settings → Install CLI**.
+2. In the admin console (https://login.tailscale.com/admin/dns) turn on
+   **MagicDNS** and **HTTPS Certificates**. Funnel also needs the `funnel`
+   attribute in the tailnet policy; the first `tailscale funnel` command
+   below prints a link that adds it for you if it is missing.
+3. Run the app in production mode: `npm run build && npm start` (port 3000).
+4. Publish it:
+
+   ```bash
+   tailscale funnel --bg 3000
+   ```
+
+5. Find the public URL:
+
+   ```bash
+   tailscale funnel status
+   ```
+
+   It prints `https://<machine>.<tailnet>.ts.net` (proxying to
+   `http://127.0.0.1:3000`). Check it from another network, e.g. a phone off
+   Wi-Fi:
+
+   ```bash
+   curl https://<machine>.<tailnet>.ts.net/.well-known/oauth-authorization-server   # JSON
+   curl -I https://<machine>.<tailnet>.ts.net/                                        # 404
+   ```
+
+   Optionally pin it in `.env` as `MCP_PUBLIC_URL="https://<machine>.<tailnet>.ts.net"`.
+   Without it the URL is read from the headers Funnel sends, which is
+   normally enough.
+6. In claude.ai go to **Settings → Connectors → Add custom connector**. Name
+   it (e.g. *Spine Scale CRM*), set the URL to
+   `https://<machine>.<tailnet>.ts.net/api/mcp`, leave the advanced OAuth
+   client ID and secret empty, and click **Add**. Click **Connect**: Claude
+   opens the CRM's sign-in card; type the app password and you are sent back
+   to Claude. The connection then appears under Settings → Connectors here.
+7. To take it offline: `tailscale funnel reset`. The connector only works
+   while the Mac is awake and the app is running.
+
+### Testing it locally with the MCP Inspector
+
+```bash
+npm run build && npm start
+npx @modelcontextprotocol/inspector
+```
+
+In the Inspector choose **Streamable HTTP**, URL `http://localhost:3000/api/mcp`,
+and connect. It discovers the OAuth metadata, registers itself, sends you to
+the sign-in card, and after the password lists the thirteen tools, each of
+which can be run from its Tools tab.
+
 ## Deploying to Vercel + hosted Postgres (later)
 
 The app is built so the move is a datasource swap, not a rewrite:

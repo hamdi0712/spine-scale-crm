@@ -21,7 +21,8 @@ export default function SettingsLayout({
         <h1 className="display text-[32px] font-semibold">Settings</h1>
         <p className="helper-text mt-1.5 text-sm text-muted">
           The keys this app calls out with, the chain it runs when it does, who
-          you are for, and what the copilot is told about your business
+          you are for, what the copilot is told about your business, and who can
+          read the CRM from Claude
         </p>
       </div>
       <div className="mb-8">

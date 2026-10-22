@@ -18,6 +18,7 @@ import {
   IconBuildingStore,
   IconGitBranch,
   IconKey,
+  IconPlugConnected,
   IconTarget,
 } from "@tabler/icons-react";
 
@@ -46,6 +47,12 @@ export const SETTINGS_SECTIONS = [
     href: "/settings/business-context",
     label: "Business context",
     Glyph: IconBuildingStore,
+  },
+  // Who can read the CRM from Claude, and the button that stops them.
+  {
+    href: "/settings/connectors",
+    label: "Connectors",
+    Glyph: IconPlugConnected,
   },
 ] as const;
 

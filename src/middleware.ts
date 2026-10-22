@@ -1,7 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidSession, SESSION_COOKIE } from "@/lib/auth";
+import { isConnectorPath, isPublicAsset, isPublicRequest } from "@/lib/mcpPublic";
+
+// Files that render on the unauthenticated login page or are fetched without a
+// session, so they bypass the session redirect on a local request.
+//
+// The logo files render on the login page, serve as the favicon, and are
+// fetched by the /_next/image optimizer. Iman's avatar is here for the
+// optimizer's sake only — it is drawn on the signed-in copilot page, but the
+// optimizer fetches the source file back through this same server and would
+// otherwise be handed the login redirect instead of a PNG.
+//
+// Monk Mode's artwork is here for that same reason, as two prefixes rather
+// than seventeen filenames: monk-* is the hero background, the forest strip
+// and the corner mountain, and habit-* is the icon and the illustration for
+// each habit. Every one of them is drawn through next/image — they are
+// 1500px PNGs of up to 1.8MB and the optimizer is what turns them into
+// something a dashboard can load seven of — so every one of them is fetched
+// back through this server by a request carrying no session cookie. Without
+// the bypass the optimizer is handed the login page and every picture on the
+// feature is broken, which is a failure that looks like a bad path rather
+// than like auth.
+//
+// Nothing is exposed by this that was not already public: these are static
+// files under public/, served by URL to anyone who asks, and the bypass only
+// decides whether the request is answered or redirected.
+//
+// The web app manifest and its icons are on the list for the same reason as
+// the logos: a phone fetches them to install the app, with no session.
+const UNAUTHENTICATED =
+  /^\/(login(\/.*)?|_next\/image|favicon\.ico|logo-icon\.png|logo-wordmark\.png|manifest\.webmanifest|apple-touch-icon\.png|icon-.*\.png|iman-avatar\.png|monk-.*\.png|habit-.*\.png)$/;
 
 export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // The Claude connector's routes authenticate themselves (a bearer token, or
+  // the app password on the authorize page) and never read the session.
+  if (isConnectorPath(pathname)) return NextResponse.next();
+
+  // A request that came in through Tailscale Funnel gets the connector and the
+  // static files its sign-in page draws with, and nothing else — not /login,
+  // not a page, not a server action, session cookie or no session cookie. See
+  // src/lib/mcpPublic.ts.
+  if (isPublicRequest(req.headers)) {
+    if (isPublicAsset(pathname)) return NextResponse.next();
+    return new NextResponse("Not found", { status: 404 });
+  }
+
+  if (UNAUTHENTICATED.test(pathname)) return NextResponse.next();
+
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   if (await isValidSession(token)) {
     return NextResponse.next();
@@ -13,31 +60,8 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // The logo files are public assets: they render on the unauthenticated login
-  // page, serve as the favicon, and are fetched by the /_next/image optimizer,
-  // so they have to bypass the session redirect. Iman's avatar is here for the
-  // optimizer's sake only — it is drawn on the signed-in copilot page, but the
-  // optimizer fetches the source file back through this same server and would
-  // otherwise be handed the login redirect instead of a PNG.
-  //
-  // Monk Mode's artwork is here for that same reason, as two prefixes rather
-  // than seventeen filenames: monk-* is the hero background, the forest strip
-  // and the corner mountain, and habit-* is the icon and the illustration for
-  // each habit. Every one of them is drawn through next/image — they are
-  // 1500px PNGs of up to 1.8MB and the optimizer is what turns them into
-  // something a dashboard can load seven of — so every one of them is fetched
-  // back through this server by a request carrying no session cookie. Without
-  // the bypass the optimizer is handed the login page and every picture on the
-  // feature is broken, which is a failure that looks like a bad path rather
-  // than like auth.
-  //
-  // Nothing is exposed by this that was not already public: these are static
-  // files under public/, served by URL to anyone who asks, and the bypass only
-  // decides whether the request is answered or redirected.
-  //
-  // The web app manifest and its icons are on the list for the same reason as
-  // the logos: a phone fetches them to install the app, with no session.
-  matcher: [
-    "/((?!login|_next/static|_next/image|favicon.ico|logo-icon.png|logo-wordmark.png|manifest.webmanifest|apple-touch-icon.png|icon-.*\\.png|iman-avatar.png|monk-.*\\.png|habit-.*\\.png).*)",
-  ],
+  // Everything but the build's static files runs through the checks above.
+  // Those are exempt because they are the compiled CSS, JS and fonts every
+  // page loads, the login page included, and nothing in them is data.
+  matcher: ["/((?!_next/static).*)"],
 };

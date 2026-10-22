@@ -28,7 +28,8 @@
 // fence is worth nothing without it and it is worth nothing without the fence.
 //
 // Server-only: this imports Prisma. It is called from
-// src/lib/actions/copilot.ts and from nowhere else.
+// src/lib/actions/copilot.ts, and from src/lib/mcpServer.ts for the Claude
+// connector, which exposes a read-only subset of these by name.
 
 import { prisma } from "@/lib/prisma";
 import {
