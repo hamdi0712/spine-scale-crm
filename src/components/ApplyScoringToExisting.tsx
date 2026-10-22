@@ -163,6 +163,27 @@ export default function ApplyScoringToExisting({
             <li><span className="font-semibold">{plan.protectedLeads.length}</span> protected</li>
             <li><span className="font-semibold">{(plan.insufficient ?? []).length}</span> not enough evidence</li>
           </ul>
+          <div className="mt-3 space-y-0.5 text-xs leading-relaxed text-ink-soft">
+            <p>
+              <span className="num font-semibold">{plan.rescoreUnchanged ?? 0}</span> unchanged record
+              {(plan.rescoreUnchanged ?? 0) === 1 ? "" : "s"} will be re-scored (no status change).
+            </p>
+            {(plan.rescoreOther ?? 0) > 0 && (
+              <p className="text-muted">
+                <span className="num">{plan.rescoreOther}</span> flagged, protected, kept or not-enough-evidence record
+                {plan.rescoreOther === 1 ? "" : "s"} also get the new scorecard, so no lead in the comparison keeps a 0–10 score.
+              </p>
+            )}
+            {(plan.rescoreSkipped ?? 0) > 0 && (
+              <p className="text-muted">
+                <span className="num">{plan.rescoreSkipped}</span> keep their current score: changed since the comparison, or the comparison could not score them.
+              </p>
+            )}
+            <p className="text-muted">
+              <span className="num">{plan.leadsAddedSince ?? 0}</span> lead{(plan.leadsAddedSince ?? 0) === 1 ? "" : "s"} added
+              after the comparison ran — not in it, so {(plan.leadsAddedSince ?? 0) === 1 ? "it keeps its" : "they keep their"} current score.
+            </p>
+          </div>
           {plan.stale.length > 0 && (
             <p className={`mt-2 text-xs leading-relaxed ${plan.staleWarning ? "text-bad" : "text-muted"}`}>
               {plan.stale.length} changed since the comparison and will be skipped.
