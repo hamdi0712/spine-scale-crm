@@ -17,6 +17,7 @@ import {
   loadComparisonSubjects,
 } from "@/lib/scoringComparisonStore";
 import { startComparisonJob } from "@/lib/actions/jobs";
+import RetryFailedComparison from "@/components/RetryFailedComparison";
 import { setScoringModel } from "@/lib/actions/pipelineSettings";
 import { fmtDateTime } from "@/lib/format";
 import { IcpTierBadge } from "@/components/Badge";
@@ -66,11 +67,14 @@ export default async function CompareScoringPage() {
         : null;
 
   const lastComplete = run?.completedAt ?? null;
+  const failedCount = new Set((run?.rows ?? []).filter((r) => r.outcome === "error").map((r) => r.subjectId)).size;
   const canApply = run !== null && lastComplete !== null && icp !== null;
   const lockedReason = !run
     ? "Locked until a comparison has run to the end."
     : !lastComplete
-      ? "Locked — the last comparison did not finish. Run it again to the end."
+      ? failedCount > 0
+        ? `Locked — ${failedCount} record${failedCount === 1 ? "" : "s"} could not be scored. Retry ${failedCount === 1 ? "it" : "them"} below; the rest are kept.`
+        : "Locked — the last comparison did not finish. Run it again to the end."
       : !icp
         ? "Locked — no ICP Definition is active."
         : null;
@@ -187,6 +191,7 @@ export default async function CompareScoringPage() {
             {errors.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-bad">Could not be scored</h3>
+                {!run.completedAt && <RetryFailedComparison runId={run.id} count={failedCount} />}
                 <ul className="mt-2 space-y-1 text-xs text-muted">
                   {errors.map((r) => (
                     <li key={r.id}>

@@ -144,6 +144,62 @@ export async function startComparisonJob(): Promise<LaunchResult> {
   });
 }
 
+// "Retry failed records": the records a finished-with-errors comparison could
+// not score (a dropped connection, an outage), scored again into the same
+// run. Nothing else in the run is touched. Once none is left in error the run
+// counts as finished and Apply unlocks — no need to re-score the rest.
+export async function startComparisonRetryJob(runId: string): Promise<LaunchResult> {
+  const run = await prisma.scoringComparisonRun.findUnique({
+    where: { id: runId },
+    select: { id: true, completedAt: true, estimatedUsd: true, subjects: true },
+  });
+  if (!run) return { ok: false, error: "That comparison run no longer exists." };
+  if (run.completedAt) return { ok: false, error: "That comparison already finished — there is nothing to retry." };
+  const failed = await prisma.scoringComparison.findMany({
+    where: { runId, outcome: "error" },
+    orderBy: { createdAt: "asc" },
+    select: { subjectKind: true, subjectId: true, clinicName: true },
+  });
+  // One item per record, however many times it failed before.
+  const seen = new Set<string>();
+  const items = failed.flatMap((f) => {
+    const key = `${f.subjectKind}:${f.subjectId}`;
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [{ id: f.subjectId, name: f.clinicName, kind: f.subjectKind }];
+  });
+  if (items.length === 0) return { ok: false, error: "No failed records in that comparison." };
+  const per = run.subjects > 0 ? run.estimatedUsd / run.subjects : 0;
+
+  return launchJob({
+    kind: "compare-scoring",
+    source: "compare-scoring",
+    verb: "Retrying",
+    href: "/discovery/compare",
+    items: items.map((i) => ({ ...i, estimateUsd: per })),
+    work: async (item) => {
+      // The old error row goes; the record's new row (a score, or a fresh
+      // error) takes its place.
+      await prisma.scoringComparison.deleteMany({
+        where: { runId, subjectKind: item.kind, subjectId: item.id, outcome: "error" },
+      });
+      const row = await compareOneSubject(runId, item.kind, item.id);
+      if (row.outcome === "error") return { outcome: "error", detail: row.reason ?? "Not scored." };
+      const score = row.newScore != null ? ` (${row.newScore})` : "";
+      return {
+        outcome: row.outcome === "unchanged" ? "ok" : "warn",
+        detail: `${COMPARISON_OUTCOME_LABELS[row.outcome]} · ${row.oldLabel} → ${row.newLabel}${score}`,
+      };
+    },
+    finish: async () => {
+      const result = await finishScoringComparison(runId);
+      if (result.complete) return `All ${result.subjects} scored — the comparison is finished and Apply is unlocked.`;
+      if (result.errors > 0) return `${result.errors} still failed. Retry them again, or run Compare from the start.`;
+      return `${result.scored} of ${result.subjects} scored — the run stopped before the end, so the rest were never scored. Run Compare from the start.`;
+    },
+  });
+}
+
 // ─── Process queue ─────────────────────────────────────────────────────────
 
 // selectedIds null is the whole pending queue; a list is exactly what was
