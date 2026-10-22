@@ -1709,3 +1709,68 @@ model JobRunItem {
 
   @@index([runId, seq])
 }
+
+// ─── Claude connector (remote MCP server) ──────────────────────────────────
+//
+// The OAuth 2.1 state behind /api/mcp: the clients that registered themselves
+// (dynamic client registration — claude.ai does this when Connect is clicked),
+// the one-use authorization codes the sign-in page hands back, and the tokens
+// those codes are exchanged for. Nothing secret is stored in the clear: codes,
+// tokens and client secrets are kept as SHA-256 hashes, so a copy of dev.db
+// is not a copy of anybody's access. Settings → Connectors deletes all three.
+
+model McpOAuthClient {
+  id String @id // the client_id handed out at registration
+
+  name         String
+  redirectUris String // JSON array of exact redirect URIs
+  // "none" for a public client using PKCE alone; otherwise the client was
+  // issued a secret and has to present it at the token endpoint.
+  authMethod   String  @default("none")
+  secretHash   String?
+
+  createdAt DateTime @default(now())
+
+  codes  McpOAuthCode[]
+  tokens McpOAuthToken[]
+}
+
+model McpOAuthCode {
+  codeHash String @id
+
+  clientId      String
+  client        McpOAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  scope         String
+  resource      String?
+  expiresAt     DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
+
+// One row per grant: the current access token and the refresh token that
+// replaces it. Refreshing rotates both, so an old refresh token stops working
+// the moment it has been used.
+model McpOAuthToken {
+  id String @id @default(cuid())
+
+  clientId         String
+  client           McpOAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  accessHash       String         @unique
+  refreshHash      String         @unique
+  scope            String
+  resource         String?
+  // Fingerprint of APP_PASSWORD at the time of sign-in, so changing the
+  // password cuts the connector off the same way it signs the browser out.
+  passwordTag      String
+  accessExpiresAt  DateTime
+  refreshExpiresAt DateTime
+  lastUsedAt       DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+}
