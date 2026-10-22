@@ -32,6 +32,7 @@
 // connector, which exposes a read-only subset of these by name.
 
 import { prisma } from "@/lib/prisma";
+import { NOT_SCORING_REJECTED } from "@/lib/liveLeadWhere";
 import {
   MESSAGE_MECHANISMS,
   MESSAGE_MECHANISM_LABELS,
@@ -73,7 +74,7 @@ import {
 } from "@/lib/storedBreakdown";
 import { IcpBreakdownV2, PAYMENT_MODEL_LABELS } from "@/lib/icpScoring";
 import { FIT_FLOOR, FIT_MAX } from "@/lib/icpWeights";
-import { leadBreakdownV2, leadScore, leadScoreText, leadTier } from "@/lib/leadScore";
+import { leadBreakdownV2, leadRuleVerdict, leadScore, leadScoreText, leadTier } from "@/lib/leadScore";
 import {
   HEALTH_ACTIONS,
   HEALTH_LABELS,
@@ -360,6 +361,14 @@ function body(text: string | null | undefined): string | null {
     : text;
 }
 
+// Set only on a lead flagged "Rejected by new scoring", which a lookup returns
+// only when asked to include them (or getLeadDetail, which is one named lead).
+function flaggedFields(lead: { scoringRejectedAt: Date | null; scoringRejectedReason: string | null }) {
+  return lead.scoringRejectedAt
+    ? { rejectedByNewScoring: true, rejectedByNewScoringReason: lead.scoringRejectedReason }
+    : {};
+}
+
 function tierLabel(tier: IcpTier | null): string {
   return tier === null ? "Not scored" : ICP_TIER_LABELS[tier];
 }
@@ -430,6 +439,7 @@ export async function getPipelineLeads(args: {
   tier?: string;
   stage?: string;
   offset?: number;
+  includeRejectedByNewScoring?: boolean;
 }): Promise<unknown> {
   const stage =
     args.stage && (LEAD_STAGES as readonly string[]).includes(args.stage)
@@ -442,10 +452,18 @@ export async function getPipelineLeads(args: {
         ? (args.tier as IcpTier)
         : null;
 
-  const leads = await prisma.lead.findMany({
-    where: { archived: false, ...(stage ? { stage } : {}) },
-    orderBy: { updatedAt: "desc" },
-  });
+  // Leads flagged "Rejected by new scoring" are out unless asked for, exactly
+  // as the app's default Pipeline view leaves them out.
+  const include = args.includeRejectedByNewScoring === true;
+  const [leads, hiddenFlagged] = await Promise.all([
+    prisma.lead.findMany({
+      where: { archived: false, ...(stage ? { stage } : {}), ...(include ? {} : NOT_SCORING_REJECTED) },
+      orderBy: { updatedAt: "desc" },
+    }),
+    include
+      ? Promise.resolve(0)
+      : prisma.lead.count({ where: { archived: false, ...(stage ? { stage } : {}), scoringRejectedAt: { not: null } } }),
+  ]);
 
   // Tier is computed from the scorecard rather than stored, so it is filtered
   // here rather than in the query — the same rule the pipeline table follows.
@@ -465,7 +483,9 @@ export async function getPipelineLeads(args: {
     filters: {
       tier: args.tier ?? "any",
       stage: stage ? stageLabel(stage) : "any",
+      rejectedByNewScoring: include ? "included" : "left out",
     },
+    ...(include ? {} : { leftOutRejectedByNewScoring: hiddenFlagged }),
     ...pageMeta(page.length, matching.length, LEADS_MAX, offset),
     // The whole filtered set, not this page of it. A page's own subtotal would
     // be a number nobody asked for and the model would quote it as the
@@ -481,9 +501,10 @@ export async function getPipelineLeads(args: {
         location: lead.location,
         stage: stageLabel(lead.stage),
         estValue: lead.estValue,
-        icpTier: tierLabel(tierNow),
+        icpTier: leadRuleVerdict(lead) ?? tierLabel(tierNow),
         icpScore: leadScoreText(lead),
-        icpAction: tierNow ? ICP_TIER_ACTIONS[tierNow] : null,
+        icpAction: leadRuleVerdict(lead) ? null : tierNow ? ICP_TIER_ACTIONS[tierNow] : null,
+        ...flaggedFields(lead),
         nextFollowUp: iso(lead.nextFollowUp),
         leadSource: lead.leadSource,
         enriched: lead.enrichedAt !== null,
@@ -561,8 +582,12 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
       // where the lead has one, and the old A–D answers where it does not.
       scoringModel: current?.model === "v2" ? "ICP model, out of 100" : "old A–D scorecard, out of 10",
       scored: current !== null,
-      tier: tierLabel(tier),
-      action: tier ? ICP_TIER_ACTIONS[tier] : null,
+      tier: leadRuleVerdict(lead) ?? tierLabel(tier),
+      action: leadRuleVerdict(lead) ? null : tier ? ICP_TIER_ACTIONS[tier] : null,
+      // Flagged by "Apply new scoring to existing records": hidden from the
+      // default Pipeline view and the lead lookups, but still this lead.
+      rejectedByNewScoring: lead.scoringRejectedAt !== null,
+      rejectedByNewScoringReason: lead.scoringRejectedReason,
       total: current?.total ?? null,
       maxScore: current?.max ?? ICP_MAX_SCORE,
       icpModelScorecard: v2 ? v2ForCopilot(v2) : null,
@@ -998,6 +1023,7 @@ export async function getFollowUpsDue(): Promise<unknown> {
     prisma.lead.findMany({
       where: {
         archived: false,
+        ...NOT_SCORING_REJECTED,
         nextFollowUp: { not: null, lte: horizon },
       },
       orderBy: { nextFollowUp: "asc" },
@@ -1265,7 +1291,7 @@ export async function getOutreachFunnel(): Promise<unknown> {
 
   const [openLeads, outreachLeads, contactedLeads, discoveryCalls] = await Promise.all([
     prisma.lead.findMany({
-      where: { archived: false, stage: { in: [...OPEN_STAGES] } },
+      where: { archived: false, stage: { in: [...OPEN_STAGES] }, ...NOT_SCORING_REJECTED },
     }),
     // Archived leads included on purpose: a request that went out three weeks
     // ago went out whatever happened to the lead since, and leaving them out
@@ -1281,6 +1307,7 @@ export async function getOutreachFunnel(): Promise<unknown> {
     prisma.lead.findMany({
       where: {
         stage: { in: [...CONTACTED_STAGES] },
+        ...NOT_SCORING_REJECTED,
         stageChangedAt: { gte: daysAgo(now, MESSAGES_WINDOW_DAYS * 2) },
       },
       select: { stageChangedAt: true },
@@ -2673,6 +2700,7 @@ function furthestStepSent(
 export async function searchLeads(args: {
   query?: string;
   connectionStatus?: string;
+  includeRejectedByNewScoring?: boolean;
 }): Promise<unknown> {
   const query = (args.query ?? "").trim();
 
@@ -2705,7 +2733,7 @@ export async function searchLeads(args: {
   // the same reason: they are converted or closed out, and a search that
   // surfaced them would answer "who are we working" with clinics nobody is.
   const leads = await prisma.lead.findMany({
-    where: { archived: false },
+    where: { archived: false, ...(args.includeRejectedByNewScoring === true ? {} : NOT_SCORING_REJECTED) },
     orderBy: { updatedAt: "desc" },
     include: {
       // Only what a step needs. The messages themselves are getLeadOutreachLog's
@@ -2781,8 +2809,9 @@ export async function searchLeads(args: {
         contactName: lead.contactName,
         location: lead.location,
         stage: stageLabel(lead.stage),
-        icpTier: tierLabel(tierNow),
+        icpTier: leadRuleVerdict(lead) ?? tierLabel(tierNow),
         icpScore: leadScoreText(lead),
+        ...flaggedFields(lead),
         // The sequence's gates, the same four instants getLeadOutreachLog
         // reports under `marks`. Acceptance is readable here so the common
         // follow-up question does not need a second call.
@@ -2986,7 +3015,7 @@ export async function auditLeadsForNonClinic(args: {
   // a converted client is not a lead to disqualify, and a closed-out one has
   // already been disqualified by somebody.
   const leads = await prisma.lead.findMany({
-    where: { archived: false },
+    where: { archived: false, ...NOT_SCORING_REJECTED },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -3326,6 +3355,7 @@ export async function runCopilotTool(
           // whichever it thought of. A value that is not a number at all is
           // dropped and the first page comes back, which the result says.
           offset: num(args.offset) ?? num(args.skip) ?? num(args.start),
+          includeRejectedByNewScoring: args.includeRejectedByNewScoring === true,
         }),
       };
     case "auditLeadsForNonClinic":
@@ -3350,6 +3380,7 @@ export async function runCopilotTool(
           // reason: an invalid value is answered by the lookup with the list
           // of valid ones, so nothing here needs to guard it.
           connectionStatus: str(args.connectionStatus) ?? str(args.status),
+          includeRejectedByNewScoring: args.includeRejectedByNewScoring === true,
         }),
       };
     case "getLeadDetail":

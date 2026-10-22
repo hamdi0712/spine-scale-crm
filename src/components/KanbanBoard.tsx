@@ -19,6 +19,9 @@ export interface KanbanLead {
   nextFollowUp: string | null;
   createdAt: string;
   icpTier: IcpTier | null;
+  // Set when the new model rejected it by a rule rather than its score:
+  // "80/100 · Rejected: chiro without a real program", shown in place of C-tier.
+  icpVerdict: string | null;
   // Carried for the table's LinkedIn link. The board cards deliberately do not
   // show it — a card is a thing to drag, not a launchpad.
   linkedinUrl: string | null;
@@ -147,9 +150,9 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                       ))}
                     </select>
                   </label>
-                  {lead.icpTier && (
+                  {(lead.icpTier || lead.icpVerdict) && (
                     <div className="mt-1.5">
-                      <IcpTierBadge tier={lead.icpTier} />
+                      <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />
                     </div>
                   )}
                   <div className="num mt-1.5 flex items-center justify-between text-xs text-muted">

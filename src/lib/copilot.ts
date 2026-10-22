@@ -333,7 +333,7 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
     function: {
       name: "getPipelineLeads",
       description:
-        "List the leads in the pipeline — clinic name, stage, ICP tier and score, estimated value, next follow-up date. Use for any question about the pipeline as a whole, about a group of leads, or to find a lead's id before calling getLeadDetail. Filter by tier or stage when the question names one. Archived leads (converted or closed out) are never included. It returns 60 leads per page and it pages: pass offset to get the rest, and the result tells you the total, whether more is waiting and the exact nextOffset to ask for. So a question asked of every lead in a tier is answerable — keep calling with the same filters and the next offset until nextOffset stops coming back, and do not state a total you have not paged to the end of. When the question names a particular clinic or contact, searchLeads is still the faster way there.",
+        "List the leads in the pipeline — clinic name, stage, ICP tier and score, estimated value, next follow-up date. Use for any question about the pipeline as a whole, about a group of leads, or to find a lead's id before calling getLeadDetail. Filter by tier or stage when the question names one. Archived leads (converted or closed out) are never included, and leads flagged 'Rejected by new scoring' are left out unless includeRejectedByNewScoring is true — the result says how many were left out. It returns 60 leads per page and it pages: pass offset to get the rest, and the result tells you the total, whether more is waiting and the exact nextOffset to ask for. So a question asked of every lead in a tier is answerable — keep calling with the same filters and the next offset until nextOffset stops coming back, and do not state a total you have not paged to the end of. When the question names a particular clinic or contact, searchLeads is still the faster way there.",
       parameters: {
         type: "object",
         properties: {
@@ -352,6 +352,11 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
             type: "number",
             description:
               "How many matching leads to skip before the page starts. Omit or 0 for the first 60, then pass the nextOffset the previous result gave you — 60, then 120, and so on — keeping tier and stage the same. The result says the total matching and stops returning nextOffset at the end of the list.",
+          },
+          includeRejectedByNewScoring: {
+            type: "boolean",
+            description:
+              "Also include leads flagged 'Rejected by new scoring'. They are hidden by default, exactly as the app's default Pipeline view hides them; pass true only when the question is about them.",
           },
         },
         required: [],
@@ -383,7 +388,7 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
     function: {
       name: "searchLeads",
       description:
-        "Find a lead by name, or list every lead at a given point on the connection. Takes part of a clinic name or a contact name (matched case-insensitively anywhere in the name), a connectionStatus filter, or both, and returns the leads it matches with their stage, ICP tier and score, whether the connection request was sent and accepted, whether a first message went out, whether they replied, and how far through the five-step outreach sequence they actually got. This is the direct way to a lead getPipelineLeads did not show you on its first page: that lookup pages 60 at a time, so a lead can be reached by paging to it, but a named clinic is one call away here instead of four. Use it whenever a question names a clinic or a person — it is faster than getPipelineLeads and it does not miss. connectionStatus is how you name the leads getOutreachFunnelSummary can only count: pass accepted_no_message for the leads that accepted the connection and never got a first message — the ones that said yes and then heard nothing — and they come back oldest acceptance first, with the days of silence on each. A name search returns at most 20; a connectionStatus filter with no name returns up to 60. Archived leads are not included.",
+        "Find a lead by name, or list every lead at a given point on the connection. Takes part of a clinic name or a contact name (matched case-insensitively anywhere in the name), a connectionStatus filter, or both, and returns the leads it matches with their stage, ICP tier and score, whether the connection request was sent and accepted, whether a first message went out, whether they replied, and how far through the five-step outreach sequence they actually got. This is the direct way to a lead getPipelineLeads did not show you on its first page: that lookup pages 60 at a time, so a lead can be reached by paging to it, but a named clinic is one call away here instead of four. Use it whenever a question names a clinic or a person — it is faster than getPipelineLeads and it does not miss. connectionStatus is how you name the leads getOutreachFunnelSummary can only count: pass accepted_no_message for the leads that accepted the connection and never got a first message — the ones that said yes and then heard nothing — and they come back oldest acceptance first, with the days of silence on each. A name search returns at most 20; a connectionStatus filter with no name returns up to 60. Archived leads are not included, and leads flagged 'Rejected by new scoring' are left out unless includeRejectedByNewScoring is true.",
       parameters: {
         type: "object",
         properties: {
@@ -402,6 +407,11 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
             ],
             description:
               "Where the lead stands on the connection. not_sent — no connection request marked sent. sent_no_reply — request sent, acceptance not marked. accepted — accepted, whatever happened after, including the ones a first message did go out to. accepted_no_message — accepted and no first message marked sent, i.e. the leads that said yes and then heard nothing; this is the subset of accepted worth asking for when the question is about follow-through. Optional; combine with query to ask the question about one clinic.",
+          },
+          includeRejectedByNewScoring: {
+            type: "boolean",
+            description:
+              "Also include leads flagged 'Rejected by new scoring'. They are hidden by default, exactly as the app's default Pipeline view hides them; pass true only when the question is about them.",
           },
         },
         required: [],

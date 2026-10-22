@@ -11,6 +11,7 @@
 // rendered as text and nothing else, and a source that is a URL is a plain
 // outbound link marked nofollow.
 
+import { ruleVerdictLabel } from "@/lib/leadScore";
 import {
   CRITERION_SOURCE_LABELS,
   Citation,
@@ -163,7 +164,7 @@ export function IcpBreakdownV2Header({ breakdown }: { breakdown: IcpBreakdownV2 
           </span>
           <span className="num text-sm text-muted">/ {V2_MAX_SCORE}</span>
         </span>
-        <IcpTierBadge tier={breakdown.tier} tooltip={false} />
+        <IcpTierBadge tier={breakdown.tier} tooltip={false} verdict={ruleVerdictLabel(breakdown)} />
       </div>
     </div>
   );

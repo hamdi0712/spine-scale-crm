@@ -94,6 +94,8 @@ export interface DiscoveryRow {
   // What icpTotal is out of — 10 under the old model, 100 under the ICP model.
   scoreMax: number;
   icpTier: IcpTier | null;
+  // A rule rejection under the new model, shown in place of C-tier.
+  icpVerdict: string | null;
   // Whichever sentence applies to this row's status, already chosen on the
   // server — the list shows one line of "why" and links to the rest.
   reason: string | null;
@@ -690,8 +692,8 @@ export default function DiscoveryList({
                     <DiscoveryStatusBadge status={row.status} />
                   </td>
                   <td className="td">
-                    {row.icpTier ? (
-                      <IcpTierBadge tier={row.icpTier} />
+                    {row.icpTier || row.icpVerdict ? (
+                      <IcpTierBadge tier={row.icpTier} verdict={row.icpVerdict} />
                     ) : (
                       <span className="text-muted">—</span>
                     )}

@@ -47,3 +47,35 @@ export function leadScoreText(lead: LeadScoreInput): string | null {
   const score = leadScore(lead);
   return score ? `${score.total} of ${score.max}` : null;
 }
+
+// When the new model rejected a clinic by a rule rather than by its score —
+// chiro without a real program, or short of the fit floor — its tier is C
+// whatever it scored, and "C-tier" beside 80/100 reads as a contradiction.
+// This is what to show instead. Null for every other case, including a plain
+// below-the-bar C and a disqualification (which has its own tier).
+export function ruleVerdictLabel(b: IcpBreakdownV2 | null | undefined): string | null {
+  if (!b || b.tier !== "C") return null;
+  switch (b.verdict.kind) {
+    case "chiro_no_program":
+      return "Rejected: chiro without a real program";
+    case "not_a_fit":
+      return "Rejected: not a confirmed fit";
+    case "insufficient_evidence":
+      return "Not enough evidence";
+    default:
+      return null;
+  }
+}
+
+export function leadRuleVerdict(lead: { icpBreakdown: string | null }): string | null {
+  return ruleVerdictLabel(leadBreakdownV2(lead));
+}
+
+// The badge text for a rule rejection, score first: "80/100 · Rejected: chiro
+// without a real program". Null when the tier badge should show as usual.
+export function leadVerdictBadge(lead: LeadScoreInput): string | null {
+  const verdict = leadRuleVerdict(lead);
+  if (!verdict) return null;
+  const score = leadScore(lead);
+  return score ? `${score.total}/${score.max} · ${verdict}` : verdict;
+}

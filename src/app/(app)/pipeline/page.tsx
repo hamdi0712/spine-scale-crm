@@ -2,7 +2,7 @@ import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PIPELINE_DEFAULT_WHERE, PIPELINE_SCORING_REJECTED_WHERE } from "@/lib/liveLeadWhere";
-import { leadTier } from "@/lib/leadScore";
+import { leadTier, leadVerdictBadge } from "@/lib/leadScore";
 import { FIRST_MESSAGE_MECHANISMS } from "@/lib/outreachSequence";
 import { openerComparison } from "@/lib/outreachSequenceRead";
 import { setMessageMechanism } from "@/lib/actions/outreachSequence";
@@ -93,6 +93,7 @@ export default async function PipelinePage({
       : null,
     // Derived here so the board and table stay presentational.
     icpTier: leadTier(l),
+    icpVerdict: leadVerdictBadge(l),
   }));
 
   return (
