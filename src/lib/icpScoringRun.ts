@@ -76,7 +76,9 @@ export async function scoreWithIcp({
 
   const precheck = precheckGaps(evidence.websiteNotes);
   const { system, user } = buildScoringPrompt(evidence, icp, precheck);
-  const reply = await deepSeekJson({ system, user, maxTokens: SCORING_MAX_TOKENS });
+  // A dropped connection or a timeout is tried twice more before the record
+  // is marked failed.
+  const reply = await deepSeekJson({ system, user, maxTokens: SCORING_MAX_TOKENS, networkRetries: 2 });
   if (!reply.ok) return { ok: false, failure: "model", reason: reply.error };
 
   const parsed = parseScoringReply(reply.content);

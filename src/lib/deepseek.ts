@@ -40,7 +40,8 @@ import { getDeepseekApiKey } from "@/lib/appSecretsStore";
 // setting somebody can move without re-reading the prompt.
 export const DEEPSEEK_MODEL = "deepseek-v4-flash";
 
-const API_URL = "https://api.deepseek.com/chat/completions";
+// Overridable only so tools/verify-compare-retry.ts can point it at a local fake.
+const API_URL = process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/chat/completions";
 
 // A scorecard suggestion is a paragraph and three short reasons. This is a
 // ceiling against a runaway generation, not a target — an answer that needs
@@ -77,10 +78,17 @@ export async function deepSeekJson({
   maxTokens = MAX_OUTPUT_TOKENS,
   timeoutMs,
   temperature,
+  networkRetries = 0,
 }: {
   system: string;
   user: string;
   maxTokens?: number;
+  // How many more times to try when the request never got an answer — it
+  // could not connect, or it timed out — waiting a few seconds between tries.
+  // Anything DeepSeek actually answered (an error, a refusal, a bad key) is
+  // not retried. The scoring call sets 2: one dropped connection in a
+  // 600-record Compare run is not a reason to fail that record.
+  networkRetries?: number;
   // Above the default zero, for the one caller that wants a different answer
   // to the same question on two different days rather than the same one twice.
   // Everything that scores or extracts leaves this alone — see the note on
@@ -92,7 +100,8 @@ export async function deepSeekJson({
   // show the moment it gives up.
   timeoutMs?: number;
 }): Promise<DeepSeekResult> {
-  const reply = await postChat(
+  const reply = await postChatRetrying(
+    networkRetries,
     {
       // The reply is read by code, so it is pinned to an object rather than
       // hoped to be one. The prompt still states the shape — this only
@@ -278,7 +287,26 @@ interface Choice {
   finish_reason?: unknown;
 }
 
-type PostResult = { ok: true; choice: Choice } | { ok: false; error: string };
+type PostResult = { ok: true; choice: Choice } | { ok: false; error: string; network?: boolean };
+
+// The pause before each retry of a request that got no answer: 3s, then 6s.
+const NETWORK_RETRY_MS = Number(process.env.DEEPSEEK_RETRY_MS) || 3_000;
+
+async function postChatRetrying(
+  retries: number,
+  body: Record<string, unknown>,
+  timeoutMs?: number,
+): Promise<PostResult> {
+  let reply = await postChat(body, timeoutMs);
+  for (let attempt = 1; attempt <= retries && !reply.ok && reply.network; attempt++) {
+    await new Promise((r) => setTimeout(r, NETWORK_RETRY_MS * attempt));
+    reply = await postChat(body, timeoutMs);
+  }
+  if (!reply.ok && reply.network && retries > 0) {
+    return { ...reply, error: `${reply.error} (tried ${retries + 1} times)` };
+  }
+  return reply;
+}
 
 // One POST, and every way it can fail turned into a sentence. What it does not
 // do is read the answer: whether an empty content or a truncated one is a
@@ -339,6 +367,7 @@ async function postChat(
     ) {
       return {
         ok: false,
+        network: true,
         error: `DeepSeek did not answer within ${Math.round(
           timeoutMs / 1000,
         )} seconds and the request was given up on. Try again.`,
@@ -346,6 +375,7 @@ async function postChat(
     }
     return {
       ok: false,
+      network: true,
       error:
         "Could not reach DeepSeek. Check the server's network connection and try again.",
     };
