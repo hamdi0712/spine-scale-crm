@@ -40,6 +40,7 @@ async function main(): Promise<void> {
   }
 
   // ─── Seed ────────────────────────────────────────────────────────────────
+
   await prisma.scoringApplicationItem.deleteMany();
   await prisma.scoringApplication.deleteMany();
   await prisma.scoringComparisonRun.deleteMany();
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
   const lCall = await lead("Oak Spine (call logged)");
   await prisma.call.create({ data: { leadId: lCall.id, type: "DISCOVERY", status: "COMPLETED", scheduledAt: new Date("2026-10-02") } });
   const lLost = await lead("Birch Clinic (lost)", { stage: "LOST" });
-  await lead("Maple Health (unchanged)");
+  const lMaple = await lead("Maple Health (unchanged)");
   const lMessaged = await lead("Aspen Chiro (messaged 5 days ago)", { stage: "CONTACTED" });
   await prisma.outreachMessage.create({
     data: { leadId: lMessaged.id, step: "FIRST_MESSAGE", content: "Thanks for connecting.", sentAt: new Date(Date.now() - 5 * 86_400_000) },
@@ -87,11 +88,31 @@ async function main(): Promise<void> {
   const cPeak = await candidate("Peak Spine (promoted, now rejected)", "PROMOTED", { promotedLeadId: lPromoted.id });
   const cHarbor = await candidate("Harbor Wellness (has a reply)", "PROMOTED", { promotedLeadId: lReplied.id });
   const cStale = await candidate("Pine Back Care (promoted by hand since)", "REJECTED");
-  await candidate("Elm Chiro (unchanged)", "REJECTED");
+  const cElm = await candidate("Elm Chiro (unchanged)", "REJECTED");
 
   const run = await prisma.scoringComparisonRun.create({
-    data: { icpName: "Primary ICP", threshold: 60, subjects: 12, estimatedUsd: 0, startedAt: new Date(Date.now() - 60_000), completedAt: new Date(Date.now() - 30_000) },
+    data: { icpName: "Primary ICP", threshold: 60, subjects: 12, estimatedUsd: 0, startedAt: new Date(), completedAt: new Date() },
   });
+  // A new-model breakdown per row, as Compare stores one: rejected on a cited
+  // non-fit (so it stays a rejection when Apply re-judges it), or promoted.
+  const { buildBreakdownV2, serializeBreakdownV2, finish } = await import("../src/lib/icpScoring");
+  const { loadActiveIcp } = await import("../src/lib/icpDefinitionStore");
+  const icpForRows = (await loadActiveIcp())!;
+  const breakdownFor = (clinicName: string, promoted: boolean) => {
+    const base = buildBreakdownV2({
+      icp: icpForRows,
+      evidence: { clinicName, websiteNotes: "https://r.test/\nFamily chiropractic care.", websiteUrl: "https://r.test/", metaAdsSignal: null, reviewCount: null } as never,
+      reply: null, precheck: null, threshold: 60, evidenceLabels: [], notes: [], now: new Date(),
+    });
+    const fit = base.fit.map((e) =>
+      promoted
+        ? { ...e, points: e.max, citations: [{ quote: "Family chiropractic care.", source: "https://r.test/" }], source: "assist" as const }
+        : e.key === "service"
+          ? { ...e, points: 0, citations: [{ quote: "Family chiropractic care.", source: "https://r.test/" }], source: "assist" as const }
+          : e,
+    );
+    return serializeBreakdownV2(finish({ ...base, fit, primaryService: { ...base.primaryService, chiropractic: false } }, 60));
+  };
   // Rows written exactly as Compare scoring writes them: the old standing as
   // its display label, with its score and tier, read off the record.
   const { candidateStanding, leadStanding, LEAD_SCORE_SELECT } = await import("../src/lib/scoringComparisonStore");
@@ -101,9 +122,16 @@ async function main(): Promise<void> {
         ? candidateStanding(await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: subjectId } }))
         : leadStanding(await prisma.lead.findUniqueOrThrow({ where: { id: subjectId }, select: LEAD_SCORE_SELECT }));
     return prisma.scoringComparison.create({
-      data: { runId: run.id, subjectKind, subjectId, clinicName, oldStatus: old.label, oldScore: old.score, oldMax: old.max, oldTier: old.tier, newStatus, outcome, flipReason, newScore: newStatus === "PROMOTED" ? 78 : 41, newTier: newStatus === "PROMOTED" ? "B" : "C" },
+      data: {
+        runId: run.id, subjectKind, subjectId, clinicName, oldStatus: old.label, oldScore: old.score, oldMax: old.max, oldTier: old.tier, newStatus, outcome, flipReason,
+        newScore: newStatus === "PROMOTED" ? 78 : 41, newTier: newStatus === "PROMOTED" ? "B" : "C",
+        // No breakdown where Compare could not score the record at all.
+        breakdown: newStatus === "FAILED" ? null : breakdownFor(clinicName, newStatus === "PROMOTED"),
+      },
     });
   };
+  await row("lead", lMaple.id, lMaple.clinicName, "PROMOTED", "PROMOTED", "unchanged", null);
+  await row("candidate", cElm.id, cElm.clinicName, "REJECTED", "REJECTED", "unchanged", null);
   await row("candidate", cNew1.id, cNew1.clinicName, "REJECTED", "PROMOTED", "newly_promoted", null);
   await row("candidate", cNew2.id, cNew2.clinicName, "REJECTED", "PROMOTED", "newly_promoted", null);
   await row("candidate", cRej.id, cRej.clinicName, "PROMOTED", "REJECTED", "newly_rejected", "Not a confirmed fit: no core service found.");
@@ -166,6 +194,12 @@ async function main(): Promise<void> {
 
   // ─── Round 1: apply, revert ──────────────────────────────────────────────
   console.log("\nRound 1 — apply, then revert untouched");
+  // A lead added after the comparison ran: not in it, keeps its score.
+  await new Promise((r) => setTimeout(r, 20));
+  const lLate = await lead("Late Lead (added after the comparison)");
+  const { leadScore } = await import("../src/lib/leadScore");
+  const scoreOf = async (id: string) => leadScore(await prisma.lead.findUniqueOrThrow({ where: { id } }));
+
   const before = await counts();
   const planned = await planApplication();
   if (!planned.ok) throw new Error(planned.error);
@@ -190,9 +224,33 @@ async function main(): Promise<void> {
   check("a write that changes no scoring or status field is not stale", !p.stale.some((e) => e.id === cNew2.id || e.id === lContacted.id));
   check("1 stale of 11 is not over 10%, so no warning", !p.staleWarning);
 
+  console.log(`  Re-score: ${p.rescoreUnchanged} unchanged, ${p.rescoreOther} other, ${p.rescoreSkipped} keep their score, ${p.leadsAddedSince} added since`);
+  check("confirm screen: 2 unchanged records will be re-scored", p.rescoreUnchanged === 2, `${p.rescoreUnchanged}`);
+  check("confirm screen: 1 lead added after the comparison ran", p.leadsAddedSince === 1, `${p.leadsAddedSince}`);
+  const mapleBefore = await scoreOf(lMaple.id);
+  const elmBefore = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: cElm.id } });
+  const lateBefore = await scoreOf(lLate.id);
+
   const applied = await applyScoring();
   if (!applied.ok) throw new Error(applied.error);
   const after = await counts();
+
+  const mapleAfter = await scoreOf(lMaple.id);
+  const elmAfter = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: cElm.id } });
+  check("an unchanged lead now carries the new scorecard (out of 100), stage untouched",
+    mapleBefore?.model === "v1" && mapleAfter?.model === "v2" && mapleAfter.max === 100 &&
+      (await prisma.lead.findUniqueOrThrow({ where: { id: lMaple.id } })).stage === "NEW",
+    `${mapleBefore?.total}/${mapleBefore?.max} → ${mapleAfter?.total}/${mapleAfter?.max}`);
+  check("an unchanged candidate is re-scored, its status untouched",
+    elmAfter.scoringModel === "v2" && elmAfter.icpBreakdown !== null && elmAfter.status === elmBefore.status && elmBefore.scoringModel === "v1",
+    `${elmBefore.icpTotal} (v1) → ${elmAfter.icpTotal} (v2), still ${elmAfter.status}`);
+  // Every lead in the comparison the comparison could score: none left on 0–10.
+  const scorable = [lMaple, lPromoted, lReplied, lContacted, lDiscovery, lCall, lLost, lMessaged, lThinOld];
+  const stillOld = [];
+  for (const l of scorable) if ((await scoreOf(l.id))?.model !== "v2") stillOld.push(l.clinicName);
+  check("no lead in the comparison still shows an old 0–10 score", stillOld.length === 0, stillOld.join(", "));
+  check("the lead the comparison could not score keeps its score", (await scoreOf(lFailed.id))?.model === "v1");
+  check("the lead added after the comparison keeps its score", JSON.stringify(await scoreOf(lLate.id)) === JSON.stringify(lateBefore));
   check("a second apply is refused while one is active", !(await applyScoring()).ok);
   check("the reply lead is untouched", (await prisma.lead.findUniqueOrThrow({ where: { id: lReplied.id } })).scoringRejectedAt === null);
   const reverted = await revertScoring(applied.applicationId);
@@ -202,6 +260,12 @@ async function main(): Promise<void> {
   check("after revert equals before, exactly", same(before, afterRevert));
   check("revert kept nothing back", reverted.kept.length === 0, JSON.stringify(reverted.kept));
   check("both leads the apply created were deleted", reverted.deletedLeads === 2);
+  check("revert restores the old 0–10 score on the unchanged lead", JSON.stringify(await scoreOf(lMaple.id)) === JSON.stringify(mapleBefore));
+  const elmReverted = await prisma.discoveryCandidate.findUniqueOrThrow({ where: { id: cElm.id } });
+  check("…and on the unchanged candidate", elmReverted.scoringModel === "v1" && elmReverted.icpTotal === elmBefore.icpTotal && elmReverted.icpBreakdown === elmBefore.icpBreakdown);
+  const flaggedLeadsOld = [];
+  for (const l of [lPromoted, lContacted, lLost]) if ((await scoreOf(l.id))?.model !== "v1") flaggedLeadsOld.push(l.clinicName);
+  check("…and on the leads that were flagged and re-scored", flaggedLeadsOld.length === 0, flaggedLeadsOld.join(", "));
 
   // ─── Round 2: re-apply, work on a created lead, revert ───────────────────
   console.log("\nRound 2 — re-apply the same comparison, message a lead it created, revert");
@@ -228,7 +292,7 @@ async function main(): Promise<void> {
   const diff = (Object.keys(before) as (keyof Counts)[]).filter((k) => before[k] !== afterRevert2[k]);
   check(
     "every other number is back to before — only the kept lead's own counts differ",
-    diff.every((k) => ["Pipeline value", "Outreach queue", "Today's focus leads", "Pipeline (default view)", "Candidates promoted", "Candidates rejected"].includes(k)) &&
+    diff.every((k) => ["Qualified leads", "Pipeline value", "Outreach queue", "Today's focus leads", "Pipeline (default view)", "Candidates promoted", "Candidates rejected"].includes(k)) &&
       afterRevert2["Pipeline (default view)"] === before["Pipeline (default view)"] + 1 &&
       afterRevert2["Candidates promoted"] === before["Candidates promoted"] + 1,
     diff.join(", "),

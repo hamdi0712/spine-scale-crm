@@ -31,7 +31,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { promoteWithin } from "@/lib/promoteLead";
-import { finish, parseBreakdownV2 } from "@/lib/icpScoring";
+import { finish, parseBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { OldStanding } from "@/lib/scoringComparison";
 import { LEAD_SCORE_SELECT, candidateStanding, leadStanding } from "@/lib/scoringComparisonStore";
 import { loadPipelineSettings, savePipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -76,6 +76,20 @@ export interface FlagEntry extends PlanEntry {
   leadId: string;
 }
 
+// A record that gets the new-model scorecard (score out of 100, tier and
+// breakdown) and nothing else: no status, no stage. Every subject of the
+// comparison the apply does not already score — unchanged ones, and the
+// flagged, protected, kept and not-enough-evidence ones — so no lead in the
+// comparison is left showing an old 0–10 score.
+export interface RescoreEntry {
+  kind: "candidate" | "lead";
+  id: string;
+  clinicName: string;
+  breakdown: string;
+  score: number;
+  tier: string;
+}
+
 export interface ApplicationPlan {
   runId: string;
   runCompletedAt: Date;
@@ -86,6 +100,18 @@ export interface ApplicationPlan {
   // Missed the fit floor only because nothing was found. Left exactly as they
   // are: not rejected, not flagged. Re-crawl and re-run Compare to judge them.
   insufficient: PlanEntry[];
+  rescore: RescoreEntry[];
+  // How many comparison records the rescore covers: "unchanged" ones, and the
+  // rest (flagged, protected, kept, not enough evidence). A candidate and its
+  // Pipeline lead are one record.
+  rescoreUnchanged: number;
+  rescoreOther: number;
+  // Comparison records that keep their old score: changed since the
+  // comparison ran, or never scored by it (no evidence at all).
+  rescoreSkipped: number;
+  // Leads added after the comparison ran: not in it, so they keep whatever
+  // score they have.
+  leadsAddedSince: number;
   // Leads un-flagged by hand ("Un-flag (keep this lead)"): never flagged again.
   kept: PlanEntry[];
   stale: StaleEntry[];
@@ -165,6 +191,26 @@ function describeChange(c: StaleChange): string {
   return `${c.field}: ${c.compared} → ${c.current}`;
 }
 
+// Whether a comparison subject changed since the run read it, by the same
+// test the stale check uses. Deleted counts as changed.
+async function changedSinceComparison(
+  row: { subjectKind: string; subjectId: string; oldStatus: string; oldScore: number | null; oldTier: string | null },
+  runStartedAt: Date,
+): Promise<boolean> {
+  if (row.subjectKind === "lead") {
+    const lead = await prisma.lead.findUnique({
+      where: { id: row.subjectId },
+      select: { ...LEAD_SCORE_SELECT, enrichedAt: true, updatedAt: true },
+    });
+    return !lead || changesSince(row, runStartedAt, leadStanding(lead), lead.enrichedAt, lead.updatedAt, null).length > 0;
+  }
+  const c = await prisma.discoveryCandidate.findUnique({
+    where: { id: row.subjectId },
+    select: { status: true, icpTotal: true, icpTier: true, scoringModel: true, disqualifiedReason: true, enrichedAt: true, updatedAt: true },
+  });
+  return !c || changesSince(row, runStartedAt, candidateStanding(c), c.enrichedAt, c.updatedAt, c.status).length > 0;
+}
+
 export async function latestFinishedRun() {
   return prisma.scoringComparisonRun.findFirst({
     where: { completedAt: { not: null } },
@@ -181,7 +227,7 @@ export async function planApplication(): Promise<PlanResult> {
     return { ok: false, error: "There is no finished Compare scoring run. Run one to the end first — this applies its results." };
   }
   const rows = await prisma.scoringComparison.findMany({
-    where: { runId: run.id, outcome: { in: ["newly_promoted", "newly_rejected", "newly_failed"] } },
+    where: { runId: run.id },
     orderBy: { createdAt: "asc" },
   });
   const recentlyMessaged = new Set(
@@ -202,13 +248,18 @@ export async function planApplication(): Promise<PlanResult> {
     flag: [],
     protectedLeads: [],
     insufficient: [],
+    rescore: [],
+    rescoreUnchanged: 0,
+    rescoreOther: 0,
+    rescoreSkipped: 0,
+    leadsAddedSince: await prisma.lead.count({ where: { createdAt: { gt: run.startedAt } } }),
     kept: [],
     stale: [],
     staleShare: 0,
     staleWarning: false,
   };
 
-  const flagOrProtect = (lead: GuardLead, reason: string, kind: "candidate" | "lead", subjectId: string) => {
+  const flagOrProtect = (lead: GuardLead, reason: string, kind: "candidate" | "lead", subjectId: string): boolean => {
     // Un-flagged by hand: a manual override no apply reverses.
     if (lead.scoringKeptAt) {
       plan.kept.push({
@@ -217,7 +268,7 @@ export async function planApplication(): Promise<PlanResult> {
         clinicName: lead.clinicName,
         reason: `you un-flagged it on ${lead.scoringKeptAt.toISOString().slice(0, 10)}. New scoring would reject it: ${reason}`,
       });
-      return;
+      return true;
     }
     if (lead.scoringRejectedAt) {
       plan.stale.push({
@@ -227,20 +278,64 @@ export async function planApplication(): Promise<PlanResult> {
         reason: "already flagged by new scoring",
         changes: [{ field: "Rejected by new scoring", compared: "not flagged", current: "flagged", at: lead.scoringRejectedAt.toISOString() }],
       });
-      return;
+      return false;
     }
     const guard = protectionReason(lead, recentlyMessaged);
     if (guard) {
       plan.protectedLeads.push({ kind: "lead", id: lead.id, clinicName: lead.clinicName, reason: `${guard}. New scoring would reject it: ${reason}` });
-      return;
+      return true;
     }
     plan.flag.push({ kind, id: subjectId, leadId: lead.id, clinicName: lead.clinicName, reason });
+    return true;
+  };
+
+  // The new scorecard onto a comparison subject and, for a candidate, onto
+  // the Pipeline lead it became.
+  const addRescore = async (
+    row: { subjectKind: string; subjectId: string; clinicName: string },
+    b: ReturnType<typeof finish> | null,
+    group: "unchanged" | "other",
+    linkedLeadId?: string | null,
+  ) => {
+    if (!b) {
+      plan.rescoreSkipped++;
+      return;
+    }
+    const entry = { clinicName: row.clinicName, breakdown: serializeBreakdownV2(b), score: b.total, tier: b.tier };
+    plan.rescore.push({ kind: row.subjectKind === "lead" ? "lead" : "candidate", id: row.subjectId, ...entry });
+    if (row.subjectKind !== "lead") {
+      const leadId =
+        linkedLeadId !== undefined
+          ? linkedLeadId
+          : (await prisma.discoveryCandidate.findUnique({ where: { id: row.subjectId }, select: { promotedLeadId: true } }))?.promotedLeadId ?? null;
+      if (leadId) plan.rescore.push({ kind: "lead", id: leadId, ...entry });
+    }
+    if (group === "unchanged") plan.rescoreUnchanged++;
+    else plan.rescoreOther++;
   };
 
   const stale = (kind: "candidate" | "lead", id: string, clinicName: string, changes: StaleChange[]) =>
     plan.stale.push({ kind, id, clinicName, changes, reason: changes.map(describeChange).join("; ") });
 
   for (const row of rows) {
+    // The stored breakdown re-judged under the current verdict rules (no
+    // model call — finish() only re-totals and re-decides), so a comparison
+    // run before the thin-evidence rule cannot flag a thin-evidence record.
+    const stored = parseBreakdownV2(row.breakdown);
+    const breakdown = stored ? finish(stored, stored.verdict.threshold) : null;
+
+    // Unchanged: same outcome under both models. Re-scored only, and only
+    // while the record still reads as the comparison saw it.
+    if (row.outcome === "unchanged") {
+      if (await changedSinceComparison(row, run.startedAt)) {
+        plan.rescoreSkipped++;
+        continue;
+      }
+      await addRescore(row, breakdown, "unchanged");
+      continue;
+    }
+    if (row.outcome !== "newly_promoted" && row.outcome !== "newly_rejected" && row.outcome !== "newly_failed") continue;
+
     if (row.outcome === "newly_failed") {
       plan.insufficient.push({
         kind: row.subjectKind === "lead" ? "lead" : "candidate",
@@ -248,13 +343,10 @@ export async function planApplication(): Promise<PlanResult> {
         clinicName: row.clinicName,
         reason: `${row.oldStatus} today. ${row.flipReason ?? "Not enough evidence to judge."}`,
       });
+      if (await changedSinceComparison(row, run.startedAt)) plan.rescoreSkipped++;
+      else await addRescore(row, breakdown, "other");
       continue;
     }
-    // The stored breakdown re-judged under the current verdict rules (no
-    // model call — finish() only re-totals and re-decides), so a comparison
-    // run before the thin-evidence rule cannot flag a thin-evidence record.
-    const stored = parseBreakdownV2(row.breakdown);
-    const breakdown = stored ? finish(stored, stored.verdict.threshold) : null;
     if (row.outcome === "newly_rejected" && breakdown?.verdict.status === "INSUFFICIENT") {
       plan.insufficient.push({
         kind: row.subjectKind === "lead" ? "lead" : "candidate",
@@ -262,6 +354,8 @@ export async function planApplication(): Promise<PlanResult> {
         clinicName: row.clinicName,
         reason: `${row.oldStatus} today. ${breakdown.verdict.reason}`,
       });
+      if (await changedSinceComparison(row, run.startedAt)) plan.rescoreSkipped++;
+      else await addRescore(row, breakdown, "other");
       continue;
     }
     if (row.subjectKind === "candidate") {
@@ -303,7 +397,11 @@ export async function planApplication(): Promise<PlanResult> {
       }
       const reason = verdictReason(row, "Rejected by new scoring.");
       if (c.promotedLead) {
-        flagOrProtect(c.promotedLead, reason, "candidate", c.id);
+        if (flagOrProtect(c.promotedLead, reason, "candidate", c.id)) {
+          await addRescore(row, breakdown, "other", c.promotedLead.id);
+        } else {
+          plan.rescoreSkipped++;
+        }
       } else {
         plan.reject.push({ kind: "candidate", id: c.id, clinicName: c.clinicName, reason, breakdown: row.breakdown, score: row.newScore, tier: row.newTier });
       }
@@ -324,7 +422,11 @@ export async function planApplication(): Promise<PlanResult> {
       stale("lead", lead.id, lead.clinicName, changes);
       continue;
     }
-    flagOrProtect(lead, verdictReason(row, "Rejected by new scoring."), "lead", lead.id);
+    if (flagOrProtect(lead, verdictReason(row, "Rejected by new scoring."), "lead", lead.id)) {
+      await addRescore(row, breakdown, "other");
+    } else {
+      plan.rescoreSkipped++;
+    }
   }
 
   const considered = plan.promote.length + plan.reject.length + plan.flag.length + plan.protectedLeads.length + plan.stale.length;
@@ -348,6 +450,10 @@ const CANDIDATE_FIELDS = [
 ] as const;
 
 const LEAD_FIELDS = ["stage", "scoringRejectedAt", "scoringRejectedReason", "scoringApplicationId"] as const;
+
+// What a re-score writes, and all a revert of one compares and restores.
+const CANDIDATE_SCORE_FIELDS = ["icpTotal", "icpTier", "icpBreakdown", "scoringModel"] as const;
+const LEAD_SCORE_FIELDS = ["icpBreakdown", "icpBreakdownAt"] as const;
 
 type Snapshot = Record<string, unknown>;
 
@@ -405,6 +511,49 @@ export async function applyScoring(now = new Date()): Promise<ApplyResult> {
           staleList: JSON.stringify(plan.stale),
         },
       });
+
+      // Re-scores first: the flag written below on some of the same leads
+      // is then the last write, which is what its revert checks against.
+      for (const r of plan.rescore) {
+        if (r.kind === "candidate") {
+          const before = await tx.discoveryCandidate.findUniqueOrThrow({ where: { id: r.id } });
+          const after = await tx.discoveryCandidate.update({
+            where: { id: r.id },
+            data: { icpTotal: r.score, icpTier: r.tier, icpBreakdown: r.breakdown, scoringModel: "v2" },
+          });
+          await tx.scoringApplicationItem.create({
+            data: {
+              applicationId: app.id,
+              subjectKind: "candidate",
+              subjectId: r.id,
+              clinicName: r.clinicName,
+              action: "rescored",
+              before: JSON.stringify(pick(before, CANDIDATE_SCORE_FIELDS)),
+              after: JSON.stringify(pick(after, CANDIDATE_SCORE_FIELDS)),
+              afterUpdatedAt: after.updatedAt,
+            },
+          });
+        } else {
+          const before = await tx.lead.findUnique({ where: { id: r.id } });
+          if (!before) continue;
+          const after = await tx.lead.update({
+            where: { id: r.id },
+            data: { icpBreakdown: r.breakdown, icpBreakdownAt: now },
+          });
+          await tx.scoringApplicationItem.create({
+            data: {
+              applicationId: app.id,
+              subjectKind: "lead",
+              subjectId: r.id,
+              clinicName: r.clinicName,
+              action: "rescored",
+              before: JSON.stringify(pick(before, LEAD_SCORE_FIELDS)),
+              after: JSON.stringify(pick(after, LEAD_SCORE_FIELDS)),
+              afterUpdatedAt: after.updatedAt,
+            },
+          });
+        }
+      }
 
       for (const p of plan.promote) {
         const before = await tx.discoveryCandidate.findUniqueOrThrow({ where: { id: p.id } });
@@ -548,9 +697,43 @@ export async function revertScoring(applicationId: string): Promise<RevertResult
 
   await prisma.$transaction(
     async (tx) => {
-      for (const item of app.items) {
+      // Promotions, rejections and flags first; re-scores last, so the
+      // score restored on a lead is not mistaken for an edit made after the
+      // apply when its flag is checked.
+      const ordered = [
+        ...app.items.filter((i) => i.action !== "rescored"),
+        ...app.items.filter((i) => i.action === "rescored"),
+      ];
+      for (const item of ordered) {
         const after = JSON.parse(item.after) as Snapshot;
         const before = JSON.parse(item.before) as Snapshot;
+
+        // A re-score is undone on its own fields alone: the old scorecard
+        // comes back unless the scorecard itself was changed after the apply
+        // (an override, a re-score by hand). Nothing else about the record
+        // is touched either way.
+        if (item.action === "rescored") {
+          const fields = item.subjectKind === "lead" ? LEAD_SCORE_FIELDS : CANDIDATE_SCORE_FIELDS;
+          const current =
+            item.subjectKind === "lead"
+              ? await tx.lead.findUnique({ where: { id: item.subjectId } })
+              : await tx.discoveryCandidate.findUnique({ where: { id: item.subjectId } });
+          if (!current) continue;
+          if (!sameSnapshot(after, pick(current as Record<string, unknown>, fields))) {
+            kept.push({
+              kind: item.subjectKind === "lead" ? "lead" : "candidate",
+              id: item.subjectId,
+              clinicName: item.clinicName,
+              reason: "its scorecard was changed after the apply, so the new score was left as you left it",
+            });
+            continue;
+          }
+          const data = revive(before, ["icpBreakdownAt"]);
+          if (item.subjectKind === "lead") await tx.lead.update({ where: { id: item.subjectId }, data });
+          else await tx.discoveryCandidate.update({ where: { id: item.subjectId }, data });
+          restored++;
+          continue;
+        }
 
         if (item.subjectKind === "lead") {
           const lead = await tx.lead.findUnique({ where: { id: item.subjectId } });
