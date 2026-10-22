@@ -15,6 +15,7 @@
 // Same rule as the old card's assist: a suggestion is pre-filled and explains
 // itself, and nothing is stored until Save.
 
+import { ruleVerdictLabel } from "@/lib/leadScore";
 import { useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
@@ -156,7 +157,7 @@ export default function IcpScorecardV2({
             </span>
             <span className="num text-sm text-muted">/ {V2_MAX_SCORE}</span>
           </span>
-          <IcpTierBadge tier={live.tier} tooltip={false} />
+          <IcpTierBadge tier={live.tier} tooltip={false} verdict={ruleVerdictLabel(live)} />
         </div>
       </div>
 

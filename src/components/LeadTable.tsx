@@ -347,7 +347,7 @@ export default function LeadTable({
                 </div>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   <StageBadge stage={lead.stage} />
-                  {lead.icpTier && <IcpTierBadge tier={lead.icpTier} />}
+                  {(lead.icpTier || lead.icpVerdict) && <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />}
                 </div>
               </div>
             </li>
@@ -423,8 +423,8 @@ export default function LeadTable({
                   <StageBadge stage={lead.stage} />
                 </td>
                 <td className="td">
-                  {lead.icpTier ? (
-                    <IcpTierBadge tier={lead.icpTier} />
+                  {lead.icpTier || lead.icpVerdict ? (
+                    <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />
                   ) : (
                     <span className="text-muted">—</span>
                   )}

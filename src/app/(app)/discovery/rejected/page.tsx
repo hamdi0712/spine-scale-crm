@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ruleVerdictLabel } from "@/lib/leadScore";
 import { prisma } from "@/lib/prisma";
 import { promoteDiscoveryCandidate } from "@/lib/actions/discovery";
 import { checkForSecondLooks } from "@/lib/actions/secondLook";
@@ -152,6 +153,7 @@ export default async function RejectedCandidatesPage({
                       </Link>
                       <IcpTierBadge
                         tier={(candidate.icpTier as IcpTier | null) ?? null}
+                        verdict={stored?.model === "v2" ? ruleVerdictLabel(stored.breakdown) : null}
                       />
                       {candidate.icpTotal != null && (
                         <span className="num text-sm text-muted">

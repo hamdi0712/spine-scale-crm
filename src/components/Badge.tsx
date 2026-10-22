@@ -203,10 +203,15 @@ export function icpTierDot(tier: IcpTier): string {
 export function IcpTierBadge({
   tier,
   tooltip = true,
+  verdict = null,
 }: {
   tier: IcpTier | null | undefined;
   tooltip?: boolean;
+  // A rule rejection (ruleVerdictLabel in src/lib/leadScore.ts): shown in
+  // place of "C-tier", which would contradict a high score beside it.
+  verdict?: string | null;
 }) {
+  if (verdict) return <Pill tone={TIER_TONES.C} label={verdict} />;
   if (!tier) return null;
   const action = ICP_TIER_ACTIONS[tier];
   return (

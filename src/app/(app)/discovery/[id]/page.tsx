@@ -1,4 +1,5 @@
 import PageActions from "@/components/PageActions";
+import { ruleVerdictLabel } from "@/lib/leadScore";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -95,7 +96,10 @@ export default async function DiscoveryCandidatePage({
               {candidate.clinicName}
             </h1>
             <DiscoveryStatusBadge status={candidate.status} />
-            <IcpTierBadge tier={(candidate.icpTier as IcpTier | null) ?? null} />
+            <IcpTierBadge
+              tier={(candidate.icpTier as IcpTier | null) ?? null}
+              verdict={stored?.model === "v2" ? ruleVerdictLabel(stored.breakdown) : null}
+            />
             {candidate.icpTotal != null && (
               <span className="num text-sm text-muted">
                 {candidate.icpTotal} / {maxScoreFor(stored?.model ?? candidate.scoringModel)}

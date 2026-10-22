@@ -1,4 +1,6 @@
 import PageActions from "@/components/PageActions";
+import { parseStoredBreakdown } from "@/lib/storedBreakdown";
+import { ruleVerdictLabel } from "@/lib/leadScore";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { addDiscoveryCandidateByName } from "@/lib/actions/discovery";
@@ -116,6 +118,10 @@ export default async function DiscoveryPage({
     // The tier is stored on a candidate rather than derived, so it is read
     // back the same way — see the note at the top of src/lib/discovery.ts.
     icpTier: (c.icpTier as IcpTier | null) ?? null,
+    icpVerdict: (() => {
+      const stored = parseStoredBreakdown(c.icpBreakdown);
+      return stored?.model === "v2" ? ruleVerdictLabel(stored.breakdown) : null;
+    })(),
     reason: reasonFor(c),
     promotedLeadId: c.promotedLeadId,
     createdAt: c.createdAt.toISOString(),
