@@ -144,9 +144,39 @@ export function qualifiedShortSubtitle(q: QualifiedLeads): string | null {
   return `${q.untouched} to approach`;
 }
 
-export function messagesTotalSubtitle(total: number): string {
-  if (total === 0) return "No leads contacted yet";
-  return "All leads contacted to date";
+// Card 2's breakdown. The headline is qualified leads (A or B) at Contacted or
+// beyond — the Qualified card's "in play" number, so the two cards agree. The
+// line under it is everyone ever contacted, every tier and archived included,
+// and how many of them were not qualified.
+export interface MessagesCard {
+  // The headline: the Qualified card's in-play count.
+  qualifiedContacted: number;
+  // Every lead at Contacted or beyond, any tier, archived included.
+  total: number;
+  // Of those, the ones not A or B (C, disqualified, rejected by rule, unscored).
+  notQualified: number;
+}
+
+export function messagesCard(
+  qualified: QualifiedLeads,
+  allContacted: LeadScoreInput[],
+): MessagesCard {
+  const notQualified = allContacted.filter((lead) => {
+    const tier = leadTier(lead);
+    return tier !== "A" && tier !== "B";
+  }).length;
+  return { qualifiedContacted: qualified.contacted, total: allContacted.length, notQualified };
+}
+
+export function messagesTotalSubtitle(m: MessagesCard): string {
+  if (m.total === 0) return "No leads contacted yet";
+  return `${m.total} contacted in total · ${m.notQualified} not qualified`;
+}
+
+// The phone's line: the same two numbers, short enough for a half-width card.
+export function messagesShortSubtitle(m: MessagesCard): string {
+  if (m.total === 0) return "None yet";
+  return `${m.total} total · ${m.notQualified} not qual.`;
 }
 
 // ─── Card 3 — Reply rate ───────────────────────────────────────────────────
