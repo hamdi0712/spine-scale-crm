@@ -15,6 +15,8 @@ import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
 import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import {
   REPLY_RATE_WINDOW_DAYS,
+  messagesCard,
+  messagesShortSubtitle,
   messagesTotalSubtitle,
   daysAgo,
   discoveryBooked,
@@ -147,8 +149,25 @@ export default async function DashboardPage() {
     // query above includes them — a message sent three weeks ago was sent
     // whatever happened to the lead since. No date bound: this card is an
     // all-time total of everyone approached, so a count is all it needs.
-    prisma.lead.count({
+    // Every tier, so the card can say how many of them were not qualified;
+    // only what the tier is read from.
+    prisma.lead.findMany({
       where: CONTACTED_LEADS_WHERE,
+      select: {
+        icpScoredAt: true,
+        icpBreakdown: true,
+        icpDqSurgicalPractice: true,
+        icpDqSoloNoStaff: true,
+        icpDqFranchiseLocked: true,
+        icpDqSystemComplete: true,
+        icpDqOutOfRegion: true,
+        icpStaffSize: true,
+        icpPackageEconomics: true,
+        icpBudgetSignal: true,
+        icpGapBooking: true,
+        icpGapReviews: true,
+        icpGapRemarketing: true,
+      },
     }),
     // The discovery calls on this month's calendar. Counted off the call log
     // rather than off a lead's stage: a stage cannot be un-set when a call is
@@ -173,7 +192,9 @@ export default async function DashboardPage() {
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
 
   const qualified = qualifiedLeads(openLeads);
-  const messages = contactedLeads;
+  // Qualified leads in play — the same group as the Qualified card's "in
+  // play" — with every tier ever contacted on the line beneath.
+  const messages = messagesCard(qualified, contactedLeads);
   const replies = replyRate(outreachLeads, now);
   const discovery = discoveryBooked(discoveryCalls);
 
@@ -192,14 +213,14 @@ export default async function DashboardPage() {
     {
       label: "Messages sent",
       shortLabel: "Messages",
-      value: String(messages),
+      value: String(messages.qualifiedContacted),
       icon: "messages",
       delta: messagesTotalSubtitle(messages),
       // The window the count covers, the way Calls booked says "This month".
-      shortDelta: messages > 0 ? "All time" : "None yet",
+      shortDelta: messagesShortSubtitle(messages),
       // An all-time total has nothing behind it to compare against, so the up
       // arrow only marks that there is something there at all.
-      tone: messages > 0 ? "up" : "flat",
+      tone: messages.qualifiedContacted > 0 ? "up" : "flat",
     },
     {
       label: `Reply rate (${REPLY_RATE_WINDOW_DAYS}d)`,
