@@ -743,16 +743,23 @@ export function finish(b: Unfinished, threshold: number): IcpBreakdownV2 {
     chiroProgram: b.chiroProgram,
     threshold,
   });
-  const tier: IcpTier = gated
-    ? "DISQUALIFIED"
-    : verdict.kind === "not_a_fit" || verdict.kind === "insufficient_evidence" || verdict.kind === "chiro_no_program"
-      ? "C"
-      : v2TierForScore(total);
+  const tier = tierFor(total, verdict.kind, gated);
   return { ...b, fitTotal, signalsTotal, ungatedTotal, total, tier, verdict };
 }
 
 function sum(entries: CriterionEntry[]): number {
   return entries.reduce((s, e) => s + e.points, 0);
+}
+
+// The tier for a score and how it was judged: disqualified at the gate, C for
+// a rejection by rule (the badge shows the rule, not the tier — see
+// ruleVerdictLabel), and otherwise the score's band. One function for a fresh
+// score and for a stored one read back, so a change to the bands re-tiers
+// every stored scorecard the moment it is read, with no re-scoring.
+export function tierFor(total: number, kind: V2VerdictKind, gated: boolean): IcpTier {
+  if (gated || kind === "disqualified") return "DISQUALIFIED";
+  if (kind === "not_a_fit" || kind === "insufficient_evidence" || kind === "chiro_no_program") return "C";
+  return v2TierForScore(total);
 }
 
 export function v2TierForScore(total: number): Exclude<IcpTier, "DISQUALIFIED"> {
@@ -761,7 +768,7 @@ export function v2TierForScore(total: number): Exclude<IcpTier, "DISQUALIFIED"> 
   return "C";
 }
 
-export const V2_TIER_BANDS = `${V2_TIER_A_MIN}+ A-tier · ${V2_TIER_B_MIN}–${V2_TIER_A_MIN - 1} B-tier · below ${V2_TIER_B_MIN} C-tier`;
+export const V2_TIER_BANDS = `A ${V2_TIER_A_MIN}–100 · B ${V2_TIER_B_MIN}–${V2_TIER_A_MIN - 1} · C 0–${V2_TIER_B_MIN - 1}`;
 
 // The order the brief sets: the gate, the fit floor, the bar, then the
 // real-program check for a chiropractic-first clinic.
@@ -2027,7 +2034,7 @@ export function parseBreakdownV2(raw: string | null | undefined): IcpBreakdownV2
   const tier = b.tier;
   if (tier !== "A" && tier !== "B" && tier !== "C" && tier !== "DISQUALIFIED") return null;
   if (!b.verdict || typeof b.verdict !== "object") return null;
-  return {
+  const read: IcpBreakdownV2 = {
     model: "v2",
     version: typeof b.version === "number" ? b.version : 0,
     icp: {
@@ -2092,6 +2099,9 @@ export function parseBreakdownV2(raw: string | null | undefined): IcpBreakdownV2
     ...(typeof b.overriddenAt === "string" ? { overriddenAt: b.overriddenAt } : {}),
     ...(typeof b.overrideNote === "string" ? { overrideNote: b.overrideNote } : {}),
   };
+  // The tier as the current bands read this score — stored breakdowns keep the
+  // tier they were saved with, and the bands can have moved since.
+  return { ...read, tier: tierFor(read.total, read.verdict.kind, read.tier === "DISQUALIFIED") };
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {

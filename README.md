@@ -391,7 +391,7 @@ again.
      is re-judged under this check, from its stored evidence, the next time
      Discovery is opened.
   6. Otherwise promoted at or above the bar (**Settings → Pipeline**, default
-     60). Tiers: A 80+, B 60–79, C below 60.
+     60). Tiers: A 80–100, B 50–79, C 0–49.
 
   Not enough evidence to judge fit at all — no website copy, and no Maps
   listing confirming there is no site; or a crawl that returned only page
