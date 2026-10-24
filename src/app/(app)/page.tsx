@@ -2,7 +2,7 @@ import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-import { CONTACTED_LEADS_WHERE, OPEN_LEADS_WHERE } from "@/lib/liveLeadWhere";
+import { OPEN_LEADS_WHERE } from "@/lib/liveLeadWhere";
 import {
   LEAD_STAGE_LABELS,
   LEAD_STAGE_SHORT_LABELS,
@@ -15,9 +15,8 @@ import { buildFocus, splitFocus, summariseFocus } from "@/lib/focus";
 import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import {
   REPLY_RATE_WINDOW_DAYS,
-  messagesCard,
-  messagesShortSubtitle,
-  messagesTotalSubtitle,
+  MESSAGES_SHORT_SUBTITLE,
+  MESSAGES_SUBTITLE,
   daysAgo,
   discoveryBooked,
   discoverySubtitle,
@@ -84,7 +83,6 @@ export default async function DashboardPage() {
     focusTasks,
     activity,
     outreachLeads,
-    contactedLeads,
     discoveryCalls,
   ] = await Promise.all([
     prisma.client.findMany({
@@ -143,32 +141,6 @@ export default async function DashboardPage() {
       },
       select: { connectionRequestSentAt: true, repliedAt: true },
     }),
-    // Messages sent, for the second card: leads standing at Contacted or past
-    // it, which is what the pipeline records an approach as (see
-    // src/lib/funnel.ts). Archived leads are included for the same reason the
-    // query above includes them — a message sent three weeks ago was sent
-    // whatever happened to the lead since. No date bound: this card is an
-    // all-time total of everyone approached, so a count is all it needs.
-    // Every tier, so the card can say how many of them were not qualified;
-    // only what the tier is read from.
-    prisma.lead.findMany({
-      where: CONTACTED_LEADS_WHERE,
-      select: {
-        icpScoredAt: true,
-        icpBreakdown: true,
-        icpDqSurgicalPractice: true,
-        icpDqSoloNoStaff: true,
-        icpDqFranchiseLocked: true,
-        icpDqSystemComplete: true,
-        icpDqOutOfRegion: true,
-        icpStaffSize: true,
-        icpPackageEconomics: true,
-        icpBudgetSignal: true,
-        icpGapBooking: true,
-        icpGapReviews: true,
-        icpGapRemarketing: true,
-      },
-    }),
     // The discovery calls on this month's calendar. Counted off the call log
     // rather than off a lead's stage: a stage cannot be un-set when a call is
     // cancelled or deleted, and a booking that no longer exists should not go
@@ -192,9 +164,9 @@ export default async function DashboardPage() {
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
 
   const qualified = qualifiedLeads(openLeads);
-  // Qualified leads in play — the same group as the Qualified card's "in
-  // play" — with every tier ever contacted on the line beneath.
-  const messages = messagesCard(qualified, contactedLeads);
+  // Qualified leads (A or B) at Contacted or beyond — the same group as the
+  // Qualified card's "in play", so the two cards agree.
+  const messages = qualified.contacted;
   const replies = replyRate(outreachLeads, now);
   const discovery = discoveryBooked(discoveryCalls);
 
@@ -213,14 +185,14 @@ export default async function DashboardPage() {
     {
       label: "Messages sent",
       shortLabel: "Messages",
-      value: String(messages.qualifiedContacted),
+      value: String(messages),
       icon: "messages",
-      delta: messagesTotalSubtitle(messages),
+      delta: MESSAGES_SUBTITLE,
       // The window the count covers, the way Calls booked says "This month".
-      shortDelta: messagesShortSubtitle(messages),
+      shortDelta: MESSAGES_SHORT_SUBTITLE,
       // An all-time total has nothing behind it to compare against, so the up
       // arrow only marks that there is something there at all.
-      tone: messages.qualifiedContacted > 0 ? "up" : "flat",
+      tone: messages > 0 ? "up" : "flat",
     },
     {
       label: `Reply rate (${REPLY_RATE_WINDOW_DAYS}d)`,
