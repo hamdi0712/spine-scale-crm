@@ -77,9 +77,11 @@ export const V2_MAX_SCORE = FIT_MAX + SIGNALS_MAX;
 // setting (Settings → Pipeline), stored in its own column.
 export const DEFAULT_V2_PROMOTION_THRESHOLD = 60;
 
-// A 80+ · B 60–79 · C below 60.
+// A 80–100 · B 50–79 · C 0–49. Independent of the promotion bar (a setting)
+// and the fit floor: a tier says how good the score is, the bar decides what
+// gets promoted.
 export const V2_TIER_A_MIN = 80;
-export const V2_TIER_B_MIN = 60;
+export const V2_TIER_B_MIN = 50;
 
 // What the second-look sweep counts as a near miss on this scale: within this
 // many points under the bar, or this many under the fit floor.

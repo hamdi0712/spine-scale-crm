@@ -466,8 +466,13 @@ function pick(row: Record<string, unknown>, fields: readonly string[]): Snapshot
   return out;
 }
 
+// icpTier is left out of the comparison: it is derived from the stored score
+// and verdict, and re-banding the tiers (migration 20261024120000) rewrites
+// it without anybody editing the record. It is still restored on revert.
 function sameSnapshot(a: Snapshot, b: Snapshot): boolean {
-  return Object.keys(a).every((k) => JSON.stringify(a[k] ?? null) === JSON.stringify(b[k] ?? null));
+  return Object.keys(a)
+    .filter((k) => k !== "icpTier")
+    .every((k) => JSON.stringify(a[k] ?? null) === JSON.stringify(b[k] ?? null));
 }
 
 function revive(snapshot: Snapshot, dateFields: string[]): Record<string, unknown> {
