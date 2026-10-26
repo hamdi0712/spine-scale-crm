@@ -10,7 +10,6 @@ export type JobKind =
   | "recrawl-leads"
   | "compare-scoring"
   | "process-queue"
-  | "find-emails"
   | "demo";
 
 // running     the loop is alive on the server
@@ -99,7 +98,6 @@ export const JOB_TITLES: Record<JobKind, string> = {
   "recrawl-leads": "Re-crawl",
   "compare-scoring": "Compare scoring",
   "process-queue": "Process queue",
-  "find-emails": "Find emails",
   demo: "Demo re-crawl",
 };
 
@@ -111,7 +109,6 @@ export function itemHref(kind: JobKind, subjectId: string): string | null {
     case "process-queue":
       return `/discovery/${subjectId}`;
     case "recrawl-leads":
-    case "find-emails":
       return `/pipeline/${subjectId}`;
     default:
       return null;

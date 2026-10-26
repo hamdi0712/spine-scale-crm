@@ -22,9 +22,6 @@ import {
   readActorId,
   readClinicDiscoveryActorId,
   readDecisionMakerActorId,
-  readEmailActorId,
-  DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID,
-  DEFAULT_EMAIL_VERIFIER_ACTOR_ID,
   readPromotionThreshold,
   readPromotionThresholdV2,
 } from "@/lib/pipelineSettings";
@@ -72,14 +69,6 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
     recrawlConcurrency: formData.has("recrawlConcurrency")
       ? readRecrawlConcurrency(formData.get("recrawlConcurrency"))
       : current.recrawlConcurrency,
-    emailExtractor: {
-      enabled: formData.get("emailExtractorEnabled") === "on",
-      actorId: readEmailActorId(formData.get("emailExtractorActorId"), DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID),
-    },
-    emailVerifier: {
-      enabled: formData.get("emailVerifierEnabled") === "on",
-      actorId: readEmailActorId(formData.get("emailVerifierActorId"), DEFAULT_EMAIL_VERIFIER_ACTOR_ID),
-    },
   };
 
   await write(settings);

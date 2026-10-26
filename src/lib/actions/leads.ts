@@ -81,7 +81,7 @@ function leadFields(formData: FormData) {
 
 export async function createLead(formData: FormData) {
   const fields = leadFields(formData);
-  // Typed in here, so it is the operator's own: Find emails never touches it.
+  // Typed in here, so it is the operator's own (manual).
   const lead = await prisma.lead.create({
     data: { ...fields, emailSource: fields.email === null ? null : "manual" },
   });
@@ -107,7 +107,7 @@ export async function updateLead(id: string, formData: FormData) {
   if (!current) return;
 
   // The same comparison for the email: an address changed here becomes the
-  // operator's own ("manual") and loses whatever Find emails had said about
+  // operator's own ("manual") and loses whatever had been recorded about
   // the old one; an unchanged one keeps its source and its verdict.
   const fields = leadFields(formData);
   const email = emailSourceAfterFormSave(current, fields.email);

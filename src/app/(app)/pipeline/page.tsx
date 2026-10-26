@@ -9,7 +9,6 @@ import { setMessageMechanism } from "@/lib/actions/outreachSequence";
 import KanbanBoard, { KanbanLead } from "@/components/KanbanBoard";
 import LeadTable from "@/components/LeadTable";
 import { RecrawlOldLeads } from "@/components/LeadRecrawl";
-import { FindEmailsByTier } from "@/components/FindEmails";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { stepCostPerCandidate } from "@/lib/pipelineSettings";
 import MechanismPicker from "@/components/MechanismPicker";
@@ -199,7 +198,6 @@ export default async function PipelinePage({
         ) : (
           <>
             {!scoringRejected && <RecrawlOldLeads costPerClinic={recrawlCost} />}
-            {!scoringRejected && <FindEmailsByTier />}
             <LeadTable leads={serialized} recrawlCostPerClinic={recrawlCost} />
           </>
         )}

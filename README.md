@@ -878,10 +878,10 @@ again.
 
 ## Long-running jobs
 
-Five things in the app work through a list one item at a time and can take
+Four things in the app work through a list one item at a time and can take
 minutes to an hour: **Re-crawl website** from Discovery's or Pipeline's
-selection bar, **Re-crawl all leads crawled before…** on Pipeline, **Find
-emails** on Pipeline, **Compare scoring**, and **Process queue**. They share one progress experience
+selection bar, **Re-crawl all leads crawled before…** on Pipeline, **Compare
+scoring**, and **Process queue**. They share one progress experience
 (`src/components/JobProgress.tsx`), and one status layer underneath it.
 
 - **The loop runs on the server.** Pressing Start asks a server action
@@ -905,8 +905,7 @@ emails** on Pipeline, **Compare scoring**, and **Process queue**. They share one
   items with a one-line result each, and a finish state with a summary and the
   full list of failures. The cost is the estimate the confirmation quoted,
   counted up item by item — neither Apify nor DeepSeek reports a per-run bill
-  back to the app. (Find emails counts each lead's own estimated spend instead,
-  because most leads stop well short of the ceiling it quoted.)
+  back to the app.
 - **Anywhere in the app**: the browser tab reads `(23/210) Re-crawling…`, and a
   pill at the top of the sidebar (the top bar on a phone) opens the panel from
   any page. A finished run stays there for half an hour, and on its own page
@@ -921,64 +920,20 @@ spending anything, `npm run dev`, sign in, and run
 seeded run of twenty made-up clinics with two failures and a warning. The demo
 route answers 404 in production.
 
-## Find emails
+## Lead email fields
 
-Email addresses for leads already in the Pipeline. Nothing here sends anything:
-it fills in the email field and says how much to trust it.
+Beside a lead's email: `emailType` (owner / generic / not found),
+`emailStatus` (valid / risky / invalid / unknown; empty is not checked),
+`emailSource` (site crawl / extractor / name pattern / imported / manual),
+`emailCheckedAt`, and `emailAlternates` (other addresses, as JSON). The lead
+page shows them under the email field. An address typed into the lead form is
+`manual`; one with no source on it reads as `imported`. Verification is done in
+Instantly, not in this app.
 
-**Where:** Pipeline → tick leads → **Find emails** on the selection bar, or the
-**Find emails for: All A-tier / All B-tier** card above the table. A tier run
-covers that tier's live leads, leaving out any that already have a valid
-address. Both read the plan from the server first, then ask you to confirm:
-how many leads, how many need the paid extractor, how many verifications at
-most, and the most it could cost. The run uses the shared job runner and
-progress panel, with **Re-crawls at once** setting the concurrency.
-
-**Settings → Pipeline → Find emails:** two actors, both **off** until you switch
-them on. The **Email extractor** (`vdrmota~contact-info-scraper`) crawls up to
-ten pages of a clinic's site. The **Email verifier** (`andok~email-verifier`)
-checks one address per run. The verifier is required: the run will not start
-without it.
-
-**Per lead, cheapest first, stopping at the first valid owner address:**
-
-1. An address **typed into the lead form** is `manual` and is never touched.
-2. An **imported** address (from a Discovery import, or any address that was
-   already there when this shipped) is verified but never replaced. If it
-   comes back valid, the lead is done. If it comes back invalid, it moves to
-   the alternates and the search carries on.
-3. **Stored crawl (free):** addresses in `websiteNotes` and in `websiteLinks`,
-   including `mailto:` links, which crawls now keep. It only keeps addresses on
-   the clinic's own domain or a mailbox provider (Gmail, Outlook…), so a web
-   designer's footer address is ignored. The **extractor** runs only if this
-   found nothing.
-4. **Verify** what was found, addresses carrying the decision-maker's name
-   first, at most five per lead. Once one generic inbox is valid, no further
-   generic ones are sent.
-5. **Guess the owner** if no valid owner address yet and a decision-maker is
-   named (the lead's contact, or the person the new-model scorecard's
-   "Decision-maker title" line names). It tries `first@`, `firstlast@`,
-   `first.last@` and `drlast@` on the clinic's domain, one verification each,
-   stopping at the first valid one. It makes no guesses on a domain the
-   verifier has already called catch-all, and stops the moment a guess reveals
-   one.
-
-**What gets stored:** the best address goes in the email field: valid owner,
-then valid generic, then risky, then unknown. A guess only goes there if it
-verified valid. Every other address goes in `emailAlternates`. The other fields
-are `emailType` (owner / generic / not found), `emailStatus` (valid / risky /
-invalid / unknown; empty means not checked), `emailSource` (site crawl /
-extractor / name pattern / imported / manual) and `emailCheckedAt`. A catch-all
-"yes" is **risky, never valid**, and only valid counts as usable. The lead page
-shows all of this under the email field.
-
-**The summary** at the end of a run counts leads by the address left in the
-email field: valid owner, valid generic, risky only, unknown only, none, and
-skipped (entered by hand).
-
-Try it without spending anything:
-`DATABASE_URL="file:$PWD/.verify.db" npx prisma migrate deploy && DATABASE_URL="file:$PWD/.verify.db" npx tsx tools/verify-find-emails.ts`
-runs it against a fake Apify on seeded leads.
+`src/lib/emailFind.ts` holds the plain helpers for reading addresses out of
+scraped text (junk and vendor addresses dropped, other businesses' domains
+ignored) and labelling them owner or generic against the decision-maker's
+name. Crawls keep `mailto:` links on `websiteLinks` for the same reason.
 
 ## On a phone or tablet
 

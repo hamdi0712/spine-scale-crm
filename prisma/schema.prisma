@@ -244,7 +244,7 @@ model Lead {
   email        String?
 
   // What is known about the email above — written by "Find emails"
-  // (src/lib/emailFindRun.ts), except emailSource, which the lead form also
+  // (Find emails, since removed), except emailSource, which the lead form also
   // writes: an address typed there is "manual", and Find emails never touches
   // a manual one. Each value is constrained by src/lib/emailFind.ts.
   //
@@ -973,9 +973,10 @@ model PipelineSettings {
   // How many re-crawls a bulk "Re-crawl website" runs at once (1–8).
   recrawlConcurrency Int @default(4)
 
-  // Find emails (src/lib/emailFindRun.ts): the paid fallback when a lead's
-  // stored crawl has no address, and the verifier every address goes through.
-  // Off by default, like every stage here that spends actor runs.
+  // UNUSED — the Find emails actors, removed with the feature (emails now
+  // arrive with Clinic-first discovery and are verified in Instantly). Kept
+  // rather than dropped so no migration touches this table; nothing reads or
+  // writes them.
   emailExtractorEnabled Boolean @default(false)
   emailExtractorActorId String  @default("vdrmota~contact-info-scraper")
   emailVerifierEnabled  Boolean @default(false)
@@ -1686,7 +1687,7 @@ model ScoringApplicationItem {
 // "did not finish" — the only way that label is ever shown.
 model JobRun {
   id     String @id @default(cuid())
-  kind   String // recrawl-candidates | recrawl-leads | compare-scoring | process-queue | find-emails | demo
+  kind   String // recrawl-candidates | recrawl-leads | compare-scoring | process-queue | demo (find-emails on old rows)
   // Which button started it, so two panels on one page (Pipeline's selection
   // bar and its "crawled before" card) each show only their own run.
   source String
