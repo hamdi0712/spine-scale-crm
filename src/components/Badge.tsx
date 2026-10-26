@@ -223,6 +223,30 @@ export function IcpTierBadge({
   );
 }
 
+// The short form for the Pipeline table, its phone cards and the board: one
+// letter, "Disqualified" or "Rejected", so the column stays narrow. The score
+// and the whole reason are in the title, and the lead page and scorecard keep
+// the long badge above.
+const TIER_SHORT: Record<IcpTier, string> = { A: "A", B: "B", C: "C", DISQUALIFIED: "Disqualified" };
+
+export function IcpTierChip({
+  tier,
+  verdict = null,
+  score = null,
+}: {
+  tier: IcpTier | null | undefined;
+  // The full rule-rejection text (leadVerdictBadge), score included.
+  verdict?: string | null;
+  // "72/100", for the title.
+  score?: string | null;
+}) {
+  if (verdict) return <Pill tone={TIER_TONES.C} label="Rejected" title={verdict} />;
+  if (!tier) return null;
+  const action = ICP_TIER_ACTIONS[tier];
+  const title = [score, ICP_TIER_LABELS[tier]].filter(Boolean).join(" · ") + (action ? ` — ${action}` : "");
+  return <Pill tone={TIER_TONES[tier]} label={TIER_SHORT[tier]} title={title} />;
+}
+
 // The score, big enough to read across a grid of cards — the number itself,
 // with the tier's mark beside it and the tier's colour behind both.
 //

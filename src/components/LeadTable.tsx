@@ -13,7 +13,7 @@ import { deleteLeads, moveLeadsStage } from "@/lib/actions/leads";
 import { ICP_TIER_LABELS, ICP_TIER_ORDER, IcpTier } from "@/lib/icp";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
-import { IcpTierBadge, StageBadge } from "@/components/Badge";
+import { IcpTierChip, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 import { useLeadRecrawl } from "@/components/LeadRecrawl";
 import { useFindEmails } from "@/components/FindEmails";
@@ -364,7 +364,7 @@ export default function LeadTable({
                 </div>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   <StageBadge stage={lead.stage} />
-                  {(lead.icpTier || lead.icpVerdict) && <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />}
+                  {(lead.icpTier || lead.icpVerdict) && <IcpTierChip tier={lead.icpTier} verdict={lead.icpVerdict} score={lead.icpScore} />}
                 </div>
               </div>
             </li>
@@ -441,7 +441,7 @@ export default function LeadTable({
                 </td>
                 <td className="td">
                   {lead.icpTier || lead.icpVerdict ? (
-                    <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />
+                    <IcpTierChip tier={lead.icpTier} verdict={lead.icpVerdict} score={lead.icpScore} />
                   ) : (
                     <span className="text-muted">—</span>
                   )}

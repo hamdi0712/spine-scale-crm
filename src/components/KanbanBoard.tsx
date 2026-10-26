@@ -7,7 +7,7 @@ import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { moveLeadStage } from "@/lib/actions/leads";
 import { IcpTier } from "@/lib/icp";
 import { fmtDate, fmtMoney } from "@/lib/format";
-import { IcpTierBadge } from "@/components/Badge";
+import { IcpTierChip } from "@/components/Badge";
 
 export interface KanbanLead {
   id: string;
@@ -22,6 +22,8 @@ export interface KanbanLead {
   // Set when the new model rejected it by a rule rather than its score:
   // "80/100 · Rejected: chiro without a real program", shown in place of C-tier.
   icpVerdict: string | null;
+  // "72/100" or "6/10", for the tier badge's title. Null when unscored.
+  icpScore: string | null;
   // Carried for the table's LinkedIn link. The board cards deliberately do not
   // show it — a card is a thing to drag, not a launchpad.
   linkedinUrl: string | null;
@@ -152,7 +154,7 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
                   </label>
                   {(lead.icpTier || lead.icpVerdict) && (
                     <div className="mt-1.5">
-                      <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />
+                      <IcpTierChip tier={lead.icpTier} verdict={lead.icpVerdict} score={lead.icpScore} />
                     </div>
                   )}
                   <div className="num mt-1.5 flex items-center justify-between text-xs text-muted">
