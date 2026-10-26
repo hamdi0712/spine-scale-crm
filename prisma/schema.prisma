@@ -264,6 +264,13 @@ model Lead {
   emailCheckedAt  DateTime?
   emailAlternates String?
 
+  // Which channel the lead is worked on: email | linkedin | call, constrained
+  // by LEAD_CHANNELS in src/lib/emailChannel.ts. Every lead that existed
+  // before the column is linkedin; a Clinic-first lead is promoted as email.
+  // The Pipeline page shows one channel at a time. Moving a lead between
+  // channels changes this column and nothing else — its LinkedIn marks stay.
+  channel String @default("linkedin")
+
   leadSource   String?
   // NO_CONTACT is a holding status rather than a stage of the pipeline — no
   // way to reach anybody yet, worth revisiting when there is. See

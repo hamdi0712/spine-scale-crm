@@ -16,6 +16,7 @@ import {
 } from "@/lib/icp";
 import { isUsTimeZone } from "@/lib/timezones";
 import { emailSourceAfterFormSave } from "@/lib/emailFind";
+import { PIPELINE_VIEWABLE_CHANNELS } from "@/lib/emailChannel";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -226,6 +227,17 @@ function bool(formData: FormData, key: string): boolean {
 
 // Reads only the raw scorecard answers — the total and tier are derived on
 // read, so nothing here needs to know the bands.
+// "Move to email" / "Move to LinkedIn" on the lead page. Writes the channel
+// and nothing else: the connection request, acceptance, reply and drafted
+// messages all stay on the lead, so moving it back finds them where they were.
+// Only the two channels the Pipeline can show are accepted.
+export async function setLeadChannel(id: string, channel: string) {
+  if (!(PIPELINE_VIEWABLE_CHANNELS as readonly string[]).includes(channel)) return;
+  await prisma.lead.updateMany({ where: { id }, data: { channel } });
+  revalidatePath("/pipeline");
+  revalidatePath(`/pipeline/${id}`);
+}
+
 export async function saveIcpScorecard(id: string, formData: FormData) {
   const answers = {
     ...Object.fromEntries(

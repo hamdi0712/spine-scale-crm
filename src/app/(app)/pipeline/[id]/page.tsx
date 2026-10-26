@@ -10,6 +10,7 @@ import {
   deleteLead,
   markConnectionRequestSent,
   moveLeadStage,
+  setLeadChannel,
   updateLead,
 } from "@/lib/actions/leads";
 import { applyEnrichSelection, runLeadEnrichment } from "@/lib/actions/enrich";
@@ -98,6 +99,11 @@ export default async function LeadDetailPage({
   // ordinary stageChangedAt behind it — and the way back out is the stage
   // select in the form below, like any other move.
   const markNoContact = moveLeadStage.bind(null, lead.id, "NO_CONTACT");
+  const moveChannel = setLeadChannel.bind(
+    null,
+    lead.id,
+    lead.channel === "email" ? "linkedin" : "email",
+  );
   const saveScorecard = saveIcpScorecardV2.bind(null, lead.id);
   const markConnectionSent = markConnectionRequestSent.bind(null, lead.id);
   const clearConnectionSent = clearConnectionRequestSent.bind(null, lead.id);
@@ -246,6 +252,13 @@ export default async function LeadDetailPage({
               </button>
             </form>
           ) : null}
+          {/* Which Pipeline view the lead sits in. Nothing but the channel
+              changes, so it is undone by the same button. */}
+          <form action={moveChannel}>
+            <button type="submit" className="btn">
+              {lead.channel === "email" ? "Move to LinkedIn" : "Move to email"}
+            </button>
+          </form>
           {/* Secondary, not destructive, and no confirmation: nothing is lost
               by pressing it — the lead keeps every field it had and one stage
               change puts it back. Hidden on a lead already in the status,
