@@ -1,37 +1,21 @@
-// Find emails — what the fields mean, and every decision the run makes that
-// does not need a network: reading addresses out of a stored crawl, telling an
-// owner's address from a front-desk one, the name-pattern guesses, reading a
-// verifier's verdict, choosing which address goes in the email field, and what
-// a run will cost.
+// Email helpers — what a lead's email fields mean, and plain functions for
+// reading addresses out of scraped text and labelling them. Kept from the
+// removed Find emails run for reuse on the addresses Clinic-first discovery
+// brings in from Google Maps.
 //
-// Pure. The actor calls and the write are in src/lib/emailFindRun.ts, and this
-// module is what the run, the Pipeline page and the lead page agree on.
+//   An address typed into the lead form is "manual"; one that arrived any
+//   other way with no source on it reads as "imported".
+//   Junk and vendor addresses (image names, site builders, error trackers,
+//   placeholders) are dropped; an address on another business's domain is
+//   not the clinic's.
+//   An address is the owner's only when it carries the decision-maker's
+//   name; anything else is a generic inbox.
 //
-// The rules, in the order the run applies them:
-//
-//   An address typed into the lead form is "manual" and is never touched.
-//
-//   An address that arrived with an import is "imported": it is verified, and
-//   it is never replaced. If it comes back invalid it moves to the alternates
-//   and the run looks for another, exactly as for a lead with no address.
-//
-//   Cheapest first. The stored crawl is read for free; the extractor actor
-//   runs only when that found nothing; the name-pattern guesses run only when
-//   no valid owner address has turned up, and never on a catch-all domain.
-//
-//   Only "valid" is usable. A catch-all domain accepts every address, so a
-//   verifier's yes there means nothing: it is "risky", never "valid".
+// Pure.
 
 import { splitName } from "@/lib/decisionMaker";
 import { leadBreakdownV2 } from "@/lib/leadScore";
 import { parseLinks } from "@/lib/websiteCrawl";
-import {
-  EXTRACTOR_ASSUMED_ADDRESSES,
-  MAX_FOUND_VERIFIED,
-  VERIFIER_USD_PER_ADDRESS,
-  extractorCost,
-} from "@/lib/emailFindRates";
-export * from "@/lib/emailFindRates";
 
 // ─── The fields ────────────────────────────────────────────────────────────
 
@@ -322,193 +306,3 @@ export function classifyAddress(address: string, person: DecisionMakerName | nul
   return "generic";
 }
 
-// The guesses, in the order they are tried: first@, firstlast@, first.last@,
-// drlast@ on the clinic's own domain. A last name alone gives drlast@ only.
-export function namePatternGuesses(person: DecisionMakerName, domain: string): string[] {
-  const { first, last } = person;
-  const locals: string[] = [];
-  if (first) locals.push(first);
-  if (first && last) locals.push(`${first}${last}`, `${first}.${last}`);
-  if (last) locals.push(`dr${last}`);
-  return dedupe(locals.map((l) => `${l}@${domain}`));
-}
-
-// ─── Reading a verifier's verdict ──────────────────────────────────────────
-//
-// Verifier actors disagree on what to call things — status, result, verdict;
-// "deliverable", "valid", "ok"; "catch_all", "accept-all", isCatchAll: true —
-// so a row is read by field name rather than by one actor's schema. The row
-// is the flattened dataset item (itemsToTable in src/lib/apify.ts): dotted
-// paths to string values.
-
-export interface Verdict {
-  status: EmailStatus;
-  catchAll: boolean;
-}
-
-const STATUS_KEYS = /^(status|result|verdict|state|deliverability|verification|verificationstatus|emailstatus|smtpstatus|smtp_status)$/i;
-const CATCH_ALL_KEYS = /(catch.?all|accept.?all)/i;
-const VALID_BOOL_KEYS = /^(is_?)?(valid|deliverable)$/i;
-
-function leaf(key: string): string {
-  return key.slice(key.lastIndexOf(".") + 1);
-}
-
-function truthy(v: string): boolean {
-  return /^(true|yes|1)$/i.test(v.trim());
-}
-
-export function statusWord(raw: string): { status: EmailStatus; catchAll: boolean } | null {
-  const w = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (w === "") return null;
-  if (/catch_?all|accept_?all/.test(w)) return { status: "risky", catchAll: true };
-  if (/^(invalid|undeliverable|bounce|bounced|rejected|disposable|bad|not_valid|does_not_exist|no_mx|syntax_error|invalid_syntax|mailbox_not_found|spamtrap)$/.test(w)) {
-    return { status: "invalid", catchAll: false };
-  }
-  if (/^(valid|deliverable|ok|safe|verified|good|exists)$/.test(w)) return { status: "valid", catchAll: false };
-  if (/^(risky|role|role_based|full_inbox|mailbox_full|low_quality)$/.test(w)) return { status: "risky", catchAll: false };
-  if (/^(unknown|unverifiable|timeout|error|unchecked|greylisted|unavailable)$/.test(w)) return { status: "unknown", catchAll: false };
-  return null;
-}
-
-// One verdict per address. A verifier that says "valid" and also flags the
-// domain as catch-all has said risky.
-export function readVerdict(headers: string[], row: string[]): Verdict {
-  let status: EmailStatus | null = null;
-  let catchAll = false;
-  let validFlag: boolean | null = null;
-  headers.forEach((h, i) => {
-    const value = row[i] ?? "";
-    const name = leaf(h);
-    if (CATCH_ALL_KEYS.test(name)) {
-      if (truthy(value)) catchAll = true;
-      return;
-    }
-    if (VALID_BOOL_KEYS.test(name) && /^(true|false)$/i.test(value.trim())) {
-      validFlag = truthy(value);
-      return;
-    }
-    if (STATUS_KEYS.test(name) && status === null) {
-      const read = statusWord(value);
-      if (read) {
-        status = read.status;
-        if (read.catchAll) catchAll = true;
-      }
-    }
-  });
-  let resolved: EmailStatus = status ?? (validFlag === true ? "valid" : validFlag === false ? "invalid" : "unknown");
-  if (catchAll && resolved === "valid") resolved = "risky";
-  return { status: resolved, catchAll };
-}
-
-// The row about this address, when the verifier returned more than one.
-export function rowForAddress(headers: string[], rows: string[][], address: string): string[] | null {
-  const want = address.toLowerCase();
-  for (const row of rows) {
-    if (row.some((cell) => cell.trim().toLowerCase() === want)) return row;
-  }
-  return rows.length === 1 ? rows[0] : null;
-}
-
-// ─── Choosing the address ──────────────────────────────────────────────────
-
-const STATUS_RANK: Record<EmailStatus, number> = { valid: 0, risky: 1, unknown: 2, invalid: 3 };
-
-function rank(c: EmailCandidate): number {
-  const status = c.status === null ? 4 : STATUS_RANK[c.status];
-  return status * 2 + (c.type === "owner" ? 0 : 1);
-}
-
-export interface EmailChoice {
-  primary: EmailCandidate | null;
-  alternates: EmailCandidate[];
-}
-
-// What goes in the email field. An imported address that did not come back
-// invalid stays where it is; otherwise the best verified address wins — valid
-// owner, valid generic, then risky, then unknown, owner before generic at each
-// step. A guess is only ever the primary when it verified valid: a catch-all
-// "yes" to a made-up address is not evidence anyone reads it. Never invalid,
-// never unverified.
-export function chooseEmail(candidates: EmailCandidate[]): EmailChoice {
-  const imported = candidates.find((c) => c.source === "imported");
-  const eligible = (c: EmailCandidate) =>
-    c.status !== null && c.status !== "invalid" && (c.source !== "name_pattern" || c.status === "valid");
-  let primary: EmailCandidate | null = null;
-  if (imported && imported.status !== "invalid") primary = imported;
-  else {
-    const sorted = candidates.filter(eligible).sort((a, b) => rank(a) - rank(b));
-    primary = sorted[0] ?? null;
-  }
-  // Guesses that did not verify are not addresses anybody found, and stay out.
-  const alternates = candidates.filter(
-    (c) => c !== primary && !(c.source === "name_pattern" && c.status === "invalid"),
-  );
-  return { primary, alternates };
-}
-
-// ─── The run's summary ─────────────────────────────────────────────────────
-
-// One per lead, read off the address left in the email field.
-export const FIND_OUTCOMES = [
-  "valid_owner",
-  "valid_generic",
-  "risky",
-  "unknown",
-  "none",
-  "skipped_manual",
-] as const;
-export type FindOutcome = (typeof FIND_OUTCOMES)[number];
-
-export const FIND_OUTCOME_LABELS: Record<FindOutcome, string> = {
-  valid_owner: "Valid owner email",
-  valid_generic: "Valid generic email",
-  risky: "Risky only",
-  unknown: "Unknown only",
-  none: "None",
-  skipped_manual: "Skipped (entered by hand)",
-};
-
-export function outcomeFor(primary: EmailCandidate | null): FindOutcome {
-  if (!primary || primary.status === null || primary.status === "invalid") return "none";
-  if (primary.status === "valid") return primary.type === "owner" ? "valid_owner" : "valid_generic";
-  return primary.status;
-}
-
-export type FindCounts = Record<FindOutcome, number>;
-
-export function countOutcomes(outcomes: (FindOutcome | null)[]): FindCounts {
-  const counts = Object.fromEntries(FIND_OUTCOMES.map((o) => [o, 0])) as FindCounts;
-  for (const o of outcomes) if (o) counts[o]++;
-  return counts;
-}
-
-// "Valid owner 7 · valid generic 5 · risky only 3 · unknown 1 · none 4". Zero
-// rows are left out except the four that answer the question.
-export function summarySentence(counts: FindCounts): string {
-  const parts = [
-    `valid owner ${counts.valid_owner}`,
-    `valid generic ${counts.valid_generic}`,
-    `risky only ${counts.risky}`,
-    `unknown ${counts.unknown}`,
-    `none ${counts.none}`,
-  ];
-  if (counts.skipped_manual > 0) parts.push(`skipped (entered by hand) ${counts.skipped_manual}`);
-  const s = parts.join(" · ");
-  return s[0].toUpperCase() + s.slice(1);
-}
-
-// ─── What it costs ─────────────────────────────────────────────────────────
-//
-// The rates live in src/lib/emailFindRates.ts, which the settings form (a
-// client component) can import without pulling the scorecard in with it.
-
-
-// The ceiling on one lead: the extractor if it will need it, and every
-// verification it could make — the imported address, the found ones up to
-// the cap, and every guess.
-export function leadCeilingUsd(plan: { imported: boolean; found: number; needsExtractor: boolean; guesses: number }): number {
-  const found = Math.min(MAX_FOUND_VERIFIED, plan.needsExtractor ? EXTRACTOR_ASSUMED_ADDRESSES : plan.found);
-  const verifications = (plan.imported ? 1 : 0) + found + plan.guesses;
-  return (plan.needsExtractor ? extractorCost() : 0) + verifications * VERIFIER_USD_PER_ADDRESS;
-}

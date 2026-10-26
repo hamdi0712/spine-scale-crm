@@ -126,11 +126,6 @@ export interface PipelineSettings {
   websiteCrawlPages: number;
   // Bulk re-crawls: how many clinics at once.
   recrawlConcurrency: number;
-  // Find emails (src/lib/emailFindRun.ts): the paid fallback when a lead's
-  // stored crawl has no address, and the verifier every address goes
-  // through. Same toggle-plus-actor shape, off until switched on.
-  emailExtractor: PipelineStepSetting;
-  emailVerifier: PipelineStepSetting;
 }
 
 // The score a candidate has to reach to be promoted rather than rejected. The
@@ -179,11 +174,6 @@ const RETIRED_DECISION_MAKER_ACTOR_ID = "harvestapi~linkedin-profile-search";
 
 export const DEFAULT_DECISION_MAKER_ENABLED = false;
 
-// Find emails. Both off by default: each spends actor runs per lead, and
-// nothing in the app should start doing that without being switched on.
-export const DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID = "vdrmota~contact-info-scraper";
-export const DEFAULT_EMAIL_VERIFIER_ACTOR_ID = "andok~email-verifier";
-
 export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   steps: Object.fromEntries(
     PIPELINE_STEP_KEYS.map((key) => [
@@ -204,8 +194,6 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   promotionThresholdV2: DEFAULT_V2_PROMOTION_THRESHOLD,
   websiteCrawlPages: DEFAULT_WEBSITE_CRAWL_PAGES,
   recrawlConcurrency: DEFAULT_RECRAWL_CONCURRENCY,
-  emailExtractor: { enabled: false, actorId: DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID },
-  emailVerifier: { enabled: false, actorId: DEFAULT_EMAIL_VERIFIER_ACTOR_ID },
 };
 
 // ─── Reading a row ─────────────────────────────────────────────────────────
@@ -253,22 +241,9 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
     promotionThresholdV2: readPromotionThresholdV2(record.promotionThresholdV2),
     websiteCrawlPages: readWebsiteCrawlPages(record.websiteCrawlPages),
     recrawlConcurrency: readRecrawlConcurrency(record.recrawlConcurrency),
-    emailExtractor: {
-      enabled: record.emailExtractorEnabled === true,
-      actorId: readEmailActorId(record.emailExtractorActorId, DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID),
-    },
-    emailVerifier: {
-      enabled: record.emailVerifierEnabled === true,
-      actorId: readEmailActorId(record.emailVerifierActorId, DEFAULT_EMAIL_VERIFIER_ACTOR_ID),
-    },
   };
 }
 
-// Either Find emails actor, held to the same shape as every other stored ID.
-export function readEmailActorId(raw: unknown, fallback: string): string {
-  if (typeof raw !== "string") return fallback;
-  return normalizeApifyId(raw) ?? fallback;
-}
 
 // An actor ID as it will be used, or the built-in default. Normalised on the
 // way through — a pasted `username/name` becomes `username~name`, which is
@@ -341,10 +316,6 @@ export function pipelineSettingsRow(
   row.promotionThresholdV2 = settings.promotionThresholdV2;
   row.websiteCrawlPages = settings.websiteCrawlPages;
   row.recrawlConcurrency = settings.recrawlConcurrency;
-  row.emailExtractorEnabled = settings.emailExtractor.enabled;
-  row.emailExtractorActorId = settings.emailExtractor.actorId;
-  row.emailVerifierEnabled = settings.emailVerifier.enabled;
-  row.emailVerifierActorId = settings.emailVerifier.actorId;
   return row;
 }
 
@@ -369,10 +340,6 @@ export function isDefaultPipelineSettings(settings: PipelineSettings): boolean {
     settings.clinicDiscovery.actorId === DEFAULT_CLINIC_DISCOVERY_ACTOR_ID &&
     settings.decisionMaker.enabled === DEFAULT_DECISION_MAKER_ENABLED &&
     settings.decisionMaker.actorId === DEFAULT_DECISION_MAKER_ACTOR_ID &&
-    !settings.emailExtractor.enabled &&
-    settings.emailExtractor.actorId === DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID &&
-    !settings.emailVerifier.enabled &&
-    settings.emailVerifier.actorId === DEFAULT_EMAIL_VERIFIER_ACTOR_ID &&
     PIPELINE_STEP_KEYS.every(
       (key) =>
         settings.steps[key].enabled &&

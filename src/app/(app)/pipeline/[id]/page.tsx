@@ -802,7 +802,7 @@ export default async function LeadDetailPage({
   );
 }
 
-// What Find emails knows about the address above it: what kind it is, whether
+// What is known about the address above it: what kind it is, whether
 // it verified, where it came from and when, and every other address found.
 // Nothing at all for a lead nobody has run it on and nobody typed into.
 function EmailFacts({

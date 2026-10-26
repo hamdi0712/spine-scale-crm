@@ -110,8 +110,8 @@ export function linksFromMarkdown(markdown: string, pageUrl: string): WebsiteLin
 }
 
 // http(s) links, and mailto: ones — a "Email Dr. Smith" link is often the only
-// place a clinic's address appears, and Find emails reads them from here
-// (src/lib/emailFind.ts). Nothing that follows or cites pages takes a mailto:.
+// place a clinic's address appears, read by the helpers in
+// src/lib/emailFind.ts. Nothing that follows or cites pages takes a mailto:.
 function absoluteUrl(href: string, base: string): string | null {
   try {
     const u = new URL(href, base || undefined);
