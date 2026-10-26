@@ -31,6 +31,15 @@ import {
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
 import { leadBreakdownV2, leadTier } from "@/lib/leadScore";
+import {
+  EMAIL_SOURCE_LABELS,
+  EMAIL_STATUS_LABELS,
+  EMAIL_TYPE_LABELS,
+  effectiveEmailSource,
+  parseAlternates,
+  readEmailStatus,
+  readEmailType,
+} from "@/lib/emailFind";
 import { loadActiveIcp } from "@/lib/icpDefinitionStore";
 import { emptyBreakdownV2 } from "@/lib/icpScoring";
 import { enrichPlan } from "@/lib/leadEnrich";
@@ -337,6 +346,9 @@ export default async function LeadDetailPage({
                   defaultValue={lead.email ?? ""}
                   className="field"
                 />
+              </div>
+              <div className="col-span-2 -mt-2 empty:hidden sm:col-span-6">
+                <EmailFacts lead={lead} />
               </div>
               <div className="col-span-2 sm:col-span-3">
                 <label className="field-label" htmlFor="linkedinUrl">
@@ -786,6 +798,52 @@ export default async function LeadDetailPage({
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+// What Find emails knows about the address above it: what kind it is, whether
+// it verified, where it came from and when, and every other address found.
+// Nothing at all for a lead nobody has run it on and nobody typed into.
+function EmailFacts({
+  lead,
+}: {
+  lead: {
+    email: string | null;
+    emailType: string | null;
+    emailStatus: string | null;
+    emailSource: string | null;
+    emailCheckedAt: Date | null;
+    emailAlternates: string | null;
+  };
+}) {
+  const source = effectiveEmailSource(lead);
+  const type = readEmailType(lead.emailType);
+  const status = readEmailStatus(lead.emailStatus);
+  const alternates = parseAlternates(lead.emailAlternates);
+  if (!source && !type && !lead.emailCheckedAt && alternates.length === 0) return null;
+  const facts = [
+    type ? EMAIL_TYPE_LABELS[type] : null,
+    lead.email ? EMAIL_STATUS_LABELS[status ?? "unchecked"] : null,
+    source ? EMAIL_SOURCE_LABELS[source] : null,
+    lead.emailCheckedAt
+      ? `checked ${lead.emailCheckedAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+      : null,
+  ].filter(Boolean);
+  return (
+    <div className="text-xs leading-relaxed text-muted">
+      {facts.length > 0 && <p>Email: {facts.join(" · ")}</p>}
+      {alternates.length > 0 && (
+        <p className="break-words">
+          Also found:{" "}
+          {alternates
+            .map(
+              (a) =>
+                `${a.address} (${EMAIL_STATUS_LABELS[a.status ?? "unchecked"].toLowerCase()}, ${EMAIL_SOURCE_LABELS[a.source].toLowerCase()})`,
+            )
+            .join(", ")}
+        </p>
+      )}
     </div>
   );
 }

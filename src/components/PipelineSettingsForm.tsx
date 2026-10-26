@@ -20,6 +20,8 @@ import {
   DEFAULT_ACTOR_IDS,
   DEFAULT_CLINIC_DISCOVERY_ACTOR_ID,
   DEFAULT_DECISION_MAKER_ACTOR_ID,
+  DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID,
+  DEFAULT_EMAIL_VERIFIER_ACTOR_ID,
   DEFAULT_PIPELINE_SETTINGS,
   DEFAULT_PROMOTION_THRESHOLD,
   DEFAULT_V2_PROMOTION_THRESHOLD,
@@ -46,6 +48,7 @@ import {
 } from "@/lib/websiteCrawl";
 import { ICP_MAX_SCORE, ICP_TIER_BANDS, tierForScore } from "@/lib/icp";
 import Toggle from "@/components/Toggle";
+import { EXTRACTOR_MAX_PAGES, VERIFIER_USD_PER_ADDRESS, extractorCost } from "@/lib/emailFindRates";
 import Link from "next/link";
 import { FIT_FLOOR, FIT_MAX, V2_MAX_SCORE } from "@/lib/icpWeights";
 import { V2_TIER_BANDS, v2TierForScore } from "@/lib/icpScoring";
@@ -375,12 +378,96 @@ export default function PipelineSettingsForm({
         </div>
       </section>
 
+      {/* ─── Find emails ─────────────────────────────────────────────────── */}
+      <section>
+        <h2 className="display mb-1 text-xl font-semibold">Find emails</h2>
+        <p className="helper-text mb-4 text-sm text-muted">
+          The two actors Pipeline&apos;s Find emails runs. The stored crawl is
+          always read first, for free; these are what it falls back on
+        </p>
+        <div className="card divide-y divide-line/60">
+          <EmailActorRow
+            name="emailExtractor"
+            title="Email extractor"
+            blurb={`Crawls up to ${EXTRACTOR_MAX_PAGES} pages of the clinic's site for addresses — only for a lead whose stored crawl had none. Roughly ${fmtEstimate(extractorCost())} per lead.`}
+            fallback={DEFAULT_EMAIL_EXTRACTOR_ACTOR_ID}
+            setting={draft.emailExtractor}
+            onChange={(emailExtractor) => setDraft((prev) => ({ ...prev, emailExtractor }))}
+          />
+          <EmailActorRow
+            name="emailVerifier"
+            title="Email verifier"
+            blurb={`Checks every address before it counts, one address per run, roughly ~$${VERIFIER_USD_PER_ADDRESS.toFixed(3)} each. Find emails will not start while this is off: only a verified-valid address is usable.`}
+            fallback={DEFAULT_EMAIL_VERIFIER_ACTOR_ID}
+            setting={draft.emailVerifier}
+            onChange={(emailVerifier) => setDraft((prev) => ({ ...prev, emailVerifier }))}
+          />
+        </div>
+      </section>
+
       <SaveBar draft={draft} stored={settings} onReset={() =>
           // The defaults, except the model in force: that switch is not on
           // this page, and Reset should not appear to throw it.
           setDraft({ ...DEFAULT_PIPELINE_SETTINGS, scoringModel: settings.scoringModel })
         } />
     </form>
+  );
+}
+
+// One of the two Find emails actors: on or off, and which actor.
+function EmailActorRow({
+  name,
+  title,
+  blurb,
+  fallback,
+  setting,
+  onChange,
+}: {
+  name: "emailExtractor" | "emailVerifier";
+  title: string;
+  blurb: string;
+  fallback: string;
+  setting: { enabled: boolean; actorId: string };
+  onChange: (next: { enabled: boolean; actorId: string }) => void;
+}) {
+  const typed = setting.actorId.trim();
+  const malformed = typed !== "" && normalizeApifyId(typed) === null;
+  return (
+    <div className={`p-6 ${setting.enabled ? "" : "bg-wash/40"}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">{blurb}</p>
+        </div>
+        <Toggle
+          name={`${name}Enabled`}
+          checked={setting.enabled}
+          onChange={(enabled) => onChange({ ...setting, enabled })}
+          label={`${title} — ${setting.enabled ? "on" : "off"}`}
+        />
+      </div>
+      <div className="mt-4">
+        <label className="field-label" htmlFor={`${name}ActorId`}>
+          Actor
+        </label>
+        <input
+          id={`${name}ActorId`}
+          name={`${name}ActorId`}
+          value={setting.actorId}
+          onChange={(e) => onChange({ ...setting, actorId: e.target.value })}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder={fallback}
+          aria-invalid={malformed || undefined}
+          className={`field font-mono text-xs ${malformed ? "border-bad focus:border-bad focus:ring-bad/15" : ""}`}
+        />
+        <p className={`${malformed ? "" : "helper-text "}mt-1.5 text-xs leading-relaxed text-muted`}>
+          {malformed
+            ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
+            : `Blank runs ${fallback}.`}
+        </p>
+      </div>
+    </div>
   );
 }
 
