@@ -53,6 +53,10 @@ export interface JobItemResult {
   // The runner takes one worker away, waits, and runs the item again rather
   // than recording it.
   backoff?: boolean;
+  // What this item actually spent, where the job knows better than its
+  // estimate (Find emails stops early on most leads). Omitted, the item's
+  // estimate is counted.
+  spentUsd?: number;
 }
 
 export interface JobSpec<T extends JobItem> {
@@ -210,7 +214,7 @@ async function drive<T extends JobItem>(id: string, spec: JobSpec<T>): Promise<v
             done: { increment: 1 },
             succeeded: { increment: result.outcome === "error" ? 0 : 1 },
             failed: { increment: result.outcome === "error" ? 1 : 0 },
-            spentUsd: { increment: next.item.estimateUsd ?? 0 },
+            spentUsd: { increment: result.spentUsd ?? next.item.estimateUsd ?? 0 },
             current: currentLine(),
             heartbeatAt: new Date(),
           },

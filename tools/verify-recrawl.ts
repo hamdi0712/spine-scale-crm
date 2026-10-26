@@ -227,7 +227,7 @@ async function main(): Promise<void> {
   const enrich = fs.readFileSync(path.join(__dirname, "../src/lib/enrichRun.ts"), "utf8");
   check("Process Queue's crawl still calls the one-call run (no mode passed)", /runWebsiteCrawl\(required, settings\)/.test(enrich));
   const jobs = fs.readFileSync(path.join(__dirname, "../src/lib/actions/jobs.ts"), "utf8");
-  check("only the two re-crawl jobs set concurrency", (jobs.match(/concurrency:/g) ?? []).length === 2);
+  check("only the two re-crawl jobs and Find emails set concurrency", (jobs.match(/concurrency:/g) ?? []).length === 3);
 
   await prisma.$disconnect();
   server.close();

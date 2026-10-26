@@ -109,9 +109,13 @@ export function linksFromMarkdown(markdown: string, pageUrl: string): WebsiteLin
   return out;
 }
 
+// http(s) links, and mailto: ones — a "Email Dr. Smith" link is often the only
+// place a clinic's address appears, and Find emails reads them from here
+// (src/lib/emailFind.ts). Nothing that follows or cites pages takes a mailto:.
 function absoluteUrl(href: string, base: string): string | null {
   try {
     const u = new URL(href, base || undefined);
+    if (u.protocol === "mailto:") return /@/.test(u.pathname) ? `mailto:${u.pathname}` : null;
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;
     u.hash = "";
     return u.toString();
@@ -270,6 +274,7 @@ const PROGRAM_TERMS = ["decompression", "disc", "sciatica", "herniated", "hernia
 const AVOID_SURGERY = /\b(avoid(ing)?\s+surgery|surgery\s+alternative|alternative\s+to\s+surgery|non\s+surgical)\b/;
 
 export function isProgramLink(link: Pick<WebsiteLink, "text" | "url">): boolean {
+  if (/^mailto:/i.test(link.url)) return false;
   let path = "";
   try {
     path = decodeURIComponent(new URL(link.url).pathname);

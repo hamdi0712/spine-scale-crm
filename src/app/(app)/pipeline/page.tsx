@@ -2,13 +2,14 @@ import PageActions from "@/components/PageActions";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { PIPELINE_DEFAULT_WHERE, PIPELINE_SCORING_REJECTED_WHERE } from "@/lib/liveLeadWhere";
-import { leadTier, leadVerdictBadge } from "@/lib/leadScore";
+import { leadScore, leadTier, leadVerdictBadge } from "@/lib/leadScore";
 import { FIRST_MESSAGE_MECHANISMS } from "@/lib/outreachSequence";
 import { openerComparison } from "@/lib/outreachSequenceRead";
 import { setMessageMechanism } from "@/lib/actions/outreachSequence";
 import KanbanBoard, { KanbanLead } from "@/components/KanbanBoard";
 import LeadTable from "@/components/LeadTable";
 import { RecrawlOldLeads } from "@/components/LeadRecrawl";
+import { FindEmailsByTier } from "@/components/FindEmails";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { stepCostPerCandidate } from "@/lib/pipelineSettings";
 import MechanismPicker from "@/components/MechanismPicker";
@@ -94,6 +95,10 @@ export default async function PipelinePage({
     // Derived here so the board and table stay presentational.
     icpTier: leadTier(l),
     icpVerdict: leadVerdictBadge(l),
+    icpScore: (() => {
+      const s = leadScore(l);
+      return s ? `${s.total}/${s.max}` : null;
+    })(),
   }));
 
   return (
@@ -194,6 +199,7 @@ export default async function PipelinePage({
         ) : (
           <>
             {!scoringRejected && <RecrawlOldLeads costPerClinic={recrawlCost} />}
+            {!scoringRejected && <FindEmailsByTier />}
             <LeadTable leads={serialized} recrawlCostPerClinic={recrawlCost} />
           </>
         )}

@@ -13,9 +13,10 @@ import { deleteLeads, moveLeadsStage } from "@/lib/actions/leads";
 import { ICP_TIER_LABELS, ICP_TIER_ORDER, IcpTier } from "@/lib/icp";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
-import { IcpTierBadge, StageBadge } from "@/components/Badge";
+import { IcpTierChip, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 import { useLeadRecrawl } from "@/components/LeadRecrawl";
+import { useFindEmails } from "@/components/FindEmails";
 
 type SortKey =
   | "clinicName"
@@ -33,6 +34,7 @@ export default function LeadTable({
   recrawlCostPerClinic?: number;
 }) {
   const recrawl = useLeadRecrawl(recrawlCostPerClinic);
+  const findEmails = useFindEmails("pipeline-find-emails-selected");
   const [query, setQuery] = useState("");
   // "ACTIVE" rather than "ALL": the list opens on the clinics there is
   // something to do about, which is every stage except the holding one. No
@@ -250,6 +252,7 @@ export default function LeadTable({
           the actions stay with the selection instead of with the header row
           that made it. Nothing renders at all until something is chosen. */}
       {recrawl.panel}
+      {findEmails.panel}
       {chosen.length > 0 && (
         // On a phone the bar docks to the bottom of the screen, just above
         // the tab bar, where a thumb already is.
@@ -288,6 +291,20 @@ export default function LeadTable({
             >
               <span className="max-md:hidden">Re-crawl website</span>
               <span className="md:hidden">Re-crawl</span>
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                void findEmails.run(
+                  { ids: chosen.map((l) => l.id) },
+                  `${chosen.length} selected`,
+                )
+              }
+              disabled={pending || findEmails.running}
+              className="btn disabled:cursor-not-allowed disabled:opacity-50 max-md:px-3"
+            >
+              <span className="max-md:hidden">Find emails</span>
+              <span className="md:hidden">Emails</span>
             </button>
             <button
               type="button"
@@ -347,7 +364,7 @@ export default function LeadTable({
                 </div>
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   <StageBadge stage={lead.stage} />
-                  {(lead.icpTier || lead.icpVerdict) && <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />}
+                  {(lead.icpTier || lead.icpVerdict) && <IcpTierChip tier={lead.icpTier} verdict={lead.icpVerdict} score={lead.icpScore} />}
                 </div>
               </div>
             </li>
@@ -424,7 +441,7 @@ export default function LeadTable({
                 </td>
                 <td className="td">
                   {lead.icpTier || lead.icpVerdict ? (
-                    <IcpTierBadge tier={lead.icpTier} verdict={lead.icpVerdict} />
+                    <IcpTierChip tier={lead.icpTier} verdict={lead.icpVerdict} score={lead.icpScore} />
                   ) : (
                     <span className="text-muted">—</span>
                   )}

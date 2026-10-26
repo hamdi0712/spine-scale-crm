@@ -15,6 +15,7 @@ import {
   triggeredSummary,
 } from "@/lib/icp";
 import { isUsTimeZone } from "@/lib/timezones";
+import { emailSourceAfterFormSave } from "@/lib/emailFind";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -79,7 +80,11 @@ function leadFields(formData: FormData) {
 }
 
 export async function createLead(formData: FormData) {
-  const lead = await prisma.lead.create({ data: leadFields(formData) });
+  const fields = leadFields(formData);
+  // Typed in here, so it is the operator's own: Find emails never touches it.
+  const lead = await prisma.lead.create({
+    data: { ...fields, emailSource: fields.email === null ? null : "manual" },
+  });
   revalidatePath("/pipeline");
   redirect(`/pipeline/${lead.id}`);
 }
@@ -97,15 +102,23 @@ export async function updateLead(id: string, formData: FormData) {
   // nothing, the same as before.
   const current = await prisma.lead.findUnique({
     where: { id },
-    select: { stage: true },
+    select: { stage: true, email: true, emailSource: true },
   });
   if (!current) return;
 
+  // The same comparison for the email: an address changed here becomes the
+  // operator's own ("manual") and loses whatever Find emails had said about
+  // the old one; an unchanged one keeps its source and its verdict.
+  const fields = leadFields(formData);
+  const email = emailSourceAfterFormSave(current, fields.email);
   await prisma.lead.update({
     where: { id },
     data: {
-      ...leadFields(formData),
+      ...fields,
       ...stageChangePatch(str(formData, "stage"), current.stage),
+      ...(email.changed
+        ? { emailSource: email.emailSource, emailType: null, emailStatus: null, emailCheckedAt: null }
+        : {}),
     },
   });
   revalidatePath("/pipeline");

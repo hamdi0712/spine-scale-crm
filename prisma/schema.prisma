@@ -242,6 +242,28 @@ model Lead {
   contactName  String?
   phone        String?
   email        String?
+
+  // What is known about the email above — written by "Find emails"
+  // (src/lib/emailFindRun.ts), except emailSource, which the lead form also
+  // writes: an address typed there is "manual", and Find emails never touches
+  // a manual one. Each value is constrained by src/lib/emailFind.ts.
+  //
+  //   emailType       owner | generic | not_found
+  //   emailStatus     valid | risky | invalid | unknown — null is not checked.
+  //                   Only valid counts as usable; a catch-all domain is
+  //                   risky, never valid.
+  //   emailSource     site_crawl | extractor | name_pattern | imported | manual.
+  //                   An imported address is verified but never replaced.
+  //   emailCheckedAt  when Find emails last ran on this lead
+  //   emailAlternates JSON [{ address, type, status, source }] — every other
+  //                   address found, including an imported one that came back
+  //                   invalid
+  emailType       String?
+  emailStatus     String?
+  emailSource     String?
+  emailCheckedAt  DateTime?
+  emailAlternates String?
+
   leadSource   String?
   // NO_CONTACT is a holding status rather than a stage of the pipeline — no
   // way to reach anybody yet, worth revisiting when there is. See
@@ -951,6 +973,14 @@ model PipelineSettings {
   // How many re-crawls a bulk "Re-crawl website" runs at once (1–8).
   recrawlConcurrency Int @default(4)
 
+  // Find emails (src/lib/emailFindRun.ts): the paid fallback when a lead's
+  // stored crawl has no address, and the verifier every address goes through.
+  // Off by default, like every stage here that spends actor runs.
+  emailExtractorEnabled Boolean @default(false)
+  emailExtractorActorId String  @default("vdrmota~contact-info-scraper")
+  emailVerifierEnabled  Boolean @default(false)
+  emailVerifierActorId  String  @default("andok~email-verifier")
+
   updatedAt DateTime @updatedAt
 }
 
@@ -1656,7 +1686,7 @@ model ScoringApplicationItem {
 // "did not finish" — the only way that label is ever shown.
 model JobRun {
   id     String @id @default(cuid())
-  kind   String // recrawl-candidates | recrawl-leads | compare-scoring | process-queue | demo
+  kind   String // recrawl-candidates | recrawl-leads | compare-scoring | process-queue | find-emails | demo
   // Which button started it, so two panels on one page (Pipeline's selection
   // bar and its "crawled before" card) each show only their own run.
   source String
