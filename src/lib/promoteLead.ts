@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { DiscoveryBreakdown, leadScorecardPrefill } from "@/lib/discovery";
 import { IcpBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { isUsTimeZone } from "@/lib/timezones";
+import { repickMapsEmails } from "@/lib/emailFind";
 
 // The stage a promoted candidate's lead starts at. An import is the top of the
 // funnel by definition, and passing through Discovery does not advance it —
@@ -67,7 +68,10 @@ export async function promoteWithin(
         contactTitle: candidate.contactTitle,
         contactSocialUrls: candidate.contactSocialUrls,
         phone: candidate.phone,
-        email: candidate.email,
+        // The email and what is known about it. Addresses the Maps search
+        // found are ranked again against whoever the candidate now names, so
+        // an owner's address found before the owner was is labelled theirs.
+        ...repickMapsEmails(candidate),
         leadSource: candidate.source,
         // A Clinic-first candidate was found by searching for clinics, not
         // people, and is worked by email; everything else is LinkedIn.

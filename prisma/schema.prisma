@@ -85,6 +85,16 @@ model DiscoveryCandidate {
   sourceActor String?
   sourceQuery String?
 
+  // What is known about `email` above, in the same four columns and with the
+  // same meanings Lead has (see src/lib/emailFind.ts), carried across on
+  // promotion. Written by a Clinic-first search's contact scraping — source
+  // maps_contacts, status null ("not checked"), the rest of what it found as
+  // alternates. Null on everything else.
+  emailType       String?
+  emailStatus     String?
+  emailSource     String?
+  emailAlternates String?
+
   // ─── Decision-maker enrichment ───────────────────────────────────────────
   //
   // A stage of its own, run by hand from the candidate page and only on a

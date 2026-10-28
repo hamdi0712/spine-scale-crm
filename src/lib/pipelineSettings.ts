@@ -388,6 +388,19 @@ export const PIPELINE_STEP_RATES: Record<PipelineStepKey, PipelineStepRate> = {
   googleReviews: { usdPerUnit: 0.004, unitsPerCandidate: 5, unit: "place" },
 };
 
+// The Clinic-first search's contact add-on (scrapeContacts on the Maps
+// crawler), per place it returns. Not a chain step: it is spent at the search,
+// before anything is a candidate, so it is priced on its own for the search's
+// confirm dialog.
+export const MAPS_CONTACTS_USD_PER_PLACE = 0.002;
+
+// The most a search can add for contacts: every term returning its full
+// allowance. A ceiling rather than a typical figure, because the dialog is
+// asking before the money is spent and fewer results only make it cheaper.
+export function mapsContactsCost(terms: number, resultsPerTerm: number): number {
+  return Math.max(0, terms) * Math.max(0, resultsPerTerm) * MAPS_CONTACTS_USD_PER_PLACE;
+}
+
 // What one candidate consumes of a step under these settings. Only the crawl
 // has a setting behind it; every other step uses its typical figure.
 export function stepUnits(key: PipelineStepKey, settings?: Pick<PipelineSettings, "websiteCrawlPages">): number {

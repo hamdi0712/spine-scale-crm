@@ -183,6 +183,11 @@ export function clinicSearchInput(
     maxItems: config.resultsPerTerm,
     maxResults: config.resultsPerTerm,
     language: "en",
+    // The Maps crawler's contact add-on: it visits each place's website and
+    // returns the addresses on it as `emails`. Paid per place (see
+    // MAPS_CONTACTS_USD_PER_PLACE in src/lib/pipelineSettings.ts), and the
+    // only source of email this pathway has.
+    scrapeContacts: true,
   };
   if (config.headcount) {
     // Only the company-search actors have anything to do with this one, and
@@ -210,6 +215,11 @@ export interface ClinicCandidate {
   facebookUrl: string | null;
   phone: string | null;
   email: string | null;
+  // Every address the actor's contact scraping returned, as it returned them —
+  // uncleaned. The import picks from these (pickMapsEmails in
+  // src/lib/emailFind.ts); `email` above is a single field an actor reported
+  // as such.
+  emails: string[];
   contactName: string | null;
   contactTitle: string | null;
   linkedinUrl: string | null; // the contact's own profile, if one came with it
@@ -223,7 +233,7 @@ export interface ClinicCandidate {
 //
 // Order matters: the first key on a list that has a value wins, so the more
 // specific name is listed before the vaguer one.
-const FIELD_ALIASES: Record<keyof Omit<ClinicCandidate, "sourceQuery">, string[]> = {
+const FIELD_ALIASES: Record<keyof Omit<ClinicCandidate, "sourceQuery" | "emails">, string[]> = {
   clinicName: ["clinicname", "companyname", "businessname", "placename", "title", "name"],
   websiteUrl: ["website", "websiteurl", "url", "domain", "companywebsite", "site"],
   location: ["address", "fulladdress", "formattedaddress", "location", "addressline"],
@@ -304,11 +314,19 @@ export function normalizeClinicRow(
     facebookUrl: readUrl(read("facebookUrl")),
     phone: read("phone"),
     email: read("email"),
+    // The Maps crawler's list, flattened by src/lib/apify.ts into one
+    // comma-joined cell.
+    emails: splitList(byKey.get("emails")),
     contactName: read("contactName"),
     contactTitle: read("contactTitle"),
     linkedinUrl: readUrl(read("linkedinUrl")),
     sourceQuery,
   };
+}
+
+function splitList(cell: string | undefined): string[] {
+  if (!cell) return [];
+  return cell.split(/[,;\s]+/).map((s) => s.trim()).filter((s) => s !== "");
 }
 
 function joinPlace(...parts: (string | null)[]): string | null {
