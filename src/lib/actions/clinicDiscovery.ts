@@ -41,6 +41,7 @@ import { IMPORT_DEFAULT_STATUS, MAX_IMPORT_ROWS } from "@/lib/discoveryImport";
 import { defaultBatchLabel, readBatchLabel } from "@/lib/discoveryBatch";
 import { zoneFromLocation } from "@/lib/timezones";
 import { recordApifySearchRun } from "@/lib/actions/apifySearchLog";
+import { mapsEmailFields, pickMapsEmails } from "@/lib/emailFind";
 
 // How many results one run keeps in total, across every term. The import cap
 // again, and for the same reason: every row kept is a row the queue will spend
@@ -229,6 +230,13 @@ export async function importClinicDiscoveryCandidates(args: {
   const leadIndex = new DedupeIndex(leads);
 
   for (const clinic of clinics) {
+    // The search's addresses, cleaned and ranked once for either path below:
+    // junk and vendor addresses gone, the best one as the email, the rest as
+    // alternates, none of them checked.
+    const emailFields = mapsEmailFields(
+      pickMapsEmails(clinic.email ? [clinic.email, ...clinic.emails] : clinic.emails, clinic),
+    );
+
     const inPipeline = leadIndex.match(clinic);
     if (inPipeline) {
       summary.skipped++;
@@ -245,7 +253,6 @@ export async function importClinicDiscoveryCandidates(args: {
         companyLinkedinUrl: clinic.companyLinkedinUrl,
         facebookUrl: clinic.facebookUrl,
         phone: clinic.phone,
-        email: clinic.email,
         contactName: clinic.contactName,
         contactTitle: clinic.contactTitle,
         linkedinUrl: clinic.linkedinUrl,
@@ -257,17 +264,22 @@ export async function importClinicDiscoveryCandidates(args: {
         sourceQuery: clinic.sourceQuery,
       });
       const source = mergeSources(existing.source, CLINIC_FIRST_SOURCE);
+      // The email and what is known about it go together: all four only onto
+      // a row with no email, so an address already there never ends up beside
+      // a label or alternates that describe a different one.
+      const emailPatch =
+        (existing.email ?? "").trim() === "" && emailFields.email !== null ? emailFields : null;
       await prisma.discoveryCandidate.update({
         where: { id: existing.id },
         // The pathway is not rewritten. A candidate LinkedIn found first was
         // found by LinkedIn first, and `source` above is where the second
         // sighting is recorded.
-        data: { ...patch, source },
+        data: { ...patch, ...(emailPatch ?? {}), source },
       });
       // Keeps the index honest for the rest of this batch: the merged row now
       // carries whatever it just gained, so a later result matching on the new
       // website merges into it too.
-      candidateIndex.add({ ...existing, ...patch });
+      candidateIndex.add({ ...existing, ...patch, email: emailPatch?.email ?? existing.email });
       summary.merged++;
       summary.mergeNotes.push(
         `${clinic.clinicName} — already in Discovery as “${existing.clinicName}” (${DEDUPE_RUNG_LABELS[hit.rung]})`,
@@ -284,7 +296,7 @@ export async function importClinicDiscoveryCandidates(args: {
         companyLinkedinUrl: clinic.companyLinkedinUrl,
         facebookUrl: clinic.facebookUrl,
         phone: clinic.phone,
-        email: clinic.email,
+        ...emailFields,
         // All three stay null unless the actor really returned them. A
         // clinic-first candidate with no decision-maker is the ordinary case,
         // and a blank person on the record would read as a person.
@@ -349,6 +361,9 @@ function readClinics(raw: unknown): ClinicCandidate[] {
       facebookUrl: text(record.facebookUrl),
       phone: text(record.phone),
       email: text(record.email),
+      emails: Array.isArray(record.emails)
+        ? record.emails.map(text).filter((e): e is string => e !== null).slice(0, 50)
+        : [],
       contactName: text(record.contactName),
       contactTitle: text(record.contactTitle),
       linkedinUrl: text(record.linkedinUrl),

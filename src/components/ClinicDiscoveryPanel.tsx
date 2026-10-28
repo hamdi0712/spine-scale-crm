@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   CLINIC_HEADCOUNT_RANGES,
+  ClinicCandidate,
   ClinicHeadcountRange,
   DEFAULT_CLINIC_SEARCH_LOCATION,
   DEFAULT_CLINIC_SEARCH_TERMS,
@@ -35,8 +36,14 @@ import { ApifySearchLogRow, searchStatus } from "@/lib/apifySearchLog";
 import { clinicKeywordStatuses } from "@/lib/actions/apifySearchLog";
 import { SearchUsageBadge } from "@/components/Badge";
 import { normalizeApifyId } from "@/lib/apifyId";
+import { EMAIL_TYPE_LABELS, pickMapsEmails } from "@/lib/emailFind";
 import { MAX_BATCH_LABEL_LENGTH, defaultBatchLabel } from "@/lib/discoveryBatch";
-import { PipelineSettings, estimateSentence } from "@/lib/pipelineSettings";
+import {
+  PipelineSettings,
+  estimateSentence,
+  fmtEstimate,
+  mapsContactsCost,
+} from "@/lib/pipelineSettings";
 
 export default function ClinicDiscoveryPanel({
   enabled,
@@ -115,6 +122,19 @@ export default function ClinicDiscoveryPanel({
   }
 
   async function run() {
+    // The search spends credit the moment it starts — the contact scraping
+    // most of all — so it says what it will add before it does. window.confirm
+    // rather than a dialog of its own, as everywhere else in the app.
+    const places = terms.length * perTerm;
+    if (
+      !confirm(
+        `Search ${terms.length} term${terms.length === 1 ? "" : "s"} × up to ${perTerm} result${perTerm === 1 ? "" : "s"}?\n\n` +
+          `Contact scraping adds ${fmtEstimate(mapsContactsCost(terms.length, perTerm))} at most ` +
+          `(${places} place${places === 1 ? "" : "s"}), on top of the search itself. ` +
+          `Emails it finds are not verified here.`,
+      )
+    )
+      return;
     setError(null);
     setSummary(null);
     setRunning(true);
@@ -396,6 +416,7 @@ export default function ClinicDiscoveryPanel({
                       <th className="th">Clinic</th>
                       <th className="th">Website</th>
                       <th className="th">Location</th>
+                      <th className="th">Email</th>
                       <th className="th">Decision maker</th>
                       <th className="th">Term</th>
                     </tr>
@@ -412,6 +433,9 @@ export default function ClinicDiscoveryPanel({
                           )}
                         </td>
                         <td data-label="Location" className="td text-muted">{clinic.location ?? "—"}</td>
+                        <td data-label="Email" className="td max-w-[220px] truncate text-muted">
+                          <EmailCell clinic={clinic} />
+                        </td>
                         <td data-label="Decision maker" className="td text-muted">
                           {clinic.contactName ?? (
                             <span className="text-muted/70">Not found</span>
@@ -484,5 +508,25 @@ function ImportSummaryCard({ summary }: { summary: ClinicImportSummary }) {
         </ul>
       )}
     </div>
+  );
+}
+
+// What the import will store as this clinic's email — the same pick the
+// server makes, so a vendor address the search returned is not shown as if it
+// were going to be kept.
+function EmailCell({ clinic }: { clinic: ClinicCandidate }) {
+  const { main, alternates } = pickMapsEmails(
+    clinic.email ? [clinic.email, ...clinic.emails] : clinic.emails,
+    clinic,
+  );
+  if (!main) return <span className="text-muted/70">None found</span>;
+  return (
+    <span title={[main, ...alternates].map((e) => e.address).join(", ")}>
+      {main.address}{" "}
+      <span className="text-muted/70">
+        ({EMAIL_TYPE_LABELS[main.type].toLowerCase()}
+        {alternates.length > 0 ? `, +${alternates.length}` : ""})
+      </span>
+    </span>
   );
 }

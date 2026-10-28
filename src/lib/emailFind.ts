@@ -38,12 +38,13 @@ export const EMAIL_STATUS_LABELS: Record<EmailStatus | "unchecked", string> = {
   unchecked: "Not checked",
 };
 
-export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "imported", "manual"] as const;
+export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "maps_contacts", "imported", "manual"] as const;
 export type EmailSource = (typeof EMAIL_SOURCES)[number];
 export const EMAIL_SOURCE_LABELS: Record<EmailSource, string> = {
   site_crawl: "Site crawl",
   extractor: "Extractor",
   name_pattern: "Name pattern",
+  maps_contacts: "Maps contacts",
   imported: "Imported",
   manual: "Entered by hand",
 };
@@ -306,3 +307,83 @@ export function classifyAddress(address: string, person: DecisionMakerName | nul
   return "generic";
 }
 
+
+// ─── Addresses off the Maps search ─────────────────────────────────────────
+
+// What a Clinic-first search's contact scraping found for one clinic, cleaned
+// and ranked: junk and vendor addresses dropped, everything else labelled, the
+// best one first. Nothing here is verified — every status is null, "not
+// checked", until Instantly checks it.
+export interface MapsEmailPick {
+  main: EmailCandidate | null;
+  alternates: EmailCandidate[];
+}
+
+export function pickMapsEmails(
+  raw: readonly string[],
+  clinic: { websiteUrl: string | null; contactName: string | null },
+): MapsEmailPick {
+  const domain = clinicDomain(clinic.websiteUrl);
+  const person = readDecisionMakerName(clinic.contactName);
+  const kept = extractEmails(raw.join("\n")).filter((a) => belongsToClinic(a, domain));
+  // Owner first, then the clinic's own domain over a mailbox provider; the
+  // actor's order breaks a tie (sort is stable).
+  const rank = (c: EmailCandidate) =>
+    (c.type === "owner" ? 0 : 2) + (MAILBOX_PROVIDERS.has(domainOf(c.address)) ? 1 : 0);
+  const ranked = kept
+    .map((address): EmailCandidate => ({
+      address,
+      type: classifyAddress(address, person),
+      status: null,
+      source: "maps_contacts",
+    }))
+    .sort((a, b) => rank(a) - rank(b));
+  return { main: ranked[0] ?? null, alternates: ranked.slice(1) };
+}
+
+// The pick as the four email columns a candidate and a lead both carry. All
+// null when nothing survived, so a merge fills nothing and a promotion carries
+// nothing.
+export function mapsEmailFields(pick: MapsEmailPick): {
+  email: string | null;
+  emailType: string | null;
+  emailStatus: string | null;
+  emailSource: string | null;
+  emailAlternates: string | null;
+} {
+  if (!pick.main) {
+    return { email: null, emailType: null, emailStatus: null, emailSource: null, emailAlternates: null };
+  }
+  return {
+    email: pick.main.address,
+    emailType: pick.main.type,
+    emailStatus: null,
+    emailSource: "maps_contacts",
+    emailAlternates: pick.alternates.length > 0 ? JSON.stringify(pick.alternates) : null,
+  };
+}
+
+// Promotion's half: a candidate's Maps addresses picked again against the
+// person it now has. The decision-maker stage usually names somebody after
+// the search ran, and drsmith@ is only the owner's once Dr. Smith is known.
+// Anything not from the Maps search is returned as it stands.
+export function repickMapsEmails(candidate: {
+  email: string | null;
+  emailType: string | null;
+  emailStatus: string | null;
+  emailSource: string | null;
+  emailAlternates: string | null;
+  websiteUrl: string | null;
+  contactName: string | null;
+}): ReturnType<typeof mapsEmailFields> {
+  const stored = {
+    email: candidate.email,
+    emailType: candidate.emailType,
+    emailStatus: candidate.emailStatus,
+    emailSource: candidate.emailSource,
+    emailAlternates: candidate.emailAlternates,
+  };
+  if (candidate.emailSource !== "maps_contacts" || !candidate.email) return stored;
+  const all = [candidate.email, ...parseAlternates(candidate.emailAlternates).map((a) => a.address)];
+  return mapsEmailFields(pickMapsEmails(all, candidate));
+}
