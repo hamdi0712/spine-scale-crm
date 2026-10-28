@@ -13,6 +13,16 @@ import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { stepCostPerCandidate } from "@/lib/pipelineSettings";
 import MechanismPicker from "@/components/MechanismPicker";
 import OpenerScoreboard from "@/components/OpenerScoreboard";
+import { cookies } from "next/headers";
+import ChannelToggle from "@/components/ChannelToggle";
+import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
+import {
+  PIPELINE_CHANNEL_COOKIE,
+  emailDetailLine,
+  emailLeadStatus,
+  emailSequenceLabel,
+  readPipelineChannel,
+} from "@/lib/emailChannel";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +31,11 @@ export default async function PipelinePage({
 }: {
   searchParams: { view?: string; scoring?: string };
 }) {
+  // Which channel the page shows: Email unless this browser last chose
+  // LinkedIn (src/components/ChannelToggle.tsx).
+  const channel = readPipelineChannel(cookies().get(PIPELINE_CHANNEL_COOKIE)?.value);
+  if (channel === "email") return <EmailPipeline />;
+
   // The table is what loads. It is the view that answers the questions asked
   // most often of a pipeline — who is where, what is scored, what is due — and
   // it is the one that reads at forty rows as well as at four. The board is a
@@ -37,10 +52,13 @@ export default async function PipelinePage({
   const recrawlCost = stepCostPerCandidate("websiteContent", await loadPipelineSettings());
   const [leads, scoringRejectedCount] = await Promise.all([
     prisma.lead.findMany({
-      where: scoringRejected ? PIPELINE_SCORING_REJECTED_WHERE : PIPELINE_DEFAULT_WHERE,
+      where: {
+        ...(scoringRejected ? PIPELINE_SCORING_REJECTED_WHERE : PIPELINE_DEFAULT_WHERE),
+        channel: "linkedin",
+      },
       orderBy: { updatedAt: "desc" },
     }),
-    prisma.lead.count({ where: PIPELINE_SCORING_REJECTED_WHERE }),
+    prisma.lead.count({ where: { ...PIPELINE_SCORING_REJECTED_WHERE, channel: "linkedin" } }),
   ]);
 
   // Every first message that has actually gone out, with the reply mark from
@@ -104,7 +122,10 @@ export default async function PipelinePage({
     <div>
       <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
-          <h1 className="display text-[32px] font-semibold">Pipeline</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="display text-[32px] font-semibold">Pipeline</h1>
+            <ChannelToggle channel="linkedin" />
+          </div>
           <p className="helper-text mt-1.5 text-sm text-muted">
             Clinics in play — every one of them scored before it got here
           </p>
@@ -200,6 +221,83 @@ export default async function PipelinePage({
             {!scoringRejected && <RecrawlOldLeads costPerClinic={recrawlCost} />}
             <LeadTable leads={serialized} recrawlCostPerClinic={recrawlCost} />
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// The Email view: the clinics on the email channel, built around the one
+// thing to do next for each. Nothing here sends — "Send to Instantly" is
+// drawn, disabled, so the page has its final shape before that part exists.
+async function EmailPipeline() {
+  const leads = await prisma.lead.findMany({
+    where: { ...PIPELINE_DEFAULT_WHERE, channel: "email" },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const rows: EmailLeadRow[] = leads.map((l) => {
+    const s = leadScore(l);
+    return {
+      id: l.id,
+      clinicName: l.clinicName,
+      contactName: l.contactName,
+      location: l.location,
+      email: (l.email ?? "").trim() || null,
+      emailDetail: emailDetailLine(l),
+      icpTier: leadTier(l),
+      icpVerdict: leadVerdictBadge(l),
+      icpScore: s ? `${s.total}/${s.max}` : null,
+      status: emailLeadStatus(l),
+      // Nothing is sent yet, so there is no sequence to read.
+      sequence: emailSequenceLabel(null),
+    };
+  });
+  const ready = rows.filter((r) => r.status === "ready").length;
+
+  return (
+    <div>
+      <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="display text-[32px] font-semibold">Pipeline</h1>
+            <ChannelToggle channel="email" />
+          </div>
+          <p className="helper-text mt-1.5 text-sm text-muted">
+            Clinics worked by email — what each one needs next
+          </p>
+        </div>
+        {/* Kept on screen on a phone too: finding clinics is how this view
+            fills, and there are only two. */}
+        <div className="flex items-center gap-2 max-md:[&>*]:flex-1 max-md:[&>*]:justify-center">
+          <Link href="/discovery/import/clinic" className="btn">
+            Find clinics
+          </Link>
+          <button
+            type="button"
+            disabled
+            title="Sending to Instantly is not wired up yet"
+            className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Send {ready} to Instantly
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-8">
+        {rows.length === 0 ? (
+          <div className="card px-6 py-12 text-center">
+            <p className="text-sm font-medium text-ink">No email leads yet</p>
+            <p className="helper-text mx-auto mt-1 max-w-sm text-sm text-muted">
+              Clinics found with Clinic-first search land here once they are
+              scored, or move a lead here from its page.
+            </p>
+            <Link href="/discovery/import/clinic" className="btn-primary mt-5">
+              Find clinics
+            </Link>
+          </div>
+        ) : (
+          <EmailLeadTable rows={rows} />
         )}
       </div>
     </div>

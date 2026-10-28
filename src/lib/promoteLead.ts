@@ -69,6 +69,9 @@ export async function promoteWithin(
         phone: candidate.phone,
         email: candidate.email,
         leadSource: candidate.source,
+        // A Clinic-first candidate was found by searching for clinics, not
+        // people, and is worked by email; everything else is LinkedIn.
+        channel: candidate.discoverySource === "CLINIC_FIRST" ? "email" : "linkedin",
         stage: PROMOTED_LEAD_STAGE,
         // Stamped with the promotion's own instant rather than left to the
         // column's now() default, so the lead, its scorecard and the

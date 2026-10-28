@@ -23,6 +23,7 @@ import {
   Trend,
 } from "@/lib/health";
 import { ICP_TIER_ACTIONS, ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
+import { EMAIL_LEAD_STATUS_LABELS, EmailLeadStatus } from "@/lib/emailChannel";
 import {
   APIFY_SEARCH_STATUS_MEANINGS,
   ApifySearchStatus,
@@ -137,6 +138,22 @@ const STAGE_TONES: Record<string, Tone> = {
 export function StageBadge({ stage }: { stage: string }) {
   const label = LEAD_STAGE_LABELS[stage as LeadStage] ?? stage;
   return <Pill tone={STAGE_TONES[stage] ?? "neutral"} label={label} />;
+}
+
+// An email lead's status. Amber for the two that wait on the operator, blue
+// for ready to go, indigo while the sequence runs, green for a reply — and
+// neutral for no email, which is a gap in the record rather than a fault.
+const EMAIL_LEAD_TONES: Record<EmailLeadStatus, Tone> = {
+  needs_opener: "amber",
+  check_contact: "amber",
+  ready: "blue",
+  in_sequence: "indigo",
+  replied: "green",
+  no_email: "neutral",
+};
+
+export function EmailStatusBadge({ status }: { status: EmailLeadStatus }) {
+  return <Pill tone={EMAIL_LEAD_TONES[status]} label={EMAIL_LEAD_STATUS_LABELS[status]} />;
 }
 
 // A candidate's place in the discovery queue. Blue and teal for work still in

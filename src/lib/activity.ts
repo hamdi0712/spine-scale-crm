@@ -13,6 +13,9 @@
 // the feed answers "what has that thing been doing" without anybody having to
 // go and check. A proposal that was never confirmed is not an event and is
 // never logged.
+//
+// LEADS_MOVED_TO_EMAIL is written once, by the migration that gave leads a
+// channel, to record how many Clinic-first leads it moved to email.
 
 export const ACTIVITY_KINDS = [
   "LEAD_CONVERTED",
@@ -22,6 +25,7 @@ export const ACTIVITY_KINDS = [
   "HEALTH_CHANGED",
   "ONBOARDING_COMPLETED",
   "COPILOT_ACTION",
+  "LEADS_MOVED_TO_EMAIL",
 ] as const;
 
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
@@ -35,6 +39,7 @@ export const ACTIVITY_ICONS: Record<ActivityKind, string> = {
   HEALTH_CHANGED: "pulse",
   ONBOARDING_COMPLETED: "check",
   COPILOT_ACTION: "flag",
+  LEADS_MOVED_TO_EMAIL: "mail",
 };
 
 export function activityIcon(kind: string): string {
