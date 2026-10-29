@@ -14,6 +14,10 @@
 // go and check. A proposal that was never confirmed is not an event and is
 // never logged.
 //
+// CONNECTOR_CHANGE is the same idea for Claude, through the connector's write
+// tools (src/lib/mcpWrites.ts): every one says "via Claude connector" and
+// carries an Undo, and undoing it logs a line of its own.
+//
 // LEADS_MOVED_TO_EMAIL is written once, by the migration that gave leads a
 // channel, to record how many Clinic-first leads it moved to email.
 // LEADS_MOVED_TO_LINKEDIN is written once, by the migration that gave
@@ -28,6 +32,7 @@ export const ACTIVITY_KINDS = [
   "HEALTH_CHANGED",
   "ONBOARDING_COMPLETED",
   "COPILOT_ACTION",
+  "CONNECTOR_CHANGE",
   "LEADS_MOVED_TO_EMAIL",
   "LEADS_MOVED_TO_LINKEDIN",
 ] as const;
@@ -43,6 +48,7 @@ export const ACTIVITY_ICONS: Record<ActivityKind, string> = {
   HEALTH_CHANGED: "pulse",
   ONBOARDING_COMPLETED: "check",
   COPILOT_ACTION: "flag",
+  CONNECTOR_CHANGE: "flag",
   LEADS_MOVED_TO_EMAIL: "mail",
   LEADS_MOVED_TO_LINKEDIN: "pipeline",
 };

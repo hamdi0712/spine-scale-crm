@@ -5,6 +5,7 @@ import {
 } from "@/lib/actions/mcpConnectors";
 import { listConnections } from "@/lib/mcpOAuth";
 import { MCP_TOOL_NAMES } from "@/lib/mcpServer";
+import { MCP_WRITE_TOOL_NAMES } from "@/lib/mcpWrites";
 import { fmtDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -22,16 +23,21 @@ export default async function ConnectorsPage() {
       <div className="mb-4">
         <h2 className="display text-xl font-semibold">Connectors</h2>
         <p className="helper-text mt-1 text-sm text-muted">
-          Claude&rsquo;s read-only access to this CRM through the MCP connector
+          Claude&rsquo;s access to this CRM through the MCP connector
         </p>
       </div>
 
       <div className="helper-text card mb-6 px-6 py-4">
         <p className="text-sm font-medium">What a connected client can do</p>
         <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
-          Read, and nothing else. It gets the same lookups the AI Copilot uses —{" "}
-          {MCP_TOOL_NAMES.length} of them, with the same limits — and no way to
-          change, send or delete anything. Scraped website text, reviews and
+          It gets the same lookups the AI Copilot uses —{" "}
+          {MCP_TOOL_NAMES.length} of them, with the same limits — and{" "}
+          {MCP_WRITE_TOOL_NAMES.length} small changes to one lead at a time
+          (email, contact name, note, task, stage, reply, un-flag). Claude asks
+          you before each change; each one lands in Activity marked &ldquo;via
+          Claude connector&rdquo; with an Undo. It cannot approve, mark sent or
+          send an email, delete anything, or touch clients, reporting or
+          settings. Scraped website text, reviews and
           prospect replies reach it labelled as untrusted, exactly as they reach
           the copilot. Access is granted by typing the app password when Claude
           asks; changing the password also cuts every connector off.

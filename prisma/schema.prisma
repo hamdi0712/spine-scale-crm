@@ -252,21 +252,21 @@ model DiscoveryCandidate {
   // When the queue last finished with this candidate, whichever way it went.
   processedAt DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  copilotActions CopilotAction[]
 
   @@index([status])
   @@index([batchLabel])
   @@index([channel])
-  copilotActions CopilotAction[]
 }
 
 model Lead {
-  id           String    @id @default(cuid())
-  clinicName   String
-  contactName  String?
-  phone        String?
-  email        String?
+  id          String  @id @default(cuid())
+  clinicName  String
+  contactName String?
+  phone       String?
+  email       String?
 
   // What is known about the email above — written by "Find emails"
   // (Find emails, since removed), except emailSource, which the lead form also
@@ -296,12 +296,12 @@ model Lead {
   // channels changes this column and nothing else — its LinkedIn marks stay.
   channel String @default("linkedin")
 
-  leadSource   String?
+  leadSource     String?
   // NO_CONTACT is a holding status rather than a stage of the pipeline — no
   // way to reach anybody yet, worth revisiting when there is. See
   // LEAD_STAGES in src/lib/constants.ts, which is where the list is owned;
   // this column is a plain string, so a stage added there needs no migration.
-  stage        String    @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST | NO_CONTACT
+  stage          String    @default("NEW") // NEW | CONTACTED | DISCOVERY | PROPOSAL | NEGOTIATING | WON | LOST | NO_CONTACT
   // When the stage above last actually changed.
   //
   // Not updatedAt, which is what the date-based stage metrics used to read and
@@ -315,10 +315,10 @@ model Lead {
   // creation, which is true: reaching a stage by being made at it is still
   // reaching it. Backfilled to createdAt on existing rows for the same reason
   // — it is the only instant about them the database can honestly claim.
-  stageChangedAt DateTime @default(now())
-  estValue     Float?
-  nextFollowUp DateTime?
-  archived     Boolean   @default(false) // set when converted to a client (or otherwise closed out)
+  stageChangedAt DateTime  @default(now())
+  estValue       Float?
+  nextFollowUp   DateTime?
+  archived       Boolean   @default(false) // set when converted to a client (or otherwise closed out)
 
   // Prospecting detail, mostly arriving through the CSV import
   // (src/lib/leadImport.ts) but editable by hand like everything else.
@@ -529,6 +529,8 @@ model Lead {
 
   copilotActions CopilotAction[]
 
+  connectorChanges ConnectorChange[]
+
   @@index([scoringRejectedAt])
 }
 
@@ -537,19 +539,19 @@ model Lead {
 // as it was copied, so a later template edit never rewrites the record. The
 // daily limit counts these by sentAt.
 model EmailSend {
-  id      String   @id @default(cuid())
-  leadId  String
-  lead    Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  step    Int
-  toEmail String
+  id        String        @id @default(cuid())
+  leadId    String
+  lead      Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  step      Int
+  toEmail   String
   // The inbox it went from: the row, and its address as it was, so the record
   // survives the inbox being renamed or removed.
   inboxId   String?
   inbox     SendingInbox? @relation(fields: [inboxId], references: [id], onDelete: SetNull)
   fromEmail String?
-  subject String
-  body    String
-  sentAt  DateTime @default(now())
+  subject   String
+  body      String
+  sentAt    DateTime      @default(now())
 
   @@unique([leadId, step])
   @@index([sentAt])
@@ -598,18 +600,18 @@ model EmailSettings {
   // The owner-direct subject, and the front desk's.
   subjectTemplate          String
   frontDeskSubjectTemplate String @default("Quick question about {clinic}")
-  ownerBodyTemplate  String
-  frontDeskTemplate  String
-  optOutLine         String
+  ownerBodyTemplate        String
+  frontDeskTemplate        String
+  optOutLine               String
   // JSON array of follow-up bodies, in order. The last one is the last email.
-  followUpTemplates  String
+  followUpTemplates        String
   // After the opt-out line on every email; "{sender}" is senderName.
-  signOff            String  @default("{sender}")
+  signOff                  String @default("{sender}")
   // The fallback for {sender} when the sending inbox has no display name.
-  senderName         String  @default("")
-  followUpDelayDays  Int     @default(3)
+  senderName               String @default("")
+  followUpDelayDays        Int    @default(3)
   // UNUSED since each sending inbox has its own limit (SendingInbox).
-  dailyLimit         Int     @default(10)
+  dailyLimit               Int    @default(10)
 
   updatedAt DateTime @updatedAt
 }
@@ -1127,7 +1129,7 @@ model PipelineSettings {
   // How many pages of a clinic's site the Website Content Crawler reads: the
   // home page, then the links most likely to be a program page first
   // (src/lib/websiteCrawl.ts). Billed per page.
-  websiteCrawlPages Int @default(6)
+  websiteCrawlPages  Int @default(6)
   // How many re-crawls a bulk "Re-crawl website" runs at once (1–8).
   recrawlConcurrency Int @default(4)
 
@@ -1485,9 +1487,9 @@ model CopilotMessage {
   conversationId String
   conversation   CopilotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  role      String // user | assistant | error
-  content   String
-  toolsUsed String   @default("")
+  role            String // user | assistant | error
+  content         String
+  toolsUsed       String   @default("")
   // The action proposed in this turn, where one was. Nullable on every other
   // turn, which is nearly all of them — a proposal is the exception, and the
   // card is drawn from the row rather than from anything in `content`.
@@ -1495,8 +1497,8 @@ model CopilotMessage {
   // The order the turns were said in. createdAt alone is not enough: a
   // question and its answer are saved in the same write and can land on the
   // same millisecond.
-  position  Int
-  createdAt DateTime @default(now())
+  position        Int
+  createdAt       DateTime @default(now())
 
   @@index([conversationId, position])
 }
@@ -1558,12 +1560,12 @@ model MonkModeChallenge {
 
   // Midnight UTC on the first day. Day 1 is this date, not the day after it.
   startDate    DateTime
-  durationDays Int      @default(21)
+  durationDays Int       @default(21)
   // The last day counted, stamped when the challenge is ended by starting a
   // new one. Null on the one being run. Ending a challenge deletes nothing:
   // completions and notes are filed under real days, not under a challenge,
   // so a finished challenge is only ever this date range read back.
-  endDate DateTime?
+  endDate      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1579,7 +1581,7 @@ model MonkModeChallenge {
 model MonkModeHabit {
   id String @id @default(cuid())
 
-  name String
+  name        String
   // The line under the name on the card. Optional: a habit called "30 Minute
   // Exercise" does not need explaining, and an empty subtitle is better than a
   // restatement of the name.
@@ -1589,7 +1591,7 @@ model MonkModeHabit {
   // icon package. Stored as this app's own key so the icon set underneath can
   // be swapped without rewriting rows, and an unknown key falls back rather
   // than crashing a card.
-  icon String @default("target")
+  icon   String @default("target")
   // A key into MONK_ACCENTS, likewise — a semantic token name, never a hex.
   // The palette is the app's own and follows light and dark with it.
   accent String @default("accent")
@@ -1598,12 +1600,12 @@ model MonkModeHabit {
   // the reason this is a number rather than a boolean.
   dailyTarget Int @default(1)
 
-  sortOrder Int @default(0)
+  sortOrder Int     @default(0)
   // Retired rather than deleted: the completions behind a habit are a record
   // of days that actually happened, and dropping the habit would drop them.
   // An inactive habit leaves the grid and stops counting against a day, and
   // its history stays readable.
-  active Boolean @default(true)
+  active    Boolean @default(true)
 
   completions MonkModeCompletion[]
 
@@ -1825,18 +1827,18 @@ model ScoringApplication {
 // One record the apply touched. before/after are JSON of the snapshotted
 // fields; a record is restored on revert only while it still reads as after.
 model ScoringApplicationItem {
-  id            String             @id @default(cuid())
-  applicationId String
-  application   ScoringApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  subjectKind   String // candidate | lead
-  subjectId     String
-  clinicName    String
-  action        String // promoted | rejected | flagged
-  before        String
-  after         String
+  id             String             @id @default(cuid())
+  applicationId  String
+  application    ScoringApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  subjectKind    String // candidate | lead
+  subjectId      String
+  clinicName     String
+  action         String // promoted | rejected | flagged
+  before         String
+  after          String
   // The record's updatedAt right after the apply wrote it.
   afterUpdatedAt DateTime
-  createdLeadId String?
+  createdLeadId  String?
 
   @@index([applicationId])
 }
@@ -1969,4 +1971,33 @@ model McpOAuthToken {
   createdAt DateTime @default(now())
 
   @@index([clientId])
+}
+
+// One change Claude made through the connector's write tools
+// (src/lib/mcpWrites.ts), kept so it can be read back and undone.
+//
+// Every write tool touches one lead, and this row records exactly what it
+// changed: the lead's fields before and after as JSON, and the ids of any rows
+// the change created (a note, a task, a suppression) so Undo removes those and
+// nothing else. The activity feed's line for the change points here.
+//
+// Undo refuses when the lead's fields no longer match `after` — something else
+// has changed them since, and putting the old values back would undo that too.
+model ConnectorChange {
+  id      String @id @default(cuid())
+  tool    String
+  summary String
+  leadId  String
+  lead    Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  before  String @default("{}")
+  after   String @default("{}")
+  // { noteIds, taskIds, suppressionIds }
+  created String @default("{}")
+
+  activityLogId String?   @unique
+  undoneAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([createdAt])
 }

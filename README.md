@@ -962,7 +962,7 @@ never matches it.
 that claude.ai can add as a custom connector, so the pipeline can be asked
 about from Claude itself.
 
-**What it exposes.** Thirteen of the Copilot's own lookups, read-only:
+**What it exposes.** Thirteen of the Copilot's own lookups:
 `getPipelineLeads` (paged), `searchLeads` (with the connection-status
 filter), `getLeadDetail`, `getLeadOutreachLog`, `getOutreachFunnelSummary`,
 `getDiscoveryQueueStatus`, `getClientHealthSummary`, `getTasks`,
@@ -974,6 +974,30 @@ Copilot's dispatcher (`runCopilotTool` in `src/lib/copilotLookups.ts`), so
 the caps, the paging and the results are identical. `proposeAction` and the
 other lookups are not on the list and are refused by the server
 (`src/lib/mcpServer.ts`).
+
+**Email data.** `getPipelineLeads`, `searchLeads` and `getLeadDetail` return
+each lead's channel, email with its type, status and source, assigned
+sending inbox, email workflow status (No email, Needs opener, Ready, In
+sequence, …) and whether it is suppressed. The two list lookups filter by
+`channel`, `emailStatus` (`valid`/`risky`/`invalid`/`unknown`/`unchecked`)
+and `emailWorkflowStatus`.
+
+**Write tools** (`src/lib/mcpWrites.ts`): `setLeadEmail`, `setContactName`,
+`addLeadNote`, `createTask`, `moveLeadStage` (Lost included), `markReplied`
+(text and type; the app's own Mark replied on an email lead) and
+`unflagLead`. Each is declared `readOnlyHint: false`, so Claude asks before
+calling it; takes one `leadId` and refuses lists; refuses archived
+(converted) leads; and is logged to Activity as "… — via Claude connector"
+with before and after values stored on a `ConnectorChange` row. **Undo** on
+that Activity line restores the fields and removes any note, task or
+suppression the change created; it refuses if the lead has changed since.
+There is no tool that approves, marks sent or sends an email, deletes
+anything, or touches clients, reporting or settings. A free-text argument
+that repeats a run of the lead's scraped website text or reply text is
+refused, so planted text cannot be carried into a write.
+
+    DATABASE_URL="file:$PWD/.verify.db" npx prisma migrate deploy
+    DATABASE_URL="file:$PWD/.verify.db" npx tsx tools/verify-mcp-writes.ts
 
 **Untrusted text.** Scraped website copy, review counts and prospect replies
 arrive nested under `untrustedScrapedContent` with the same warning the
