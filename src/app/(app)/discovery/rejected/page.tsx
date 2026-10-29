@@ -11,7 +11,13 @@ import {
 } from "@/lib/storedBreakdown";
 import { fmtDate } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
-import { IcpTierBadge, SecondLookBadge } from "@/components/Badge";
+import { IcpTierBadge, SecondLookBadge, TalkingOnLinkedinBadge } from "@/components/Badge";
+import { cookies } from "next/headers";
+import {
+  DISCOVERY_CHANNEL_COOKIE,
+  LEAD_CHANNEL_LABELS,
+  readPipelineChannel,
+} from "@/lib/emailChannel";
 import ConfirmForm from "@/components/ConfirmForm";
 import DiscoveryBreakdownView from "@/components/DiscoveryBreakdown";
 import IcpBreakdownV2View from "@/components/IcpBreakdownV2View";
@@ -53,6 +59,8 @@ export default async function RejectedCandidatesPage({
         : "all";
 
   const now = new Date();
+  // The channel Discovery is showing: its Rejected list is that channel's.
+  const channel = readPipelineChannel(cookies().get(DISCOVERY_CHANNEL_COOKIE)?.value);
 
   // Flagged first, then the order this page has always used. A second-look flag
   // is exactly the signal the sort was reaching for — "where a decision worth
@@ -62,6 +70,7 @@ export default async function RejectedCandidatesPage({
   const [candidates, rejectedTotal, lastSwept] = await Promise.all([
     prisma.discoveryCandidate.findMany({
       where: {
+        channel,
         status: "REJECTED",
         ...(filter === "disqualified" ? { disqualified: true } : {}),
         ...(filter === "ctier" ? { disqualified: false } : {}),
@@ -75,7 +84,7 @@ export default async function RejectedCandidatesPage({
     // The whole list, not the filtered view — the sweep reads every rejection
     // regardless of which tab is open, so the button's state should not change
     // with the filter.
-    prisma.discoveryCandidate.count({ where: { status: "REJECTED" } }),
+    prisma.discoveryCandidate.count({ where: { channel, status: "REJECTED" } }),
     prisma.discoveryCandidate.findFirst({
       where: { status: "REJECTED", secondLookAt: { not: null } },
       orderBy: { secondLookAt: "desc" },
@@ -90,7 +99,9 @@ export default async function RejectedCandidatesPage({
           <Link href="/discovery" className="text-sm text-accent hover:underline">
             ← Discovery
           </Link>
-          <h1 className="display mt-2 text-[32px] font-semibold">Rejected</h1>
+          <h1 className="display mt-2 text-[32px] font-semibold">
+            Rejected <span className="text-muted">· {LEAD_CHANNEL_LABELS[channel]}</span>
+          </h1>
           <p className="helper-text mt-1.5 text-sm text-muted">
             Every candidate the queue decided against, and why — highest score
             first, because that is where a decision worth overruling would be
@@ -193,13 +204,17 @@ export default async function RejectedCandidatesPage({
                   {/* The override. Confirmed rather than instant: it is
                       overruling a scored decision whose reasoning is directly
                       below it, and that is a thing to mean. */}
-                  <ConfirmForm
-                    action={promote}
-                    message={`Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`}
-                    className="btn shrink-0"
-                  >
-                    Promote anyway
-                  </ConfirmForm>
+                  {candidate.linkedinConflictLeadId ? (
+                    <TalkingOnLinkedinBadge />
+                  ) : (
+                    <ConfirmForm
+                      action={promote}
+                      message={`Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`}
+                      className="btn shrink-0"
+                    >
+                      Promote anyway
+                    </ConfirmForm>
+                  )}
                 </div>
                 {stored?.model === "v2" ? (
                   <IcpBreakdownV2View breakdown={stored.breakdown} compact />

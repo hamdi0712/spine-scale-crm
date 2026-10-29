@@ -40,6 +40,7 @@ import { clinicKeywordStatuses } from "@/lib/actions/apifySearchLog";
 import { SearchUsageBadge } from "@/components/Badge";
 import { normalizeApifyId } from "@/lib/apifyId";
 import { EMAIL_TYPE_LABELS, pickMapsEmails } from "@/lib/emailFind";
+import { TALKING_ON_LINKEDIN_LABEL } from "@/lib/emailChannel";
 import { MAX_BATCH_LABEL_LENGTH, defaultBatchLabel } from "@/lib/discoveryBatch";
 import {
   PipelineSettings,
@@ -429,8 +430,10 @@ export default function ClinicDiscoveryPanel({
                 {result.clinics.length === 1 ? "" : "s"} found
               </h2>
               <p className="helper-text mt-1 text-sm text-muted">
-                Nothing is written yet. Clinics already in Discovery are merged
-                into what is there rather than added again.
+                Nothing is written yet. They land in Discovery’s Email view.
+                Clinics already there, or already email leads, are merged or
+                skipped rather than added again; old LinkedIn records are left
+                alone.
               </p>
             </div>
             <p className="num text-xs text-muted">
@@ -532,20 +535,25 @@ export default function ClinicDiscoveryPanel({
   );
 }
 
-// What the import actually did, stated in full: created, merged into a
-// candidate that was already there, and skipped because that clinic is already
-// a lead in the pipeline.
+// What the import actually did, stated in full: created, merged into an email
+// candidate that was already there, skipped because that clinic is already an
+// email lead, and tagged because it is talking to us on LinkedIn.
 function ImportSummaryCard({ summary }: { summary: ClinicImportSummary }) {
   return (
     <div className="rounded-[10px] border border-ok/30 bg-ok-soft/60 px-4 py-3">
       <p className="num text-sm font-medium">
         {summary.created === 0
           ? "No new candidates created."
-          : `Created ${summary.created} candidate${summary.created === 1 ? "" : "s"} — none of them scored yet.`}
+          : `Created ${summary.created} email candidate${summary.created === 1 ? "" : "s"} — none of them scored yet.`}{" "}
+        <Link href="/discovery" className="font-normal text-accent hover:underline">
+          Open Discovery
+        </Link>
       </p>
       <p className="num mt-0.5 text-xs leading-relaxed text-muted">
-        {summary.merged} merged into a candidate already in Discovery ·{" "}
-        {summary.skipped} skipped as already in the pipeline.
+        {summary.merged} merged into an email candidate already in Discovery ·{" "}
+        {summary.skipped} skipped as already in the email pipeline.
+        {summary.tagged > 0 &&
+          ` ${summary.tagged} tagged ${TALKING_ON_LINKEDIN_LABEL} — already talking to us there, so they won’t be promoted to email.`}
       </p>
       {summary.mergeNotes.length > 0 && (
         <ul className="mt-2 space-y-1 text-xs leading-relaxed text-muted">

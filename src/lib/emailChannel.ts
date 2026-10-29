@@ -45,6 +45,40 @@ export function readPipelineChannel(v: unknown): PipelineChannel {
   return v === "linkedin" ? "linkedin" : DEFAULT_PIPELINE_CHANNEL;
 }
 
+// Discovery is split the same way and read with readPipelineChannel, but its
+// toggle is remembered separately from Pipeline's.
+export const DISCOVERY_CHANNEL_COOKIE = "discovery-channel";
+
+// ─── Talking on LinkedIn ───────────────────────────────────────────────────
+
+// The stages that mean a LinkedIn conversation is under way: Discovery Call
+// Booked and everything the pipeline only reaches through it. Lost and No
+// Contact come after it in LEAD_STAGES but are not live conversations; a lost
+// lead that had accepted or replied is still caught by those two fields.
+export const LINKEDIN_ENGAGED_STAGES = ["DISCOVERY", "PROPOSAL", "NEGOTIATING", "WON"] as const;
+
+// A LinkedIn lead that is already talking to us: accepted the connection,
+// replied, or reached Discovery Call Booked or later. An email candidate for
+// the same clinic is still created, but tagged and never promoted, so nobody
+// emails a clinic mid-conversation on LinkedIn.
+export function isTalkingOnLinkedin(lead: {
+  channel: string;
+  stage: string;
+  connectionAcceptedAt: Date | null;
+  repliedAt: Date | null;
+}): boolean {
+  return (
+    lead.channel === "linkedin" &&
+    (lead.connectionAcceptedAt !== null ||
+      lead.repliedAt !== null ||
+      (LINKEDIN_ENGAGED_STAGES as readonly string[]).includes(lead.stage))
+  );
+}
+
+export const TALKING_ON_LINKEDIN_LABEL = "Talking on LinkedIn";
+export const TALKING_ON_LINKEDIN_BLOCK =
+  "Not promoted: this clinic is already talking to us on LinkedIn. Carry on there.";
+
 // ─── Email status ──────────────────────────────────────────────────────────
 
 export const EMAIL_LEAD_STATUSES = [

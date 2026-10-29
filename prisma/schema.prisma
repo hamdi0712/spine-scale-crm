@@ -95,6 +95,20 @@ model DiscoveryCandidate {
   emailSource     String?
   emailAlternates String?
 
+  // Which channel this candidate is found for: email | linkedin | call, the
+  // same set as Lead.channel (LEAD_CHANNELS in src/lib/emailChannel.ts).
+  // Discovery shows one channel at a time, and a candidate promotes onto its
+  // own channel. Every candidate that existed before the column is linkedin;
+  // Clinic-first search writes email.
+  channel String @default("linkedin")
+
+  // "Talking on LinkedIn": the LinkedIn lead this email candidate matched when
+  // it was imported — one that has accepted, replied, or reached Discovery
+  // Call Booked or later. Null on everything else. A candidate carrying it is
+  // never promoted (promoteWithin refuses it) and Process queue skips it.
+  // Not a foreign key, so deleting that lead never deletes this record.
+  linkedinConflictLeadId String?
+
   // ─── Decision-maker enrichment ───────────────────────────────────────────
   //
   // A stage of its own, run by hand from the candidate page and only on a
@@ -243,6 +257,7 @@ model DiscoveryCandidate {
 
   @@index([status])
   @@index([batchLabel])
+  @@index([channel])
   copilotActions CopilotAction[]
 }
 

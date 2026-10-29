@@ -16,11 +16,19 @@ import { DiscoveryBreakdown, leadScorecardPrefill } from "@/lib/discovery";
 import { IcpBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { isUsTimeZone } from "@/lib/timezones";
 import { repickMapsEmails } from "@/lib/emailFind";
+import { TALKING_ON_LINKEDIN_BLOCK, readLeadChannel } from "@/lib/emailChannel";
 
 // The stage a promoted candidate's lead starts at. An import is the top of the
 // funnel by definition, and passing through Discovery does not advance it —
 // scoring says whether to talk to a clinic, not that anybody has.
 export const PROMOTED_LEAD_STAGE = "NEW";
+
+export class TalkingOnLinkedinError extends Error {
+  constructor(clinicName: string) {
+    super(`${clinicName}: ${TALKING_ON_LINKEDIN_BLOCK}`);
+    this.name = "TalkingOnLinkedinError";
+  }
+}
 
 // Creates the lead and marks the candidate promoted, in one transaction: a
 // lead with no candidate pointing at it would be re-created by the next run of
@@ -56,6 +64,12 @@ export async function promoteWithin(
     const candidate = await tx.discoveryCandidate.findUniqueOrThrow({
       where: { id: candidateId },
     });
+    // The backstop behind every promotion path: a clinic already talking to
+    // us on LinkedIn is never put into the email pipeline. Each path skips
+    // these before it gets here; this makes sure none can.
+    if (candidate.linkedinConflictLeadId !== null) {
+      throw new TalkingOnLinkedinError(candidate.clinicName);
+    }
 
     const lead = await tx.lead.create({
       data: {
@@ -73,9 +87,11 @@ export async function promoteWithin(
         // an owner's address found before the owner was is labelled theirs.
         ...repickMapsEmails(candidate),
         leadSource: candidate.source,
-        // A Clinic-first candidate was found by searching for clinics, not
-        // people, and is worked by email; everything else is LinkedIn.
-        channel: candidate.discoverySource === "CLINIC_FIRST" ? "email" : "linkedin",
+        // Onto the candidate's own channel and no other: an email candidate
+        // becomes an email lead, everything else a LinkedIn one. Not how it
+        // was found — a Clinic-first candidate from before Discovery had
+        // channels is a LinkedIn candidate and promotes as one.
+        channel: readLeadChannel(candidate.channel) === "email" ? "email" : "linkedin",
         stage: PROMOTED_LEAD_STAGE,
         // Stamped with the promotion's own instant rather than left to the
         // column's now() default, so the lead, its scorecard and the

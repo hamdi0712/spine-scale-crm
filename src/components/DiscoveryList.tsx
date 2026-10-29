@@ -61,6 +61,7 @@ import {
 import { fmtDate } from "@/lib/format";
 import {
   DiscoveryStatusBadge,
+  TalkingOnLinkedinBadge,
   IcpScoreBadge,
   IcpTierBadge,
   icpTierDot,
@@ -100,6 +101,9 @@ export interface DiscoveryRow {
   // server — the list shows one line of "why" and links to the rest.
   reason: string | null;
   promotedLeadId: string | null;
+  // An email candidate whose clinic is talking to us on LinkedIn: tagged, and
+  // never promoted.
+  talkingOnLinkedin: boolean;
   createdAt: string;
 }
 
@@ -689,7 +693,10 @@ export default function DiscoveryList({
                     )}
                   </td>
                   <td className="td">
-                    <DiscoveryStatusBadge status={row.status} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <DiscoveryStatusBadge status={row.status} />
+                      {row.talkingOnLinkedin && <TalkingOnLinkedinBadge />}
+                    </div>
                   </td>
                   <td className="td">
                     {row.icpTier || row.icpVerdict ? (
@@ -842,8 +849,9 @@ function CandidateCard({
       {/* mt-auto so the footers line up across a row of cards whose middles
           are different heights — a clinic with no location is still a card the
           same shape as the one beside it. */}
-      <div className="mt-auto flex items-center gap-2 pt-4">
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
         <DiscoveryStatusBadge status={row.status} />
+        {row.talkingOnLinkedin && <TalkingOnLinkedinBadge />}
         <span className="num ml-auto shrink-0 text-xs text-muted">
           {fmtDate(row.createdAt)}
         </span>

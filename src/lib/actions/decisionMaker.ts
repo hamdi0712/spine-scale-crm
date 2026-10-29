@@ -581,6 +581,12 @@ async function applyDecisionMaker(
   // Not a lead yet, and qualified: promote it the ordinary way, through the
   // same path the queue uses.
   if (candidate.status !== "QUALIFIED_NO_CONTACT") return null;
+  // Talking on LinkedIn: the person is recorded, but it is never promoted.
+  const tagged = await prisma.discoveryCandidate.findUnique({
+    where: { id },
+    select: { linkedinConflictLeadId: true },
+  });
+  if (tagged?.linkedinConflictLeadId) return null;
   const breakdown = parseBreakdown(candidate.icpBreakdown);
   return promoteToLead(id, breakdown, new Date());
 }

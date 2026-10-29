@@ -25,6 +25,7 @@ import {
 import { COMPARISON_OUTCOME_LABELS } from "@/lib/scoringComparison";
 import { BATCH_QUEUE_DESCRIPTION, defaultBatchLabel } from "@/lib/discoveryBatch";
 import { ICP_MAX_SCORE } from "@/lib/icp";
+import { readPipelineChannel } from "@/lib/emailChannel";
 import { normalizeApifyId } from "@/lib/apifyId";
 import {
   ClinicTermResult,
@@ -210,9 +211,12 @@ export async function startComparisonRetryJob(runId: string): Promise<LaunchResu
 // ─── Process queue ─────────────────────────────────────────────────────────
 
 // selectedIds null is the whole pending queue; a list is exactly what was
-// ticked. Read fresh here, at the moment it starts, either way.
-export async function startQueueJob(selectedIds: string[] | null): Promise<LaunchResult> {
-  const queue = selectedIds ? await discoveryQueueSelected(selectedIds) : await discoveryQueue();
+// ticked. Read fresh here, at the moment it starts, either way — and only the
+// channel Discovery is showing, so the Email view never runs LinkedIn
+// candidates and the other way round.
+export async function startQueueJob(channel: unknown, selectedIds: string[] | null): Promise<LaunchResult> {
+  const ch = readPipelineChannel(channel);
+  const queue = selectedIds ? await discoveryQueueSelected(selectedIds, ch) : await discoveryQueue(ch);
   if (queue.length === 0) {
     return {
       ok: false,

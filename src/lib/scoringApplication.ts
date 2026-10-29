@@ -31,6 +31,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { promoteWithin } from "@/lib/promoteLead";
+import { TALKING_ON_LINKEDIN_LABEL } from "@/lib/emailChannel";
 import { finish, parseBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { OldStanding } from "@/lib/scoringComparison";
 import { LEAD_SCORE_SELECT, candidateStanding, leadStanding } from "@/lib/scoringComparisonStore";
@@ -371,6 +372,7 @@ export async function planApplication(): Promise<PlanResult> {
           disqualifiedReason: true,
           enrichedAt: true,
           updatedAt: true,
+          linkedinConflictLeadId: true,
           promotedLead: { select: LEAD_GUARD_SELECT },
         },
       });
@@ -381,6 +383,17 @@ export async function planApplication(): Promise<PlanResult> {
       const changes = changesSince(row, run.startedAt, candidateStanding(c), c.enrichedAt, c.updatedAt, c.status);
       if (changes.length > 0) {
         stale("candidate", c.id, c.clinicName, changes);
+        continue;
+      }
+      // Talking on LinkedIn: never promoted, by new scoring or anything else
+      // (promoteWithin would refuse it and undo the whole apply).
+      if (row.outcome === "newly_promoted" && c.linkedinConflictLeadId) {
+        plan.protectedLeads.push({
+          kind: "candidate",
+          id: c.id,
+          clinicName: c.clinicName,
+          reason: `${TALKING_ON_LINKEDIN_LABEL} — new scoring would promote it, but it stays a candidate`,
+        });
         continue;
       }
       if (row.outcome === "newly_promoted") {
