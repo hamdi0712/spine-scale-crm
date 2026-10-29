@@ -196,10 +196,15 @@ export default async function DiscoveryPage({
                 </Link>
               </>
             ) : (
-              // The one way into the Email view.
-              <Link href="/discovery/import/clinic" className="btn">
-                Find clinics
-              </Link>
+              <>
+                <Link href="/discovery/search-history" className="btn">
+                  Search history
+                </Link>
+                {/* The one way into the Email view. */}
+                <Link href="/discovery/import/clinic" className="btn">
+                  Find clinics
+                </Link>
+              </>
             )}
             {/* Add clinic by name is deliberately not here. Six buttons made
               this row wrap on any window narrower than a desktop, and of the

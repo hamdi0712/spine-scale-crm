@@ -46,7 +46,7 @@ export default async function ClinicDiscoveryPage() {
           </p>
         </div>
         <PageActions className="flex shrink-0 flex-wrap gap-2">
-          <Link href="/discovery/search-history" className="btn">
+          <Link href="/discovery/search-history?channel=email" className="btn">
             Search history
           </Link>
           <Link href="/discovery/import/apify" className="btn">

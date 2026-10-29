@@ -35,11 +35,15 @@ import {
 } from "@/lib/actions/apifySearchLog";
 import { SearchUsageBadge } from "@/components/Badge";
 import { fmtDateTime } from "@/lib/format";
+import { PipelineChannel } from "@/lib/emailChannel";
 
 export default function SearchHistoryPanel({
   rows,
+  channel,
 }: {
+  // One channel's searches: the toggle on the page above picks which.
   rows: ApifySearchLogRow[];
+  channel: PipelineChannel;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -96,6 +100,7 @@ export default function SearchHistoryPanel({
 
       {adding && (
         <ManualAddForm
+          channel={channel}
           onDone={() => {
             setAdding(false);
             router.refresh();
@@ -107,9 +112,9 @@ export default function SearchHistoryPanel({
         <div className="card px-6 py-10 text-center">
           <p className="text-sm font-medium">Nothing logged yet</p>
           <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
-            Every Apify import and every Clinic-First term is counted here from
-            the moment it is run. Searches run before this existed are not —
-            log them by hand and set the status they have really earned.
+            {channel === "email"
+              ? "Every Clinic-first term is counted here from the moment it is run for email. Every term starts as New on this side, however often it was run for LinkedIn."
+              : "Every Apify import and every Clinic-First term is counted here from the moment it is run. Searches run before this existed are not — log them by hand and set the status they have really earned."}
           </p>
         </div>
       ) : (
@@ -295,7 +300,9 @@ function StatusPicker({
 // Logging a search that was never run through tracking. Its status is the
 // whole reason the row exists, so the form asks for one and defaults to the
 // tier somebody reaching for this form most likely means.
-function ManualAddForm({ onDone }: { onDone: () => void }) {
+//
+// Logged onto the channel being shown, so it counts where it was added.
+function ManualAddForm({ channel, onDone }: { channel: PipelineChannel; onDone: () => void }) {
   const [type, setType] = useState<ApifySearchType>("CLINIC_KEYWORD");
   const [raw, setRaw] = useState("");
   const [status, setStatus] = useState<ApifySearchStatus>("WELL_USED");
@@ -305,7 +312,7 @@ function ManualAddForm({ onDone }: { onDone: () => void }) {
   function submit() {
     setError(null);
     startSave(async () => {
-      const result = await addApifySearchLogEntry({ type, raw, status });
+      const result = await addApifySearchLogEntry({ type, raw, status, channel });
       if (!result.ok) {
         setError(result.error);
         return;

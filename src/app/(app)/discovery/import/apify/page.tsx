@@ -35,7 +35,7 @@ export default async function ApifyImportPage() {
           {/* Every run from this screen is counted against its input JSON —
               the history is where that count is read, and where a search that
               has stopped paying says so. */}
-          <Link href="/discovery/search-history" className="btn">
+          <Link href="/discovery/search-history?channel=linkedin" className="btn">
             Search history
           </Link>
           <Link href="/discovery/import" className="btn">

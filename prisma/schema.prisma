@@ -1570,6 +1570,12 @@ model ApifySearchLog {
   // LINKEDIN_SEARCH or CLINIC_KEYWORD — see src/lib/apifySearchLog.ts.
   type String
 
+  // Which channel the search was run for: email | linkedin, as Discovery is
+  // split. Every row from before the column is linkedin; Clinic-first search
+  // logs email, so a keyword's email count starts from New however often it
+  // was run for LinkedIn.
+  channel String @default("linkedin")
+
   // The normalised search. For LinkedIn, the input JSON with its keys sorted
   // at every depth and its whitespace gone, so re-indenting it is not a new
   // search. For clinic-first, the term, trimmed and lowercased.
@@ -1589,9 +1595,10 @@ model ApifySearchLog {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // One row per search per kind, and the database holds it: two tabs running
-  // the same keyword both upsert and the second settles on the first's row.
-  @@unique([type, key])
+  // One row per search per kind per channel, and the database holds it: two
+  // tabs running the same keyword both upsert and the second settles on the
+  // first's row.
+  @@unique([channel, type, key])
   @@index([lastRunAt])
 }
 

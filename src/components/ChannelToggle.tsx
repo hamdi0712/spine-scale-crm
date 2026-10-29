@@ -32,7 +32,15 @@ export default function ChannelToggle({
     if (next === shown) return;
     setShown(next);
     document.cookie = `${cookie}=${next}; path=/; max-age=31536000; samesite=lax`;
-    startTransition(() => router.refresh());
+    // A page opened with its channel in the URL (?channel=, from a link that
+    // names one) would read that again on a refresh, so it is dropped.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("channel")) {
+      url.searchParams.delete("channel");
+      startTransition(() => router.replace(url.pathname + url.search));
+    } else {
+      startTransition(() => router.refresh());
+    }
   }
 
   const item = (on: boolean) =>
