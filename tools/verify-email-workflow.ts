@@ -145,7 +145,7 @@ async function main(): Promise<void> {
     // First answer invents a stat; the second is clean.
     [name("Owner Spine")]: [
       { opener: "Most clinics your size lose 30% of decompression leads.", basis: "cited", ...note },
-      { opener: "I noticed Owner Spine (email verify) runs spinal decompression alongside laser therapy.", basis: "cited", ...note },
+      { opener: "I noticed Owner Spine (email verify) runs spinal decompression on the DRX9000 alongside laser therapy.", basis: "cited", ...note },
     ],
     // First answer states a gap as a fact; the second asks about it.
     [name("Front Desk Clinic")]: [
@@ -163,6 +163,7 @@ async function main(): Promise<void> {
   const o1 = await act.generateEmailOpener(owner.id);
   let ownerLead = await reload(owner.id);
   check("a made-up stat is rejected and asked for again", o1.ok && !/30%|most clinics/i.test(ownerLead.emailOpener ?? ""), ownerLead.emailOpener ?? JSON.stringify(o1));
+  check("and the redraft naming the DRX9000 from their site is kept", (ownerLead.emailOpener ?? "").includes("DRX9000"));
   check("owner email → owner-direct version, greeted by salutation()", ownerLead.emailVersion === "owner" && (ownerLead.emailBody ?? "").startsWith("Hi Dr. Smith,"), ownerLead.emailBody?.split("\n")[0]);
   check("the email is subject, greeting, opener, body and opt-out",
     ownerLead.emailSubject === `Quick question about ${name("Owner Spine")}` &&
@@ -186,6 +187,24 @@ async function main(): Promise<void> {
     (thinLead.emailOpener ?? "").includes("both spinal decompression and laser therapy under one roof"), thinLead.emailOpener ?? JSON.stringify(o3));
   await act.generateEmailOpener(mismatch.id);
   await act.generateEmailOpener(dq.id);
+
+  console.log("\nThe made-up-stats check and product names");
+  const { inventedStatsReason } = await import("../src/lib/outreachSequence");
+  const site = {
+    clinicName: "Owner Spine",
+    websiteNotes: "We treat disc pain on the DRX9000 and the X3-Laser. Serving Austin for 30 years. Call (512) 555-0100.",
+    reviewCount: 40,
+  };
+  const allowed = (line: string) => inventedStatsReason(line, site) === null;
+  check("a product name on the clinic's own site is allowed (DRX9000)", allowed("I noticed you offer decompression on the DRX9000."));
+  check("so is one with a hyphen (X3-Laser)", allowed("I saw the X3-Laser on your site."));
+  check("the same product name is blocked when the site doesn't mention it", !allowed("I noticed you run the DRX7000."));
+  check("a bare number is still blocked, even one that is on the site", !allowed("You've served Austin for 30 years."));
+  check("a percentage is still blocked", !allowed("Clinics lose 30% of DRX9000 leads."));
+  check("a dollar amount is still blocked", !allowed("The DRX9000 is a $5k a month opportunity."));
+  check("a count is still blocked", !allowed("The DRX9000 could bring in 12 more patients a month."));
+  check("a comparison is still blocked", !allowed("You run the DRX9000, unlike most clinics."));
+  check("the review count is still allowed", allowed("I saw your 40 Google reviews."));
 
   console.log("\nChecking addresses by file");
   check("unchecked addresses show Check email first", (await state(owner.id)).status === "check_email");

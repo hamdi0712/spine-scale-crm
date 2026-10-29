@@ -1716,8 +1716,9 @@ export function readObservation(raw: unknown): string | null {
 // comparisons. The prompt forbids them; this makes sure. A message is rejected
 // for a percentage, a dollar figure, "most clinics", "usually", "on average",
 // "typically", a comparison to other clinics, or any number that is not this
-// clinic's review count, part of its name, or inside a quote that is word for
-// word on its own site.
+// clinic's review count, part of its name, inside a quote that is word for
+// word on its own site, or part of a word on its own site that is a name
+// rather than a figure (a product like "DRX9000"; see namedOnSite).
 export function inventedStatsReason(
   message: string,
   evidence: Pick<IcpAssistEvidence, "clinicName" | "websiteNotes" | "reviewCount">,
@@ -1746,9 +1747,27 @@ export function inventedStatsReason(
   for (const m of Array.from(rest.matchAll(/\d[\d,]*(\.\d+)?/g))) {
     const n = Number(m[0].replace(/,/g, ""));
     if (evidence.reviewCount != null && n === evidence.reviewCount) continue;
+    if (namedOnSite(rest, m.index ?? 0, m[0].length, notes)) continue;
     return `it uses the number ${m[0]}, which is not the review count or a quote from the site`;
   }
   return null;
+}
+
+// A number that is part of a name rather than a figure: the whole word it
+// sits in has letters as well as digits ("DRX9000", "X3-laser"), and that
+// exact word is on the clinic's own site. A bare number is never this, even
+// when the same number is on the site — "30" is a count however it got there,
+// and percentages, dollar amounts and comparisons were already refused above.
+function namedOnSite(text: string, start: number, length: number, notes: string): boolean {
+  const word = /[a-z0-9-]/i;
+  let a = start;
+  let b = start + length;
+  while (a > 0 && word.test(text[a - 1])) a--;
+  while (b < text.length && word.test(text[b])) b++;
+  const token = text.slice(a, b).replace(/^-+|-+$/g, "").toLowerCase();
+  if (!/[a-z]/.test(token) || !/\d/.test(token)) return false;
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9-])${escaped}($|[^a-z0-9-])`).test(notes);
 }
 
 // The clause the follow-up is built around.
