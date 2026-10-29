@@ -25,11 +25,16 @@ import { addressIsPlaceholder, salutation } from "@/lib/outreachSequence";
 export const EMAIL_SETTINGS_ID = "default";
 
 export interface EmailSettingsValues {
+  // The owner-direct subject; the front desk has its own below.
   subjectTemplate: string;
+  frontDeskSubjectTemplate: string;
   ownerBodyTemplate: string;
   frontDeskTemplate: string;
   optOutLine: string;
   followUpTemplates: string[];
+  // After the opt-out line, on every email: "{sender}" and whatever else the
+  // signature carries.
+  signOff: string;
   senderName: string;
   followUpDelayDays: number;
   dailyLimit: number;
@@ -39,28 +44,29 @@ export interface EmailSettingsValues {
 // tried end to end, and plainly not the operator's own words. While any
 // template still holds it, the Email view and the Email panel say so.
 export const STARTER_SUBJECT = "Quick question about {clinic}";
+export const STARTER_FRONT_DESK_SUBJECT = "Quick question about {clinic}";
 export const STARTER_OWNER_BODY = [
+  "{greeting}",
+  "",
   "{opener}",
   "",
   "I help non-surgical spine and decompression clinics turn more of the people who ask about care into booked consults. If it's useful, I can send a short note on what I'd look at first for {clinic}.",
   "",
   "Worth sending?",
-  "",
-  "{sender}",
 ].join("\n");
 export const STARTER_FRONT_DESK_BODY = [
+  "{greeting}",
+  "",
   "{opener}",
   "",
   "Could you pass this to {contact}? I help non-surgical spine clinics turn more inquiries into booked consults, and I'd like to send a short note on what I'd look at first for {clinic}.",
-  "",
-  "Thank you,",
-  "{sender}",
 ].join("\n");
 export const STARTER_OPT_OUT = "If this isn't relevant, just reply \"no\" and I won't email again.";
 export const STARTER_FOLLOW_UPS = [
-  ["Following up on my note below. Is it worth me sending what I'd look at first for {clinic}?", "", "{sender}"].join("\n"),
-  ["Last note from me. If the timing's off, no problem at all, and if it's useful later just reply and I'll send it over.", "", "{sender}"].join("\n"),
+  "Following up on my note below. Is it worth me sending what I'd look at first for {clinic}?",
+  "Last note from me. If the timing's off, no problem at all, and if it's useful later just reply and I'll send it over.",
 ];
+export const STARTER_SIGN_OFF = "{sender}";
 
 export const DEFAULT_FOLLOW_UP_DELAY_DAYS = 3;
 export const DEFAULT_DAILY_LIMIT = 10;
@@ -69,10 +75,12 @@ export const MAX_TEMPLATE_CHARS = 4000;
 
 export const DEFAULT_EMAIL_SETTINGS: EmailSettingsValues = {
   subjectTemplate: STARTER_SUBJECT,
+  frontDeskSubjectTemplate: STARTER_FRONT_DESK_SUBJECT,
   ownerBodyTemplate: STARTER_OWNER_BODY,
   frontDeskTemplate: STARTER_FRONT_DESK_BODY,
   optOutLine: STARTER_OPT_OUT,
   followUpTemplates: STARTER_FOLLOW_UPS,
+  signOff: STARTER_SIGN_OFF,
   senderName: "",
   followUpDelayDays: DEFAULT_FOLLOW_UP_DELAY_DAYS,
   dailyLimit: DEFAULT_DAILY_LIMIT,
@@ -86,13 +94,15 @@ export const STARTER_COPY_BANNER = "Starter copy — edit your templates in Sett
 export function startersRemaining(s: EmailSettingsValues): string[] {
   const same = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
   const out: string[] = [];
-  if (same(s.subjectTemplate, STARTER_SUBJECT)) out.push("Subject");
+  if (same(s.subjectTemplate, STARTER_SUBJECT)) out.push("Owner subject");
+  if (same(s.frontDeskSubjectTemplate, STARTER_FRONT_DESK_SUBJECT)) out.push("Front-desk subject");
   if (same(s.ownerBodyTemplate, STARTER_OWNER_BODY)) out.push("Owner-direct email");
   if (same(s.frontDeskTemplate, STARTER_FRONT_DESK_BODY)) out.push("Front-desk email");
   if (same(s.optOutLine, STARTER_OPT_OUT)) out.push("Opt-out line");
   s.followUpTemplates.forEach((t, i) => {
     if (STARTER_FOLLOW_UPS.some((starter) => same(t, starter))) out.push(`Follow-up ${i + 1}`);
   });
+  if (same(s.signOff, STARTER_SIGN_OFF)) out.push("Sign-off");
   return out;
 }
 
@@ -127,10 +137,12 @@ export function readEmailSettings(row: Record<string, unknown> | null | undefine
   const r = row ?? {};
   return {
     subjectTemplate: text(r.subjectTemplate, STARTER_SUBJECT),
+    frontDeskSubjectTemplate: text(r.frontDeskSubjectTemplate, STARTER_FRONT_DESK_SUBJECT),
     ownerBodyTemplate: text(r.ownerBodyTemplate, STARTER_OWNER_BODY),
     frontDeskTemplate: text(r.frontDeskTemplate, STARTER_FRONT_DESK_BODY),
     optOutLine: text(r.optOutLine, STARTER_OPT_OUT),
     followUpTemplates: r.followUpTemplates === undefined ? STARTER_FOLLOW_UPS : readFollowUpTemplates(r.followUpTemplates),
+    signOff: text(r.signOff, STARTER_SIGN_OFF),
     senderName: typeof r.senderName === "string" ? r.senderName.trim().slice(0, 200) : "",
     followUpDelayDays: int(r.followUpDelayDays, DEFAULT_FOLLOW_UP_DELAY_DAYS, 1, 60),
     dailyLimit: int(r.dailyLimit, DEFAULT_DAILY_LIMIT, 1, 500),
@@ -140,10 +152,12 @@ export function readEmailSettings(row: Record<string, unknown> | null | undefine
 export function emailSettingsRow(s: EmailSettingsValues) {
   return {
     subjectTemplate: s.subjectTemplate,
+    frontDeskSubjectTemplate: s.frontDeskSubjectTemplate,
     ownerBodyTemplate: s.ownerBodyTemplate,
     frontDeskTemplate: s.frontDeskTemplate,
     optOutLine: s.optOutLine,
     followUpTemplates: JSON.stringify(s.followUpTemplates),
+    signOff: s.signOff,
     senderName: s.senderName,
     followUpDelayDays: s.followUpDelayDays,
     dailyLimit: s.dailyLimit,
@@ -208,12 +222,26 @@ export function unfilledPlaceholders(textIn: string): string[] {
   return Array.from(new Set(Array.from(textIn.matchAll(/\{(\w+)\}/g)).map((m) => m[0])));
 }
 
-function assemble(greeting: string, body: string, optOut: string): string {
-  return [greeting, "", body.trim(), "", optOut.trim()].join("\n").replace(/\n{3,}/g, "\n\n").trim();
+// An email from its template: the greeting where the template puts
+// {greeting} (at the top where it has none, as the follow-ups do not), the
+// template, the opt-out line, and the sign-off.
+function assemble(
+  greeting: string,
+  template: string,
+  values: Record<string, string>,
+  settings: Pick<EmailSettingsValues, "optOutLine" | "signOff">,
+): string {
+  const hasGreeting = template.includes("{greeting}");
+  const body = fill(template, { ...values, greeting });
+  return [hasGreeting ? null : greeting, body.trim(), settings.optOutLine.trim(), fill(settings.signOff, values).trim()]
+    .filter((part): part is string => part !== null && part !== "")
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
-// The whole first email: subject, and a body of greeting, the template with
-// the opener in it, and the opt-out line.
+// The whole first email: the version's subject, and a body of greeting, the
+// template with the opener in it, the opt-out line and the sign-off.
 export function renderEmail(
   settings: EmailSettingsValues,
   lead: EmailLeadInput,
@@ -227,9 +255,10 @@ export function renderEmail(
     sender: settings.senderName,
   };
   const template = version === "owner" ? settings.ownerBodyTemplate : settings.frontDeskTemplate;
+  const subject = version === "owner" ? settings.subjectTemplate : settings.frontDeskSubjectTemplate;
   return {
-    subject: fill(settings.subjectTemplate, values).trim(),
-    body: assemble(emailGreeting(lead, version), fill(template, values), settings.optOutLine),
+    subject: fill(subject, values).trim(),
+    body: assemble(emailGreeting(lead, version), template, values, settings),
   };
 }
 
@@ -245,7 +274,7 @@ export function renderFollowUp(
   if (template === undefined) return null;
   const values = { clinic: lead.clinicName.trim(), opener: "", contact: contactFor(lead), sender: settings.senderName };
   const subject = /^re:/i.test(firstSubject.trim()) ? firstSubject.trim() : `Re: ${firstSubject.trim()}`;
-  return { subject, body: assemble(emailGreeting(lead, version), fill(template, values), settings.optOutLine) };
+  return { subject, body: assemble(emailGreeting(lead, version), template, values, settings) };
 }
 
 // ─── The contact check ─────────────────────────────────────────────────────

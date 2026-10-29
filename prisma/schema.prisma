@@ -568,12 +568,16 @@ model Suppression {
 model EmailSettings {
   id String @id
 
-  subjectTemplate    String
+  // The owner-direct subject, and the front desk's.
+  subjectTemplate          String
+  frontDeskSubjectTemplate String @default("Quick question about {clinic}")
   ownerBodyTemplate  String
   frontDeskTemplate  String
   optOutLine         String
   // JSON array of follow-up bodies, in order. The last one is the last email.
   followUpTemplates  String
+  // After the opt-out line on every email; "{sender}" is senderName.
+  signOff            String  @default("{sender}")
   senderName         String  @default("")
   followUpDelayDays  Int     @default(3)
   dailyLimit         Int     @default(10)

@@ -19,6 +19,7 @@ import {
   EMAIL_OPENER_MAX_CHARS,
   SEQUENCE_MAX_TOKENS,
   SequenceContext,
+  assumptionReason,
   buildEmailOpenerPrompt,
   buildFirstMessageFallbackPrompt,
   emailCuriosityPainSignalLine,
@@ -62,7 +63,7 @@ export async function saveEmailSettings(raw: unknown): Promise<Result> {
   const r = raw !== null && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
   const followUps = Array.isArray(r.followUpTemplates) ? r.followUpTemplates : [];
   if (followUps.length > MAX_FOLLOW_UPS) return { ok: false, error: `At most ${MAX_FOLLOW_UPS} follow-ups.` };
-  for (const key of ["subjectTemplate", "ownerBodyTemplate", "frontDeskTemplate", "optOutLine"]) {
+  for (const key of ["subjectTemplate", "frontDeskSubjectTemplate", "ownerBodyTemplate", "frontDeskTemplate", "optOutLine", "signOff"]) {
     const v = r[key];
     if (typeof v !== "string" || v.trim() === "") return { ok: false, error: "Every template needs some text." };
     if (v.length > MAX_TEMPLATE_CHARS) return { ok: false, error: `A template is longer than ${MAX_TEMPLATE_CHARS} characters.` };
@@ -117,10 +118,11 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
   const scorecard = scorecardEvidence(lead.icpBreakdown);
   const { system, user } = buildEmailOpenerPrompt(ctx, scorecard);
 
-  // The made-up-stats check and the gap rule, after the model has written
-  // it; a line that fails either is asked for once more, then given up on.
+  // The made-up-stats check, the gap rule and the no-bridging rule, after
+  // the model has written it; a line that fails any is asked for once more,
+  // then given up on.
   const screen = (opener: string, basis: "cited" | "gap" | null) =>
-    inventedStatsReason(opener, ctx.evidence) ?? gapAsStatementReason(opener, basis);
+    inventedStatsReason(opener, ctx.evidence) ?? gapAsStatementReason(opener, basis) ?? assumptionReason(opener);
 
   let opener: string | null = null;
   let note: string | null = null;

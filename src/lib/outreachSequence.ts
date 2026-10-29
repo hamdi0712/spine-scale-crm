@@ -2280,6 +2280,16 @@ export function buildEmailOpenerPrompt(
     "Write the first line of a cold email to this clinic, sent by hand from Gmail. ONE sentence, or two very short ones. It is the opener only: the greeting, the rest of the email and the sign-off are added by the app.",
     "",
     "It opens with one true, specific observation about this clinic, read off the evidence or the scorecard's citations above.",
+    "",
+    "WHAT TO OBSERVE, in this order of preference. The email that follows is about how new patient inquiries are followed up, so the best opener is something true about how new patients reach this clinic:",
+    "  1. Active Meta ads (only if the advertising evidence shows them).",
+    "  2. A free consultation, screening or new-patient offer named on their site.",
+    "  3. The booking flow: online booking, a request-an-appointment form, a call-to-book line.",
+    "  4. The contact options: phone, a contact form, chat or text.",
+    "  Only if none of those is in the evidence: a named program or service. Equipment and the review count come last of all.",
+    "",
+    "THE OPENER STOPS AT THE OBSERVATION. The email continues on its own with a question about how inquiries are followed up; do not write a bridge to it. Never add an assumption about the clinic to connect the two: nothing about how busy they are, how many inquiries or leads they get, what the ads bring in, how the front desk copes, or what happens after hours. No \"which probably means\", \"I imagine\", \"so you must\", \"that likely\". Say what you saw and stop.",
+    "",
     "  - Built on something CITED: you may state it plainly, as what you noticed.",
     "  - Built on a GAP (something not found): it MUST be a question. Never state that anything is missing, absent, lacking, or not there. \"I couldn't tell from the site how a new patient books after hours, is that by phone?\" is the shape. \"You don't offer online booking\" is forbidden.",
     "",
@@ -2326,6 +2336,15 @@ export function parseEmailOpenerReply(raw: string): EmailOpenerReply | null {
 // sentence that talks about something not being there has to be a question.
 // Also a greeting, which the template adds, so the email would say "Hi" twice.
 const ABSENCE = /\b(didn't see|did not see|couldn't (?:see|find|tell)|could not (?:see|find|tell)|no (?:visible|online|clear|obvious|sign)|doesn't (?:seem|appear|have|offer|show)|does not (?:seem|appear|have|offer|show)|don't (?:have|offer|show)|do not (?:have|offer|show)|missing|lacks?|lacking|without (?:a|any)|isn't (?:any|a)|there's no|there is no|not (?:listed|mentioned|shown|visible))\b/i;
+
+// And the bridge rule: the opener says what was seen and stops. A clause that
+// guesses at the clinic to lead into the question ("which probably means a
+// lot of after-hours calls") is an assumption, however natural it reads.
+const ASSUMPTION = /\b(probably|presumably|likely|i (?:imagine|bet|assume|suspect|guess)|i'?m sure|no doubt|must (?:be|get|have|see)|which means|that means|meaning you|so you(?:'re| are| must| probably)?|chances are)\b/i;
+
+export function assumptionReason(opener: string): string | null {
+  return ASSUMPTION.test(opener) ? "it adds an assumption about the clinic to bridge to the question" : null;
+}
 
 export function gapAsStatementReason(opener: string, basis: "cited" | "gap" | null): string | null {
   if (/^\s*(hi|hey|hello|dear)\b/i.test(opener)) return "it starts with a greeting, which the template already adds";
