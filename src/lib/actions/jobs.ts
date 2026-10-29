@@ -25,6 +25,13 @@ import {
 import { COMPARISON_OUTCOME_LABELS } from "@/lib/scoringComparison";
 import { BATCH_QUEUE_DESCRIPTION, defaultBatchLabel } from "@/lib/discoveryBatch";
 import { ICP_MAX_SCORE } from "@/lib/icp";
+import { normalizeApifyId } from "@/lib/apifyId";
+import {
+  ClinicTermResult,
+  MAX_CLINIC_RESULTS,
+  readClinicSearchConfig,
+} from "@/lib/clinicDiscovery";
+import { clinicTermLine, runClinicSearchTerm } from "@/lib/clinicSearchRun";
 
 // ─── Re-crawl website ──────────────────────────────────────────────────────
 
@@ -234,6 +241,56 @@ export async function startQueueJob(selectedIds: string[] | null): Promise<Launc
         detail: `${result.headline}${score}`,
         result,
       };
+    },
+  });
+}
+
+// ─── Clinic-first search ───────────────────────────────────────────────────
+
+// One item per search term, one at a time, each a started-then-checked run
+// on Apify (src/lib/clinicSearchRun.ts). Each term's clinics are stored on its
+// item, and the panel reads them back once the run is over
+// (combineClinicTermResults) — so the search can be left running and its
+// results are there to import whenever the page is opened again. Nothing is
+// written to Discovery from here; importing is still its own button.
+export async function startClinicSearchJob(args: { config: unknown; actorId?: string }): Promise<LaunchResult> {
+  const config = readClinicSearchConfig(args?.config);
+  if (config.terms.length === 0) return { ok: false, error: "Add at least one search term to run." };
+
+  const settings = await loadPipelineSettings();
+  if (!settings.clinicDiscovery.enabled) {
+    return {
+      ok: false,
+      error: "Clinic-First Discovery is turned off. Turn it on under Settings → Pipeline, where its actor is set too.",
+    };
+  }
+  // Overrides the stored actor for this run only, held to the same shape a
+  // saved one is held to.
+  const typed = typeof args?.actorId === "string" ? args.actorId.trim() : "";
+  const actorId = typed === "" ? settings.clinicDiscovery.actorId : normalizeApifyId(typed);
+  if (!actorId) return { ok: false, error: "That actor ID is not one Apify would recognise." };
+
+  let collected = 0;
+  return launchJob({
+    kind: "clinic-search",
+    source: "clinic-search",
+    verb: "Searching",
+    href: "/discovery/import/clinic",
+    items: config.terms.map((term) => ({ id: term, name: term })),
+    work: async (item) => {
+      const r: ClinicTermResult = await runClinicSearchTerm(item.name, config, actorId);
+      collected += r.clinics.length;
+      return { ...clinicTermLine(r), result: r };
+    },
+    // Past the cap, another term is a run paid for and thrown away.
+    halt: () =>
+      collected >= MAX_CLINIC_RESULTS
+        ? `Stopped at ${MAX_CLINIC_RESULTS} clinics, the most one search keeps — the remaining terms were not run.`
+        : null,
+    finish: async ({ status, halted }) => {
+      if (halted) return halted;
+      if (status === "stopped") return "Stopped — the terms that ran have their results below, ready to import.";
+      return null;
     },
   });
 }

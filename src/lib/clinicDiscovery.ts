@@ -18,6 +18,9 @@
 // src/lib/actions/clinicDiscovery.ts and the actor ID is a setting, never a
 // constant in here.
 
+import { DedupeIndex } from "@/lib/discoveryDedupe";
+import { MAX_IMPORT_ROWS } from "@/lib/discoveryImport";
+
 // ─── Which pathway found a candidate ───────────────────────────────────────
 
 export const DISCOVERY_SOURCES = ["PERSON_FIRST", "CLINIC_FIRST"] as const;
@@ -350,4 +353,56 @@ export function readUrl(raw: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+// ─── One search, across its terms ──────────────────────────────────────────
+
+// How many results one search keeps in total, across every term — the import
+// cap, for the same reason: every row kept is a row the queue will spend five
+// actor runs and a model call on.
+export const MAX_CLINIC_RESULTS = MAX_IMPORT_ROWS;
+
+// What one term came back with, as the search job stores it on the term's
+// progress item (src/lib/clinicSearchRun.ts writes it), so the results are
+// still there when the page is left and come back to.
+export interface ClinicTermResult {
+  term: string;
+  actorId: string;
+  clinics: ClinicCandidate[];
+  // The run hit its time limit; clinics is what it had collected by then.
+  timedOut: boolean;
+  ranSeconds: number | null;
+  error: string | null;
+}
+
+export interface ClinicSearchOutcome {
+  actorId: string | null;
+  // One per clinic, de-duplicated across terms — but not yet against what is
+  // stored. That check runs at import time, against the database as it
+  // stands then.
+  clinics: ClinicCandidate[];
+  // What each term returned, so a term that found nothing says so rather
+  // than disappearing into a total.
+  perTerm: { term: string; found: number; timedOut: boolean; error?: string }[];
+}
+
+// The terms' results as one list: the same clinic under two terms is one
+// clinic, credited to the first term that found it, and the list stops at
+// the cap.
+export function combineClinicTermResults(results: ClinicTermResult[]): ClinicSearchOutcome {
+  const seen = new DedupeIndex<ClinicCandidate>();
+  const clinics: ClinicCandidate[] = [];
+  const perTerm: ClinicSearchOutcome["perTerm"] = [];
+  for (const r of results) {
+    let found = 0;
+    for (const clinic of r.clinics) {
+      if (clinics.length >= MAX_CLINIC_RESULTS) break;
+      if (seen.match(clinic)) continue;
+      seen.add(clinic);
+      clinics.push(clinic);
+      found++;
+    }
+    perTerm.push({ term: r.term, found, timedOut: r.timedOut, ...(r.error ? { error: r.error } : {}) });
+  }
+  return { actorId: results[0]?.actorId ?? null, clinics, perTerm };
 }
