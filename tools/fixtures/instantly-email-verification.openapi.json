@@ -1,0 +1,585 @@
+{
+ "_note": "The email-verification part of Instantly's published API v2 spec (https://api.instantly.ai/openapi/api_v2.json), saved for tools/verify-instantly.ts. Refetch to update.",
+ "openapi": "3.1.0",
+ "info": "2.0.0",
+ "paths": {
+  "/api/v2/email-verification": {
+   "post": {
+    "operationId": "createEmailVerification",
+    "summary": "Create email verification",
+    "tags": [
+     "EmailVerification"
+    ],
+    "description": "If an email takes longer than 10 seconds to verify, the endpoint will return the status as `pending`. In that case, you may use the `/email-verification/:email` endpoint to check the status of the verification job.\n\nAlternatively, you can send a `webhook_url` to receive the results instead of polling the status endpoint.\n\n\nRequires one of the following scopes: `email_verifications:create`\n\n\nRequires one of the following scopes: `email_verifications:create`, `email_verifications:all`, `all:create`, `all:all`",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "title": "CreateEmail Verification",
+        "description": "The Email Verification to create",
+        "type": "object",
+        "properties": {
+         "email": {
+          "type": "string",
+          "description": "The email address to verify",
+          "example": "example@example.com"
+         },
+         "webhook_url": {
+          "type": "string",
+          "description": "A webhook URL to receive the verification results. If the email verification takes more than 10 seconds we will send the results to this URL.",
+          "example": "https://example.com/webhook"
+         }
+        },
+        "required": [
+         "email"
+        ],
+        "additionalProperties": false
+       }
+      }
+     },
+     "required": true,
+     "description": "The Email Verification to create"
+    },
+    "responses": {
+     "200": {
+      "description": "The Email Verification",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EmailVerification"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "Invalid request body (e.g. missing required fields, or invalid field values)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            400
+           ],
+           "examples": [
+            400
+           ],
+           "example": 400
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Bad Request"
+           ],
+           "examples": [
+            "Bad Request"
+           ],
+           "example": "Bad Request"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "body must have required property 'name'"
+           ],
+           "example": "body must have required property 'name'"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "This request is unauthorized (either the Authorization header is missing or invalid, or the API key has been revoked)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            401
+           ],
+           "examples": [
+            401
+           ],
+           "example": 401
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Unauthorized"
+           ],
+           "examples": [
+            "Unauthorized"
+           ],
+           "example": "Unauthorized"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Missing Authorization header"
+           ],
+           "example": "Missing Authorization header"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     },
+     "402": {
+      "description": "This request cannot be fulfilled because the workspace does not have an active paid plan",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            402
+           ],
+           "examples": [
+            402
+           ],
+           "example": 402
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Payment Required"
+           ],
+           "examples": [
+            "Payment Required"
+           ],
+           "example": "Payment Required"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Workspace does not have an active paid plan"
+           ],
+           "example": "Workspace does not have an active paid plan"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "The requested resource was not found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            404
+           ],
+           "examples": [
+            404
+           ],
+           "example": 404
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Not Found"
+           ],
+           "examples": [
+            "Not Found"
+           ],
+           "example": "Not Found"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Resource not found"
+           ],
+           "example": "Resource not found"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "You have exceeded the rate limit. Please check the rate limit docs for more information.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            429
+           ],
+           "examples": [
+            429
+           ],
+           "example": 429
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Too Many Requests"
+           ],
+           "examples": [
+            "Too Many Requests"
+           ],
+           "example": "Too Many Requests"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Rate limit exceeded"
+           ],
+           "example": "Rate limit exceeded"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/email-verification/{email}": {
+   "get": {
+    "operationId": "checkVerificationStatus",
+    "summary": "Check an email verification status",
+    "tags": [
+     "EmailVerification"
+    ],
+    "description": "Requires one of the following scopes: `email_verifications:read`, `email_verifications:all`, `all:read`, `all:all`",
+    "parameters": [
+     {
+      "schema": {
+       "type": "string",
+       "format": "email",
+       "example": "user@example.com"
+      },
+      "example": "user@example.com",
+      "in": "path",
+      "name": "email",
+      "required": true,
+      "description": "The email address to verify"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The requested Email Verification",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/EmailVerification"
+        }
+       }
+      }
+     },
+     "401": {
+      "description": "This request is unauthorized (either the Authorization header is missing or invalid, or the API key has been revoked)",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            401
+           ],
+           "examples": [
+            401
+           ],
+           "example": 401
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Unauthorized"
+           ],
+           "examples": [
+            "Unauthorized"
+           ],
+           "example": "Unauthorized"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Missing Authorization header"
+           ],
+           "example": "Missing Authorization header"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     },
+     "402": {
+      "description": "This request cannot be fulfilled because the workspace does not have an active paid plan",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            402
+           ],
+           "examples": [
+            402
+           ],
+           "example": 402
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Payment Required"
+           ],
+           "examples": [
+            "Payment Required"
+           ],
+           "example": "Payment Required"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Workspace does not have an active paid plan"
+           ],
+           "example": "Workspace does not have an active paid plan"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     },
+     "404": {
+      "description": "The requested resource was not found",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            404
+           ],
+           "examples": [
+            404
+           ],
+           "example": 404
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Not Found"
+           ],
+           "examples": [
+            "Not Found"
+           ],
+           "example": "Not Found"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Resource not found"
+           ],
+           "example": "Resource not found"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     },
+     "429": {
+      "description": "You have exceeded the rate limit. Please check the rate limit docs for more information.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "properties": {
+          "statusCode": {
+           "type": "number",
+           "enum": [
+            429
+           ],
+           "examples": [
+            429
+           ],
+           "example": 429
+          },
+          "error": {
+           "type": "string",
+           "enum": [
+            "Too Many Requests"
+           ],
+           "examples": [
+            "Too Many Requests"
+           ],
+           "example": "Too Many Requests"
+          },
+          "message": {
+           "type": "string",
+           "examples": [
+            "Rate limit exceeded"
+           ],
+           "example": "Rate limit exceeded"
+          }
+         },
+         "required": [
+          "statusCode",
+          "error",
+          "message"
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "EmailVerification": {
+    "title": "Email Verification",
+    "description": "A single email verification",
+    "x-tags": [
+     "Schemas",
+     "EmailVerification"
+    ],
+    "type": "object",
+    "properties": {
+     "status": {
+      "type": [
+       "null",
+       "string"
+      ],
+      "description": "The request status. Do not use this field to determine the verification status. Please use `verification_status` instead to check the verification status",
+      "readOnly": true,
+      "enum": [
+       "success",
+       "error"
+      ],
+      "x-enumDescriptions": {
+       "success": "The verification was successful",
+       "error": "The verification was unsuccessful"
+      },
+      "example": "success"
+     },
+     "email": {
+      "type": "string",
+      "description": "The email address to verify",
+      "example": "example@example.com"
+     },
+     "verification_status": {
+      "type": "string",
+      "description": "The verification status.",
+      "readOnly": true,
+      "enum": [
+       "pending",
+       "verified",
+       "invalid"
+      ],
+      "x-enumDescriptions": {
+       "pending": "The verification is pending",
+       "verified": "The verification is verified",
+       "invalid": "The verification is invalid"
+      },
+      "example": "pending"
+     },
+     "catch_all": {
+      "type": [
+       "boolean",
+       "string"
+      ],
+      "description": "Whether this is a catch-all email address",
+      "readOnly": true,
+      "enum": [
+       true,
+       false,
+       "pending"
+      ],
+      "x-enumDescriptions": {
+       "false": "The email is not a catch-all",
+       "true": "The email is a catch-all",
+       "pending": "The catch-all status is pending"
+      },
+      "example": true
+     },
+     "credits": {
+      "type": [
+       "null",
+       "number"
+      ],
+      "description": "The number of verification credits available after the verification",
+      "readOnly": true,
+      "example": 100
+     },
+     "credits_used": {
+      "type": [
+       "null",
+       "number"
+      ],
+      "description": "The number of verification credits used",
+      "readOnly": true,
+      "example": 1
+     }
+    },
+    "required": [
+     "email",
+     "verification_status"
+    ],
+    "additionalProperties": false
+   }
+  }
+ }
+}

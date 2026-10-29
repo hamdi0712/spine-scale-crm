@@ -1,4 +1,4 @@
-// The two API credentials the app calls out with, and the rules about them.
+// The API credentials the app calls out with, and the rules about them.
 //
 // Pure, and safe to import from a client component: nothing in here reads a
 // row, an environment variable or a network. It is the vocabulary the store
@@ -14,7 +14,7 @@
 
 export const APP_SECRETS_ID = "singleton";
 
-export const SECRET_KEYS = ["deepseekApiKey", "apifyApiToken"] as const;
+export const SECRET_KEYS = ["deepseekApiKey", "apifyApiToken", "instantlyApiKey"] as const;
 
 export type SecretKey = (typeof SECRET_KEYS)[number];
 
@@ -42,6 +42,13 @@ export const SECRET_META: Record<SecretKey, SecretMeta> = {
     envVar: "APIFY_API_TOKEN",
     help: "Runs the enrichment actors and the Apify import.",
     placeholder: "apify_api_…",
+  },
+  instantlyApiKey: {
+    key: "instantlyApiKey",
+    label: "Instantly API key",
+    envVar: "INSTANTLY_API_KEY",
+    help: "Checks email addresses (email verification only — nothing is sent through Instantly). Needs the email_verifications scope.",
+    placeholder: "Instantly API v2 key",
   },
 };
 

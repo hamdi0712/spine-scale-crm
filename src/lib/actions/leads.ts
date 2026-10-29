@@ -17,6 +17,7 @@ import {
 import { isUsTimeZone } from "@/lib/timezones";
 import { emailSourceAfterFormSave } from "@/lib/emailFind";
 import { PIPELINE_VIEWABLE_CHANNELS } from "@/lib/emailChannel";
+import { autoCheckEmails } from "@/lib/actions/jobs";
 
 function str(formData: FormData, key: string): string | null {
   const v = formData.get(key);
@@ -103,7 +104,7 @@ export async function updateLead(id: string, formData: FormData) {
   // nothing, the same as before.
   const current = await prisma.lead.findUnique({
     where: { id },
-    select: { stage: true, email: true, emailSource: true },
+    select: { stage: true, email: true, emailSource: true, channel: true },
   });
   if (!current) return;
 
@@ -124,6 +125,8 @@ export async function updateLead(id: string, formData: FormData) {
   });
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
+  // A new address on an email lead is checked on its own, budget allowing.
+  if (email.changed && email.emailSource !== null && current.channel === "email") void autoCheckEmails();
 }
 
 // ─── Bulk actions from the pipeline table ──────────────────────────────────

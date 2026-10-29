@@ -42,6 +42,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { autoCheckEmails } from "@/lib/actions/jobs";
 import { recordMilestone } from "@/lib/milestones";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { isLeadStage } from "@/lib/leadStage";
@@ -437,6 +438,8 @@ async function planChange(name: McpWriteToolName, lead: LeadForWrite, args: Reco
               ...(same ? {} : { emailStatus: null, emailCheckedAt: null }),
             },
           });
+          // A new address is checked on its own, budget allowing.
+          if (!same) void autoCheckEmails();
           return {};
         },
         summary: (b) =>
