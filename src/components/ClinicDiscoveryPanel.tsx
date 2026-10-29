@@ -14,12 +14,15 @@
 // clinic's own evidence and will wait for a person rather than being promoted
 // with a blank one.
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   CLINIC_HEADCOUNT_RANGES,
   ClinicCandidate,
   ClinicHeadcountRange,
+  ClinicSearchOutcome,
+  ClinicTermResult,
+  combineClinicTermResults,
   DEFAULT_CLINIC_SEARCH_LOCATION,
   DEFAULT_CLINIC_SEARCH_TERMS,
   DEFAULT_RESULTS_PER_TERM,
@@ -28,10 +31,10 @@ import {
 } from "@/lib/clinicDiscovery";
 import {
   ClinicImportSummary,
-  ClinicSearchResult,
   importClinicDiscoveryCandidates,
-  runClinicDiscoverySearch,
 } from "@/lib/actions/clinicDiscovery";
+import { startClinicSearchJob } from "@/lib/actions/jobs";
+import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import { ApifySearchLogRow, searchStatus } from "@/lib/apifySearchLog";
 import { clinicKeywordStatuses } from "@/lib/actions/apifySearchLog";
 import { SearchUsageBadge } from "@/components/Badge";
@@ -80,18 +83,29 @@ export default function ClinicDiscoveryPanel({
   const [statuses, setStatuses] =
     useState<Record<string, ApifySearchLogRow>>(termStatuses);
 
-  const [result, setResult] = useState<ClinicSearchResult | null>(null);
+  // The search runs on the server as a job (src/lib/jobRunner.ts), so it
+  // carries on when this page is left. Its results are read back from the
+  // job once it ends — whenever that is, and whichever visit to the page
+  // sees it end.
+  const { job, running, track, dismiss } = useJobRun("clinic-search");
+  const [result, setResult] = useState<ClinicSearchOutcome | null>(null);
   const [summary, setSummary] = useState<ClinicImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [importing, startImport] = useTransition();
 
-  const actorInUse = actorOverride.trim() === "" ? actorId : actorOverride.trim();
+  const actorInUse = result?.actorId ?? (actorOverride.trim() === "" ? actorId : actorOverride.trim());
   const actorMalformed =
     actorOverride.trim() !== "" && normalizeApifyId(actorOverride) === null;
   const batchDefault = defaultBatchLabel(new Date(), actorInUse);
   const batchLabel = batch ?? batchDefault;
-  const found = result?.ok ? result.clinics : [];
+  const found = result?.clinics ?? [];
+  // Every term failed: nothing to look at but what went wrong.
+  const allFailed =
+    result !== null &&
+    result.clinics.length === 0 &&
+    result.perTerm.length > 0 &&
+    result.perTerm.every((t) => t.error);
 
   // Re-read the statuses for whatever terms are on screen. Called when the
   // set changes and again after a run, because a run is what moves them: nine
@@ -108,6 +122,32 @@ export default function ClinicDiscoveryPanel({
   useEffect(() => {
     void refreshStatuses(terms);
   }, [terms, refreshStatuses]);
+
+  const finishedId = job && job.status !== "running" ? job.id : null;
+  const termsRef = useRef(terms);
+  termsRef.current = terms;
+  useEffect(() => {
+    if (!finishedId) return;
+    let cancelled = false;
+    fetch(`/api/jobs/results?id=${encodeURIComponent(finishedId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { results: { result: unknown }[] } | null) => {
+        if (cancelled || !body) return;
+        // Every term that ran moved its pill.
+        void refreshStatuses(termsRef.current);
+        setResult(
+          combineClinicTermResults(
+            body.results
+              .map((r) => r.result as ClinicTermResult | null)
+              .filter((r): r is ClinicTermResult => r !== null),
+          ),
+        );
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [finishedId, refreshStatuses]);
 
   function addTerm() {
     const trimmed = newTerm.trim();
@@ -137,29 +177,26 @@ export default function ClinicDiscoveryPanel({
       return;
     setError(null);
     setSummary(null);
-    setRunning(true);
-    try {
-      const res = await runClinicDiscoverySearch({
-        config: {
-          terms,
-          location,
-          headcount: headcount === "" ? null : headcount,
-          resultsPerTerm: perTerm,
-        },
-        actorId: actorOverride.trim() === "" ? undefined : actorOverride.trim(),
-      });
-      setResult(res);
-      if (!res.ok) setError(res.error);
-    } catch {
-      setResult(null);
-      setError(
-        "The search could not be run. Check the server's network connection and try again.",
-      );
-    } finally {
-      setRunning(false);
-      // Every term just ran, so every pill just moved.
-      void refreshStatuses(terms);
+    setResult(null);
+    setStarting(true);
+    const started = await startClinicSearchJob({
+      config: {
+        terms,
+        location,
+        headcount: headcount === "" ? null : headcount,
+        resultsPerTerm: perTerm,
+      },
+      actorId: actorOverride.trim() === "" ? undefined : actorOverride.trim(),
+    }).catch(() => ({
+      ok: false as const,
+      error: "The search could not be started. Check the server's network connection and try again.",
+    }));
+    setStarting(false);
+    if (!started.ok) {
+      setError(started.error);
+      return;
     }
+    track(started.id);
   }
 
   function importFound() {
@@ -172,7 +209,9 @@ export default function ClinicDiscoveryPanel({
       });
       setSummary(written);
       // What was just written is now stored, and re-importing it would only
-      // find its own rows again. The results stay on screen to be read.
+      // find its own rows again — so the finished run is put away too, and
+      // does not offer the same results on the next visit.
+      if (job) void dismiss(job.id);
       setResult(null);
     });
   }
@@ -354,27 +393,34 @@ export default function ClinicDiscoveryPanel({
         <button
           type="button"
           onClick={run}
-          disabled={!enabled || running || terms.length === 0 || actorMalformed}
+          disabled={!enabled || running || starting || terms.length === 0 || actorMalformed}
           className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {running ? "Searching…" : `Search ${terms.length} term${terms.length === 1 ? "" : "s"}`}
+          {running || starting ? "Searching…" : `Search ${terms.length} term${terms.length === 1 ? "" : "s"}`}
         </button>
         <p className="helper-text text-xs leading-relaxed text-muted">
-          One actor run per term, on the server, while you wait. Nothing is
-          written until the results below are imported.
+          One actor run per term, on the server — up to 15 minutes each. You can
+          leave this page while it runs; the results wait here. Nothing is
+          written until they are imported.
         </p>
       </div>
 
-      {error && (
+      <JobProgressFor source="clinic-search" />
+
+      {(error || allFailed) && (
         <div className="rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
-          <p className="text-sm font-medium text-bad">The search stopped</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">{error}</p>
+          <p className="text-sm font-medium text-bad">
+            {error ? "The search didn’t start" : "The search stopped"}
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted">
+            {error ?? result?.perTerm[0]?.error}
+          </p>
         </div>
       )}
 
       {summary && <ImportSummaryCard summary={summary} />}
 
-      {result?.ok && (
+      {result && !allFailed && (
         <section>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -401,7 +447,11 @@ export default function ClinicDiscoveryPanel({
               <li key={t.term} className="flex flex-wrap gap-2 px-4 py-2">
                 <span className="font-medium">{t.term}</span>
                 <span className="num ml-auto text-muted">
-                  {t.error ? t.error : `${t.found} found`}
+                  {t.error
+                    ? t.error
+                    : t.timedOut
+                      ? `${t.found} found — timed out, kept what it collected`
+                      : `${t.found} found`}
                 </span>
               </li>
             ))}

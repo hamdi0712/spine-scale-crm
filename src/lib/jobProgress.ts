@@ -10,6 +10,7 @@ export type JobKind =
   | "recrawl-leads"
   | "compare-scoring"
   | "process-queue"
+  | "clinic-search"
   | "demo";
 
 // running     the loop is alive on the server
@@ -98,6 +99,7 @@ export const JOB_TITLES: Record<JobKind, string> = {
   "recrawl-leads": "Re-crawl",
   "compare-scoring": "Compare scoring",
   "process-queue": "Process queue",
+  "clinic-search": "Clinic-first search",
   demo: "Demo re-crawl",
 };
 

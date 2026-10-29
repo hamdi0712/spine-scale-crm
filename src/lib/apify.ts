@@ -241,8 +241,14 @@ function chargeCap(usd: number): string {
 }
 
 function timeoutMessage(): string {
-  return `The run did not finish within ${APIFY_RUN_TIMEOUT_SECONDS} seconds and was given up on. Narrow the input — a smaller result count, fewer pages — or run it in the Apify console and import the CSV export instead.`;
+  return `The run timed out after ${APIFY_RUN_TIMEOUT_SECONDS} seconds and was given up on. Narrow the input — a smaller result count, fewer pages — or run it in the Apify console and import the CSV export instead.`;
 }
+
+// Apify's own word for an input it would not accept. Only this is reported as
+// a rejected input: a 400 is also how a one-call run reports an actor that
+// started and then failed or timed out ("run-failed"), which says nothing
+// about the input.
+const INPUT_ERROR_TYPES = /invalid-input|input-validation|schema-validation/;
 
 // Apify reports failures as { error: { type, message } }. The message is the
 // actor's or the platform's own text and carries no credential, so it is worth
@@ -285,11 +291,15 @@ async function errorMessage(
   if (response.status === 404) {
     return `No ${kind} with that ID exists on this account. Check the ID, and that the ${kind} is shared with the token's account.${suffix}`;
   }
-  if (response.status === 408) {
+  if (code === "timeout") {
     return timeoutMessage();
   }
-  if (response.status === 400) {
-    return `The run failed to start — Apify would not accept that input. Check the parameters against the ${kind}'s input schema.${suffix}`;
+  if (INPUT_ERROR_TYPES.test(type)) {
+    return `Apify rejected the input, so the run did not start. Check the parameters against the ${kind}'s input schema.${suffix}`;
+  }
+  const runStatus = detail.match(/status:\s*([A-Z-]+)/)?.[1];
+  if (type === "run-failed" || runStatus) {
+    return `The ${kind} run started but did not succeed on Apify${runStatus ? ` (${runStatus.toLowerCase()})` : ""}.${suffix}`;
   }
   return `The ${kind} run failed (HTTP ${response.status}).${suffix}`;
   }
@@ -308,7 +318,9 @@ function errorCode(status: number, type: string, detail: string): ApifyErrorCode
   ) {
     return "capacity";
   }
-  if (status === 408) return "timeout";
+  // 408 is the one-call run giving up; "run-failed … status: TIMED-OUT" is
+  // the actor hitting its own limit inside one.
+  if (status === 408 || /status:\s*timed-out/.test(t)) return "timeout";
   return null;
 }
 
@@ -322,11 +334,13 @@ function errorCode(status: number, type: string, detail: string): ApifyErrorCode
 // A run that hits its time limit is a real timeout; whatever pages it did
 // read are still returned.
 //
-// The bulk re-crawls use this; nothing else does yet.
+// The bulk re-crawls and the Clinic-first search use this.
 
+// ranSeconds is how long the run went on Apify, for a message that says so;
+// null where it never started.
 export type ApifyRunResult =
-  | { ok: true; label: string; headers: string[]; rows: string[][]; timedOut: boolean; runId: string }
-  | { ok: false; error: string; code: ApifyErrorCode | null; runId: string | null };
+  | { ok: true; label: string; headers: string[]; rows: string[][]; timedOut: boolean; runId: string; ranSeconds: number }
+  | { ok: false; error: string; code: ApifyErrorCode | null; runId: string | null; ranSeconds?: number | null };
 
 const TERMINAL = new Set(["SUCCEEDED", "FAILED", "TIMED-OUT", "ABORTED"]);
 const POLL_WAIT_SECONDS = 30;
@@ -370,6 +384,7 @@ export async function runApifyActor({
   const first = ((await started.json().catch(() => null)) as { data?: ApifyRun } | null)?.data;
   if (!first?.id) return { ok: false, error: "Apify started the run but did not say which one.", code: null, runId: null };
   let run: ApifyRun = first;
+  const startedAt = Date.now();
 
   // Asked after with a long-poll — Apify holds each request until the run ends
   // or the wait runs out — until it ends, or until well past its own limit.
@@ -395,12 +410,19 @@ export async function runApifyActor({
     }
   }
 
+  const ranSeconds = runSeconds(run, startedAt);
   if (!TERMINAL.has(run.status)) {
-    return { ok: false, error: `Apify run ${run.id} could not be followed to the end.`, code: "timeout", runId: run.id };
+    return { ok: false, error: `Apify run ${run.id} could not be followed to the end.`, code: "timeout", runId: run.id, ranSeconds };
   }
   const timedOut = run.status === "TIMED-OUT";
   if (run.status === "FAILED" || run.status === "ABORTED") {
-    return { ok: false, error: `The run ${run.status === "FAILED" ? "failed" : "was aborted"} on Apify (run ${run.id}).`, code: null, runId: run.id };
+    return {
+      ok: false,
+      error: `The run ${run.status === "FAILED" ? "failed" : "was aborted"} on Apify after ${fmtSeconds(ranSeconds)} (run ${run.id})${run.statusMessage ? `: ${run.statusMessage}` : "."}`,
+      code: null,
+      runId: run.id,
+      ranSeconds,
+    };
   }
 
   let items: unknown;
@@ -416,12 +438,12 @@ export async function runApifyActor({
   }
   if (!Array.isArray(items) || items.length === 0) {
     return timedOut
-      ? { ok: false, error: `The run hit its ${runTimeoutSeconds}-second limit on Apify before reading anything.`, code: "timeout", runId: run.id }
-      : { ok: false, error: "The run finished but its dataset is empty.", code: null, runId: run.id };
+      ? { ok: false, error: `The run timed out on Apify after ${fmtSeconds(ranSeconds)} before returning anything.`, code: "timeout", runId: run.id, ranSeconds }
+      : { ok: false, error: "The run finished but its dataset is empty.", code: null, runId: run.id, ranSeconds };
   }
   const table = itemsToTable(items, maxItems);
   if (table.headers.length === 0) {
-    return { ok: false, error: "The run returned items with no fields to map.", code: null, runId: run.id };
+    return { ok: false, error: "The run returned items with no fields to map.", code: null, runId: run.id, ranSeconds };
   }
   return {
     ok: true,
@@ -430,6 +452,7 @@ export async function runApifyActor({
     rows: table.rows,
     timedOut,
     runId: run.id,
+    ranSeconds,
   };
 }
 
@@ -437,6 +460,27 @@ interface ApifyRun {
   id: string;
   status: string;
   defaultDatasetId: string;
+  statusMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  stats?: { runTimeSecs?: number };
+}
+
+// How long the run went, by Apify's own account where it gives one, else by
+// this server's clock from the moment it was started.
+function runSeconds(run: ApifyRun, startedHere: number): number {
+  if (typeof run.stats?.runTimeSecs === "number" && run.stats.runTimeSecs > 0) return Math.round(run.stats.runTimeSecs);
+  const from = run.startedAt ? Date.parse(run.startedAt) : NaN;
+  const to = run.finishedAt ? Date.parse(run.finishedAt) : NaN;
+  if (Number.isFinite(from) && Number.isFinite(to) && to >= from) return Math.round((to - from) / 1000);
+  return Math.round((Date.now() - startedHere) / 1000);
+}
+
+// "14m 58s", "45s".
+export function fmtSeconds(total: number): string {
+  const s = Math.max(0, Math.round(total));
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
 // Dataset items are JSON objects whose shape is the actor's business, not

@@ -1,11 +1,11 @@
 "use server";
 
-// Clinic-First Discovery — the run, and the write.
+// Clinic-First Discovery — the write.
 //
-// Two actions, and the split between them is the same one the Apify import
-// makes: searching costs money and returns something to look at, so it happens
-// on its own and comes back to the browser; writing happens only when somebody
-// has seen what would be written and pressed the button.
+// The search itself is a background job (startClinicSearchJob in
+// src/lib/actions/jobs.ts): it costs money and returns something to look at,
+// and can run for many minutes. Writing happens only here, when somebody has
+// seen what would be written and pressed the button.
 //
 // What it writes is ordinary DiscoveryCandidate rows, Pending, exactly as the
 // CSV and Apify imports write them. Nothing about the enrichment chain, the
@@ -21,15 +21,12 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { runApifySync } from "@/lib/apify";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import {
   CLINIC_FIRST_BATCH_DESCRIPTION,
   CLINIC_FIRST_SOURCE,
   ClinicCandidate,
-  clinicSearchInput,
-  normalizeClinicRow,
-  readClinicSearchConfig,
+  MAX_CLINIC_RESULTS,
 } from "@/lib/clinicDiscovery";
 import {
   DEDUPE_RUNG_LABELS,
@@ -37,116 +34,10 @@ import {
   mergeFill,
   mergeSources,
 } from "@/lib/discoveryDedupe";
-import { IMPORT_DEFAULT_STATUS, MAX_IMPORT_ROWS } from "@/lib/discoveryImport";
+import { IMPORT_DEFAULT_STATUS } from "@/lib/discoveryImport";
 import { defaultBatchLabel, readBatchLabel } from "@/lib/discoveryBatch";
 import { zoneFromLocation } from "@/lib/timezones";
-import { recordApifySearchRun } from "@/lib/actions/apifySearchLog";
 import { mapsEmailFields, pickMapsEmails } from "@/lib/emailFind";
-
-// How many results one run keeps in total, across every term. The import cap
-// again, and for the same reason: every row kept is a row the queue will spend
-// five actor runs and a model call on.
-const MAX_CLINIC_RESULTS = MAX_IMPORT_ROWS;
-
-export type ClinicSearchResult =
-  | {
-      ok: true;
-      actorId: string;
-      // One per clinic found, already normalised and already de-duplicated
-      // against each other — but not yet against what is stored. That check
-      // runs at import time, against the database as it stands then.
-      clinics: ClinicCandidate[];
-      // What each term returned, so a term that found nothing says so rather
-      // than disappearing into a total.
-      perTerm: { term: string; found: number; error?: string }[];
-    }
-  | { ok: false; error: string };
-
-// ─── The search ────────────────────────────────────────────────────────────
-
-// Runs the configured actor once per search term and normalises everything it
-// returns into clinic candidates.
-//
-// A term that fails does not fail the run. Nine terms and one bad one is nine
-// terms' worth of clinics plus a line saying what happened to the tenth —
-// throwing all of it away because one search 404'd would spend the credit and
-// return nothing. A run where *every* term failed is a failed run, and says so
-// with the first actor's own sentence.
-export async function runClinicDiscoverySearch(args: {
-  config: unknown;
-  // Overrides the stored actor for this run only, so a different actor can be
-  // tried without saving it. Nothing is persisted from here.
-  actorId?: string;
-}): Promise<ClinicSearchResult> {
-  const config = readClinicSearchConfig(args?.config);
-  if (config.terms.length === 0) {
-    return { ok: false, error: "Add at least one search term to run." };
-  }
-
-  const settings = await loadPipelineSettings();
-  if (!settings.clinicDiscovery.enabled) {
-    return {
-      ok: false,
-      error:
-        "Clinic-First Discovery is turned off. Turn it on under Settings → Pipeline, where its actor is set too.",
-    };
-  }
-  // Held to the same shape a stored one is held to, so a typed override cannot
-  // put anything into a URL that a saved setting could not.
-  const actorId =
-    typeof args?.actorId === "string" && args.actorId.trim() !== ""
-      ? args.actorId.trim()
-      : settings.clinicDiscovery.actorId;
-
-  const clinics: ClinicCandidate[] = [];
-  const perTerm: { term: string; found: number; error?: string }[] = [];
-  // Within one run: the same clinic under two search terms is one clinic.
-  const seen = new DedupeIndex<ClinicCandidate & { clinicName: string }>();
-  const errors: string[] = [];
-
-  for (const term of config.terms) {
-    if (clinics.length >= MAX_CLINIC_RESULTS) {
-      perTerm.push({ term, found: 0, error: "Not run — the result cap was already reached." });
-      continue;
-    }
-    // One term, one run, one count — recorded here rather than around the
-    // whole loop, because a term skipped by the cap above was not run and a
-    // term whose actor fails below was. A term that fails still cost a call
-    // and still counts as having been tried.
-    await recordApifySearchRun({ type: "CLINIC_KEYWORD", raw: term });
-
-    const result = await runApifySync({
-      kind: "actor",
-      id: actorId,
-      input: JSON.stringify(clinicSearchInput(term, config)),
-      maxItems: config.resultsPerTerm,
-    });
-    if (!result.ok) {
-      errors.push(result.error);
-      perTerm.push({ term, found: 0, error: result.error });
-      continue;
-    }
-
-    let found = 0;
-    for (const cells of result.rows) {
-      if (clinics.length >= MAX_CLINIC_RESULTS) break;
-      const clinic = normalizeClinicRow({ headers: result.headers, cells }, term);
-      // No name, no candidate — and no invention of one.
-      if (!clinic) continue;
-      if (seen.match(clinic)) continue;
-      seen.add(clinic);
-      clinics.push(clinic);
-      found++;
-    }
-    perTerm.push({ term, found });
-  }
-
-  if (clinics.length === 0 && errors.length === config.terms.length) {
-    return { ok: false, error: errors[0] };
-  }
-
-  return { ok: true, actorId, clinics, perTerm };
-}
 
 // ─── The write ─────────────────────────────────────────────────────────────
 
