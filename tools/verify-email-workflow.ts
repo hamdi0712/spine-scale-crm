@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   const state = async (id: string, now = new Date()) => emailLeadState(await reload(id), await loadEmailSettings(), now);
 
   console.log("\nStarter copy");
-  check("every template starts as starter copy, so the banner shows", wf.startersRemaining(settings).length === 6, wf.startersRemaining(settings).join(", "));
+  check("every template starts as starter copy, so the banner shows", wf.startersRemaining(settings).length === 8, wf.startersRemaining(settings).join(", "));
 
   console.log("\nDrafting the opener");
   stub.setReplies({
@@ -165,10 +165,10 @@ async function main(): Promise<void> {
   check("a made-up stat is rejected and asked for again", o1.ok && !/30%|most clinics/i.test(ownerLead.emailOpener ?? ""), ownerLead.emailOpener ?? JSON.stringify(o1));
   check("and the redraft naming the DRX9000 from their site is kept", (ownerLead.emailOpener ?? "").includes("DRX9000"));
   check("owner email → owner-direct version, greeted by salutation()", ownerLead.emailVersion === "owner" && (ownerLead.emailBody ?? "").startsWith("Hi Dr. Smith,"), ownerLead.emailBody?.split("\n")[0]);
-  check("the email is subject, greeting, opener, body and opt-out",
+  check("the email is subject, greeting, opener, body, opt-out and sign-off",
     ownerLead.emailSubject === `Quick question about ${name("Owner Spine")}` &&
       (ownerLead.emailBody ?? "").includes(ownerLead.emailOpener ?? "@@") &&
-      (ownerLead.emailBody ?? "").trim().endsWith(wf.STARTER_OPT_OUT));
+      (ownerLead.emailBody ?? "").trim().endsWith(`${wf.STARTER_OPT_OUT}\n\n${wf.STARTER_SIGN_OFF}`));
   const o2 = await act.generateEmailOpener(desk.id);
   const deskLead = await reload(desk.id);
   check("a gap stated as fact is rejected; the question is kept", o2.ok && (deskLead.emailOpener ?? "").endsWith("?"), deskLead.emailOpener ?? JSON.stringify(o2));
@@ -356,14 +356,88 @@ async function main(): Promise<void> {
   const edited = {
     ...settings,
     subjectTemplate: "A thought for {clinic}",
-    ownerBodyTemplate: "{opener}\n\nMine.\n\n{sender}",
-    frontDeskTemplate: "{opener}\n\nMine, for {contact}.\n\n{sender}",
+    frontDeskSubjectTemplate: "For the doctor at {clinic}",
+    ownerBodyTemplate: "{opener}\n\nMine.",
+    frontDeskTemplate: "{opener}\n\nMine, for {contact}.",
     optOutLine: "Reply stop and I won't write again.",
     followUpTemplates: ["My follow-up.", "My last note."],
+    signOff: "Thanks,\n{sender}",
   };
   check("a template without {opener} is refused", !(await act.saveEmailSettings({ ...edited, ownerBodyTemplate: "No opener here." })).ok);
   check("saved", (await act.saveEmailSettings(edited)).ok);
   check("no starter copy left, so no banner", wf.startersRemaining(await loadEmailSettings()).length === 0 && (await loadEmailView()).starters.length === 0);
+
+  console.log("\nThe final copy, as the migration writes it");
+  const fs = await import("node:fs");
+  const migration = fs.readFileSync(path.join(__dirname, "../prisma/migrations/20261029150000_final_email_copy/migration.sql"), "utf8");
+  const insert = migration.slice(migration.indexOf("INSERT INTO"));
+  await prisma.emailSettings.update({ where: { id: wf.EMAIL_SETTINGS_ID }, data: { senderName: "", dailyLimit: 10 } });
+  await prisma.$executeRawUnsafe(insert);
+  const final = await loadEmailSettings();
+  check("written over the edited row; no starter copy, so no banner", wf.startersRemaining(final).length === 0, wf.startersRemaining(final).join(", "));
+  check("the two subjects, as given", final.subjectTemplate === "quick question about new patient follow-up" && final.frontDeskSubjectTemplate === "question for the doctor");
+  check("placeholders kept exactly as written",
+    final.ownerBodyTemplate.startsWith("{greeting}\n\n{opener}\n\n") && final.frontDeskTemplate.startsWith("{greeting}\n\n{opener}\n\n") &&
+      final.ownerBodyTemplate.includes("at {clinic} right now") && final.followUpTemplates[0].includes("handled at {clinic},") && final.signOff.startsWith("{sender}\nSpine Scale\n"));
+  check("the opt-out line and its typographic quotes, as given", final.optOutLine === "If this isn’t relevant, just reply “no” and I won’t email again.");
+  check("two follow-ups, three days apart (day 3, then day 6)", final.followUpTemplates.length === 2 && final.followUpDelayDays === 3 &&
+    final.followUpTemplates[1].endsWith("I’ll pick it up.\n\nThanks either way."));
+  check("the sender name and daily limit were left as they were", final.senderName === "" && final.dailyLimit === 10);
+
+  console.log("\nThe opener: preferred evidence and no bridging");
+  const os = await import("../src/lib/outreachSequence");
+  const prompt = os.buildEmailOpenerPrompt(
+    { evidence: { clinicName: "X", websiteNotes: "n", metaAdsSignal: null, reviewCount: null }, contactName: null, contactTitle: null, loomUrl: null, replyText: null, priorMessages: [] },
+    { cited: [], gaps: [] },
+  ).user;
+  check("the prompt puts ads, free consult offers, booking and contact options first, equipment and reviews last",
+    /1\. Active Meta ads/.test(prompt) && /2\. A free consultation/.test(prompt) && /3\. The booking flow/.test(prompt) && /4\. The contact options/.test(prompt) &&
+      /Equipment and the review count come last/.test(prompt));
+  check("and forbids bridging assumptions", /THE OPENER STOPS AT THE OBSERVATION/.test(prompt));
+  check("a bridging assumption is rejected", os.assumptionReason("I saw you're running Meta ads, which probably means a lot of after-hours inquiries.") !== null &&
+    os.assumptionReason("I imagine the front desk is stretched with the free consult offer.") !== null);
+  check("a plain observation passes", os.assumptionReason("I saw Lakeside Spine & Disc Center is running Meta ads for a free decompression consultation.") === null);
+
+  console.log("\nBoth emails, assembled for a seeded lead");
+  const lake = await prisma.lead.create({
+    data: {
+      clinicName: name("Lakeside Spine & Disc Center"),
+      stage: "NEW",
+      channel: "email",
+      contactName: "Dr. Maria Lopez",
+      email: "drlopez@lakesidespine.test",
+      emailType: "owner",
+      websiteNotes: "Lakeside Spine & Disc Center. Book your free decompression consultation online or call us. Text us anytime.",
+      metaAdsSignal: "Active ads: 3 running, promoting a free consultation",
+      reviewCount: 64,
+    },
+  });
+  stub.setReplies({
+    [name("Lakeside Spine & Disc Center")]: [
+      { opener: "I saw Lakeside Spine & Disc Center is running Meta ads for a free consultation, which probably brings in a lot of after-hours inquiries.", basis: "cited", ...note },
+      { opener: "I saw Lakeside Spine & Disc Center is running Meta ads for a free decompression consultation.", basis: "cited", ...note },
+    ],
+  });
+  const lakeOpener = await act.generateEmailOpener(lake.id);
+  const lakeLead = await reload(lake.id);
+  check("the bridging opener was rejected, the plain one kept", lakeOpener.ok && !/probably/.test(lakeLead.emailOpener ?? "") && /Meta ads/.test(lakeLead.emailOpener ?? ""), lakeLead.emailOpener ?? JSON.stringify(lakeOpener));
+  const ownerEmail = { subject: lakeLead.emailSubject!, body: lakeLead.emailBody! };
+  await act.setEmailVersion(lake.id, "front_desk");
+  const deskVersion = await reload(lake.id);
+  const deskEmail = { subject: deskVersion.emailSubject!, body: deskVersion.emailBody! };
+  check("owner email: its subject, greeted by name, opt-out, then the sign-off",
+    ownerEmail.subject === "quick question about new patient follow-up" && ownerEmail.body.startsWith("Hi Dr. Lopez,\n\nI saw ") &&
+      ownerEmail.body.includes("at Lakeside Spine & Disc Center (email verify) right now.") &&
+      ownerEmail.body.endsWith(`${final.optOutLine}\n\n{sender}\nSpine Scale\nOne Archers’ Place, East Tower\nTaft Avenue corner Castro Street, Malate\nManila 1004, Philippines`));
+  check("front-desk email: its subject, greeting the team",
+    deskEmail.subject === "question for the doctor" && deskEmail.body.startsWith(`Hi ${name("Lakeside Spine & Disc Center")} team,\n\nI saw `) &&
+      deskEmail.body.includes("Would you mind passing it along?"));
+  const fu = (n: number) => wf.renderFollowUp(final, lakeLead, "owner", n, ownerEmail.subject)!;
+  check("follow-ups reply in thread, greeted, with the opt-out and sign-off", fu(1).subject === "Re: quick question about new patient follow-up" &&
+    fu(1).body.startsWith("Hi Dr. Lopez,\n\nJust bumping") && fu(2).body.includes("Thanks either way.\n\nIf this isn’t relevant"));
+  for (const [label, e] of [["OWNER", ownerEmail], ["FRONT DESK", deskEmail], ["FOLLOW-UP 1", fu(1)], ["FOLLOW-UP 2", fu(2)]] as const) {
+    console.log(`\n  ── ${label} ──\n  Subject: ${e.subject}\n\n${e.body.split("\n").map((l) => `  ${l}`).join("\n")}`);
+  }
 
   await prisma.$disconnect();
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);

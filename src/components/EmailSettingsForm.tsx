@@ -58,27 +58,42 @@ export default function EmailSettingsForm({ initial, starters }: { initial: Emai
         <div>
           <p className="text-sm font-medium">Email 1</p>
           <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
-            Placeholders: <code>{"{opener}"}</code> the drafted opener, <code>{"{clinic}"}</code> the clinic&apos;s
-            name, <code>{"{contact}"}</code> who the front desk is asked to pass it to, <code>{"{sender}"}</code> your
-            name below. The greeting (“Hi Dr. Chen,” to the owner, “Hi {"{clinic}"} team,” to a front desk) and the
-            opt-out line are added for you.
+            Placeholders: <code>{"{greeting}"}</code> “Hi Dr. Chen,” to the owner or “Hi {"{clinic}"} team,” to a
+            front desk (added at the top of a template without it), <code>{"{opener}"}</code> the drafted opener,{" "}
+            <code>{"{clinic}"}</code> the clinic&apos;s name, <code>{"{contact}"}</code> who the front desk is asked to
+            pass it to, <code>{"{sender}"}</code> your name below. Every email ends with the opt-out line, then the
+            sign-off.
           </p>
         </div>
-        <label className="block">
-          <span className="field-label">{label("Subject", isStarter("Subject"))}</span>
-          <input className="field" value={v.subjectTemplate} onChange={(e) => set("subjectTemplate", e.target.value)} />
-        </label>
+        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+          <label className="block">
+            <span className="field-label">{label("Subject, owner", isStarter("Owner subject"))}</span>
+            <input className="field" value={v.subjectTemplate} onChange={(e) => set("subjectTemplate", e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="field-label">{label("Subject, front desk", isStarter("Front-desk subject"))}</span>
+            <input
+              className="field"
+              value={v.frontDeskSubjectTemplate}
+              onChange={(e) => set("frontDeskSubjectTemplate", e.target.value)}
+            />
+          </label>
+        </div>
         <label className="block">
           <span className="field-label">{label("Owner-direct email", isStarter("Owner-direct email"))}</span>
-          <textarea className="field min-h-[180px]" value={v.ownerBodyTemplate} onChange={(e) => set("ownerBodyTemplate", e.target.value)} />
+          <textarea className="field min-h-[320px]" value={v.ownerBodyTemplate} onChange={(e) => set("ownerBodyTemplate", e.target.value)} />
         </label>
         <label className="block">
           <span className="field-label">{label("Front-desk email", isStarter("Front-desk email"))}</span>
-          <textarea className="field min-h-[180px]" value={v.frontDeskTemplate} onChange={(e) => set("frontDeskTemplate", e.target.value)} />
+          <textarea className="field min-h-[360px]" value={v.frontDeskTemplate} onChange={(e) => set("frontDeskTemplate", e.target.value)} />
         </label>
         <label className="block">
           <span className="field-label">{label("Opt-out line", isStarter("Opt-out line"))}</span>
           <input className="field" value={v.optOutLine} onChange={(e) => set("optOutLine", e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="field-label">{label("Sign-off", isStarter("Sign-off"))}</span>
+          <textarea className="field min-h-[150px]" value={v.signOff} onChange={(e) => set("signOff", e.target.value)} />
         </label>
         <label className="block">
           <span className="field-label">Your name, for {"{sender}"}</span>
