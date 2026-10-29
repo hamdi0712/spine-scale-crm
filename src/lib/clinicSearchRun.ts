@@ -34,8 +34,9 @@ export async function runClinicSearchTerm(
   // One term, one run, one count — a term whose actor fails still cost a
   // call and still counts as having been tried. A count that cannot be
   // written (this runs after the action that started it has answered) is
-  // not a reason to skip the search.
-  await recordApifySearchRun({ type: "CLINIC_KEYWORD", raw: term }).catch(() => {});
+  // not a reason to skip the search. Logged as email: what this search finds
+  // lands in Email Discovery.
+  await recordApifySearchRun({ type: "CLINIC_KEYWORD", raw: term, channel: "email" }).catch(() => {});
 
   const result = await runApifyActor({
     kind: "actor",

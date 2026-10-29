@@ -29,7 +29,7 @@ export async function fetchApifyDataset(args: {
   // exhausted search this count exists to make visible. The input is
   // canonicalised on the way in, so re-indenting the same JSON is the same
   // search rather than a second one.
-  await recordApifySearchRun({ type: "LINKEDIN_SEARCH", raw: input });
+  await recordApifySearchRun({ type: "LINKEDIN_SEARCH", raw: input, channel: "linkedin" });
 
   return runApifySync({ kind, id, input });
 }

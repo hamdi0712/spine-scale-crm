@@ -3,7 +3,9 @@
 // Search usage tracking — the reads and the writes.
 //
 // The recording half is called from the two places that actually spend an
-// actor run on a search: the Apify import action and the Clinic-First run. It
+// actor run on a search: the Apify import action (LinkedIn) and the
+// Clinic-First run (email). Every read is one channel's — the history page
+// and the status pills only ever count searches run for the channel shown. It
 // is deliberately unconditional and deliberately quiet — a search is logged
 // because it was run, not because it worked, and a logging failure never
 // fails a run that has already been paid for.
@@ -23,6 +25,7 @@ import {
   isApifySearchType,
   searchKey,
 } from "@/lib/apifySearchLog";
+import { PipelineChannel, readPipelineChannel } from "@/lib/emailChannel";
 
 const HISTORY_PATH = "/discovery/search-history";
 
@@ -34,21 +37,25 @@ const HISTORY_PATH = "/discovery/search-history";
 //
 // Takes the raw search — the input JSON, or the term — and normalises it here
 // rather than trusting a caller to have done it, so there is exactly one
-// definition of "the same search".
+// definition of "the same search". The same search run for another channel
+// is another row.
 export async function recordApifySearchRun(args: {
   type: ApifySearchType;
   raw: string;
+  channel: PipelineChannel;
 }): Promise<void> {
   if (!isApifySearchType(args?.type)) return;
   const key = searchKey(args.type, typeof args?.raw === "string" ? args.raw : "");
   if (key === "") return;
+  const channel = readPipelineChannel(args?.channel);
   const now = new Date();
 
   try {
     await prisma.apifySearchLog.upsert({
-      where: { type_key: { type: args.type, key } },
+      where: { channel_type_key: { channel, type: args.type, key } },
       update: { runCount: { increment: 1 }, lastRunAt: now },
       create: {
+        channel,
         type: args.type,
         key,
         runCount: 1,
@@ -73,8 +80,9 @@ export async function recordApifySearchRun(args: {
 // after everything that has, by when they were added — not before, because
 // "most recently used" is what the list claims to be ordered by and a row that
 // was never used has no claim on the top of it.
-export async function listApifySearchLogs(): Promise<ApifySearchLogRow[]> {
+export async function listApifySearchLogs(channel: PipelineChannel): Promise<ApifySearchLogRow[]> {
   const rows = await prisma.apifySearchLog.findMany({
+    where: { channel: readPipelineChannel(channel) },
     orderBy: [{ lastRunAt: "desc" }, { createdAt: "desc" }],
   });
   return rows.map(toRow);
@@ -83,6 +91,9 @@ export async function listApifySearchLogs(): Promise<ApifySearchLogRow[]> {
 // The status of a set of clinic-first terms, keyed by the term as it was
 // passed in, for the pills beside the search-term chips. Terms with no row
 // are simply absent — the panel reads absence as New, which is what it means.
+//
+// Email's counts only: Clinic-first search runs for email, so a term ground
+// through for LinkedIn still reads New here until it is run for email.
 export async function clinicKeywordStatuses(
   terms: string[],
 ): Promise<Record<string, ApifySearchLogRow>> {
@@ -93,7 +104,7 @@ export async function clinicKeywordStatuses(
 
   const keys = Array.from(new Set(wanted.map((t) => searchKey("CLINIC_KEYWORD", t))));
   const rows = await prisma.apifySearchLog.findMany({
-    where: { type: "CLINIC_KEYWORD", key: { in: keys } },
+    where: { channel: "email", type: "CLINIC_KEYWORD", key: { in: keys } },
   });
   const byKey = new Map(rows.map((row) => [row.key, toRow(row)]));
 
@@ -143,7 +154,9 @@ export async function addApifySearchLogEntry(args: {
   type: string;
   raw: string;
   status: string | null;
+  channel: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const channel = readPipelineChannel(args?.channel);
   const type: ApifySearchType = isApifySearchType(args?.type)
     ? args.type
     : "CLINIC_KEYWORD";
@@ -163,9 +176,9 @@ export async function addApifySearchLogEntry(args: {
     : null;
 
   await prisma.apifySearchLog.upsert({
-    where: { type_key: { type, key } },
+    where: { channel_type_key: { channel, type, key } },
     update: { manualStatusOverride: status },
-    create: { type, key, runCount: 0, manualStatusOverride: status },
+    create: { channel, type, key, runCount: 0, manualStatusOverride: status },
   });
   revalidatePath(HISTORY_PATH);
   return { ok: true };

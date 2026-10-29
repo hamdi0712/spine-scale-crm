@@ -6,6 +6,9 @@ import {
   APIFY_SEARCH_WELL_USED_AT,
 } from "@/lib/apifySearchLog";
 import SearchHistoryPanel from "@/components/SearchHistoryPanel";
+import ChannelToggle from "@/components/ChannelToggle";
+import { cookies } from "next/headers";
+import { DISCOVERY_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 
 // Reads the log on every request — a page that cached this would be a usage
 // count that stopped counting.
@@ -18,8 +21,20 @@ export const dynamic = "force-dynamic";
 // blocks a run — a well-used search still runs — and nothing here is derived
 // from what a run found. It counts runs, which is the only thing about a
 // search that is true regardless of what came back that day.
-export default async function SearchHistoryPage() {
-  const rows = await listApifySearchLogs();
+//
+// One channel at a time, on the toggle beside the title: the statuses count
+// only the searches run for that channel, so a keyword worn out on LinkedIn is
+// still New for email. It follows Discovery's choice — the same cookie — and
+// a link from one of the search screens can name its channel instead.
+export default async function SearchHistoryPage({
+  searchParams,
+}: {
+  searchParams: { channel?: string };
+}) {
+  const channel = readPipelineChannel(
+    searchParams.channel ?? cookies().get(DISCOVERY_CHANNEL_COOKIE)?.value,
+  );
+  const rows = await listApifySearchLogs(channel);
 
   return (
     <div className="max-w-5xl">
@@ -28,21 +43,30 @@ export default async function SearchHistoryPage() {
           <Link href="/discovery" className="text-sm text-accent hover:underline">
             ← Discovery
           </Link>
-          <h1 className="display mt-2 text-[32px] font-semibold">
-            Search history
-          </h1>
+          <div className="mt-2 flex items-center gap-3">
+            <h1 className="display text-[32px] font-semibold">Search history</h1>
+            <ChannelToggle channel={channel} cookie={DISCOVERY_CHANNEL_COOKIE} label="Search history channel" />
+          </div>
           <p className="helper-text mt-1.5 text-sm text-muted">
             Every search that has been run, and how worn it is — so a keyword
             that stopped paying is visible before it is run again
           </p>
         </div>
         <PageActions className="flex flex-wrap gap-2 xl:shrink-0">
-          <Link href="/discovery/import/clinic" className="btn">
-            Clinic-first search
-          </Link>
-          <Link href="/discovery/import/apify" className="btn">
-            Import from Apify
-          </Link>
+          {channel === "email" ? (
+            <Link href="/discovery/import/clinic" className="btn">
+              Find clinics
+            </Link>
+          ) : (
+            <>
+              <Link href="/discovery/import/clinic" className="btn">
+                Clinic-first search
+              </Link>
+              <Link href="/discovery/import/apify" className="btn">
+                Import from Apify
+              </Link>
+            </>
+          )}
         </PageActions>
       </div>
 
@@ -58,7 +82,7 @@ export default async function SearchHistoryPage() {
         </p>
       </div>
 
-      <SearchHistoryPanel rows={rows} />
+      <SearchHistoryPanel rows={rows} channel={channel} />
     </div>
   );
 }
