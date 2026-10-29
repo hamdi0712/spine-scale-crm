@@ -558,6 +558,25 @@ model EmailSend {
   @@index([inboxId, sentAt])
 }
 
+// One email check through Instantly's email-verification endpoint: the
+// address, what Instantly said, what it became here, and the credits it cost.
+// The monthly budget is the sum of creditsUsed since the 1st.
+model EmailCheck {
+  id          String   @id @default(cuid())
+  leadId      String?
+  email       String
+  // verified | invalid | pending (still pending when polling gave up)
+  rawStatus   String
+  catchAll    String?
+  // valid | risky | invalid | unknown
+  status      String
+  creditsUsed Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([email])
+}
+
 // A Gmail inbox cold email is sent from, by hand. Each has its own daily
 // limit, and the display name {sender} is signed with (Settings' "Your name"
 // where it has none).
@@ -612,6 +631,12 @@ model EmailSettings {
   followUpDelayDays        Int    @default(3)
   // UNUSED since each sending inbox has its own limit (SendingInbox).
   dailyLimit               Int    @default(10)
+
+  // Instantly email checks: the monthly credit budget a check job may not go
+  // past, and what one check costs — a starting guess, corrected from the
+  // credits_used Instantly reports on each check.
+  checkCreditBudget        Int    @default(150)
+  creditsPerCheck          Float  @default(1)
 
   updatedAt DateTime @updatedAt
 }
@@ -1264,8 +1289,9 @@ model AppSecrets {
 
   // Null means "not set here" and defers to the environment variable of the
   // same name. Saving an empty value clears the column back to that.
-  deepseekApiKey String?
-  apifyApiToken  String?
+  deepseekApiKey   String?
+  apifyApiToken    String?
+  instantlyApiKey  String?
 
   updatedAt DateTime @updatedAt
 }

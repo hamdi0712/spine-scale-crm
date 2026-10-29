@@ -38,6 +38,9 @@ export interface EmailSettingsValues {
   senderName: string;
   followUpDelayDays: number;
   dailyLimit: number;
+  // Instantly email checks: this month's credit budget, and one check's cost.
+  checkCreditBudget: number;
+  creditsPerCheck: number;
 }
 
 // Starter copy: something that reads as an email, so the workflow can be
@@ -84,6 +87,8 @@ export const DEFAULT_EMAIL_SETTINGS: EmailSettingsValues = {
   senderName: "",
   followUpDelayDays: DEFAULT_FOLLOW_UP_DELAY_DAYS,
   dailyLimit: DEFAULT_DAILY_LIMIT,
+  checkCreditBudget: 150,
+  creditsPerCheck: 1,
 };
 
 export const STARTER_COPY_BANNER = "Starter copy — edit your templates in Settings → Email before sending.";
@@ -146,6 +151,11 @@ export function readEmailSettings(row: Record<string, unknown> | null | undefine
     senderName: typeof r.senderName === "string" ? r.senderName.trim().slice(0, 200) : "",
     followUpDelayDays: int(r.followUpDelayDays, DEFAULT_FOLLOW_UP_DELAY_DAYS, 1, 60),
     dailyLimit: int(r.dailyLimit, DEFAULT_DAILY_LIMIT, 1, 500),
+    checkCreditBudget: int(r.checkCreditBudget, 150, 0, 1_000_000),
+    creditsPerCheck: (() => {
+      const n = Number(r.creditsPerCheck);
+      return Number.isFinite(n) && n > 0 ? Math.min(100, n) : 1;
+    })(),
   };
 }
 
@@ -161,6 +171,8 @@ export function emailSettingsRow(s: EmailSettingsValues) {
     senderName: s.senderName,
     followUpDelayDays: s.followUpDelayDays,
     dailyLimit: s.dailyLimit,
+    checkCreditBudget: s.checkCreditBudget,
+    creditsPerCheck: s.creditsPerCheck,
   };
 }
 

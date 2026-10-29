@@ -21,7 +21,7 @@ export default async function ApiKeysPage() {
       <div className="mb-4">
         <h2 className="display text-xl font-semibold">API Keys</h2>
         <p className="helper-text mt-1 text-sm text-muted">
-          The credentials for the two services this app calls out to
+          The credentials for the services this app calls out to
         </p>
       </div>
 

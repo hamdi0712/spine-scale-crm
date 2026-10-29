@@ -14,6 +14,7 @@ import {
   SendingInboxView,
   startersRemaining,
 } from "@/lib/emailWorkflow";
+import { fmtCredits } from "@/lib/emailCheck";
 
 type InboxDraft = { id: string | null; address: string; displayName: string; dailyLimit: number };
 
@@ -21,10 +22,12 @@ export default function EmailSettingsForm({
   initial,
   inboxes: initialInboxes,
   starters,
+  creditsUsed,
 }: {
   initial: EmailSettingsValues;
   inboxes: SendingInboxView[];
   starters: string[];
+  creditsUsed: number;
 }) {
   const router = useRouter();
   const [v, setV] = useState<EmailSettingsValues>(initial);
@@ -219,6 +222,31 @@ export default function EmailSettingsForm({
               value={v.followUpDelayDays}
               onChange={(e) => set("followUpDelayDays", Number(e.target.value))}
             />
+          </label>
+        </div>
+      </div>
+
+      <div className="card space-y-4 p-6">
+        <div>
+          <p className="text-sm font-medium">Email checks (Instantly)</p>
+          <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
+            Addresses are checked through Instantly&apos;s email verification — nothing is sent through Instantly.
+            Each address is checked once (Check again on a lead re-checks it). A check that would go past this
+            month&apos;s budget is refused; new email leads are checked on their own while budget is left.
+          </p>
+        </div>
+        <p className={`num text-sm ${creditsUsed > v.checkCreditBudget ? "text-bad" : ""}`}>
+          {fmtCredits(creditsUsed)} of {v.checkCreditBudget} credits used this month
+        </p>
+        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+          <label className="block">
+            <span className="field-label">Monthly credit budget</span>
+            <input type="number" min={0} className="field num" value={v.checkCreditBudget} onChange={(e) => set("checkCreditBudget", Number(e.target.value))} />
+          </label>
+          <label className="block">
+            <span className="field-label">Credits per check</span>
+            <input type="number" min={0.01} step={0.01} className="field num" value={v.creditsPerCheck} onChange={(e) => set("creditsPerCheck", Number(e.target.value))} />
+            <span className="mt-1 block text-xs text-muted">Corrected from what Instantly reports after each check.</span>
           </label>
         </div>
       </div>

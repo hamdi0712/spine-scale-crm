@@ -24,6 +24,9 @@ import {
   startersRemaining,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
+import { autoCheckEmails } from "@/lib/actions/jobs";
+import { creditsUsedThisMonth } from "@/lib/emailCheckRun";
+import { getInstantlyApiKey } from "@/lib/appSecretsStore";
 import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import type { EmailPanelProps } from "@/components/EmailPanel";
 
@@ -99,6 +102,9 @@ export async function loadEmailView(now = new Date()) {
     loadInboxes(),
   ]);
   await assignReady(leads, inboxes);
+  // Newly promoted email leads arrive with an address nobody has checked;
+  // they are checked on their own from here, budget allowing.
+  void autoCheckEmails();
   const counters = await inboxCounters(inboxes, now);
   const rows = leads.map((l) => {
     const s = leadScore(l);
@@ -124,10 +130,12 @@ export async function loadEmailView(now = new Date()) {
       inboxLimit: counter?.limit ?? 0,
     };
   });
+  const check = await checkInfo(now);
   return {
     rows,
     settings,
     counters,
+    check,
     starters: startersRemaining(settings),
     unchecked: leads.filter((l) => (l.email ?? "").trim() !== "" && l.emailStatus === null).length,
   };
@@ -155,6 +163,7 @@ export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Pr
     inboxLocked: lead.emailSends.length > 0,
     inboxSentToday: counter?.sent ?? 0,
     inboxLimit: counter?.limit ?? 0,
+    check: { ...(await checkInfo(now)), checked: lead.emailStatus !== null },
     email: (lead.email ?? "").trim() || null,
     emailDetail: emailDetailLine(lead),
     contact:
@@ -196,4 +205,10 @@ export async function loadLeadEmailState(leadId: string, now = new Date()): Prom
   ]);
   await assignReady([lead], inboxes);
   return emailLeadState(lead, settings, now, inboxes);
+}
+
+// What the check buttons quote: the key, this month's credits, the cost of one.
+export async function checkInfo(now = new Date()) {
+  const [settings, used, key] = await Promise.all([loadEmailSettings(), creditsUsedThisMonth(now), getInstantlyApiKey()]);
+  return { hasKey: key !== null, used, budget: settings.checkCreditBudget, perCheck: settings.creditsPerCheck };
 }

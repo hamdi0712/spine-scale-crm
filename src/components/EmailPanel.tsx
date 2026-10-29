@@ -34,6 +34,7 @@ import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { EmailStatusBadge } from "@/components/Badge";
 import EmailSendButtons from "@/components/EmailSendButtons";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
+import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
 import { confirmText } from "@/lib/displayMode";
 
 export interface EmailPanelProps {
@@ -52,6 +53,9 @@ export interface EmailPanelProps {
   inboxLocked: boolean;
   inboxSentToday: number;
   inboxLimit: number;
+  // Checking the address through Instantly: whether it has been already,
+  // and what the confirm quotes.
+  check: { checked: boolean; hasKey: boolean; used: number; budget: number; perCheck: number };
   email: string | null;
   emailDetail: string | null;
   contact: { state: "confirmed" | "mismatch"; scorecardName: string | null; contactName: string | null };
@@ -135,6 +139,22 @@ export default function EmailPanel(p: EmailPanelProps) {
           {p.email ? <span className="break-all font-medium">{p.email}</span> : <span className="text-muted">no address yet</span>}
           {p.emailDetail && <span className="text-xs text-muted"> · {p.emailDetail}</span>}
         </p>
+        {p.email && !closed && (
+          <div className="mt-1.5">
+            <EmailCheckButton
+              label={p.check.checked ? "Check again" : "Check email"}
+              count={1}
+              leadIds={[p.leadId]}
+              force={p.check.checked}
+              perCheck={p.check.perCheck}
+              used={p.check.used}
+              budget={p.check.budget}
+              hasKey={p.check.hasKey}
+              compact
+            />
+            <EmailCheckProgress className="mt-2" />
+          </div>
+        )}
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <span className="text-muted">From</span>
           {p.inbox === null ? (

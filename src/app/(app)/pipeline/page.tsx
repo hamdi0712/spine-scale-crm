@@ -19,6 +19,8 @@ import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
 import { PIPELINE_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 import { loadEmailView } from "@/lib/emailWorkflowRead";
 import EmailCheckFile from "@/components/EmailCheckFile";
+import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
+import { fmtCredits } from "@/lib/emailCheck";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
 
 export const dynamic = "force-dynamic";
@@ -229,7 +231,7 @@ export default async function PipelinePage({
 // Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
 // it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
 async function EmailPipeline() {
-  const { rows, counters, starters, unchecked } = await loadEmailView();
+  const { rows, counters, starters, unchecked, check } = await loadEmailView();
 
   return (
     <div>
@@ -259,9 +261,16 @@ async function EmailPipeline() {
             )}
             {counters.length > 0 && <span className="font-normal text-muted"> sent today</span>}
           </p>
+          <p className={`num mt-1 text-xs ${check.used > check.budget ? "text-bad" : "text-muted"}`}>
+            Email checks: {fmtCredits(check.used)} of {check.budget} Instantly credits used this month
+            {!check.hasKey && " · no Instantly API key yet"}
+          </p>
         </div>
         <div className="flex flex-col items-end gap-2 max-md:items-stretch">
-          <EmailCheckFile unchecked={unchecked} />
+          <div className="flex flex-wrap items-start gap-2">
+            <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} />
+            <EmailCheckFile unchecked={unchecked} />
+          </div>
           <Link href="/discovery/import/clinic" className="btn max-md:justify-center">
             Find clinics
           </Link>
@@ -269,6 +278,7 @@ async function EmailPipeline() {
       </div>
 
       {starters.length > 0 && <StarterCopyBanner remaining={starters} className="mt-6" />}
+      <EmailCheckProgress className="mt-6" />
 
       <div className="mt-8">
         {rows.length === 0 ? (

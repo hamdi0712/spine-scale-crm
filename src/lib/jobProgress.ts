@@ -11,6 +11,7 @@ export type JobKind =
   | "compare-scoring"
   | "process-queue"
   | "clinic-search"
+  | "email-check"
   | "demo";
 
 // running     the loop is alive on the server
@@ -100,6 +101,7 @@ export const JOB_TITLES: Record<JobKind, string> = {
   "compare-scoring": "Compare scoring",
   "process-queue": "Process queue",
   "clinic-search": "Clinic-first search",
+  "email-check": "Email check",
   demo: "Demo re-crawl",
 };
 

@@ -33,6 +33,9 @@ import {
   readClinicSearchConfig,
 } from "@/lib/clinicDiscovery";
 import { clinicTermLine, runClinicSearchTerm } from "@/lib/clinicSearchRun";
+import { checkLeadEmail, checkReadiness, creditsUsedThisMonth, uncheckedEmailLeads } from "@/lib/emailCheckRun";
+import { fmtCredits } from "@/lib/emailCheck";
+import { loadEmailSettings } from "@/lib/emailSettingsStore";
 
 // ─── Re-crawl website ──────────────────────────────────────────────────────
 
@@ -297,6 +300,86 @@ export async function startClinicSearchJob(args: { config: unknown; actorId?: st
       return null;
     },
   });
+}
+
+// ─── Email check (Instantly) ───────────────────────────────────────────────
+
+// Checks addresses through Instantly's email-verification endpoint, one lead
+// at a time, in the shared runner and progress panel. Never sends anything.
+//
+// leadIds null is every unchecked email lead. A job that would go past this
+// month's credit budget is refused, saying how many would fit — except the
+// automatic one (auto), which checks as many as fit and leaves the rest.
+// force re-checks leads that were checked already ("Check again").
+// A refused key or a plan without API access stops the run at once.
+export async function startEmailCheckJob(args: { leadIds?: string[] | null; force?: boolean; auto?: boolean }): Promise<LaunchResult> {
+  const leadIds = Array.isArray(args?.leadIds) ? args.leadIds.filter((x) => typeof x === "string") : null;
+  const force = args?.force === true;
+  const rows = leadIds
+    ? await prisma.lead.findMany({
+        where: { id: { in: leadIds }, email: { not: null }, NOT: { email: "" }, ...(force ? {} : { emailStatus: null }) },
+        select: { id: true, clinicName: true },
+      })
+    : await uncheckedEmailLeads();
+  if (rows.length === 0) {
+    return { ok: false, error: force ? "There is no address to check." : "Nothing to check — every address has been checked. Use Check again on a lead to check it again." };
+  }
+  const ready = await checkReadiness(rows.length);
+  if (!ready.hasKey) return { ok: false, error: "No Instantly API key — add one under Settings → API Keys." };
+  let items = rows;
+  if (!ready.fits) {
+    if (!args?.auto) {
+      return {
+        ok: false,
+        error: `That needs ${fmtCredits(ready.needed)} credits and ${fmtCredits(ready.left)} are left of this month's ${ready.settings.checkCreditBudget} — ${ready.affordable} check${ready.affordable === 1 ? "" : "s"} would fit. Raise the budget in Settings → Email, or check fewer.`,
+      };
+    }
+    if (ready.affordable === 0) return { ok: false, error: "This month's credit budget is used up." };
+    items = rows.slice(0, ready.affordable);
+  }
+  const per = ready.settings.creditsPerCheck;
+  return launchJob({
+    kind: "email-check",
+    source: "email-check",
+    verb: "Checking",
+    href: "/pipeline",
+    items: items.map((r) => ({ id: r.id, name: r.clinicName })),
+    work: async (item) => {
+      const r = await checkLeadEmail(item.id, { force });
+      if (r.kind === "failed") return { outcome: "error", detail: r.detail, result: { code: r.code } };
+      if (r.kind === "skipped") return { outcome: "warn", detail: r.detail };
+      return { outcome: r.status === "valid" ? "ok" : "warn", detail: r.detail };
+    },
+    halt: (results) => {
+      const last = results[results.length - 1] as { result?: { code?: string }; detail: string } | undefined;
+      const code = last?.result?.code;
+      return code === "auth" || code === "plan" || code === "no_key" ? `Stopped: ${last?.detail}` : null;
+    },
+    finish: async ({ halted }) => {
+      const used = await creditsUsedThisMonth();
+      const settings = await loadEmailSettings();
+      if (halted) return `${halted.replace(/\.?$/, ".")} ${fmtCredits(used)} of ${settings.checkCreditBudget} credits used this month.`;
+      return `About ${fmtCredits(items.length * per)} credits estimated · ${fmtCredits(used)} of ${settings.checkCreditBudget} used this month.${
+        items.length < rows.length ? ` ${rows.length - items.length} left unchecked — the budget ran out.` : ""
+      }`;
+    },
+  });
+}
+
+// Checks new email leads' addresses on its own, as long as there is a key and
+// budget left: whatever is unchecked, as many as fit. Quiet — nothing to
+// check, no key, no budget or a check already running all mean it simply
+// does not start. Called wherever a lead gets an address.
+export async function autoCheckEmails(): Promise<void> {
+  try {
+    const pending = await uncheckedEmailLeads();
+    if (pending.length === 0) return;
+    const ready = await checkReadiness(1);
+    if (!ready.hasKey || !ready.fits) return;
+    await startEmailCheckJob({ auto: true });
+  } catch {
+    // An automatic check that cannot start is not an error anybody is waiting on.
+  }
 }
 
 // ─── Stop and dismiss ──────────────────────────────────────────────────────
