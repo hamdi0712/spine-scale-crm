@@ -7,6 +7,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { confirmText } from "@/lib/displayMode";
 
 export default function ApplyScoringModel({
   model,
@@ -28,7 +29,11 @@ export default function ApplyScoringModel({
       next === "v2"
         ? "Apply the new scoring model? From the next Process queue run, candidates are scored against the active ICP out of 100 — chiro-first clinics need a real program (2 of 5 signals), fits under the fit floor are rejected. Nothing already scored changes."
         : "Switch Process queue back to the old A–D scorecard? Nothing already scored changes.";
-    if (!confirm(message)) return;
+    const short =
+      next === "v2"
+        ? "Apply new scoring from the next queue run? Already-scored records don't change."
+        : "Switch back to the old A–D scorecard? Already-scored records don't change.";
+    if (!confirm(confirmText(message, short))) return;
     setError(null);
     startTransition(async () => {
       const result = await setModel(next);

@@ -52,7 +52,7 @@ export default function MonkHabitSettings({ habits }: { habits: MonkHabit[] }) {
             <p className="helper-text px-6 py-8 text-center text-sm text-muted">
               No active habits. Add one below.
             </p>
-            <p className="md:hidden px-6 py-8 text-center text-sm text-muted">No active habits.</p>
+            <p className="pro-only px-6 py-8 text-center text-sm text-muted">No active habits.</p>
           </>
         ) : (
           <ul>

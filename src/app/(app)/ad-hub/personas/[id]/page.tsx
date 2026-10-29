@@ -65,6 +65,7 @@ export default async function PersonaDetailPage({
           <ConfirmForm
             action={remove}
             message={`Delete ${persona.name}? Their ${countLabel(persona.concepts.length, "concept")} and every creative underneath go with them.`}
+            proMessage={`Delete ${persona.name} and everything under it?`}
             className="btn-danger"
           >
             Delete

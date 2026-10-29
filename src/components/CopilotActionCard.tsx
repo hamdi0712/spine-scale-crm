@@ -104,8 +104,8 @@ export default function CopilotActionCard({
             </Link>{" "}
             — open the record in another tab if you want to look before you agree.
           </p>
-          {/* A phone keeps the record link and drops the advice after it. */}
-          <p className="md:hidden mt-1.5 text-xs text-muted">
+          {/* Pro keeps the record link and drops the advice after it. */}
+          <p className="pro-only mt-1.5 text-xs text-muted">
             On{" "}
             <Link
               href={current.recordHref}

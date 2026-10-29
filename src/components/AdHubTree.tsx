@@ -60,7 +60,7 @@ export default function AdHubTree({ personas }: { personas: TreePersona[] }) {
           No personas yet. The new-concept wizard writes the first one — it
           starts by asking who the ad is for.
         </p>
-        <p className="md:hidden text-sm text-muted">No personas yet.</p>
+        <p className="pro-only text-sm text-muted">No personas yet.</p>
       </div>
     );
   }

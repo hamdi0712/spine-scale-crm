@@ -13,6 +13,7 @@ import { TASK_STATUSES, TASK_STATUS_LABELS, TaskStatus } from "@/lib/tasks";
 import { createTask, deleteTask, moveTaskStatus } from "@/lib/actions/tasks";
 import { fmtDate } from "@/lib/format";
 import Icon from "@/components/Icons";
+import { confirmText } from "@/lib/displayMode";
 
 export interface BoardTask {
   id: string;
@@ -97,7 +98,7 @@ export default function TaskBoard({
   function handleDelete(task: BoardTask) {
     if (
       !confirm(
-        `Delete “${task.title}”? This cannot be undone.`,
+        confirmText(`Delete “${task.title}”? This cannot be undone.`, `Delete “${task.title}”? Can't be undone.`),
       )
     )
       return;

@@ -55,7 +55,7 @@ export default function MonkHabitGrid({
           No habits yet. Add your non-negotiables under{" "}
           <span className="font-medium text-ink">Habits</span>.
         </p>
-        <p className="md:hidden py-6 text-center text-sm text-muted">No habits yet.</p>
+        <p className="pro-only py-6 text-center text-sm text-muted">No habits yet.</p>
       </>
     );
   }

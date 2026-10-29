@@ -376,7 +376,7 @@ export function JobProgressPanel({
       {live && (
         <p className="mt-3 flex items-center gap-1.5 text-xs text-muted">
           <IconDeviceLaptop size={14} aria-hidden className="shrink-0" />
-          Keep your Mac awake until this finishes. Leaving this page won&rsquo;t stop it.
+          Keep your Mac awake until this finishes.<span className="guided-only"> Leaving this page won&rsquo;t stop it.</span>
         </p>
       )}
 

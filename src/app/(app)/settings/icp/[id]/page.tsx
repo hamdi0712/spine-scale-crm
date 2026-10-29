@@ -36,6 +36,7 @@ export default async function IcpEditPage({
           <ConfirmForm
             action={remove}
             message={`Delete ${icp.name}? Candidates already scored against it keep their stored breakdowns.`}
+            proMessage={`Delete ${icp.name}?`}
             className="btn-danger"
           >
             Delete

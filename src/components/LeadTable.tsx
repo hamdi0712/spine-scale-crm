@@ -16,6 +16,7 @@ import { fmtRelative } from "@/lib/activity";
 import { IcpTierChip, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 import { useLeadRecrawl } from "@/components/LeadRecrawl";
+import { confirmText } from "@/lib/displayMode";
 
 type SortKey =
   | "clinicName"
@@ -143,7 +144,10 @@ export default function LeadTable({
     if (ids.length === 0) return;
     if (
       !confirm(
-        `Delete ${ids.length} lead${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+        confirmText(
+          `Delete ${ids.length} lead${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+          `Delete ${ids.length} lead${ids.length === 1 ? "" : "s"}? Can't be undone.`,
+        ),
       )
     ) {
       return;

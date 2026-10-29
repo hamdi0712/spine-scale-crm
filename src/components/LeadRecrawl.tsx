@@ -10,6 +10,7 @@ import { fmtEstimate } from "@/lib/pipelineSettings";
 import { CrawlTarget, leadsCrawledBefore } from "@/lib/actions/leadRecrawl";
 import { startLeadRecrawl } from "@/lib/actions/jobs";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
+import { confirmText } from "@/lib/displayMode";
 
 type RecrawlSource = "pipeline-recrawl-selected" | "pipeline-recrawl-before";
 
@@ -20,7 +21,10 @@ export function useLeadRecrawl(costPerClinic: number, source: RecrawlSource = "p
     if (targets.length === 0 || running) return;
     if (
       !confirm(
-        `Re-crawl the website of ${targets.length} ${what}? ${fmtEstimate(targets.length * costPerClinic)} in Apify usage (Website Content Crawler only).\n\nTheir stored website notes and links are replaced. Nothing is re-scored and no stage changes. Leads without a website URL are skipped.`,
+        confirmText(
+          `Re-crawl the website of ${targets.length} ${what}? ${fmtEstimate(targets.length * costPerClinic)} in Apify usage (Website Content Crawler only).\n\nTheir stored website notes and links are replaced. Nothing is re-scored and no stage changes. Leads without a website URL are skipped.`,
+          `Re-crawl ${targets.length} ${what}? · ${fmtEstimate(targets.length * costPerClinic)} · Replaces stored website notes.`,
+        ),
       )
     ) {
       return;

@@ -33,6 +33,7 @@ import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { EmailStatusBadge } from "@/components/Badge";
 import EmailSendButtons from "@/components/EmailSendButtons";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
+import { confirmText } from "@/lib/displayMode";
 
 export interface EmailPanelProps {
   leadId: string;
@@ -178,7 +179,7 @@ export default function EmailPanel(p: EmailPanelProps) {
                     disabled={pending}
                     onClick={() => {
                       if (v === p.version) return;
-                      if (dirty && !confirm("Switching rebuilds the email from the other template, and your edits go. Switch?")) return;
+                      if (dirty && !confirm(confirmText("Switching rebuilds the email from the other template, and your edits go. Switch?", "Switch template? Your edits are lost."))) return;
                       run(() => setEmailVersion(p.leadId, v));
                     }}
                     className={`segment-item px-3 text-xs ${p.version === v ? "segment-item-on" : ""}`}
@@ -222,7 +223,7 @@ export default function EmailPanel(p: EmailPanelProps) {
                   disabled={pending}
                   className="btn"
                   onClick={() => {
-                    if (!confirm("Draft a new opener? The email is rebuilt around it and needs approving again.")) return;
+                    if (!confirm(confirmText("Draft a new opener? The email is rebuilt around it and needs approving again.", "New opener? Needs approving again."))) return;
                     run(() => generateEmailOpener(p.leadId));
                   }}
                 >
@@ -286,7 +287,7 @@ export default function EmailPanel(p: EmailPanelProps) {
               disabled={pending || !p.email}
               className="btn disabled:opacity-50"
               onClick={() => {
-                if (!confirm(`Mark ${p.email} bounced? The address moves to the alternates as invalid and the lead goes back to No email. The clinic is not suppressed.`)) return;
+                if (!confirm(confirmText(`Mark ${p.email} bounced? The address moves to the alternates as invalid and the lead goes back to No email. The clinic is not suppressed.`, `Mark ${p.email} bounced? Lead goes back to No email.`))) return;
                 run(() => markEmailBounced(p.leadId));
               }}
             >
@@ -297,7 +298,7 @@ export default function EmailPanel(p: EmailPanelProps) {
               disabled={pending}
               className="btn"
               onClick={() => {
-                if (!confirm(`Mark ${p.clinicName} unsubscribed? It goes on the suppression list and is not contacted again on any channel.`)) return;
+                if (!confirm(confirmText(`Mark ${p.clinicName} unsubscribed? It goes on the suppression list and is not contacted again on any channel.`, `Unsubscribe ${p.clinicName}? Never contacted again on any channel.`))) return;
                 run(() => markEmailUnsubscribed(p.leadId));
               }}
             >

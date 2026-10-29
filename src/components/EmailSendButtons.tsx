@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { markEmailSent } from "@/lib/actions/emailWorkflow";
 import { EmailToSend, copyText, gmailComposeUrl } from "@/lib/emailWorkflow";
+import { confirmText } from "@/lib/displayMode";
 
 export default function EmailSendButtons({
   leadId,
@@ -41,7 +42,12 @@ export default function EmailSendButtons({
   function markSent() {
     if (
       sentToday >= dailyLimit &&
-      !confirm(`That will be ${sentToday + 1} sent today, over your limit of ${dailyLimit}. Mark it sent anyway?`)
+      !confirm(
+        confirmText(
+          `That will be ${sentToday + 1} sent today, over your limit of ${dailyLimit}. Mark it sent anyway?`,
+          `Over your limit: ${sentToday + 1} of ${dailyLimit} today. Mark sent?`,
+        ),
+      )
     ) {
       return;
     }

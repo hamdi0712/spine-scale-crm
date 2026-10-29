@@ -109,6 +109,7 @@ export default async function CreativeDetailPage({
           <ConfirmForm
             action={remove}
             message={`Delete creative #${creative.creativeNumber}? Its compliance checks and performance history go with it; any variations of it stay.`}
+            proMessage={`Delete creative #${creative.creativeNumber} and its history?`}
             className="btn-danger"
           >
             Delete

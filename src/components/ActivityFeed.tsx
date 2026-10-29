@@ -67,7 +67,7 @@ export default function ActivityFeed({
           signing a contract, collecting an invoice, a health change or finishing
           onboarding will each land here.
         </p>
-        <p className="md:hidden py-6 text-sm text-muted">No milestones logged yet.</p>
+        <p className="pro-only py-6 text-sm text-muted">No milestones logged yet.</p>
       </>
     );
   }

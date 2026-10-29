@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { DISPLAY_MODE_INIT_SCRIPT } from "@/lib/displayMode";
 
 // All three faces are self-hosted from ./fonts, so nothing contacts Google
 // Fonts at build or dev startup (that request timed out on some networks and
@@ -110,6 +111,9 @@ export default function RootLayout({
             puts `dark` on <html> before the first pixel, so a dark-mode
             visitor never sees a white flash on load. See lib/theme.ts. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Same reason, for Guided / Pro: a Pro browser never shows the
+            Guided text for a frame. See lib/displayMode.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: DISPLAY_MODE_INIT_SCRIPT }} />
       </head>
       <body className={`${inter.variable} ${plexMono.variable} ${caveat.variable} font-sans`}>{children}</body>
     </html>

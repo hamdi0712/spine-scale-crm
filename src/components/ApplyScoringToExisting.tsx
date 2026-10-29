@@ -11,6 +11,7 @@ import {
   previewScoringApplication,
   revertScoringApplication,
 } from "@/lib/actions/scoringApplication";
+import { confirmText } from "@/lib/displayMode";
 
 export interface HistoryRow {
   id: string;
@@ -113,7 +114,15 @@ export default function ApplyScoringToExisting({
   }
 
   function revert(id: string) {
-    if (!confirm("Revert new scoring? Every record it changed goes back to how it was, leads it created are deleted unless you have worked on them, and Process Queue goes back to the model it used before.")) return;
+    if (
+      !confirm(
+        confirmText(
+          "Revert new scoring? Every record it changed goes back to how it was, leads it created are deleted unless you have worked on them, and Process Queue goes back to the model it used before.",
+          "Revert new scoring? Leads it created are deleted unless worked on.",
+        ),
+      )
+    )
+      return;
     setError(null);
     startTransition(async () => {
       const result = await revertScoringApplication(id);

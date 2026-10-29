@@ -210,6 +210,7 @@ export default async function RejectedCandidatesPage({
                     <ConfirmForm
                       action={promote}
                       message={`Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`}
+                      proMessage={`Promote ${candidate.clinicName} anyway?`}
                       className="btn shrink-0"
                     >
                       Promote anyway
