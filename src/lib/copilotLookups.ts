@@ -34,6 +34,16 @@
 import { prisma } from "@/lib/prisma";
 import { NOT_SCORING_REJECTED } from "@/lib/liveLeadWhere";
 import {
+  EMAIL_LEAD_STATUSES,
+  EMAIL_LEAD_STATUS_LABELS,
+  EmailLeadStatus,
+  LEAD_CHANNELS,
+  LeadChannel,
+} from "@/lib/emailChannel";
+import { EMAIL_STATUSES, EMAIL_SOURCE_LABELS, EMAIL_TYPE_LABELS, EmailSource, EmailType } from "@/lib/emailFind";
+import type { Lead } from "@prisma/client";
+import { emailWorkflowStatus, SUPPRESSION_REASON_LABELS, SuppressionReason } from "@/lib/emailWorkflow";
+import {
   MESSAGE_MECHANISMS,
   MESSAGE_MECHANISM_LABELS,
   MessageMechanism,
@@ -369,6 +379,112 @@ function flaggedFields(lead: { scoringRejectedAt: Date | null; scoringRejectedRe
     : {};
 }
 
+// ─── The email channel, on every lead row ─────────────────────────────────
+//
+// The same fields and the same workflow status the Email view shows, worked
+// out by the same rule (emailWorkflowStatus in src/lib/emailWorkflow.ts). A
+// lead query that wants these includes EMAIL_INCLUDE so the status can be
+// computed without a second read.
+
+const EMAIL_INCLUDE = {
+  emailSends: { select: { step: true, sentAt: true } },
+  sendingInbox: { select: { address: true } },
+} as const;
+
+type EmailReadLead = Lead & {
+  emailSends: { step: number; sentAt: Date }[];
+  sendingInbox: { address: string } | null;
+};
+
+// The address verdict a filter can ask for: the four stored values, plus
+// "unchecked" for null, which is how the Email view names it.
+const EMAIL_STATUS_FILTERS = [...EMAIL_STATUSES, "unchecked"] as const;
+type EmailStatusFilter = (typeof EMAIL_STATUS_FILTERS)[number];
+
+function emailWorkflowOf(lead: EmailReadLead): EmailLeadStatus {
+  return emailWorkflowStatus(lead, leadTier(lead), lead.emailSends);
+}
+
+function emailFields(lead: EmailReadLead) {
+  const workflow = emailWorkflowOf(lead);
+  return {
+    channel: lead.channel,
+    email: lead.email,
+    emailType: lead.emailType,
+    emailTypeLabel: EMAIL_TYPE_LABELS[lead.emailType as EmailType] ?? null,
+    emailStatus: lead.email ? (lead.emailStatus ?? "unchecked") : null,
+    emailSource: lead.emailSource,
+    emailSourceLabel: EMAIL_SOURCE_LABELS[lead.emailSource as EmailSource] ?? null,
+    assignedInbox: lead.sendingInbox?.address ?? null,
+    emailWorkflowStatus: workflow,
+    emailWorkflowStatusLabel: EMAIL_LEAD_STATUS_LABELS[workflow],
+    suppressed: lead.suppressedAt !== null,
+    suppressedReason: lead.suppressedAt
+      ? (SUPPRESSION_REASON_LABELS[lead.suppressedReason as SuppressionReason] ?? lead.suppressedReason)
+      : null,
+  };
+}
+
+interface EmailFilterArgs {
+  channel?: string;
+  emailStatus?: string;
+  emailWorkflowStatus?: string;
+}
+
+type EmailFilter =
+  | { ok: true; channel: LeadChannel | null; emailStatus: EmailStatusFilter | null; workflow: EmailLeadStatus | null }
+  | { ok: false; message: string };
+
+// An unknown value is answered with the list of known ones rather than
+// ignored: a filter dropped silently returns every lead under a heading that
+// says it returned some of them.
+function readEmailFilter(args: EmailFilterArgs): EmailFilter {
+  const pick = <T extends string>(list: readonly T[], v: string | undefined, label: string): T | null | string => {
+    const value = (v ?? "").trim();
+    if (value === "") return null;
+    return (list as readonly string[]).includes(value) ? (value as T) : `"${value}" is not a ${label}. Use one of: ${list.join(", ")}.`;
+  };
+  const channel = pick(LEAD_CHANNELS, args.channel, "channel");
+  const emailStatus = pick(EMAIL_STATUS_FILTERS, args.emailStatus, "email status");
+  const workflow = pick(EMAIL_LEAD_STATUSES, args.emailWorkflowStatus, "email workflow status");
+  for (const [v, list] of [
+    [channel, LEAD_CHANNELS],
+    [emailStatus, EMAIL_STATUS_FILTERS],
+    [workflow, EMAIL_LEAD_STATUSES],
+  ] as const) {
+    if (typeof v === "string" && !(list as readonly string[]).includes(v)) return { ok: false, message: v };
+  }
+  return {
+    ok: true,
+    channel: channel as LeadChannel | null,
+    emailStatus: emailStatus as EmailStatusFilter | null,
+    workflow: workflow as EmailLeadStatus | null,
+  };
+}
+
+function emailFilterActive(f: Extract<EmailFilter, { ok: true }>): boolean {
+  return f.channel !== null || f.emailStatus !== null || f.workflow !== null;
+}
+
+function matchesEmailFilter(lead: EmailReadLead, f: Extract<EmailFilter, { ok: true }>): boolean {
+  if (f.channel !== null && lead.channel !== f.channel) return false;
+  if (f.emailStatus !== null) {
+    // "unchecked" is an address nobody has checked, not a lead with none.
+    if (!lead.email) return false;
+    if ((lead.emailStatus ?? "unchecked") !== f.emailStatus) return false;
+  }
+  if (f.workflow !== null && emailWorkflowOf(lead) !== f.workflow) return false;
+  return true;
+}
+
+function emailFilterLabels(f: Extract<EmailFilter, { ok: true }>) {
+  return {
+    channel: f.channel ?? "any",
+    emailStatus: f.emailStatus ?? "any",
+    emailWorkflowStatus: f.workflow ? EMAIL_LEAD_STATUS_LABELS[f.workflow] : "any",
+  };
+}
+
 function tierLabel(tier: IcpTier | null): string {
   return tier === null ? "Not scored" : ICP_TIER_LABELS[tier];
 }
@@ -440,7 +556,9 @@ export async function getPipelineLeads(args: {
   stage?: string;
   offset?: number;
   includeRejectedByNewScoring?: boolean;
-}): Promise<unknown> {
+} & EmailFilterArgs): Promise<unknown> {
+  const emailFilter = readEmailFilter(args);
+  if (!emailFilter.ok) return { listed: false, message: emailFilter.message };
   const stage =
     args.stage && (LEAD_STAGES as readonly string[]).includes(args.stage)
       ? (args.stage as LeadStage)
@@ -459,6 +577,7 @@ export async function getPipelineLeads(args: {
     prisma.lead.findMany({
       where: { archived: false, ...(stage ? { stage } : {}), ...(include ? {} : NOT_SCORING_REJECTED) },
       orderBy: { updatedAt: "desc" },
+      include: EMAIL_INCLUDE,
     }),
     include
       ? Promise.resolve(0)
@@ -468,6 +587,7 @@ export async function getPipelineLeads(args: {
   // Tier is computed from the scorecard rather than stored, so it is filtered
   // here rather than in the query — the same rule the pipeline table follows.
   const matching = leads.filter((lead) => {
+    if (!matchesEmailFilter(lead, emailFilter)) return false;
     if (tier === null) return true;
     const t = leadTier(lead);
     return tier === "UNSCORED" ? t === null : t === tier;
@@ -483,6 +603,7 @@ export async function getPipelineLeads(args: {
     filters: {
       tier: args.tier ?? "any",
       stage: stage ? stageLabel(stage) : "any",
+      ...emailFilterLabels(emailFilter),
       rejectedByNewScoring: include ? "included" : "left out",
     },
     ...(include ? {} : { leftOutRejectedByNewScoring: hiddenFlagged }),
@@ -507,6 +628,7 @@ export async function getPipelineLeads(args: {
         ...flaggedFields(lead),
         nextFollowUp: iso(lead.nextFollowUp),
         leadSource: lead.leadSource,
+        ...emailFields(lead),
         enriched: lead.enrichedAt !== null,
         connectionRequestSent: lead.connectionRequestSentAt !== null,
         updatedAt: iso(lead.updatedAt),
@@ -526,6 +648,7 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
       client: { select: { id: true, clinicName: true, status: true } },
       candidate: { select: { id: true, batchLabel: true, source: true } },
       outreach: { orderBy: { createdAt: "desc" }, take: OUTREACH_MESSAGES_MAX },
+      ...EMAIL_INCLUDE,
     },
   });
   if (!lead) {
@@ -565,6 +688,20 @@ export async function getLeadDetail(args: { id: string }): Promise<unknown> {
       connectionAcceptedAt: iso(lead.connectionAcceptedAt),
       repliedAt: iso(lead.repliedAt),
       loomUrl: lead.loomUrl,
+    },
+    // The email channel: the address and what is known about it, the inbox it
+    // goes from, where it stands in the Email workflow, and the reply. The
+    // reply is the prospect's words, so it is fenced like every other.
+    emailChannel: {
+      ...emailFields(lead),
+      emailApprovedAt: iso(lead.emailApprovedAt),
+      emailsSent: lead.emailSends.length,
+      emailRepliedAt: iso(lead.emailRepliedAt),
+      emailReplyType: lead.emailReplyType,
+      emailUnsubscribedAt: iso(lead.emailUnsubscribedAt),
+      emailReply: lead.emailReplyText
+        ? { [UNTRUSTED_CONTENT_KEY]: { warning: UNTRUSTED_REPLY_WARNING, text: body(lead.emailReplyText) } }
+        : null,
     },
     // The outreach sequence, so "where has this one got to" and "what did we
     // already say to them" are answerable. Written by this app from its own
@@ -2701,8 +2838,10 @@ export async function searchLeads(args: {
   query?: string;
   connectionStatus?: string;
   includeRejectedByNewScoring?: boolean;
-}): Promise<unknown> {
+} & EmailFilterArgs): Promise<unknown> {
   const query = (args.query ?? "").trim();
+  const emailFilter = readEmailFilter(args);
+  if (!emailFilter.ok) return { searched: false, message: emailFilter.message };
 
   const statusArg = (args.connectionStatus ?? "").trim();
   if (statusArg !== "" && !isLeadConnectionStatus(statusArg)) {
@@ -2716,10 +2855,11 @@ export async function searchLeads(args: {
     ? statusArg
     : null;
 
-  if (query.length < LEAD_SEARCH_MIN_CHARS && status === null) {
+  const filterOnly = status !== null || emailFilterActive(emailFilter);
+  if (query.length < LEAD_SEARCH_MIN_CHARS && !filterOnly) {
     return {
       searched: false,
-      message: `searchLeads needs at least ${LEAD_SEARCH_MIN_CHARS} characters to search on — part of a clinic name or a contact name — or a connectionStatus to filter by. For the pipeline as a whole, or to filter by tier or stage, call getPipelineLeads.`,
+      message: `searchLeads needs at least ${LEAD_SEARCH_MIN_CHARS} characters to search on — part of a clinic name or a contact name — or a connectionStatus, channel, emailStatus or emailWorkflowStatus to filter by. For the pipeline as a whole, or to filter by tier or stage, call getPipelineLeads.`,
       statuses: LEAD_CONNECTION_STATUS_MEANINGS,
     };
   }
@@ -2740,10 +2880,12 @@ export async function searchLeads(args: {
       // to return; this is here to say how far along the lead is, and to tell a
       // first message that went out from one that never did.
       outreach: { select: { step: true, sentAt: true } },
+      ...EMAIL_INCLUDE,
     },
   });
 
   const matching = leads.filter((lead) => {
+    if (!matchesEmailFilter(lead, emailFilter)) return false;
     if (
       needle !== null &&
       !lead.clinicName.toLowerCase().includes(needle) &&
@@ -2776,9 +2918,10 @@ export async function searchLeads(args: {
   return {
     searched: true,
     query: query === "" ? null : query,
+    ...(emailFilterActive(emailFilter) ? { emailFilters: emailFilterLabels(emailFilter) } : {}),
     matchedOn:
       needle === null
-        ? "Connection status only — every lead in the pipeline with that status."
+        ? "Filters only — every lead in the pipeline matching them."
         : "Clinic name or contact name, partial and case-insensitive.",
     ...(status
       ? {
@@ -2794,7 +2937,7 @@ export async function searchLeads(args: {
       ? {
           note:
             needle === null
-              ? `No lead in the pipeline is ${LEAD_CONNECTION_STATUS_LABELS[status!].toLowerCase()}. That is an answer, not a miss — nothing is archived out of this except converted and closed-out leads.`
+              ? `No lead in the pipeline matches those filters. That is an answer, not a miss — nothing is archived out of this except converted and closed-out leads.`
               : `Nothing in the pipeline matches "${query}"${status ? ` with that connection status` : ""}. It may be archived, it may still be a discovery candidate (getDiscoveryCandidates), or it may be spelled differently — try a shorter fragment of the name.`,
         }
       : {}),
@@ -2834,6 +2977,7 @@ export async function searchLeads(args: {
                 (now.getTime() - lead.connectionAcceptedAt.getTime()) / DAY_MS,
               ),
         repliedAt: iso(lead.repliedAt),
+        ...emailFields(lead),
         // Where the lead actually got to. Null is "nothing marked sent yet",
         // which is not the same as nothing written — the drafts are in
         // getLeadOutreachLog.
@@ -3356,6 +3500,9 @@ export async function runCopilotTool(
           // dropped and the first page comes back, which the result says.
           offset: num(args.offset) ?? num(args.skip) ?? num(args.start),
           includeRejectedByNewScoring: args.includeRejectedByNewScoring === true,
+          channel: str(args.channel),
+          emailStatus: str(args.emailStatus),
+          emailWorkflowStatus: str(args.emailWorkflowStatus),
         }),
       };
     case "auditLeadsForNonClinic":
@@ -3381,6 +3528,9 @@ export async function runCopilotTool(
           // of valid ones, so nothing here needs to guard it.
           connectionStatus: str(args.connectionStatus) ?? str(args.status),
           includeRejectedByNewScoring: args.includeRejectedByNewScoring === true,
+          channel: str(args.channel),
+          emailStatus: str(args.emailStatus),
+          emailWorkflowStatus: str(args.emailWorkflowStatus),
         }),
       };
     case "getLeadDetail":

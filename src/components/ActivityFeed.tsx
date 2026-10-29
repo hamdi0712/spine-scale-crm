@@ -6,6 +6,7 @@ import Link from "next/link";
 import { activityIcon, fmtRelative } from "@/lib/activity";
 import EmptyMark from "@/components/EmptyMark";
 import Icon from "@/components/Icons";
+import UndoConnectorChangeButton from "@/components/UndoConnectorChangeButton";
 
 export interface ActivityEntry {
   id: string;
@@ -13,6 +14,8 @@ export interface ActivityEntry {
   summary: string;
   createdAt: Date;
   href: string | null;
+  // A change Claude made through the connector that can still be undone.
+  undoChangeId?: string | null;
 }
 
 function Row({ entry, now }: { entry: ActivityEntry; now: Date }) {
@@ -75,15 +78,21 @@ export default function ActivityFeed({
     <ul className="divide-y divide-line/60">
       {entries.map((entry) => (
         <li key={entry.id}>
-          {entry.href ? (
-            <Link href={entry.href} className="block hover:opacity-80">
-              <Row entry={entry} now={now} />
-            </Link>
-          ) : (
-            <Row entry={entry} now={now} />
-          )}
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              {entry.href ? (
+                <Link href={entry.href} className="block hover:opacity-80">
+                  <Row entry={entry} now={now} />
+                </Link>
+              ) : (
+                <Row entry={entry} now={now} />
+              )}
+            </div>
+            {entry.undoChangeId && <UndoConnectorChangeButton changeId={entry.undoChangeId} />}
+          </div>
         </li>
       ))}
     </ul>
   );
 }
+

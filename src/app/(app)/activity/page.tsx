@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import ActivityFeed from "@/components/ActivityFeed";
+import { connectorUndoIds } from "@/lib/mcpWrites";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export default async function ActivityPage() {
     orderBy: { createdAt: "desc" },
     take: PAGE_SIZE,
   });
+  const undoIds = await connectorUndoIds(entries.map((e) => e.id));
 
   return (
     <div>
@@ -34,6 +36,7 @@ export default async function ActivityPage() {
             kind: entry.kind,
             summary: entry.summary,
             createdAt: entry.createdAt,
+            undoChangeId: undoIds.get(entry.id) ?? null,
             href: entry.clientId
               ? `/clients/${entry.clientId}`
               : entry.leadId

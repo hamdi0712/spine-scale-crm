@@ -29,6 +29,7 @@ import {
   replyRateShortSubtitle
 } from "@/lib/funnel";
 import ActivityFeed from "@/components/ActivityFeed";
+import { connectorUndoIds } from "@/lib/mcpWrites";
 import BusinessHoursPanel, {
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
@@ -154,6 +155,7 @@ export default async function DashboardPage() {
       select: { status: true },
     }),
   ]);
+  const undoIds = await connectorUndoIds(activity.map((a) => a.id));
 
   // ─── Headline numbers ────────────────────────────────────────────────────
   //
@@ -452,6 +454,7 @@ export default async function DashboardPage() {
               kind: a.kind,
               summary: a.summary,
               createdAt: a.createdAt,
+              undoChangeId: undoIds.get(a.id) ?? null,
               href: a.clientId
                 ? `/clients/${a.clientId}`
                 : a.leadId
