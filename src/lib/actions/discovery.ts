@@ -33,6 +33,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { PipelineChannel, TALKING_ON_LINKEDIN_BLOCK } from "@/lib/emailChannel";
+import { showDiscoveryChannel } from "@/lib/discoveryChannelCookie";
 import { runEnrichActors } from "@/lib/enrichRun";
 import { recrawlWebsite, whenRecrawlLands } from "@/lib/websiteCrawlRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -61,6 +63,7 @@ import {
   rejectionReason,
   serializeBreakdown,
   staffSizeScore,
+  isDiscoveryStatus,
 } from "@/lib/discovery";
 import {
   DISCOVERY_ASSIST_MAX_TOKENS,
@@ -196,6 +199,7 @@ export async function importDiscoveryCandidates(formData: FormData) {
   }
 
   revalidatePath("/discovery");
+  showDiscoveryChannel("linkedin");
   redirect(
     `/discovery?imported=${summary.created}&duplicates=${summary.duplicates}&skipped=${summary.skipped}`,
   );
@@ -301,6 +305,7 @@ export async function addDiscoveryCandidateByName(args: {
   });
 
   revalidatePath("/discovery");
+  showDiscoveryChannel("linkedin");
   return {
     ok: true,
     id: created.id,
@@ -414,11 +419,15 @@ function int(formData: FormData, key: string): number | null {
 //
 // Oldest first: a queue that reordered itself would make "it stopped after
 // four" impossible to reason about.
-export async function discoveryQueue(): Promise<
+//
+// One channel's queue: Discovery's Email and LinkedIn views each run their
+// own. A candidate tagged Talking on LinkedIn is never in it — it can never
+// be promoted, so enriching and scoring it would spend for nothing.
+export async function discoveryQueue(channel: PipelineChannel): Promise<
   { id: string; clinicName: string }[]
 > {
   return prisma.discoveryCandidate.findMany({
-    where: { status: { in: DISCOVERY_QUEUE_STATUSES } },
+    where: { status: { in: DISCOVERY_QUEUE_STATUSES }, ...queueChannelWhere(channel) },
     orderBy: { createdAt: "asc" },
     select: { id: true, clinicName: true },
   });
@@ -435,13 +444,18 @@ export async function discoveryQueue(): Promise<
 // Read fresh and ordered the same way, for the same reasons as above.
 export async function discoveryQueueSelected(
   ids: string[],
+  channel: PipelineChannel,
 ): Promise<{ id: string; clinicName: string }[]> {
   if (ids.length === 0) return [];
   return prisma.discoveryCandidate.findMany({
-    where: { id: { in: ids }, status: { in: DISCOVERY_QUEUE_STATUSES } },
+    where: { id: { in: ids }, status: { in: DISCOVERY_QUEUE_STATUSES }, ...queueChannelWhere(channel) },
     orderBy: { createdAt: "asc" },
     select: { id: true, clinicName: true },
   });
+}
+
+function queueChannelWhere(channel: PipelineChannel) {
+  return { channel, linkedinConflictLeadId: null };
 }
 
 // One candidate, all the way through. Called once per candidate by the queue
@@ -478,6 +492,7 @@ export async function processDiscoveryCandidate(
       websiteNotes: true,
       status: true,
       promotedLeadId: true,
+      linkedinConflictLeadId: true,
     },
   });
   if (!candidate) {
@@ -507,6 +522,22 @@ export async function processDiscoveryCandidate(
       max: null,
       tier: null,
       promotedLeadId: candidate.promotedLeadId,
+      steps: [],
+    };
+  }
+
+  // Talking on LinkedIn: never promoted, so not worth a cent of enrichment.
+  // The queue already leaves these out; this covers any other way in.
+  if (candidate.linkedinConflictLeadId) {
+    return {
+      id,
+      clinicName: candidate.clinicName,
+      status: isDiscoveryStatus(candidate.status) ? candidate.status : "PENDING",
+      headline: TALKING_ON_LINKEDIN_BLOCK,
+      total: null,
+      max: null,
+      tier: null,
+      promotedLeadId: null,
       steps: [],
     };
   }
@@ -1015,11 +1046,16 @@ async function scoreCandidateV2({
 export async function promoteDiscoveryCandidate(id: string) {
   const candidate = await prisma.discoveryCandidate.findUnique({
     where: { id },
-    select: { id: true, icpBreakdown: true, promotedLeadId: true },
+    select: { id: true, icpBreakdown: true, promotedLeadId: true, linkedinConflictLeadId: true },
   });
   if (!candidate) return;
   if (candidate.promotedLeadId) {
     redirect(`/pipeline/${candidate.promotedLeadId}`);
+  }
+  // Talking on LinkedIn: the override does not reach these either. The
+  // button is not offered for them; this is for a stale page.
+  if (candidate.linkedinConflictLeadId) {
+    redirect(`/discovery/${id}`);
   }
 
   // Whichever model scored it, the lead arrives with that model's card.

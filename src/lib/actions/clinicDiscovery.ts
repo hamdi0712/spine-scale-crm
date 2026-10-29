@@ -38,6 +38,8 @@ import { IMPORT_DEFAULT_STATUS } from "@/lib/discoveryImport";
 import { defaultBatchLabel, readBatchLabel } from "@/lib/discoveryBatch";
 import { zoneFromLocation } from "@/lib/timezones";
 import { mapsEmailFields, pickMapsEmails } from "@/lib/emailFind";
+import { LINKEDIN_ENGAGED_STAGES } from "@/lib/emailChannel";
+import { showDiscoveryChannel } from "@/lib/discoveryChannelCookie";
 
 // ─── The write ─────────────────────────────────────────────────────────────
 
@@ -45,6 +47,9 @@ export interface ClinicImportSummary {
   created: number;
   merged: number;
   skipped: number;
+  // Created or merged, and matched to a LinkedIn lead already talking to us:
+  // tagged Talking on LinkedIn, and never promoted.
+  tagged: number;
   // One line per merge, so the page can say which clinic matched what and on
   // which rung rather than reporting a bare count.
   mergeNotes: string[];
@@ -52,18 +57,22 @@ export interface ClinicImportSummary {
 
 // Writes the clinics the panel is showing.
 //
-// Every one of them is put through the match waterfall in
-// src/lib/discoveryDedupe.ts against every candidate and every lead in the
-// database — name and location first, then website domain, then company
-// LinkedIn page, then name and contact. A hit is merged into the row that is
-// already there: blank fields filled, the new source appended to the old one,
-// and nothing that was already known overwritten. No second candidate is
-// created, and nothing is ever deleted.
+// Every one of them is a candidate on the email channel, and is put through
+// the match waterfall in src/lib/discoveryDedupe.ts against the email
+// channel's candidates and leads only — name and location first, then website
+// domain, then company LinkedIn page, then name and contact. The email channel
+// started fresh, so a clinic that is an old LinkedIn candidate or lead is a new
+// email candidate here and never merges into the LinkedIn record. A hit is
+// merged into the row that is already there: blank fields filled, the new
+// source appended to the old one, and nothing that was already known
+// overwritten. No second candidate is created, and nothing is ever deleted.
 //
-// A lead that matches is not merged into and not re-created either. That
-// clinic has already been through Discovery and is in the pipeline; bringing
-// it back as a candidate to be scored again is exactly what the duplicate test
-// exists to prevent.
+// An email lead that matches is not merged into and not re-created either.
+// That clinic is already in the email pipeline.
+//
+// One LinkedIn check stays: a clinic already talking to us on LinkedIn
+// (isTalkingOnLinkedin) is still created as an email candidate, but tagged
+// with that lead, and is never promoted — see promoteWithin.
 export async function importClinicDiscoveryCandidates(args: {
   clinics: unknown;
   actorId?: string;
@@ -74,6 +83,7 @@ export async function importClinicDiscoveryCandidates(args: {
     created: 0,
     merged: 0,
     skipped: 0,
+    tagged: 0,
     mergeNotes: [],
   };
   if (clinics.length === 0) return summary;
@@ -86,8 +96,9 @@ export async function importClinicDiscoveryCandidates(args: {
     readBatchLabel(args?.batchLabel ?? null) ??
     defaultBatchLabel(new Date(), CLINIC_FIRST_BATCH_DESCRIPTION);
 
-  const [candidates, leads] = await Promise.all([
+  const [candidates, leads, linkedinLeads] = await Promise.all([
     prisma.discoveryCandidate.findMany({
+      where: { channel: "email" },
       select: {
         id: true,
         clinicName: true,
@@ -104,10 +115,30 @@ export async function importClinicDiscoveryCandidates(args: {
         timeZone: true,
         sourceActor: true,
         sourceQuery: true,
+        linkedinConflictLeadId: true,
       },
     }),
     prisma.lead.findMany({
+      where: { channel: "email" },
       select: {
+        clinicName: true,
+        location: true,
+        websiteUrl: true,
+        companyLinkedinUrl: true,
+        contactName: true,
+      },
+    }),
+    prisma.lead.findMany({
+      where: {
+        channel: "linkedin",
+        OR: [
+          { connectionAcceptedAt: { not: null } },
+          { repliedAt: { not: null } },
+          { stage: { in: [...LINKEDIN_ENGAGED_STAGES] } },
+        ],
+      },
+      select: {
+        id: true,
         clinicName: true,
         location: true,
         websiteUrl: true,
@@ -119,6 +150,7 @@ export async function importClinicDiscoveryCandidates(args: {
 
   const candidateIndex = new DedupeIndex(candidates);
   const leadIndex = new DedupeIndex(leads);
+  const talkingIndex = new DedupeIndex(linkedinLeads);
 
   for (const clinic of clinics) {
     // The search's addresses, cleaned and ranked once for either path below:
@@ -127,6 +159,8 @@ export async function importClinicDiscoveryCandidates(args: {
     const emailFields = mapsEmailFields(
       pickMapsEmails(clinic.email ? [clinic.email, ...clinic.emails] : clinic.emails, clinic),
     );
+
+    const talkingTo = talkingIndex.match(clinic)?.existing.id ?? null;
 
     const inPipeline = leadIndex.match(clinic);
     if (inPipeline) {
@@ -153,7 +187,11 @@ export async function importClinicDiscoveryCandidates(args: {
         // knowing about, so a later term does not overwrite an earlier one.
         sourceActor: actorId,
         sourceQuery: clinic.sourceQuery,
+        // A LinkedIn conversation that started after this candidate was
+        // first found tags it now.
+        linkedinConflictLeadId: talkingTo,
       });
+      if (patch.linkedinConflictLeadId) summary.tagged++;
       const source = mergeSources(existing.source, CLINIC_FIRST_SOURCE);
       // The email and what is known about it go together: all four only onto
       // a row with no email, so an address already there never ends up beside
@@ -196,6 +234,8 @@ export async function importClinicDiscoveryCandidates(args: {
         linkedinUrl: clinic.linkedinUrl,
         source: CLINIC_FIRST_SOURCE,
         discoverySource: "CLINIC_FIRST",
+        channel: "email",
+        linkedinConflictLeadId: talkingTo,
         sourceActor: actorId,
         sourceQuery: clinic.sourceQuery,
         status: IMPORT_DEFAULT_STATUS,
@@ -217,6 +257,7 @@ export async function importClinicDiscoveryCandidates(args: {
         timeZone: true,
         sourceActor: true,
         sourceQuery: true,
+        linkedinConflictLeadId: true,
       },
     });
     // So the rest of this batch dedupes against it too — and, because it is
@@ -224,9 +265,11 @@ export async function importClinicDiscoveryCandidates(args: {
     // actually has rather than against a half-filled copy.
     candidateIndex.add(created);
     summary.created++;
+    if (talkingTo) summary.tagged++;
   }
 
   revalidatePath("/discovery");
+  showDiscoveryChannel("email");
   return summary;
 }
 

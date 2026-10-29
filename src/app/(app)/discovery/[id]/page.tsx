@@ -25,7 +25,8 @@ import { IcpTier } from "@/lib/icp";
 import { fmtDateTime } from "@/lib/format";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES } from "@/lib/timezones";
-import { DiscoveryStatusBadge, IcpTierBadge } from "@/components/Badge";
+import { DiscoveryStatusBadge, IcpTierBadge, TalkingOnLinkedinBadge } from "@/components/Badge";
+import { TALKING_ON_LINKEDIN_BLOCK } from "@/lib/emailChannel";
 import ConfirmForm from "@/components/ConfirmForm";
 import DiscoveryBreakdownView, {
   DiscoveryScoreHeader,
@@ -96,6 +97,7 @@ export default async function DiscoveryCandidatePage({
               {candidate.clinicName}
             </h1>
             <DiscoveryStatusBadge status={candidate.status} />
+            {candidate.linkedinConflictLeadId && <TalkingOnLinkedinBadge />}
             <IcpTierBadge
               tier={(candidate.icpTier as IcpTier | null) ?? null}
               verdict={stored?.model === "v2" ? ruleVerdictLabel(stored.breakdown) : null}
@@ -144,6 +146,16 @@ export default async function DiscoveryCandidatePage({
               className="btn"
             >
               View the lead →
+            </Link>
+          ) : candidate.linkedinConflictLeadId ? (
+            // Never promoted while the LinkedIn conversation is the one under
+            // way — the way to act on this clinic is that lead.
+            <Link
+              href={`/pipeline/${candidate.linkedinConflictLeadId}`}
+              className="btn"
+              title={TALKING_ON_LINKEDIN_BLOCK}
+            >
+              View the LinkedIn lead →
             </Link>
           ) : (
             <ConfirmForm

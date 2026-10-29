@@ -5,13 +5,22 @@ import { useState, useTransition } from "react";
 import { IconBrandLinkedin, IconMail, IconPhone } from "@tabler/icons-react";
 import { PIPELINE_CHANNEL_COOKIE, PipelineChannel } from "@/lib/emailChannel";
 
-// The channel toggle beside the Pipeline title: Email, LinkedIn, and Call
-// greyed out until it is built.
+// The channel toggle beside the Pipeline and Discovery titles: Email,
+// LinkedIn, and Call greyed out until it is built. Each page remembers its
+// own choice, in its own cookie.
 //
 // The choice goes in a cookie rather than localStorage so the server reads it
 // and renders the right view on first paint — no flash of the other channel.
 // A year, per browser; nothing about it is stored on the server.
-export default function ChannelToggle({ channel }: { channel: PipelineChannel }) {
+export default function ChannelToggle({
+  channel,
+  cookie = PIPELINE_CHANNEL_COOKIE,
+  label = "Pipeline channel",
+}: {
+  channel: PipelineChannel;
+  cookie?: string;
+  label?: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [shown, setShown] = useState(channel);
@@ -22,7 +31,7 @@ export default function ChannelToggle({ channel }: { channel: PipelineChannel })
   function choose(next: PipelineChannel) {
     if (next === shown) return;
     setShown(next);
-    document.cookie = `${PIPELINE_CHANNEL_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
+    document.cookie = `${cookie}=${next}; path=/; max-age=31536000; samesite=lax`;
     startTransition(() => router.refresh());
   }
 
@@ -31,7 +40,7 @@ export default function ChannelToggle({ channel }: { channel: PipelineChannel })
 
   return (
     <div className="relative">
-      <div className="segment" role="group" aria-label="Pipeline channel">
+      <div className="segment" role="group" aria-label={label}>
         <button
           type="button"
           onClick={() => choose("email")}

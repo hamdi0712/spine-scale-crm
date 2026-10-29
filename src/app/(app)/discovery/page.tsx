@@ -1,4 +1,7 @@
+import { cookies } from "next/headers";
 import PageActions from "@/components/PageActions";
+import ChannelToggle from "@/components/ChannelToggle";
+import { DISCOVERY_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 import { parseStoredBreakdown } from "@/lib/storedBreakdown";
 import { ruleVerdictLabel } from "@/lib/leadScore";
 import Link from "next/link";
@@ -82,6 +85,11 @@ export default async function DiscoveryPage({
   };
 }) {
   const summary = importSummary(searchParams);
+  // Which channel the page shows: Email unless this browser last chose
+  // LinkedIn. The LinkedIn view is Discovery as it always was — every
+  // candidate from before channels existed is a LinkedIn one — and the Email
+  // view holds what Clinic-first search finds.
+  const channel = readPipelineChannel(cookies().get(DISCOVERY_CHANNEL_COOKIE)?.value);
   // The settings the queue quotes its estimate from — read here so the dialog
   // opens with a number rather than fetching one.
   const settings = await loadPipelineSettings();
@@ -89,11 +97,13 @@ export default async function DiscoveryPage({
   // real-program check before the list is read, so none is stranded.
   await resolveHeldCandidates();
   const [candidates, queued, rejected] = await Promise.all([
-    prisma.discoveryCandidate.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.discoveryCandidate.findMany({ where: { channel }, orderBy: { createdAt: "desc" } }),
+    // What Process queue would take on this channel: tagged candidates are
+    // never in it (see discoveryQueue).
     prisma.discoveryCandidate.count({
-      where: { status: { in: DISCOVERY_QUEUE_STATUSES } },
+      where: { channel, linkedinConflictLeadId: null, status: { in: DISCOVERY_QUEUE_STATUSES } },
     }),
-    prisma.discoveryCandidate.count({ where: { status: "REJECTED" } }),
+    prisma.discoveryCandidate.count({ where: { channel, status: "REJECTED" } }),
   ]);
 
   const rows: DiscoveryRow[] = candidates.map((c) => ({
@@ -124,6 +134,7 @@ export default async function DiscoveryPage({
     })(),
     reason: reasonFor(c),
     promotedLeadId: c.promotedLeadId,
+    talkingOnLinkedin: c.linkedinConflictLeadId !== null,
     createdAt: c.createdAt.toISOString(),
   }));
 
@@ -131,8 +142,10 @@ export default async function DiscoveryPage({
   // the statuses are, so the header button can tell a selection of five
   // pending candidates from a selection of five already-promoted ones.
   const queueable = rows
-    .filter((r) => (DISCOVERY_QUEUE_STATUSES as string[]).includes(r.status))
+    .filter((r) => (DISCOVERY_QUEUE_STATUSES as string[]).includes(r.status) && !r.talkingOnLinkedin)
     .map((r) => r.id);
+  // Process queue runs this channel's candidates and no other.
+  const startQueue = startQueueJob.bind(null, channel);
 
   return (
     <DiscoverySelectionProvider queueable={queueable}>
@@ -145,36 +158,56 @@ export default async function DiscoveryPage({
           stacks: a shrink-0 row that never yields would push the page wider
           than the window instead. */}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div className="min-w-0">
-            <h1 className="display text-[32px] font-semibold">Discovery</h1>
+          {/* The title and its channel toggle hold their width; the buttons
+            beside them wrap instead of sliding under the toggle. */}
+          <div className="min-w-0 xl:shrink-0">
+            <div className="flex items-center gap-3">
+              <h1 className="display text-[32px] font-semibold">Discovery</h1>
+              <ChannelToggle channel={channel} cookie={DISCOVERY_CHANNEL_COOKIE} label="Discovery channel" />
+            </div>
+            {channel === "email" && (
+              <p className="helper-text mt-1.5 text-sm text-muted">
+                Clinics found for email — scored here, promoted to the Email pipeline
+              </p>
+            )}
           </div>
-          <PageActions className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
+          <PageActions className="flex flex-wrap items-center gap-2 xl:min-w-0 xl:justify-end">
             <Link href="/discovery/rejected" className="btn">
               Rejected
               {rejected > 0 && <span className="num">({rejected})</span>}
             </Link>
-            <Link href="/discovery/search-history" className="btn">
-              Search history
-            </Link>
-            <Link href="/discovery/import" className="btn">
-              Import CSV
-            </Link>
-            <Link href="/discovery/import/apify" className="btn">
-              Import from Apify
-            </Link>
-            {/* The second pathway. It sits with the other ways in rather than
-              replacing any of them — the LinkedIn person search is still the
-              first way, and this one starts from the clinic. */}
-            <Link href="/discovery/import/clinic" className="btn">
-              Clinic-first search
-            </Link>
+            {channel === "linkedin" ? (
+              <>
+                <Link href="/discovery/search-history" className="btn">
+                  Search history
+                </Link>
+                <Link href="/discovery/import" className="btn">
+                  Import CSV
+                </Link>
+                <Link href="/discovery/import/apify" className="btn">
+                  Import from Apify
+                </Link>
+                {/* The second pathway. It sits with the other ways in rather than
+                  replacing any of them — the LinkedIn person search is still the
+                  first way, and this one starts from the clinic. Its results
+                  land in the Email view. */}
+                <Link href="/discovery/import/clinic" className="btn">
+                  Clinic-first search
+                </Link>
+              </>
+            ) : (
+              // The one way into the Email view.
+              <Link href="/discovery/import/clinic" className="btn">
+                Find clinics
+              </Link>
+            )}
             {/* Add clinic by name is deliberately not here. Six buttons made
               this row wrap on any window narrower than a desktop, and of the
               six it is the one used least — so it lives on the import page
               (/discovery/import) and in the empty state below, where somebody
               with nothing in Discovery is looking for a way in. */}
             <DiscoveryQueue
-              start={startQueueJob}
+              start={startQueue}
               queued={queued}
               settings={settings}
             />
@@ -211,7 +244,19 @@ export default async function DiscoveryPage({
           </div>
         )}
 
-        {candidates.length === 0 ? (
+        {candidates.length === 0 && channel === "email" ? (
+          <div className="card mt-8 px-6 py-12 text-center">
+            <p className="text-sm font-medium">No email candidates yet</p>
+            <p className="helper-text mx-auto mt-1 max-w-sm text-xs leading-relaxed text-muted">
+              Clinics found with Clinic-first search land here. Process queue
+              scores them, and the ones that qualify move to the Email
+              pipeline.
+            </p>
+            <Link href="/discovery/import/clinic" className="btn-primary mt-5">
+              Find clinics
+            </Link>
+          </div>
+        ) : candidates.length === 0 ? (
           <div className="card mt-8 px-6 py-10 text-center">
             <p className="text-sm font-medium">Nothing in Discovery yet</p>
             <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">

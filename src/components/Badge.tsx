@@ -23,7 +23,12 @@ import {
   Trend,
 } from "@/lib/health";
 import { ICP_TIER_ACTIONS, ICP_TIER_LABELS, IcpTier } from "@/lib/icp";
-import { EMAIL_LEAD_STATUS_LABELS, EmailLeadStatus } from "@/lib/emailChannel";
+import {
+  EMAIL_LEAD_STATUS_LABELS,
+  EmailLeadStatus,
+  TALKING_ON_LINKEDIN_BLOCK,
+  TALKING_ON_LINKEDIN_LABEL,
+} from "@/lib/emailChannel";
 import {
   APIFY_SEARCH_STATUS_MEANINGS,
   ApifySearchStatus,
@@ -171,6 +176,13 @@ const DISCOVERY_TONES: Record<DiscoveryStatus, Tone> = {
   REJECTED: "neutral",
   FAILED: "red",
 };
+
+// An email candidate whose clinic is already talking to us on LinkedIn. Amber,
+// because it is a hold rather than a verdict: the candidate is fine, and is
+// never promoted to email while that conversation is the one under way.
+export function TalkingOnLinkedinBadge() {
+  return <Pill tone="amber" label={TALKING_ON_LINKEDIN_LABEL} title={TALKING_ON_LINKEDIN_BLOCK} />;
+}
 
 export function DiscoveryStatusBadge({ status }: { status: string }) {
   const known = status as DiscoveryStatus;

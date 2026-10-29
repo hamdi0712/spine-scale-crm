@@ -32,7 +32,8 @@ export interface HeldCleanupResult {
 export async function resolveHeldCandidates(now = new Date()): Promise<HeldCleanupResult> {
   const result: HeldCleanupResult = { promoted: [], rejected: [], requeued: [] };
   const held = await prisma.discoveryCandidate.findMany({
-    where: { status: RETIRED_HELD_STATUS },
+    // Talking on LinkedIn is never promoted, so it is not re-judged for it.
+    where: { status: RETIRED_HELD_STATUS, linkedinConflictLeadId: null },
   });
   for (const c of held) {
     if (c.promotedLeadId) {

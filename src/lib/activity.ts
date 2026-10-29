@@ -16,6 +16,9 @@
 //
 // LEADS_MOVED_TO_EMAIL is written once, by the migration that gave leads a
 // channel, to record how many Clinic-first leads it moved to email.
+// LEADS_MOVED_TO_LINKEDIN is written once, by the migration that gave
+// Discovery a channel, to record how many email leads it moved back so the
+// email pipeline could start fresh.
 
 export const ACTIVITY_KINDS = [
   "LEAD_CONVERTED",
@@ -26,6 +29,7 @@ export const ACTIVITY_KINDS = [
   "ONBOARDING_COMPLETED",
   "COPILOT_ACTION",
   "LEADS_MOVED_TO_EMAIL",
+  "LEADS_MOVED_TO_LINKEDIN",
 ] as const;
 
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
@@ -40,6 +44,7 @@ export const ACTIVITY_ICONS: Record<ActivityKind, string> = {
   ONBOARDING_COMPLETED: "check",
   COPILOT_ACTION: "flag",
   LEADS_MOVED_TO_EMAIL: "mail",
+  LEADS_MOVED_TO_LINKEDIN: "pipeline",
 };
 
 export function activityIcon(kind: string): string {
