@@ -86,7 +86,7 @@ export default function DisplayModeToggle({
           title={
             m === "guided"
               ? "Guided: every explanation on screen"
-              : "Pro: explanations fold to ⓘ, confirms are one line"
+              : "Pro: explanations hidden, confirms are one line"
           }
           className={`segment-item ${small ? "!h-7 !px-2.5 !text-xs" : "flex-1 justify-center"} ${
             mode === m ? "segment-item-on" : ""

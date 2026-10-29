@@ -31,7 +31,6 @@ import { ICP_MAX_SCORE, ICP_TIER_BANDS } from "@/lib/icp";
 import { FIT_FLOOR, FIT_MAX, SIGNALS_MAX } from "@/lib/icpWeights";
 import { V2_TIER_BANDS } from "@/lib/icpScoring";
 import { PipelineSettings, estimateQueueCost, fmtEstimate } from "@/lib/pipelineSettings";
-import { InfoToggle } from "@/components/HelperInfo";
 import CostEstimate from "@/components/CostEstimate";
 import AiButton from "@/components/AiButton";
 import { createPortal } from "react-dom";
@@ -223,7 +222,6 @@ function QueueDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="queue-title"
-        data-guided-scope
         className={`${dialogClass} dialog-sheet card my-auto flex max-h-[88dvh] w-full max-w-2xl flex-col`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
@@ -249,15 +247,14 @@ function QueueDialog({
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
           {/* Pro: the whole plan in one line — how many, what it costs, and
-              the warning — with one ⓘ that brings the Guided dialog back.
-              The cost and the Mac are information, so they stay. */}
+              the warning. The cost and the Mac are information, so they
+              stay. */}
           <p className="pro-only rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3 text-sm font-medium text-ink">
             <span className="num">
               {phase === "planning" &&
                 `Process ${queued} candidate${queued === 1 ? "" : "s"} · ${fmtEstimate(estimateQueueCost(queued, settings))} · `}
             </span>
-            Runs in the background. Keep your Mac awake.{" "}
-            <InfoToggle className="ml-0.5 align-[-3px]" />
+            Runs in the background. Keep your Mac awake.
           </p>
 
           {/* The one thing this dialog must say, and it says it first. */}

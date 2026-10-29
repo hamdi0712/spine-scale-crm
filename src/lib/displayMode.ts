@@ -2,8 +2,7 @@
 //
 // Guided is the app as it was built, every subtitle, field hint and "how this
 // works" note on screen. Pro is for someone who already knows: explanation
-// (.helper-text) folds down to a small ⓘ that opens it again, and confirm
-// dialogs say what they are about to do in one line. What is information
+// (.helper-text) is hidden, and confirm dialogs say what they are about to do in one line. What is information
 // rather than explanation never goes: costs, keep-your-Mac-awake, anything
 // that cannot be undone, errors, and why an action is blocked.
 //
