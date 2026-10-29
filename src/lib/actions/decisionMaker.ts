@@ -34,6 +34,7 @@ import { runGoogleSearch } from "@/lib/googleSearchRun";
 import { deepSeekJson } from "@/lib/deepseek";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { promoteToLead } from "@/lib/promoteLead";
+import { findSuppression } from "@/lib/suppression";
 import { parseBreakdown } from "@/lib/discovery";
 import { mergeFill } from "@/lib/discoveryDedupe";
 import {
@@ -584,9 +585,10 @@ async function applyDecisionMaker(
   // Talking on LinkedIn: the person is recorded, but it is never promoted.
   const tagged = await prisma.discoveryCandidate.findUnique({
     where: { id },
-    select: { linkedinConflictLeadId: true },
+    select: { linkedinConflictLeadId: true, email: true, websiteUrl: true },
   });
   if (tagged?.linkedinConflictLeadId) return null;
+  if (tagged && (await findSuppression({ email: tagged.email, websiteUrl: tagged.websiteUrl }))) return null;
   const breakdown = parseBreakdown(candidate.icpBreakdown);
   return promoteToLead(id, breakdown, new Date());
 }

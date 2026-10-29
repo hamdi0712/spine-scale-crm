@@ -62,6 +62,8 @@ import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
 import OutreachSequencePanel from "@/components/OutreachSequencePanel";
+import EmailPanel from "@/components/EmailPanel";
+import { emailPanelProps } from "@/lib/emailWorkflowRead";
 import IcpScorecardV2 from "@/components/IcpScorecardV2";
 import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
@@ -83,6 +85,7 @@ export default async function LeadDetailPage({
       // Every draft, not just the newest per step: the panel groups them, and
       // regenerating leaves the older ones in place rather than replacing them.
       outreach: { orderBy: { createdAt: "desc" } },
+      emailSends: { orderBy: { step: "asc" } },
     },
   });
   if (!lead) notFound();
@@ -746,30 +749,54 @@ export default async function LeadDetailPage({
               its own the moment it is pressed, and nesting that in a form whose
               own Save is somewhere above would make "did that save?" a fair
               question about both. */}
-          <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
-            <h2 className="display text-xl font-semibold">Outreach sequence</h2>
-            <p className="helper-text text-xs text-muted">
-              Drafts to copy — nothing here is sent
-            </p>
-          </div>
-          <div className="card p-6">
-            <OutreachSequencePanel
-              messages={toMessageViews(lead.outreach)}
-              state={sequenceState(lead)}
-              actions={sequence}
-              acceptedLabel={
-                lead.connectionAcceptedAt
-                  ? `Accepted ${fmtRelative(lead.connectionAcceptedAt)}`
-                  : null
-              }
-              repliedLabel={
-                lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
-              }
-              salutationNote={salutationNote(
-                salutation(lead.contactName, lead.contactTitle, lead.websiteNotes),
-              )}
-            />
-          </div>
+          {lead.channel === "email" ? (
+            <>
+              <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
+                <h2 className="display text-xl font-semibold">Email</h2>
+                <p className="helper-text text-xs text-muted">Sent by hand from Gmail</p>
+              </div>
+              <div className="card p-6">
+                <EmailPanel {...(await emailPanelProps(lead))} />
+              </div>
+            </>
+          ) : (
+            <>
+            {lead.suppressedAt && (
+              // On the suppression list: drafting and marking sent are refused
+              // on the server too.
+              <div className="mt-8 rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
+                <p className="text-sm font-medium text-bad">On the suppression list</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                  This clinic said no to email. It is not contacted on any channel, LinkedIn included.
+                </p>
+              </div>
+            )}
+            <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
+              <h2 className="display text-xl font-semibold">Outreach sequence</h2>
+              <p className="helper-text text-xs text-muted">
+                Drafts to copy — nothing here is sent
+              </p>
+            </div>
+            <div className="card p-6">
+              <OutreachSequencePanel
+                messages={toMessageViews(lead.outreach)}
+                state={sequenceState(lead)}
+                actions={sequence}
+                acceptedLabel={
+                  lead.connectionAcceptedAt
+                    ? `Accepted ${fmtRelative(lead.connectionAcceptedAt)}`
+                    : null
+                }
+                repliedLabel={
+                  lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
+                }
+                salutationNote={salutationNote(
+                  salutation(lead.contactName, lead.contactTitle, lead.websiteNotes),
+                )}
+              />
+            </div>
+            </>
+          )}
         </section>
       </div>
 

@@ -35,6 +35,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { PipelineChannel, TALKING_ON_LINKEDIN_BLOCK } from "@/lib/emailChannel";
 import { showDiscoveryChannel } from "@/lib/discoveryChannelCookie";
+import { findSuppression, loadSuppressionIndex, suppressedMessage } from "@/lib/suppression";
 import { runEnrichActors } from "@/lib/enrichRun";
 import { recrawlWebsite, whenRecrawlLands } from "@/lib/websiteCrawlRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -168,11 +169,14 @@ export async function importDiscoveryCandidates(formData: FormData) {
   const seen = new Set(
     [...candidates, ...leads].map((r) => dedupeKey(r.clinicName, r.contactName)),
   );
+  // A clinic on the suppression list is not contacted on any channel, so it
+  // is not imported to be contacted on this one. Counted with the skipped.
+  const suppression = await loadSuppressionIndex();
 
   const toCreate: ImportedCandidate[] = [];
   for (const row of capped) {
     const candidate = Array.isArray(row) ? mapRow(row, mapping) : null;
-    if (!candidate) {
+    if (!candidate || suppression.matches(candidate)) {
       summary.skipped++;
       continue;
     }
@@ -493,6 +497,7 @@ export async function processDiscoveryCandidate(
       status: true,
       promotedLeadId: true,
       linkedinConflictLeadId: true,
+      email: true,
     },
   });
   if (!candidate) {
@@ -522,6 +527,29 @@ export async function processDiscoveryCandidate(
       max: null,
       tier: null,
       promotedLeadId: candidate.promotedLeadId,
+      steps: [],
+    };
+  }
+
+  // On the suppression list: rejected before anything is spent on it, with
+  // the reason on the record.
+  const suppressed = await findSuppression({ email: candidate.email, websiteUrl: candidate.websiteUrl });
+  if (suppressed) {
+    const reason = suppressedMessage(suppressed);
+    await prisma.discoveryCandidate.update({
+      where: { id },
+      data: { status: "REJECTED", disqualifiedReason: reason, processedAt: new Date() },
+    });
+    revalidatePath("/discovery");
+    return {
+      id,
+      clinicName: candidate.clinicName,
+      status: "REJECTED",
+      headline: reason,
+      total: null,
+      max: null,
+      tier: null,
+      promotedLeadId: null,
       steps: [],
     };
   }
@@ -1046,7 +1074,7 @@ async function scoreCandidateV2({
 export async function promoteDiscoveryCandidate(id: string) {
   const candidate = await prisma.discoveryCandidate.findUnique({
     where: { id },
-    select: { id: true, icpBreakdown: true, promotedLeadId: true, linkedinConflictLeadId: true },
+    select: { id: true, icpBreakdown: true, promotedLeadId: true, linkedinConflictLeadId: true, email: true, websiteUrl: true },
   });
   if (!candidate) return;
   if (candidate.promotedLeadId) {
@@ -1055,6 +1083,10 @@ export async function promoteDiscoveryCandidate(id: string) {
   // Talking on LinkedIn: the override does not reach these either. The
   // button is not offered for them; this is for a stale page.
   if (candidate.linkedinConflictLeadId) {
+    redirect(`/discovery/${id}`);
+  }
+  // Nor a clinic on the suppression list.
+  if (await findSuppression({ email: candidate.email, websiteUrl: candidate.websiteUrl })) {
     redirect(`/discovery/${id}`);
   }
 

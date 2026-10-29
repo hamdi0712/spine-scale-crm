@@ -18,6 +18,7 @@ import {
   IconBuildingStore,
   IconGitBranch,
   IconKey,
+  IconMail,
   IconPlugConnected,
   IconTarget,
 } from "@tabler/icons-react";
@@ -39,6 +40,12 @@ export const SETTINGS_SECTIONS = [
     href: "/settings/icp",
     label: "ICP",
     Glyph: IconTarget,
+  },
+  // The cold email templates, the follow-up delay and the daily limit.
+  {
+    href: "/settings/email",
+    label: "Email",
+    Glyph: IconMail,
   },
   // Last because it is the newest and the least often opened —
   // keys and the enrichment chain are changed while something is being set up,

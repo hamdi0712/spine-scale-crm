@@ -16,12 +16,20 @@ import { DiscoveryBreakdown, leadScorecardPrefill } from "@/lib/discovery";
 import { IcpBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { isUsTimeZone } from "@/lib/timezones";
 import { repickMapsEmails } from "@/lib/emailFind";
+import { findSuppression, suppressedMessage } from "@/lib/suppression";
 import { TALKING_ON_LINKEDIN_BLOCK, readLeadChannel } from "@/lib/emailChannel";
 
 // The stage a promoted candidate's lead starts at. An import is the top of the
 // funnel by definition, and passing through Discovery does not advance it —
 // scoring says whether to talk to a clinic, not that anybody has.
 export const PROMOTED_LEAD_STAGE = "NEW";
+
+export class SuppressedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SuppressedError";
+  }
+}
 
 export class TalkingOnLinkedinError extends Error {
   constructor(clinicName: string) {
@@ -70,6 +78,9 @@ export async function promoteWithin(
     if (candidate.linkedinConflictLeadId !== null) {
       throw new TalkingOnLinkedinError(candidate.clinicName);
     }
+    // Nor a clinic on the suppression list, on any channel.
+    const suppressed = await findSuppression({ email: candidate.email, websiteUrl: candidate.websiteUrl }, tx);
+    if (suppressed) throw new SuppressedError(suppressedMessage(suppressed));
 
     const lead = await tx.lead.create({
       data: {

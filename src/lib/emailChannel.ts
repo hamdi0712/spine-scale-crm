@@ -4,11 +4,8 @@
 // channel at a time, picked by the toggle beside its title and remembered per
 // browser in a cookie, so the server renders the right view on first paint.
 //
-// The email status is derived, never stored, the same way the ICP tier is:
-// what it can say grows as the opener and the Instantly send are built, and a
-// derived value moves with them without a backfill. All seven are defined now
-// so the chips above the table are the final set; until those parts exist,
-// emailLeadStatus only ever returns "no_email" or "needs_opener".
+// The email status is derived, never stored, the same way the ICP tier is —
+// see emailWorkflowStatus in src/lib/emailWorkflow.ts.
 //
 // Pure.
 
@@ -81,43 +78,45 @@ export const TALKING_ON_LINKEDIN_BLOCK =
 
 // ─── Email status ──────────────────────────────────────────────────────────
 
+// The statuses are worked out by emailWorkflowStatus in
+// src/lib/emailWorkflow.ts, from the rules there; this is their names, the
+// order the chips run in (the way the work flows, left to right), and the one
+// thing to do next for each.
 export const EMAIL_LEAD_STATUSES = [
   "needs_opener",
+  "check_email",
   "check_contact",
+  "not_ab",
   "ready",
   "in_sequence",
   "replied",
+  "stopped",
   "no_email",
 ] as const;
 export type EmailLeadStatus = (typeof EMAIL_LEAD_STATUSES)[number];
 export const EMAIL_LEAD_STATUS_LABELS: Record<EmailLeadStatus, string> = {
   needs_opener: "Needs opener",
+  check_email: "Check email",
   check_contact: "Check contact",
+  not_ab: "Not A/B",
   ready: "Ready",
   in_sequence: "In sequence",
   replied: "Replied",
+  stopped: "Stopped",
   no_email: "No email",
 };
 
-// The one thing to do next, per status.
 export const EMAIL_LEAD_NEXT: Record<EmailLeadStatus, string> = {
-  needs_opener: "Write the opener",
-  check_contact: "Check the contact",
-  ready: "Send to Instantly",
-  in_sequence: "Wait for a reply",
+  needs_opener: "Draft and approve the email",
+  check_email: "Check the address",
+  check_contact: "Pick the contact",
+  not_ab: "Not sent to — below A/B",
+  ready: "Send Email 1",
+  in_sequence: "Wait, or send the follow-up",
   replied: "Answer the reply",
+  stopped: "Nothing — suppressed",
   no_email: "Find an email",
 };
-
-export interface EmailLeadFields {
-  email: string | null;
-}
-
-// For now: no address → No email; an address → Needs opener. The other five
-// come in with the opener and the Instantly send.
-export function emailLeadStatus(lead: EmailLeadFields): EmailLeadStatus {
-  return (lead.email ?? "").trim() === "" ? "no_email" : "needs_opener";
-}
 
 // The line under the address: whose inbox it is, and whether it was checked.
 // "Front desk" rather than "Generic inbox" — at a clinic, that is who reads it.
@@ -131,19 +130,4 @@ export function emailDetailLine(lead: {
   const who = type === "owner" ? "Owner" : type === "generic" ? "Front desk" : null;
   const checked = EMAIL_STATUS_LABELS[readEmailStatus(lead.emailStatus) ?? "unchecked"];
   return [who, checked].filter(Boolean).join(" · ");
-}
-
-// Where the lead is in its email sequence, e.g. "Email 2 of 2 · sent Oct 30".
-// Nothing is sent yet, so every lead is "Not started"; the signature is the
-// one the Instantly part will fill in.
-export function emailSequenceLabel(sequence: {
-  step: number;
-  of: number;
-  sentAt: Date | null;
-} | null): string {
-  if (!sequence) return "Not started";
-  const sent = sequence.sentAt
-    ? ` · sent ${sequence.sentAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-    : "";
-  return `Email ${sequence.step} of ${sequence.of}${sent}`;
 }

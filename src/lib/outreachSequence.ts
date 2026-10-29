@@ -2212,3 +2212,124 @@ function readText(raw: unknown, max: number): string | null {
   if (trimmed === "" || /^none$/i.test(trimmed)) return null;
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
 }
+
+// ─── The cold email opener ─────────────────────────────────────────────────
+//
+// The first line of a cold email, sent by hand from Gmail. Step 2's job in a
+// different place: one true, specific observation about this clinic, written
+// from the same evidence under the same rules — the same system prompt, the
+// same pain points, the same invented-stats gate after it — and, where the
+// evidence will not carry one, the same curiosity fallback.
+//
+// Two differences. It is one sentence and nothing else: the greeting, the body
+// and the sign-off come from the templates in Settings → Email. And it is also
+// given the scorecard's own evidence: what the scoring run cited, and what it
+// looked for and did not find. Something not found is a gap, and a gap is only
+// ever asked about, never stated (gapAsStatementReason holds that after the
+// model has written it).
+
+export const EMAIL_OPENER_MAX_CHARS = 280;
+
+// What the scorecard has to say, already as lines: cited findings, quoted, and
+// gaps, in the scorer's own words.
+export interface ScorecardEvidence {
+  cited: string[];
+  gaps: string[];
+}
+
+export function buildEmailOpenerPrompt(
+  ctx: SequenceContext,
+  scorecard: ScorecardEvidence,
+): { system: string; user: string } {
+  const clinic = ctx.evidence.clinicName.trim();
+  const user = [
+    `CLINIC: ${clinic}`,
+    "",
+    "EVIDENCE",
+    "Gathered by an automated enrichment run. This is everything you have.",
+    "",
+    evidenceBlock(ctx.evidence),
+    "",
+    "WHAT THE SCORECARD CITED (found, with the quote that proves it)",
+    scorecard.cited.length === 0 ? "  Nothing." : scorecard.cited.map((c) => `  - ${truncate(c, 300)}`).join("\n"),
+    "",
+    "WHAT THE SCORECARD LOOKED FOR AND DID NOT FIND (gaps: not confirmed, which is not the same as absent)",
+    scorecard.gaps.length === 0 ? "  Nothing." : scorecard.gaps.map((g) => `  - ${truncate(g, 200)}`).join("\n"),
+    "",
+    ...painPointsBlock(ctx),
+    "TASK",
+    "Write the first line of a cold email to this clinic, sent by hand from Gmail. ONE sentence, or two very short ones. It is the opener only: the greeting, the rest of the email and the sign-off are added by the app.",
+    "",
+    "It opens with one true, specific observation about this clinic, read off the evidence or the scorecard's citations above.",
+    "  - Built on something CITED: you may state it plainly, as what you noticed.",
+    "  - Built on a GAP (something not found): it MUST be a question. Never state that anything is missing, absent, lacking, or not there. \"I couldn't tell from the site how a new patient books after hours, is that by phone?\" is the shape. \"You don't offer online booking\" is forbidden.",
+    "",
+    "HARD RULES:",
+    "  - Never describe your own service, and no pitch, no offer, no call to book. The body does that.",
+    "  - No figures: no percentages, no dollar amounts, no counts other than the clinic's own review count, no comparisons to other clinics, never \"most clinics\", \"usually\", \"typically\" or \"on average\".",
+    "  - No greeting and no name: do not start with \"Hi\" or the person's name.",
+    `  - Under ${EMAIL_OPENER_MAX_CHARS} characters. No square brackets. No em dashes.`,
+    "  - If the evidence and the scorecard carry nothing true and specific, return null. A forced opener is a fabricated one.",
+    "",
+    INTERNAL_NOTE_SPEC,
+    "",
+    "REPLY FORMAT",
+    "A single JSON object, exactly these keys:",
+    "{",
+    '  "opener": "<the opener>" | null,',
+    '  "basis": "cited" | "gap" | null,',
+    '  "evidence": "<what it was built on, quoted>" | null,',
+    '  "uncertainty": "<hedging used, or none>",',
+    '  "stage": "<the stage required before this email>"',
+    "}",
+  ].join("\n");
+  return { system: SYSTEM_PROMPT, user };
+}
+
+export type EmailOpenerReply = {
+  opener: string | null;
+  basis: "cited" | "gap" | null;
+  note: InternalNote;
+};
+
+export function parseEmailOpenerReply(raw: string): EmailOpenerReply | null {
+  const body = readObject(raw);
+  if (!body) return null;
+  const opener = readMessage(body.opener, EMAIL_OPENER_MAX_CHARS);
+  return {
+    opener: opener === null ? null : opener.replace(/\s*\n+\s*/g, " "),
+    basis: body.basis === "cited" || body.basis === "gap" ? body.basis : null,
+    note: readInternalNote(body),
+  };
+}
+
+// The gate that holds the gap rule, after the model has written the line: any
+// sentence that talks about something not being there has to be a question.
+// Also a greeting, which the template adds, so the email would say "Hi" twice.
+const ABSENCE = /\b(didn't see|did not see|couldn't (?:see|find|tell)|could not (?:see|find|tell)|no (?:visible|online|clear|obvious|sign)|doesn't (?:seem|appear|have|offer|show)|does not (?:seem|appear|have|offer|show)|don't (?:have|offer|show)|do not (?:have|offer|show)|missing|lacks?|lacking|without (?:a|any)|isn't (?:any|a)|there's no|there is no|not (?:listed|mentioned|shown|visible))\b/i;
+
+export function gapAsStatementReason(opener: string, basis: "cited" | "gap" | null): string | null {
+  if (/^\s*(hi|hey|hello|dear)\b/i.test(opener)) return "it starts with a greeting, which the template already adds";
+  const sentences = opener.match(/[^.?!]+[.?!]*/g) ?? [opener];
+  for (const s of sentences) {
+    if (ABSENCE.test(s) && !s.trim().endsWith("?")) return "it states a gap as a fact rather than asking about it";
+  }
+  if (basis === "gap" && !opener.includes("?")) return "it is built on a gap but is not a question";
+  return null;
+}
+
+// The curiosity fallback, as an email opener: Step 2's two shapes without
+// "thanks for connecting", which an email to a stranger cannot say.
+export function emailCuriosityProcessLine(detail: string): string | null {
+  const anchor = detail.trim().replace(/[.]+$/, "");
+  if (anchor === "") return null;
+  return stripEmDashes(
+    `Random question, for a practice running ${anchor}, is patient follow-up after the first visit something your front desk handles, or is it more ad hoc?`,
+  );
+}
+
+export function emailCuriosityPainSignalLine(clinicName: string): string {
+  return stripEmDashes(
+    `Curious how ${clinicName.trim()} normally catches it when a patient books but doesn't show, is that a front desk callback, or does it mostly go untracked?`,
+  );
+}

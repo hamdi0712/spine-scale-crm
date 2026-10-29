@@ -27,6 +27,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { loadActiveIcp } from "@/lib/icpDefinitionStore";
 import { deepSeekJson } from "@/lib/deepseek";
+import { findSuppression, suppressedMessage } from "@/lib/suppression";
 import { assistEvidenceLabels, hasAssistEvidence } from "@/lib/icpAssist";
 import {
   FIRST_MESSAGE_VARIANTS,
@@ -143,6 +144,9 @@ export async function generateOutreachStep(
   if (!lead) {
     return { ok: false, error: "That lead no longer exists." };
   }
+  // On the suppression list: not contacted on any channel, LinkedIn included.
+  const suppressed = await findSuppression({ leadId });
+  if (suppressed) return { ok: false, error: suppressedMessage(suppressed) };
 
   // The panel already refuses to show a button for a locked step; this is the
   // same rule on the server, because a hidden button is a courtesy and not a
@@ -830,6 +834,8 @@ export async function markMessageSent(
     select: { id: true, step: true, variant: true, messageMechanism: true },
   });
   if (!message) return "That message no longer exists.";
+  const suppressed = await findSuppression({ leadId });
+  if (suppressed) return suppressedMessage(suppressed);
 
   // The one thing the mark now insists on. Which kind of opener this was is
   // only knowable while somebody still remembers writing it, and a first
