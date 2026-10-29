@@ -12,8 +12,11 @@ import {
   EmailWorkflowStatus,
   contactCheck,
   defaultEmailVersion,
+  SendingInboxView,
   emailToSend,
   emailWorkflowStatus,
+  inboxShort,
+  isEmailToSend,
   unfilledPlaceholders,
   isDueBy,
   nextFollowUp,
@@ -21,27 +24,37 @@ import {
   startersRemaining,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
-import { countSentToday } from "@/lib/actions/emailWorkflow";
+import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import type { EmailPanelProps } from "@/components/EmailPanel";
 
 export interface EmailLeadState {
   status: EmailWorkflowStatus;
   toSend: EmailToSend | null;
+  // There is an email to send, but it cannot go yet: why.
+  sendBlocked: string | null;
+  inbox: SendingInboxView | null;
   followUpDueToday: boolean;
   sequence: string;
 }
 
+type LeadWithSends = Lead & { emailSends: EmailSend[] };
+
 export function emailLeadState(
-  lead: Lead & { emailSends: EmailSend[] },
+  lead: LeadWithSends,
   settings: EmailSettingsValues,
   now: Date,
+  inboxes: SendingInboxView[],
 ): EmailLeadState {
   const tier = leadTier(lead);
   const status = emailWorkflowStatus(lead, tier, lead.emailSends);
   const next = status === "in_sequence" ? nextFollowUp(lead.emailSends, settings) : null;
+  const inbox = inboxForLead(lead, inboxes);
+  const send = emailToSend(lead, tier, lead.emailSends, settings, now, inbox);
   return {
     status,
-    toSend: emailToSend(lead, tier, lead.emailSends, settings, now),
+    toSend: isEmailToSend(send) ? send : null,
+    sendBlocked: send !== null && "blocked" in send ? send.blocked : null,
+    inbox,
     followUpDueToday: next !== null && isDueBy(next.dueAt, now),
     sequence: sequenceLabel(
       lead.emailSends,
@@ -51,19 +64,46 @@ export function emailLeadState(
   };
 }
 
+// Leads that have become Ready with no inbox yet are given one now, before
+// anything is shown — the first moment they are Ready is the first moment
+// this sees them so.
+async function assignReady(leads: LeadWithSends[], inboxes: SendingInboxView[]): Promise<void> {
+  const ready = leads.filter(
+    (l) => l.sendingInboxId === null && l.emailSends.length === 0 && emailWorkflowStatus(l, leadTier(l), l.emailSends) === "ready",
+  );
+  const given = await assignInboxes(ready.map((l) => l.id), inboxes);
+  for (const l of ready) if (given[l.id]) l.sendingInboxId = given[l.id];
+}
+
+export interface InboxCounter {
+  id: string;
+  address: string;
+  short: string;
+  sent: number;
+  limit: number;
+}
+
+async function inboxCounters(inboxes: SendingInboxView[], now: Date): Promise<InboxCounter[]> {
+  const sent = await sentTodayByInbox(now);
+  return inboxes.map((i) => ({ id: i.id, address: i.address, short: inboxShort(i.address), sent: sent[i.id] ?? 0, limit: i.dailyLimit }));
+}
+
 export async function loadEmailView(now = new Date()) {
-  const [settings, leads, sentToday] = await Promise.all([
+  const [settings, leads, inboxes] = await Promise.all([
     loadEmailSettings(),
     prisma.lead.findMany({
       where: { ...PIPELINE_DEFAULT_WHERE, channel: "email" },
       include: { emailSends: { orderBy: { step: "asc" } } },
       orderBy: { updatedAt: "desc" },
     }),
-    countSentToday(now),
+    loadInboxes(),
   ]);
+  await assignReady(leads, inboxes);
+  const counters = await inboxCounters(inboxes, now);
   const rows = leads.map((l) => {
     const s = leadScore(l);
-    const state = emailLeadState(l, settings, now);
+    const state = emailLeadState(l, settings, now, inboxes);
+    const counter = counters.find((c) => c.id === state.inbox?.id) ?? null;
     return {
       id: l.id,
       clinicName: l.clinicName,
@@ -74,25 +114,32 @@ export async function loadEmailView(now = new Date()) {
       icpTier: leadTier(l),
       icpVerdict: leadVerdictBadge(l),
       icpScore: s ? `${s.total}/${s.max}` : null,
-      ...state,
+      status: state.status,
+      sequence: state.sequence,
+      toSend: state.toSend,
+      sendBlocked: state.sendBlocked,
+      followUpDueToday: state.followUpDueToday,
+      inbox: state.inbox ? state.inbox.address : null,
+      inboxSentToday: counter?.sent ?? 0,
+      inboxLimit: counter?.limit ?? 0,
     };
   });
   return {
     rows,
     settings,
-    sentToday,
+    counters,
     starters: startersRemaining(settings),
     unchecked: leads.filter((l) => (l.email ?? "").trim() !== "" && l.emailStatus === null).length,
   };
 }
 
 // Everything the Email panel on a lead's page shows.
-export async function emailPanelProps(
-  lead: Lead & { emailSends: EmailSend[] },
-  now = new Date(),
-): Promise<EmailPanelProps> {
-  const [settings, sentToday] = await Promise.all([loadEmailSettings(), countSentToday(now)]);
-  const state = emailLeadState(lead, settings, now);
+export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Promise<EmailPanelProps> {
+  const [settings, inboxes] = await Promise.all([loadEmailSettings(), loadInboxes()]);
+  await assignReady([lead], inboxes);
+  const counters = await inboxCounters(inboxes, now);
+  const state = emailLeadState(lead, settings, now, inboxes);
+  const counter = counters.find((c) => c.id === state.inbox?.id) ?? null;
   const check = contactCheck(lead);
   return {
     leadId: lead.id,
@@ -100,9 +147,14 @@ export async function emailPanelProps(
     status: state.status,
     sequence: state.sequence,
     toSend: state.toSend,
+    sendBlocked: state.sendBlocked,
     starters: startersRemaining(settings),
-    sentToday,
-    dailyLimit: settings.dailyLimit,
+    inbox: state.inbox ? { id: state.inbox.id, address: state.inbox.address } : null,
+    inboxes: inboxes.map((i) => ({ id: i.id, address: i.address })),
+    // Fixed once Email 1 has gone: the follow-ups stay in its thread.
+    inboxLocked: lead.emailSends.length > 0,
+    inboxSentToday: counter?.sent ?? 0,
+    inboxLimit: counter?.limit ?? 0,
     email: (lead.email ?? "").trim() || null,
     emailDetail: emailDetailLine(lead),
     contact:
@@ -117,7 +169,13 @@ export async function emailPanelProps(
     body: lead.emailBody,
     approved: lead.emailApprovedAt !== null,
     unfilled: unfilledPlaceholders(`${lead.emailSubject ?? ""}\n${lead.emailBody ?? ""}`),
-    sends: lead.emailSends.map((s) => ({ step: s.step, sentAt: s.sentAt.toISOString(), subject: s.subject, toEmail: s.toEmail })),
+    sends: lead.emailSends.map((s) => ({
+      step: s.step,
+      sentAt: s.sentAt.toISOString(),
+      subject: s.subject,
+      toEmail: s.toEmail,
+      fromEmail: s.fromEmail,
+    })),
     reply: lead.emailRepliedAt
       ? { at: lead.emailRepliedAt.toISOString(), type: lead.emailReplyType, text: lead.emailReplyText }
       : null,
@@ -126,4 +184,16 @@ export async function emailPanelProps(
         ? { reason: lead.suppressedReason, at: lead.suppressedAt.toISOString() }
         : null,
   };
+}
+
+// One lead's state, as a page would show it: given an inbox first if it has
+// just become Ready.
+export async function loadLeadEmailState(leadId: string, now = new Date()): Promise<EmailLeadState> {
+  const [settings, inboxes, lead] = await Promise.all([
+    loadEmailSettings(),
+    loadInboxes(),
+    prisma.lead.findUniqueOrThrow({ where: { id: leadId }, include: { emailSends: { orderBy: { step: "asc" } } } }),
+  ]);
+  await assignReady([lead], inboxes);
+  return emailLeadState(lead, settings, now, inboxes);
 }

@@ -45,7 +45,7 @@ async function main(): Promise<void> {
   const { buildBreakdownV2, finish } = await import("../src/lib/icpScoring");
   const wf = await import("../src/lib/emailWorkflow");
   const act = await import("../src/lib/actions/emailWorkflow");
-  const { emailLeadState, loadEmailView } = await import("../src/lib/emailWorkflowRead");
+  const { loadLeadEmailState, loadEmailView } = await import("../src/lib/emailWorkflowRead");
   const { loadEmailSettings } = await import("../src/lib/emailSettingsStore");
   const { generateOutreachStep, markMessageSent } = await import("../src/lib/actions/outreachSequence");
   const { importClinicDiscoveryCandidates } = await import("../src/lib/actions/clinicDiscovery");
@@ -56,6 +56,11 @@ async function main(): Promise<void> {
   await prisma.emailSend.deleteMany();
   await prisma.suppression.deleteMany();
   await prisma.emailSettings.deleteMany();
+  // Two sending inboxes, 1 a day each so going over is easy to see.
+  await prisma.lead.updateMany({ data: { sendingInboxId: null } });
+  await prisma.sendingInbox.deleteMany();
+  const hamdi = await prisma.sendingInbox.create({ data: { address: "hamdi@spinescale.co", displayName: "", dailyLimit: 1, position: 0 } });
+  const team = await prisma.sendingInbox.create({ data: { address: "team@spinescale.co", displayName: "", dailyLimit: 1, position: 1 } });
   await prisma.task.deleteMany({ where: { title: { startsWith: "Reply to" } } });
   await prisma.lead.deleteMany({ where: { clinicName: { endsWith: "(email verify)" } } });
   await prisma.discoveryCandidate.deleteMany({ where: { clinicName: { endsWith: "(email verify)" } } });
@@ -135,7 +140,7 @@ async function main(): Promise<void> {
   // Your name, for {sender}: until it is set, an email cannot be approved.
   const reload = (id: string) => prisma.lead.findUniqueOrThrow({ where: { id }, include: { emailSends: { orderBy: { step: "asc" } } } });
   const settings = await loadEmailSettings();
-  const state = async (id: string, now = new Date()) => emailLeadState(await reload(id), await loadEmailSettings(), now);
+  const state = (id: string, now = new Date()) => loadLeadEmailState(id, now);
 
   console.log("\nStarter copy");
   check("every template starts as starter copy, so the banner shows", wf.startersRemaining(settings).length === 8, wf.startersRemaining(settings).join(", "));
@@ -235,11 +240,8 @@ async function main(): Promise<void> {
 
   console.log("\nApproving, the contact check, and the Ready rule");
   check("checked but not approved: Needs opener", (await state(owner.id)).status === "needs_opener");
-  const unsigned = await act.approveEmail(owner.id);
-  check("with no sender name set, the email still reads {sender} and cannot be approved",
-    !unsigned.ok && /\{sender\}/.test(unsigned.error), unsigned.ok ? "approved?" : unsigned.error);
-  await prisma.emailSettings.create({ data: { id: wf.EMAIL_SETTINGS_ID, ...wf.emailSettingsRow({ ...settings, senderName: "Alex" }) } });
-  for (const id of [owner.id, desk.id, mismatch.id, dq.id]) await act.generateEmailOpener(id);
+  check("{sender} stays in the draft, to be signed from the sending inbox", (ownerLead.emailBody ?? "").includes("{sender}") &&
+    wf.unfilledPlaceholders(ownerLead.emailBody ?? "").length === 0);
   const savedEdit = await act.saveEmailDraft(owner.id, { subject: "Hi {clinic}", body: "A body with the placeholder left in." });
   const approvedEdit = await act.approveEmail(owner.id);
   check("an edit saves, and an email with an unfilled placeholder cannot be approved",
@@ -262,28 +264,51 @@ async function main(): Promise<void> {
   check("disqualified: never Ready, however complete", (await state(dq.id)).status === "not_ab");
   check("and Mark sent refuses it", !(await act.markEmailSent(dq.id, { step: 0, subject: "s", body: "b" })).ok);
 
-  console.log("\nSending by hand");
+  console.log("\nSending by hand, from two inboxes");
+  const leadInbox = async (id: string) => (await reload(id)).sendingInboxId;
+  check("leads alternate between inboxes as they become Ready: owner → hamdi@, front desk → team@, then hamdi@ again",
+    (await leadInbox(owner.id)) === hamdi.id && (await leadInbox(desk.id)) === team.id && (await leadInbox(mismatch.id)) === hamdi.id);
+  check("a lead that never becomes Ready gets no inbox", (await leadInbox(dq.id)) === null);
+  const unsigned = await state(owner.id);
+  check("with no display name and no Your name, it cannot be sent yet — and says why",
+    unsigned.toSend === null && /Nobody to sign it as/.test(unsigned.sendBlocked ?? ""), unsigned.sendBlocked ?? "");
+  // hamdi@ signs as its display name; team@ has none and falls back to Your name.
+  await prisma.sendingInbox.update({ where: { id: hamdi.id }, data: { displayName: "Hamdi" } });
+  await prisma.emailSettings.create({ data: { id: wf.EMAIL_SETTINGS_ID, ...wf.emailSettingsRow({ ...settings, senderName: "Alex" }) } });
   const send0 = (await state(owner.id)).toSend!;
-  const gmail = new URL(wf.gmailComposeUrl(send0.to, send0.subject, send0.body));
-  check("Open in Gmail: compose with to, subject and body filled in",
-    gmail.hostname === "mail.google.com" && gmail.searchParams.get("view") === "cm" &&
+  const deskSend0 = (await state(desk.id)).toSend!;
+  check("{sender} is the sending inbox's display name", send0.from === "hamdi@spinescale.co" && send0.body.includes("\nHamdi") && !send0.body.includes("{sender}"));
+  check("and Your name where the inbox has none", deskSend0.from === "team@spinescale.co" && deskSend0.body.includes("\nAlex"));
+  const gmail = new URL(wf.gmailComposeUrl(send0.from, send0.to, send0.subject, send0.body));
+  check("Open in Gmail opens the assigned inbox's account (authuser), with to, subject and body filled in",
+    gmail.hostname === "mail.google.com" && gmail.searchParams.get("authuser") === "hamdi@spinescale.co" && gmail.searchParams.get("view") === "cm" &&
       gmail.searchParams.get("to") === "drsmith@ownerspine.test" && gmail.searchParams.get("su") === send0.subject && gmail.searchParams.get("body") === send0.body);
+  check("…and the front desk's from team@",
+    new URL(wf.gmailComposeUrl(deskSend0.from, deskSend0.to, deskSend0.subject, deskSend0.body)).searchParams.get("authuser") === "team@spinescale.co");
   check("Copy email: subject then body", wf.copyText(send0.subject, send0.body).startsWith(`Subject: ${send0.subject}\n\n`));
-  await prisma.emailSettings.upsert({
-    where: { id: wf.EMAIL_SETTINGS_ID },
-    create: { id: wf.EMAIL_SETTINGS_ID, ...wf.emailSettingsRow({ ...settings, senderName: "Alex", dailyLimit: 2 }) },
-    update: { dailyLimit: 2 },
-  });
-  const sent0 = await act.markEmailSent(owner.id, { step: 0, subject: send0.subject, body: send0.body });
+  check("the inbox can be changed before Email 1", (await act.setLeadInbox(owner.id, team.id)).ok && (await leadInbox(owner.id)) === team.id);
+  await act.setLeadInbox(owner.id, hamdi.id);
+  const sent0 = await act.markEmailSent(owner.id, { step: 0, subject: send0.subject, body: send0.body, inboxId: send0.inboxId });
   check("Mark sent records Email 1 and its date, and moves it to In sequence",
     sent0.ok && sent0.step === 0 && (await prisma.emailSend.count({ where: { leadId: owner.id, step: 0 } })) === 1 && (await state(owner.id)).status === "in_sequence");
+  check("Mark sent records which inbox sent it", (await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 0 } })).fromEmail === "hamdi@spinescale.co" &&
+    sent0.ok && sent0.inbox === "hamdi@spinescale.co" && sent0.sentToday === 1 && sent0.dailyLimit === 1);
+  const locked = await act.setLeadInbox(owner.id, team.id);
+  check("and the inbox cannot be changed after Email 1", !locked.ok && (await leadInbox(owner.id)) === hamdi.id, locked.ok ? "changed?" : locked.error);
   const deskSend = (await state(desk.id)).toSend!;
-  await act.markEmailSent(desk.id, { step: 0, subject: deskSend.subject, body: deskSend.body });
+  const deskSent = await act.markEmailSent(desk.id, { step: 0, subject: deskSend.subject, body: deskSend.body, inboxId: deskSend.inboxId });
+  check("each inbox counts on its own: team@ is at 1 of 1", deskSent.ok && deskSent.inbox === "team@spinescale.co" && deskSent.sentToday === 1);
   const mmSend = (await state(mismatch.id)).toSend!;
-  const third = await act.markEmailSent(mismatch.id, { step: 0, subject: mmSend.subject, body: mmSend.body });
-  check("the daily count: 3 sent today against a limit of 2 (allowed, reported)", third.ok && third.sentToday === 3 && third.dailyLimit === 2);
+  const third = await act.markEmailSent(mismatch.id, { step: 0, subject: mmSend.subject, body: mmSend.body, inboxId: mmSend.inboxId });
+  check("hamdi@ goes over its own limit: 2 of 1 (allowed, reported)", third.ok && third.inbox === "hamdi@spinescale.co" && third.sentToday === 2 && third.dailyLimit === 1);
   const view = await loadEmailView();
-  check("the Email view reads 3 of 2 sent today", view.sentToday === 3 && view.settings.dailyLimit === 2);
+  const counter = (address: string) => view.counters.find((c) => c.address === address);
+  check("the Email view counts per inbox: hamdi@ 2 of 1, team@ 1 of 1",
+    counter("hamdi@spinescale.co")?.sent === 2 && counter("hamdi@spinescale.co")?.limit === 1 && counter("team@spinescale.co")?.sent === 1 &&
+      view.counters.map((c) => c.short).join(" ") === "hamdi@ team@");
+  check("each row shows its inbox", view.rows.find((r) => r.id === owner.id)?.inbox === "hamdi@spinescale.co" &&
+    view.rows.find((r) => r.id === desk.id)?.inbox === "team@spinescale.co");
+
 
   console.log("\nFollow-ups");
   const now = new Date();
@@ -295,12 +320,21 @@ async function main(): Promise<void> {
   await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 0 }, data: { sentAt: new Date(now.getTime() - 3 * DAY) } });
   const viewDue = await loadEmailView();
   check("the Follow-up due today chip counts it", viewDue.rows.filter((r) => r.followUpDueToday).length === 1);
+  // Even if the lead's assignment moved (by hand, in the database), the
+  // follow-up goes from the inbox Email 1 went from: same thread.
+  await prisma.lead.update({ where: { id: owner.id }, data: { sendingInboxId: team.id } });
   const f1 = (await state(owner.id)).toSend!;
-  check("follow-up 1 marked sent", (await act.markEmailSent(owner.id, { step: 1, subject: f1.subject, body: f1.body })).ok);
+  check("follow-ups use Email 1's inbox, so they stay in its thread", f1.from === "hamdi@spinescale.co" && f1.inboxId === hamdi.id &&
+    new URL(wf.gmailComposeUrl(f1.from, f1.to, f1.subject, f1.body)).searchParams.get("authuser") === "hamdi@spinescale.co");
+  const wrongInbox = await act.markEmailSent(owner.id, { step: 1, subject: f1.subject, body: f1.body, inboxId: team.id });
+  check("marking it sent from another inbox is refused", !wrongInbox.ok, wrongInbox.ok ? "accepted?" : wrongInbox.error);
+  check("follow-up 1 marked sent, from hamdi@", (await act.markEmailSent(owner.id, { step: 1, subject: f1.subject, body: f1.body, inboxId: f1.inboxId })).ok &&
+    (await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 1 } })).inboxId === hamdi.id);
   await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 1 }, data: { sentAt: new Date(now.getTime() - 3 * DAY) } });
   const f2 = (await state(owner.id)).toSend!;
   check("follow-up 2 comes due after it", f2?.step === 2);
-  await act.markEmailSent(owner.id, { step: 2, subject: f2.subject, body: f2.body });
+  await act.markEmailSent(owner.id, { step: 2, subject: f2.subject, body: f2.body, inboxId: f2.inboxId });
+  check("follow-up 2 from hamdi@ too", f2.from === "hamdi@spinescale.co" && (await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 2 } })).fromEmail === "hamdi@spinescale.co");
   await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 2 }, data: { sentAt: new Date(now.getTime() - 30 * DAY) } });
   const after = await state(owner.id);
   check("and it stops after the last template", after.toSend === null && !after.followUpDueToday && after.sequence.includes("last email"), after.sequence);
@@ -366,6 +400,19 @@ async function main(): Promise<void> {
   check("a template without {opener} is refused", !(await act.saveEmailSettings({ ...edited, ownerBodyTemplate: "No opener here." })).ok);
   check("saved", (await act.saveEmailSettings(edited)).ok);
   check("no starter copy left, so no banner", wf.startersRemaining(await loadEmailSettings()).length === 0 && (await loadEmailView()).starters.length === 0);
+
+  console.log("\nSending inboxes in Settings");
+  const current = await loadEmailSettings();
+  const listed = async () => (await prisma.sendingInbox.findMany({ orderBy: { position: "asc" } })).map((i) => ({ id: i.id, address: i.address, displayName: i.displayName, dailyLimit: i.dailyLimit }));
+  const base = await listed();
+  const removeUsed = await act.saveEmailSettings({ ...current, inboxes: base.filter((i) => i.id !== hamdi.id) });
+  check("an inbox that has sent email cannot be removed", !removeUsed.ok && /hamdi@spinescale\.co has already sent/.test(removeUsed.ok ? "" : removeUsed.error));
+  const added = await act.saveEmailSettings({ ...current, inboxes: [...base.map((i) => (i.id === team.id ? { ...i, displayName: "Spine Scale Team", dailyLimit: 15 } : i)), { id: null, address: "Outreach@SpineScale.co", displayName: "", dailyLimit: 10 }] });
+  const afterAdd = await listed();
+  check("an inbox is added (address lowercased) and another renamed with a new limit",
+    added.ok && afterAdd.length === 3 && afterAdd[2].address === "outreach@spinescale.co" && afterAdd.find((i) => i.id === team.id)?.displayName === "Spine Scale Team" && afterAdd.find((i) => i.id === team.id)?.dailyLimit === 15);
+  check("a bad address is refused", !(await act.saveEmailSettings({ ...current, inboxes: [...afterAdd, { id: null, address: "not an address", displayName: "", dailyLimit: 10 }] })).ok);
+  check("an unused inbox can be removed", (await act.saveEmailSettings({ ...current, inboxes: afterAdd.slice(0, 2) })).ok && (await listed()).length === 2);
 
   console.log("\nThe final copy, as the migration writes it");
   const fs = await import("node:fs");

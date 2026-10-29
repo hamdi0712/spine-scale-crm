@@ -9,7 +9,7 @@ import {
   EmailLeadStatus,
 } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
-import { EmailToSend } from "@/lib/emailWorkflow";
+import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
 import { EmailStatusBadge, IcpTierChip } from "@/components/Badge";
 import EmailSendButtons from "@/components/EmailSendButtons";
 
@@ -29,7 +29,13 @@ export interface EmailLeadRow {
   // The email to send now — Email 1 once Ready, or the follow-up that is due —
   // with its buttons on the row. Null for everything else.
   toSend: EmailToSend | null;
+  // There is one, but it cannot go yet (no inbox, nobody to sign it as).
+  sendBlocked: string | null;
   followUpDueToday: boolean;
+  // The inbox it is sent from, and what that inbox has sent today.
+  inbox: string | null;
+  inboxSentToday: number;
+  inboxLimit: number;
 }
 
 type Filter = "due" | "all" | EmailLeadStatus;
@@ -40,15 +46,7 @@ type Filter = "due" | "all" | EmailLeadStatus;
 // status nothing has reached yet simply says 0. "Follow-up due today" comes
 // first: it is the work that cannot wait, and it cuts across the statuses
 // (every lead in it is In sequence).
-export default function EmailLeadTable({
-  rows,
-  sentToday,
-  dailyLimit,
-}: {
-  rows: EmailLeadRow[];
-  sentToday: number;
-  dailyLimit: number;
-}) {
+export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
   const due = rows.filter((r) => r.followUpDueToday).length;
   const [filter, setFilter] = useState<Filter>(due > 0 ? "due" : "all");
 
@@ -124,7 +122,7 @@ export default function EmailLeadTable({
             </Link>
             {row.toSend && (
               <div className="mt-2 px-1">
-                <EmailSendButtons leadId={row.id} toSend={row.toSend} sentToday={sentToday} dailyLimit={dailyLimit} compact />
+                <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
               </div>
             )}
           </li>
@@ -164,6 +162,7 @@ export default function EmailLeadTable({
                       {row.emailDetail && (
                         <div className="mt-0.5 text-xs text-muted">{row.emailDetail}</div>
                       )}
+                      {row.inbox && <div className="mt-0.5 text-xs text-muted">from {inboxShort(row.inbox)}</div>}
                     </>
                   ) : (
                     <span className="text-muted">—</span>
@@ -181,8 +180,10 @@ export default function EmailLeadTable({
                 </td>
                 <td className="td num text-xs text-muted">{row.sequence}</td>
                 <td className="td text-sm font-medium text-ink">
-                  {row.toSend ? (
-                    <EmailSendButtons leadId={row.id} toSend={row.toSend} sentToday={sentToday} dailyLimit={dailyLimit} compact />
+                  {row.sendBlocked && !row.toSend ? (
+                    <span className="text-xs font-normal text-bad">{row.sendBlocked}</span>
+                  ) : row.toSend ? (
+                    <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
                   ) : (
                     EMAIL_LEAD_NEXT[row.status]
                   )}

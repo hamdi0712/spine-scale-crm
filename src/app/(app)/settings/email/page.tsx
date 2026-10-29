@@ -1,6 +1,7 @@
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { startersRemaining } from "@/lib/emailWorkflow";
 import EmailSettingsForm from "@/components/EmailSettingsForm";
+import { loadInboxes } from "@/lib/emailInboxes";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,6 @@ export const dynamic = "force-dynamic";
 // each follow-up, and how many to send a day. Emails go out by hand from
 // Gmail; nothing here sends anything.
 export default async function EmailSettingsPage() {
-  const settings = await loadEmailSettings();
-  return <EmailSettingsForm initial={settings} starters={startersRemaining(settings)} />;
+  const [settings, inboxes] = await Promise.all([loadEmailSettings(), loadInboxes()]);
+  return <EmailSettingsForm initial={settings} inboxes={inboxes} starters={startersRemaining(settings)} />;
 }

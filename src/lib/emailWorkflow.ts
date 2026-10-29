@@ -218,8 +218,15 @@ function fill(template: string, values: Record<string, string>): string {
 
 // Placeholders left unfilled, so the panel can refuse to approve an email
 // with "{opener}" still in it.
+//
+// {sender} is the exception: it is filled when the email is sent, from the
+// inbox it goes out of (see senderFor), so it stays in the draft on purpose.
+export const SEND_TIME_PLACEHOLDERS = ["{sender}"];
+
 export function unfilledPlaceholders(textIn: string): string[] {
-  return Array.from(new Set(Array.from(textIn.matchAll(/\{(\w+)\}/g)).map((m) => m[0])));
+  return Array.from(new Set(Array.from(textIn.matchAll(/\{(\w+)\}/g)).map((m) => m[0]))).filter(
+    (p) => !SEND_TIME_PLACEHOLDERS.includes(p),
+  );
 }
 
 // An email from its template: the greeting where the template puts
@@ -252,7 +259,6 @@ export function renderEmail(
     clinic: lead.clinicName.trim(),
     opener: opener.trim(),
     contact: contactFor(lead),
-    sender: settings.senderName,
   };
   const template = version === "owner" ? settings.ownerBodyTemplate : settings.frontDeskTemplate;
   const subject = version === "owner" ? settings.subjectTemplate : settings.frontDeskSubjectTemplate;
@@ -272,7 +278,7 @@ export function renderFollowUp(
 ): { subject: string; body: string } | null {
   const template = settings.followUpTemplates[n - 1];
   if (template === undefined) return null;
-  const values = { clinic: lead.clinicName.trim(), opener: "", contact: contactFor(lead), sender: settings.senderName };
+  const values = { clinic: lead.clinicName.trim(), opener: "", contact: contactFor(lead) };
   const subject = /^re:/i.test(firstSubject.trim()) ? firstSubject.trim() : `Re: ${firstSubject.trim()}`;
   return { subject, body: assemble(emailGreeting(lead, version), template, values, settings) };
 }
@@ -516,9 +522,11 @@ export function checkExportCsv(rows: { id: string; clinicName: string; email: st
 
 // ─── Sending ───────────────────────────────────────────────────────────────
 
-// A Gmail compose window with the address, subject and body filled in.
-export function gmailComposeUrl(to: string, subject: string, body: string): string {
-  const q = new URLSearchParams({ view: "cm", fs: "1", to, su: subject, body });
+// A Gmail compose window on the sending inbox's own account — authuser picks
+// the signed-in account by address, rather than whichever is first in the
+// browser — with the address, subject and body filled in.
+export function gmailComposeUrl(from: string, to: string, subject: string, body: string): string {
+  const q = new URLSearchParams({ authuser: from, view: "cm", fs: "1", to, su: subject, body });
   return `https://mail.google.com/mail/?${q.toString()}`;
 }
 
@@ -533,6 +541,9 @@ export interface EmailToSend {
   step: number;
   label: string;
   to: string;
+  // The inbox it goes from: Gmail is opened on this account.
+  inboxId: string;
+  from: string;
   subject: string;
   body: string;
 }
@@ -541,9 +552,11 @@ export interface EmailSendRecord extends EmailSendView {
   subject: string;
 }
 
-// The email to send right now, or null: Email 1 as approved once the lead is
-// Ready, or the next follow-up once it is due, drafted from its template in
-// reply to Email 1.
+// The email to send right now: Email 1 as approved once the lead is Ready,
+// or the next follow-up once it is due, drafted from its template in reply
+// to Email 1 — from the lead's inbox, signed with that inbox's name. Null
+// when there is nothing to send; { blocked } when there is, but it cannot go
+// yet (no inbox, or nobody to sign it as).
 export function emailToSend(
   lead: EmailWorkflowLead &
     EmailLeadInput & { emailType: string | null; emailVersion: string | null; emailSubject: string | null; emailBody: string | null },
@@ -551,18 +564,67 @@ export function emailToSend(
   sends: EmailSendRecord[],
   settings: EmailSettingsValues,
   now: Date,
-): EmailToSend | null {
+  inbox: SendingInboxView | null,
+): EmailToSend | { blocked: string } | null {
   const next = sendBlocker(lead, tier, sends, settings, now);
   if ("blocked" in next) return null;
+  if (!inbox) return { blocked: "No sending inbox — add one in Settings → Email." };
+  const sender = senderFor(inbox, settings);
+  if (sender === "") return { blocked: `Nobody to sign it as: give ${inbox.address} a display name, or set Your name, in Settings → Email.` };
   const to = (lead.email ?? "").trim();
+  const from = { inboxId: inbox.id, from: inbox.address };
   if (next.step === 0) {
     if (!lead.emailSubject || !lead.emailBody) return null;
-    return { step: 0, label: "Email 1", to, subject: lead.emailSubject, body: lead.emailBody };
+    return { step: 0, label: "Email 1", to, ...from, subject: lead.emailSubject, body: fillSender(lead.emailBody, sender) };
   }
   const first = sends.find((s) => s.step === 0);
   const drafted = renderFollowUp(settings, lead, defaultEmailVersion(lead), next.step, first?.subject ?? lead.emailSubject ?? "");
   if (!drafted) return null;
-  return { step: next.step, label: `Follow-up ${next.step}`, to, ...drafted };
+  return { step: next.step, label: `Follow-up ${next.step}`, to, ...from, subject: drafted.subject, body: fillSender(drafted.body, sender) };
+}
+
+export function isEmailToSend(v: EmailToSend | { blocked: string } | null): v is EmailToSend {
+  return v !== null && !("blocked" in v);
+}
+
+// ─── Sending inboxes ───────────────────────────────────────────────────────
+
+export interface SendingInboxView {
+  id: string;
+  address: string;
+  displayName: string;
+  dailyLimit: number;
+}
+
+// Who an email from this inbox is signed as: its display name, or Settings'
+// "Your name" where it has none.
+export function senderFor(inbox: Pick<SendingInboxView, "displayName">, settings: Pick<EmailSettingsValues, "senderName">): string {
+  return inbox.displayName.trim() || settings.senderName.trim();
+}
+
+export function fillSender(textIn: string, sender: string): string {
+  return sender === "" ? textIn : textIn.split("{sender}").join(sender);
+}
+
+// The inbox a newly Ready lead is given: whichever has the fewest leads so
+// far, the first in Settings order on a tie — so two inboxes alternate and
+// stay balanced.
+export function pickInbox<T extends { id: string }>(inboxes: T[], assigned: Record<string, number>): T | null {
+  let best: T | null = null;
+  for (const inbox of inboxes) {
+    if (best === null || (assigned[inbox.id] ?? 0) < (assigned[best.id] ?? 0)) best = inbox;
+  }
+  return best;
+}
+
+// "hamdi@" for the counters and the rows.
+export function inboxShort(address: string): string {
+  const at = address.indexOf("@");
+  return at === -1 ? address : address.slice(0, at + 1);
+}
+
+export function isInboxAddress(v: unknown): v is string {
+  return typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 
 // Where a lead is in its sequence, for the table: what went last and when,
