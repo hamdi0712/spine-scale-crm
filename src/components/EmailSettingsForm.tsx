@@ -11,12 +11,28 @@ import {
   EmailSettingsValues,
   MAX_FOLLOW_UPS,
   STARTER_FOLLOW_UPS,
+  SendingInboxView,
   startersRemaining,
 } from "@/lib/emailWorkflow";
 
-export default function EmailSettingsForm({ initial, starters }: { initial: EmailSettingsValues; starters: string[] }) {
+type InboxDraft = { id: string | null; address: string; displayName: string; dailyLimit: number };
+
+export default function EmailSettingsForm({
+  initial,
+  inboxes: initialInboxes,
+  starters,
+}: {
+  initial: EmailSettingsValues;
+  inboxes: SendingInboxView[];
+  starters: string[];
+}) {
   const router = useRouter();
   const [v, setV] = useState<EmailSettingsValues>(initial);
+  const [inboxes, setInboxes] = useState<InboxDraft[]>(initialInboxes);
+  const setInbox = (i: number, patch: Partial<InboxDraft>) => {
+    setInboxes((prev) => prev.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+    setMessage(null);
+  };
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const live = startersRemaining(v);
@@ -29,7 +45,7 @@ export default function EmailSettingsForm({ initial, starters }: { initial: Emai
 
   function save() {
     start(async () => {
-      const r = await saveEmailSettings(v);
+      const r = await saveEmailSettings({ ...v, inboxes });
       setMessage(r.ok ? { ok: true, text: "Saved." } : { ok: false, text: r.error });
       router.refresh();
     });
@@ -53,6 +69,61 @@ export default function EmailSettingsForm({ initial, starters }: { initial: Emai
           </p>
         </div>
       )}
+
+      <div className="card space-y-4 p-6">
+        <div>
+          <p className="text-sm font-medium">Sending inboxes</p>
+          <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
+            The Gmail inboxes cold email goes from, by hand. Each lead is given one when it first becomes Ready,
+            alternating so they stay balanced; Open in Gmail opens that account. The display name signs{" "}
+            <code>{"{sender}"}</code> — blank uses Your name below. An inbox that has sent email cannot be removed.
+          </p>
+        </div>
+        {inboxes.map((inbox, i) => (
+          <div key={inbox.id ?? `new-${i}`} className="grid grid-cols-[2fr_1.5fr_90px_auto] items-end gap-3 max-md:grid-cols-1">
+            <label className="block">
+              <span className="field-label">Address</span>
+              <input className="field" value={inbox.address} onChange={(e) => setInbox(i, { address: e.target.value })} />
+            </label>
+            <label className="block">
+              <span className="field-label">Display name</span>
+              <input
+                className="field"
+                value={inbox.displayName}
+                placeholder={v.senderName || "Your name"}
+                onChange={(e) => setInbox(i, { displayName: e.target.value })}
+              />
+            </label>
+            <label className="block">
+              <span className="field-label">Per day</span>
+              <input
+                type="number"
+                min={1}
+                max={500}
+                className="field num"
+                value={inbox.dailyLimit}
+                onChange={(e) => setInbox(i, { dailyLimit: Number(e.target.value) })}
+              />
+            </label>
+            <button
+              type="button"
+              className="mb-2 text-xs text-muted hover:text-bad"
+              onClick={() => setInboxes((prev) => prev.filter((_, j) => j !== i))}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        {inboxes.length < 10 && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => setInboxes((prev) => [...prev, { id: null, address: "", displayName: "", dailyLimit: 10 }])}
+          >
+            Add an inbox
+          </button>
+        )}
+      </div>
 
       <div className="card space-y-5 p-6">
         <div>
@@ -81,11 +152,11 @@ export default function EmailSettingsForm({ initial, starters }: { initial: Emai
         </div>
         <label className="block">
           <span className="field-label">{label("Owner-direct email", isStarter("Owner-direct email"))}</span>
-          <textarea className="field min-h-[320px]" value={v.ownerBodyTemplate} onChange={(e) => set("ownerBodyTemplate", e.target.value)} />
+          <textarea className="field !min-h-[320px]" value={v.ownerBodyTemplate} onChange={(e) => set("ownerBodyTemplate", e.target.value)} />
         </label>
         <label className="block">
           <span className="field-label">{label("Front-desk email", isStarter("Front-desk email"))}</span>
-          <textarea className="field min-h-[360px]" value={v.frontDeskTemplate} onChange={(e) => set("frontDeskTemplate", e.target.value)} />
+          <textarea className="field !min-h-[360px]" value={v.frontDeskTemplate} onChange={(e) => set("frontDeskTemplate", e.target.value)} />
         </label>
         <label className="block">
           <span className="field-label">{label("Opt-out line", isStarter("Opt-out line"))}</span>
@@ -93,10 +164,10 @@ export default function EmailSettingsForm({ initial, starters }: { initial: Emai
         </label>
         <label className="block">
           <span className="field-label">{label("Sign-off", isStarter("Sign-off"))}</span>
-          <textarea className="field min-h-[150px]" value={v.signOff} onChange={(e) => set("signOff", e.target.value)} />
+          <textarea className="field !min-h-[150px]" value={v.signOff} onChange={(e) => set("signOff", e.target.value)} />
         </label>
         <label className="block">
-          <span className="field-label">Your name, for {"{sender}"}</span>
+          <span className="field-label">Your name, for {"{sender}"} when an inbox has no display name</span>
           <input className="field" value={v.senderName} onChange={(e) => set("senderName", e.target.value)} />
         </label>
       </div>
@@ -122,7 +193,7 @@ export default function EmailSettingsForm({ initial, starters }: { initial: Emai
               </button>
             </span>
             <textarea
-              className="field min-h-[110px]"
+              className="field !min-h-[110px]"
               value={t}
               onChange={(e) => set("followUpTemplates", v.followUpTemplates.map((x, j) => (j === i ? e.target.value : x)))}
             />
@@ -147,17 +218,6 @@ export default function EmailSettingsForm({ initial, starters }: { initial: Emai
               className="field num"
               value={v.followUpDelayDays}
               onChange={(e) => set("followUpDelayDays", Number(e.target.value))}
-            />
-          </label>
-          <label className="block">
-            <span className="field-label">Emails per day</span>
-            <input
-              type="number"
-              min={1}
-              max={500}
-              className="field num"
-              value={v.dailyLimit}
-              onChange={(e) => set("dailyLimit", Number(e.target.value))}
             />
           </label>
         </div>

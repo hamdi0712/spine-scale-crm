@@ -1,27 +1,29 @@
 "use client";
 
-// The three buttons that send an email by hand: open it in Gmail with the
-// address, subject and body filled in, or copy it — then mark it sent once it
-// has gone. Marking sent past the daily limit asks first; it is a limit you
-// set for yourself, not a wall.
+// The three buttons that send an email by hand: open it in Gmail — on the
+// lead's sending inbox, whichever account is first in the browser — with the
+// address, subject and body filled in, or copy it; then mark it sent once it
+// has gone. Marking sent past that inbox's daily limit asks first; it is a
+// limit you set for yourself, not a wall.
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { markEmailSent } from "@/lib/actions/emailWorkflow";
-import { EmailToSend, copyText, gmailComposeUrl } from "@/lib/emailWorkflow";
+import { EmailToSend, copyText, gmailComposeUrl, inboxShort } from "@/lib/emailWorkflow";
 import { confirmText } from "@/lib/displayMode";
 
 export default function EmailSendButtons({
   leadId,
   toSend,
-  sentToday,
-  dailyLimit,
+  inboxSentToday,
+  inboxLimit,
   compact = false,
 }: {
   leadId: string;
   toSend: EmailToSend;
-  sentToday: number;
-  dailyLimit: number;
+  // What the sending inbox has sent today, and its own limit.
+  inboxSentToday: number;
+  inboxLimit: number;
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -41,11 +43,11 @@ export default function EmailSendButtons({
 
   function markSent() {
     if (
-      sentToday >= dailyLimit &&
+      inboxSentToday >= inboxLimit &&
       !confirm(
         confirmText(
-          `That will be ${sentToday + 1} sent today, over your limit of ${dailyLimit}. Mark it sent anyway?`,
-          `Over your limit: ${sentToday + 1} of ${dailyLimit} today. Mark sent?`,
+          `That will be ${inboxSentToday + 1} sent today from ${toSend.from}, over its limit of ${inboxLimit}. Mark it sent anyway?`,
+          `${inboxShort(toSend.from)} over its limit: ${inboxSentToday + 1} of ${inboxLimit} today. Mark sent?`,
         ),
       )
     ) {
@@ -53,7 +55,7 @@ export default function EmailSendButtons({
     }
     setError(null);
     start(async () => {
-      const r = await markEmailSent(leadId, { step: toSend.step, subject: toSend.subject, body: toSend.body });
+      const r = await markEmailSent(leadId, { step: toSend.step, subject: toSend.subject, body: toSend.body, inboxId: toSend.inboxId });
       if (!r.ok) setError(r.error);
       router.refresh();
     });
@@ -64,10 +66,11 @@ export default function EmailSendButtons({
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <a
-          href={gmailComposeUrl(toSend.to, toSend.subject, toSend.body)}
+          href={gmailComposeUrl(toSend.from, toSend.to, toSend.subject, toSend.body)}
           target="_blank"
           rel="noopener noreferrer"
           className={btn}
+          title={`Opens Gmail as ${toSend.from}`}
         >
           Open in Gmail
         </a>

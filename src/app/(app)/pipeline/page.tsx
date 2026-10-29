@@ -229,8 +229,7 @@ export default async function PipelinePage({
 // Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
 // it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
 async function EmailPipeline() {
-  const { rows, settings, sentToday, starters, unchecked } = await loadEmailView();
-  const over = sentToday > settings.dailyLimit;
+  const { rows, counters, starters, unchecked } = await loadEmailView();
 
   return (
     <div>
@@ -243,9 +242,22 @@ async function EmailPipeline() {
           <p className="helper-text mt-1.5 text-sm text-muted">
             Clinics worked by email, sent by hand from Gmail — what each one needs next
           </p>
-          <p className={`num mt-2 text-sm font-medium ${over ? "text-bad" : "text-ink"}`}>
-            {sentToday} of {settings.dailyLimit} sent today
-            {over && <span className="font-normal"> — over your daily limit</span>}
+          {/* Sent today, per inbox, each against its own limit. */}
+          <p className="num mt-2 text-sm font-medium text-ink">
+            {counters.length === 0 ? (
+              <Link href="/settings/email" className="text-bad hover:underline">
+                No sending inboxes — add one in Settings → Email
+              </Link>
+            ) : (
+              counters.map((c, i) => (
+                <span key={c.id} className={c.sent > c.limit ? "text-bad" : undefined} title={c.address}>
+                  {i > 0 && <span className="text-muted"> · </span>}
+                  {c.short}: {c.sent} of {c.limit}
+                  {c.sent > c.limit && <span className="font-normal"> (over)</span>}
+                </span>
+              ))
+            )}
+            {counters.length > 0 && <span className="font-normal text-muted"> sent today</span>}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2 max-md:items-stretch">
@@ -271,7 +283,7 @@ async function EmailPipeline() {
             </Link>
           </div>
         ) : (
-          <EmailLeadTable rows={rows} sentToday={sentToday} dailyLimit={settings.dailyLimit} />
+          <EmailLeadTable rows={rows} />
         )}
       </div>
     </div>

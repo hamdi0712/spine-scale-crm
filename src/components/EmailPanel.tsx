@@ -16,6 +16,7 @@ import {
   markEmailUnsubscribed,
   resolveContact,
   saveEmailDraft,
+  setLeadInbox,
   setEmailVersion,
   unapproveEmail,
 } from "@/lib/actions/emailWorkflow";
@@ -42,8 +43,15 @@ export interface EmailPanelProps {
   sequence: string;
   toSend: EmailToSend | null;
   starters: string[];
-  sentToday: number;
-  dailyLimit: number;
+  // There is an email to send, but it cannot go yet: why.
+  sendBlocked: string | null;
+  // The inbox it goes from, the ones it could go from, whether it can still
+  // be changed (only before Email 1), and that inbox's count today.
+  inbox: { id: string; address: string } | null;
+  inboxes: { id: string; address: string }[];
+  inboxLocked: boolean;
+  inboxSentToday: number;
+  inboxLimit: number;
   email: string | null;
   emailDetail: string | null;
   contact: { state: "confirmed" | "mismatch"; scorecardName: string | null; contactName: string | null };
@@ -55,7 +63,7 @@ export interface EmailPanelProps {
   body: string | null;
   approved: boolean;
   unfilled: string[];
-  sends: { step: number; sentAt: string; subject: string; toEmail: string }[];
+  sends: { step: number; sentAt: string; subject: string; toEmail: string; fromEmail: string | null }[];
   reply: { at: string; type: string | null; text: string | null } | null;
   suppressed: { reason: string; at: string } | null;
 }
@@ -127,6 +135,33 @@ export default function EmailPanel(p: EmailPanelProps) {
           {p.email ? <span className="break-all font-medium">{p.email}</span> : <span className="text-muted">no address yet</span>}
           {p.emailDetail && <span className="text-xs text-muted"> · {p.emailDetail}</span>}
         </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <span className="text-muted">From</span>
+          {p.inbox === null ? (
+            <span className="text-muted">
+              {p.inboxes.length === 0 ? "no sending inbox — add one in Settings → Email" : "an inbox is assigned once it is Ready"}
+            </span>
+          ) : p.inboxLocked || p.inboxes.length < 2 ? (
+            <span className="font-medium" title={p.inboxLocked ? "Fixed: Email 1 went from it, and the follow-ups stay in its thread." : undefined}>
+              {p.inbox.address}
+            </span>
+          ) : (
+            <select
+              className="field h-8 w-auto py-0 text-sm"
+              value={p.inbox.id}
+              disabled={pending}
+              onChange={(e) => run(() => setLeadInbox(p.leadId, e.target.value))}
+              aria-label="Sending inbox"
+            >
+              {p.inboxes.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.address}
+                </option>
+              ))}
+            </select>
+          )}
+          {p.inbox && p.inboxLocked && <span className="text-xs text-muted">· fixed, same thread</span>}
+        </div>
       </div>
       {p.contact.state === "mismatch" && !sentAny && (
         <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
@@ -195,8 +230,13 @@ export default function EmailPanel(p: EmailPanelProps) {
               </label>
               <label className="block">
                 <span className="field-label">Email</span>
-                <textarea className="field min-h-[260px] font-[inherit] text-sm" value={body} onChange={(e) => setBody(e.target.value)} />
+                <textarea className="field !min-h-[420px] font-[inherit] text-sm" value={body} onChange={(e) => setBody(e.target.value)} />
               </label>
+              {body.includes("{sender}") && (
+                <p className="text-xs text-muted">
+                  {"{sender}"} is signed when it is sent, with the sending inbox&apos;s name.
+                </p>
+              )}
               {p.unfilled.length > 0 && !dirty && (
                 <p className="text-xs text-bad">Still has {p.unfilled.join(", ")} in it — fill it in before approving.</p>
               )}
@@ -246,10 +286,11 @@ export default function EmailPanel(p: EmailPanelProps) {
             </div>
           )}
           <div className="mt-2.5">
-            <EmailSendButtons leadId={p.leadId} toSend={p.toSend} sentToday={p.sentToday} dailyLimit={p.dailyLimit} />
+            <EmailSendButtons leadId={p.leadId} toSend={p.toSend} inboxSentToday={p.inboxSentToday} inboxLimit={p.inboxLimit} />
           </div>
         </div>
       )}
+      {p.sendBlocked && !p.toSend && <p className="text-sm text-bad">{p.sendBlocked}</p>}
 
       {sentAny && (
         <div>
@@ -259,7 +300,10 @@ export default function EmailPanel(p: EmailPanelProps) {
               <li key={s.step} className="flex flex-wrap gap-x-2">
                 <span className="font-medium">{s.step === 0 ? "Email 1" : `Follow-up ${s.step}`}</span>
                 <span className="num text-muted">{day(s.sentAt)}</span>
-                <span className="truncate text-muted">· {s.subject} · to {s.toEmail}</span>
+                <span className="truncate text-muted">
+                  · {s.subject} · to {s.toEmail}
+                  {s.fromEmail && ` · from ${s.fromEmail}`}
+                </span>
               </li>
             ))}
           </ul>
@@ -308,7 +352,7 @@ export default function EmailPanel(p: EmailPanelProps) {
           {replyOpen && (
             <div className="space-y-2.5 rounded-[10px] bg-wash/70 p-3">
               <textarea
-                className="field min-h-[110px] text-sm"
+                className="field !min-h-[110px] text-sm"
                 placeholder="Paste their reply"
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}

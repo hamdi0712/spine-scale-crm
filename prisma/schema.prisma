@@ -519,6 +519,12 @@ model Lead {
   suppressedAt         DateTime?
   suppressedReason     String?
 
+  // The Gmail inbox this lead is emailed from. Assigned when the lead first
+  // becomes Ready, alternating between inboxes; changeable until Email 1 is
+  // sent, and fixed after, so the follow-ups stay in the same thread.
+  sendingInboxId String?
+  sendingInbox   SendingInbox? @relation(fields: [sendingInboxId], references: [id], onDelete: SetNull)
+
   emailSends EmailSend[]
 
   copilotActions CopilotAction[]
@@ -536,12 +542,33 @@ model EmailSend {
   lead    Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   step    Int
   toEmail String
+  // The inbox it went from: the row, and its address as it was, so the record
+  // survives the inbox being renamed or removed.
+  inboxId   String?
+  inbox     SendingInbox? @relation(fields: [inboxId], references: [id], onDelete: SetNull)
+  fromEmail String?
   subject String
   body    String
   sentAt  DateTime @default(now())
 
   @@unique([leadId, step])
   @@index([sentAt])
+  @@index([inboxId, sentAt])
+}
+
+// A Gmail inbox cold email is sent from, by hand. Each has its own daily
+// limit, and the display name {sender} is signed with (Settings' "Your name"
+// where it has none).
+model SendingInbox {
+  id          String   @id @default(cuid())
+  address     String   @unique
+  displayName String   @default("")
+  dailyLimit  Int      @default(10)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  leads Lead[]
+  sends EmailSend[]
 }
 
 // The suppression list: clinics that said no (not_interested) or asked to stop
@@ -578,8 +605,10 @@ model EmailSettings {
   followUpTemplates  String
   // After the opt-out line on every email; "{sender}" is senderName.
   signOff            String  @default("{sender}")
+  // The fallback for {sender} when the sending inbox has no display name.
   senderName         String  @default("")
   followUpDelayDays  Int     @default(3)
+  // UNUSED since each sending inbox has its own limit (SendingInbox).
   dailyLimit         Int     @default(10)
 
   updatedAt DateTime @updatedAt

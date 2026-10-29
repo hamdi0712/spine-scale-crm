@@ -38,6 +38,7 @@ import {
   MAX_TEMPLATE_CHARS,
   contactCheck,
   defaultEmailVersion,
+  isInboxAddress,
   readCheckResults,
   readEmailReplyType,
   readEmailSettings,
@@ -49,6 +50,7 @@ import {
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
 import { findSuppression, suppressLead, suppressedMessage } from "@/lib/suppression";
+import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -72,9 +74,64 @@ export async function saveEmailSettings(raw: unknown): Promise<Result> {
     return { ok: false, error: "Both email templates need {opener} somewhere, or the opener is never used." };
   }
   const settings: EmailSettingsValues = readEmailSettings({ ...r, followUpTemplates: followUps });
+  if (r.inboxes !== undefined) {
+    const saved = await saveInboxes(r.inboxes);
+    if (!saved.ok) return saved;
+  }
   await saveEmailSettingsRow(settings);
   revalidatePath("/settings/email");
   revalidatePath("/pipeline");
+  return { ok: true };
+}
+
+// The sending inboxes as the form has them: kept ones updated, new ones
+// added, missing ones removed. An inbox that has already sent email cannot
+// be removed — its leads' follow-ups go from it, in the same thread — and a
+// lead that was only assigned one is assigned again the next time it is seen.
+async function saveInboxes(raw: unknown): Promise<Result> {
+  if (!Array.isArray(raw)) return { ok: false, error: "The inbox list did not come through." };
+  if (raw.length > 10) return { ok: false, error: "At most 10 sending inboxes." };
+  const list = raw.map((x, position) => {
+    const o = x !== null && typeof x === "object" ? (x as Record<string, unknown>) : {};
+    const limit = Number(o.dailyLimit);
+    return {
+      id: typeof o.id === "string" && o.id !== "" ? o.id : null,
+      address: typeof o.address === "string" ? o.address.trim().toLowerCase() : "",
+      displayName: typeof o.displayName === "string" ? o.displayName.trim().slice(0, 120) : "",
+      dailyLimit: Number.isFinite(limit) ? Math.min(500, Math.max(1, Math.round(limit))) : 10,
+      position,
+    };
+  });
+  for (const i of list) if (!isInboxAddress(i.address)) return { ok: false, error: `“${i.address || "(blank)"}” is not an email address.` };
+  if (new Set(list.map((i) => i.address)).size !== list.length) return { ok: false, error: "The same inbox is listed twice." };
+
+  const existing = await prisma.sendingInbox.findMany({ select: { id: true, address: true, _count: { select: { sends: true } } } });
+  const keep = new Set(list.flatMap((i) => (i.id ? [i.id] : [])));
+  const removed = existing.filter((e) => !keep.has(e.id));
+  const used = removed.find((e) => e._count.sends > 0);
+  if (used) return { ok: false, error: `${used.address} has already sent email — its leads' follow-ups go from it, so it cannot be removed.` };
+
+  await prisma.$transaction(async (tx) => {
+    if (removed.length > 0) await tx.sendingInbox.deleteMany({ where: { id: { in: removed.map((e) => e.id) } } });
+    for (const i of list) {
+      const data = { address: i.address, displayName: i.displayName, dailyLimit: i.dailyLimit, position: i.position };
+      if (i.id && existing.some((e) => e.id === i.id)) await tx.sendingInbox.update({ where: { id: i.id }, data });
+      else await tx.sendingInbox.create({ data });
+    }
+  });
+  return { ok: true };
+}
+
+// Moves a lead to another inbox — only before Email 1 is sent. After it, the
+// follow-ups must go from the inbox Email 1 went from to stay in its thread.
+export async function setLeadInbox(leadId: string, inboxId: string): Promise<Result> {
+  const lead = await loadLead(leadId);
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  if (lead.emailSends.length > 0) return { ok: false, error: "Email 1 has gone — the follow-ups stay with its inbox, in the same thread." };
+  const inbox = await prisma.sendingInbox.findUnique({ where: { id: typeof inboxId === "string" ? inboxId : "" } });
+  if (!inbox) return { ok: false, error: "That inbox no longer exists." };
+  await prisma.lead.update({ where: { id: leadId }, data: { sendingInboxId: inbox.id } });
+  revalidate(leadId);
   return { ok: true };
 }
 
@@ -361,7 +418,7 @@ export async function importCheckResults(
 // ─── Sending, by hand ──────────────────────────────────────────────────────
 
 export type MarkSentResult =
-  | { ok: true; step: number; sentToday: number; dailyLimit: number }
+  | { ok: true; step: number; inbox: string; sentToday: number; dailyLimit: number }
   | { ok: false; error: string };
 
 // Records that the email Gmail just sent went: Email 1, or the follow-up that
@@ -370,7 +427,7 @@ export type MarkSentResult =
 // and the count comes back so it can say so.
 export async function markEmailSent(
   leadId: string,
-  sent: { step: number; subject: string; body: string },
+  sent: { step: number; subject: string; body: string; inboxId?: string },
 ): Promise<MarkSentResult> {
   const lead = await loadLead(leadId);
   if (!lead) return { ok: false, error: "That lead no longer exists." };
@@ -381,21 +438,28 @@ export async function markEmailSent(
   const next = sendBlocker(lead, leadTier(lead), lead.emailSends, settings, now);
   if ("blocked" in next) return { ok: false, error: next.blocked };
   if (sent?.step !== next.step) return { ok: false, error: "The page was out of date — reload it and send again." };
+
+  // The inbox it went from: Email 1's for a follow-up, the lead's own for
+  // Email 1 — given one now if it somehow has none.
+  const inboxes = await loadInboxes();
+  if (next.step === 0 && !lead.sendingInboxId) {
+    const given = await assignInboxes([leadId], inboxes);
+    lead.sendingInboxId = given[leadId] ?? null;
+  }
+  const inbox = inboxForLead(lead, inboxes);
+  if (!inbox) return { ok: false, error: "No sending inbox — add one in Settings → Email." };
+  if (sent?.inboxId !== undefined && sent.inboxId !== inbox.id) {
+    return { ok: false, error: "The inbox changed since the page loaded — reload it and send again." };
+  }
   const subject = typeof sent.subject === "string" ? sent.subject.slice(0, 300) : "";
   const body = typeof sent.body === "string" ? sent.body.slice(0, 8000) : "";
 
   await prisma.emailSend.create({
-    data: { leadId, step: next.step, toEmail: (lead.email ?? "").trim(), subject, body, sentAt: now },
+    data: { leadId, step: next.step, toEmail: (lead.email ?? "").trim(), inboxId: inbox.id, fromEmail: inbox.address, subject, body, sentAt: now },
   });
-  const sentToday = await countSentToday(now);
+  const sentToday = (await sentTodayByInbox(now))[inbox.id] ?? 0;
   revalidate(leadId);
-  return { ok: true, step: next.step, sentToday, dailyLimit: settings.dailyLimit };
-}
-
-export async function countSentToday(now = new Date()): Promise<number> {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  return prisma.emailSend.count({ where: { sentAt: { gte: start } } });
+  return { ok: true, step: next.step, inbox: inbox.address, sentToday, dailyLimit: inbox.dailyLimit };
 }
 
 // ─── Results ───────────────────────────────────────────────────────────────
