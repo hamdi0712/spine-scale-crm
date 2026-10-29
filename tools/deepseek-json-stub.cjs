@@ -24,7 +24,10 @@ exports.deepSeekJson = async ({ system, user }) => {
   prompts.push({ system, user });
   const match = /^CLINIC: (.+)$/m.exec(user);
   const name = match ? match[1].trim() : "";
-  const reply = replies[name];
+  // An array is a script of replies in order, one per call — for a caller
+  // that asks again after rejecting an answer. The last one repeats.
+  const scripted = replies[name];
+  const reply = Array.isArray(scripted) ? (scripted.length > 1 ? scripted.shift() : scripted[0]) : scripted;
   if (reply === undefined) {
     return { ok: false, error: `The scripted model has no reply for “${name}”.` };
   }

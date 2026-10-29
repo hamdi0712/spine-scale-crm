@@ -9,7 +9,9 @@ import {
   EmailLeadStatus,
 } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
+import { EmailToSend } from "@/lib/emailWorkflow";
 import { EmailStatusBadge, IcpTierChip } from "@/components/Badge";
+import EmailSendButtons from "@/components/EmailSendButtons";
 
 export interface EmailLeadRow {
   id: string;
@@ -24,16 +26,31 @@ export interface EmailLeadRow {
   icpScore: string | null;
   status: EmailLeadStatus;
   sequence: string;
+  // The email to send now — Email 1 once Ready, or the follow-up that is due —
+  // with its buttons on the row. Null for everything else.
+  toSend: EmailToSend | null;
+  followUpDueToday: boolean;
 }
 
-type Filter = "all" | EmailLeadStatus;
+type Filter = "due" | "all" | EmailLeadStatus;
 
 // The Email view of the pipeline: one row per clinic, built around the one
 // thing to do next. The chips above it filter by status and count each one,
-// all seven always shown so the set reads the same on every visit — a status
-// nothing has reached yet simply says 0.
-export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
-  const [filter, setFilter] = useState<Filter>("all");
+// every status always shown so the set reads the same on every visit — a
+// status nothing has reached yet simply says 0. "Follow-up due today" comes
+// first: it is the work that cannot wait, and it cuts across the statuses
+// (every lead in it is In sequence).
+export default function EmailLeadTable({
+  rows,
+  sentToday,
+  dailyLimit,
+}: {
+  rows: EmailLeadRow[];
+  sentToday: number;
+  dailyLimit: number;
+}) {
+  const due = rows.filter((r) => r.followUpDueToday).length;
+  const [filter, setFilter] = useState<Filter>(due > 0 ? "due" : "all");
 
   const counts = useMemo(() => {
     const c = Object.fromEntries(EMAIL_LEAD_STATUSES.map((s) => [s, 0])) as Record<
@@ -44,10 +61,16 @@ export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
     return c;
   }, [rows]);
 
-  const shown = filter === "all" ? rows : rows.filter((r) => r.status === filter);
+  const shown =
+    filter === "all"
+      ? rows
+      : filter === "due"
+        ? rows.filter((r) => r.followUpDueToday)
+        : rows.filter((r) => r.status === filter);
 
   // Ordered the way the work flows, left to right; No email last.
   const chips: { key: Filter; label: string; count: number }[] = [
+    { key: "due", label: "Follow-up due today", count: due },
     { key: "all", label: "All", count: rows.length },
     ...EMAIL_LEAD_STATUSES.map((s) => ({
       key: s,
@@ -96,9 +119,14 @@ export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
                 {row.email ?? "No email yet"}
               </p>
               <p className="mt-2 text-xs font-medium text-accent">
-                {EMAIL_LEAD_NEXT[row.status]} →
+                {row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]} →
               </p>
             </Link>
+            {row.toSend && (
+              <div className="mt-2 px-1">
+                <EmailSendButtons leadId={row.id} toSend={row.toSend} sentToday={sentToday} dailyLimit={dailyLimit} compact />
+              </div>
+            )}
           </li>
         ))}
         {shown.length === 0 && (
@@ -152,7 +180,13 @@ export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
                   <EmailStatusBadge status={row.status} />
                 </td>
                 <td className="td num text-xs text-muted">{row.sequence}</td>
-                <td className="td text-sm font-medium text-ink">{EMAIL_LEAD_NEXT[row.status]}</td>
+                <td className="td text-sm font-medium text-ink">
+                  {row.toSend ? (
+                    <EmailSendButtons leadId={row.id} toSend={row.toSend} sentToday={sentToday} dailyLimit={dailyLimit} compact />
+                  ) : (
+                    EMAIL_LEAD_NEXT[row.status]
+                  )}
+                </td>
               </tr>
             ))}
             {shown.length === 0 && (

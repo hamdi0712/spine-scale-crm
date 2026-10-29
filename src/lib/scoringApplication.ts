@@ -32,6 +32,7 @@ import { prisma } from "@/lib/prisma";
 import { LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { promoteWithin } from "@/lib/promoteLead";
 import { TALKING_ON_LINKEDIN_LABEL } from "@/lib/emailChannel";
+import { findSuppression } from "@/lib/suppression";
 import { finish, parseBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { OldStanding } from "@/lib/scoringComparison";
 import { LEAD_SCORE_SELECT, candidateStanding, leadStanding } from "@/lib/scoringComparisonStore";
@@ -373,6 +374,8 @@ export async function planApplication(): Promise<PlanResult> {
           enrichedAt: true,
           updatedAt: true,
           linkedinConflictLeadId: true,
+          email: true,
+          websiteUrl: true,
           promotedLead: { select: LEAD_GUARD_SELECT },
         },
       });
@@ -387,6 +390,16 @@ export async function planApplication(): Promise<PlanResult> {
       }
       // Talking on LinkedIn: never promoted, by new scoring or anything else
       // (promoteWithin would refuse it and undo the whole apply).
+      // On the suppression list: the same, for every channel.
+      if (row.outcome === "newly_promoted" && (await findSuppression({ email: c.email, websiteUrl: c.websiteUrl }))) {
+        plan.protectedLeads.push({
+          kind: "candidate",
+          id: c.id,
+          clinicName: c.clinicName,
+          reason: "On the suppression list — new scoring would promote it, but it stays a candidate",
+        });
+        continue;
+      }
       if (row.outcome === "newly_promoted" && c.linkedinConflictLeadId) {
         plan.protectedLeads.push({
           kind: "candidate",

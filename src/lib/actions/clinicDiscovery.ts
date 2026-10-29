@@ -40,6 +40,7 @@ import { zoneFromLocation } from "@/lib/timezones";
 import { mapsEmailFields, pickMapsEmails } from "@/lib/emailFind";
 import { LINKEDIN_ENGAGED_STAGES } from "@/lib/emailChannel";
 import { showDiscoveryChannel } from "@/lib/discoveryChannelCookie";
+import { loadSuppressionIndex } from "@/lib/suppression";
 
 // ─── The write ─────────────────────────────────────────────────────────────
 
@@ -47,6 +48,8 @@ export interface ClinicImportSummary {
   created: number;
   merged: number;
   skipped: number;
+  // On the suppression list (by address or website domain): not imported.
+  suppressed: number;
   // Created or merged, and matched to a LinkedIn lead already talking to us:
   // tagged Talking on LinkedIn, and never promoted.
   tagged: number;
@@ -83,6 +86,7 @@ export async function importClinicDiscoveryCandidates(args: {
     created: 0,
     merged: 0,
     skipped: 0,
+    suppressed: 0,
     tagged: 0,
     mergeNotes: [],
   };
@@ -151,6 +155,7 @@ export async function importClinicDiscoveryCandidates(args: {
   const candidateIndex = new DedupeIndex(candidates);
   const leadIndex = new DedupeIndex(leads);
   const talkingIndex = new DedupeIndex(linkedinLeads);
+  const suppression = await loadSuppressionIndex();
 
   for (const clinic of clinics) {
     // The search's addresses, cleaned and ranked once for either path below:
@@ -159,6 +164,11 @@ export async function importClinicDiscoveryCandidates(args: {
     const emailFields = mapsEmailFields(
       pickMapsEmails(clinic.email ? [clinic.email, ...clinic.emails] : clinic.emails, clinic),
     );
+
+    if (suppression.matches({ email: emailFields.email, websiteUrl: clinic.websiteUrl })) {
+      summary.suppressed++;
+      continue;
+    }
 
     const talkingTo = talkingIndex.match(clinic)?.existing.id ?? null;
 

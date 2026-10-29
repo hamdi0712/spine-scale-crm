@@ -483,9 +483,102 @@ model Lead {
   // every later apply skips and every revert leaves alone.
   scoringKeptAt         DateTime?
 
+  // ─── Cold email, sent by hand from Gmail ─────────────────────────────────
+  //
+  // The email channel's workflow (src/lib/emailWorkflow.ts). Nothing here
+  // sends anything: the email is drafted and approved here, opened in Gmail or
+  // copied, and "Mark sent" records that it went (EmailSend below).
+  //
+  //   emailOpener         the one-line opener, from the scorecard evidence;
+  //                       emailOpenerNote is what it was built on, for review
+  //   emailOpenerMechanism observation | curiosity_process | curiosity_pain_signal
+  //   emailVersion        owner | front_desk — which template the email uses
+  //   emailSubject/Body   the email as approved, frozen: a template edited in
+  //                       Settings later never changes it
+  //   emailApprovedAt     null until approved; an edit after approval clears it
+  //   contactConfirmedAt  set when a contact that disagreed with the
+  //                       scorecard's decision-maker was picked by hand
+  //   emailRepliedAt/emailReplyText/emailReplyType  interested | not_now |
+  //                       not_interested; a reply stops the follow-ups
+  //   emailUnsubscribedAt the clinic asked not to be emailed
+  //   suppressedAt/suppressedReason  on the suppression list (Suppression
+  //                       below): not_interested | unsubscribed. Blocks every
+  //                       channel.
+  emailOpener          String?
+  emailOpenerNote      String?
+  emailOpenerMechanism String?
+  emailVersion         String?
+  emailSubject         String?
+  emailBody            String?
+  emailApprovedAt      DateTime?
+  contactConfirmedAt   DateTime?
+  emailRepliedAt       DateTime?
+  emailReplyText       String?
+  emailReplyType       String?
+  emailUnsubscribedAt  DateTime?
+  suppressedAt         DateTime?
+  suppressedReason     String?
+
+  emailSends EmailSend[]
+
   copilotActions CopilotAction[]
 
   @@index([scoringRejectedAt])
+}
+
+// One email marked sent from Gmail, by hand. Step 0 is Email 1; 1, 2, … are
+// the follow-ups, in template order. The subject and body are what was sent,
+// as it was copied, so a later template edit never rewrites the record. The
+// daily limit counts these by sentAt.
+model EmailSend {
+  id      String   @id @default(cuid())
+  leadId  String
+  lead    Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  step    Int
+  toEmail String
+  subject String
+  body    String
+  sentAt  DateTime @default(now())
+
+  @@unique([leadId, step])
+  @@index([sentAt])
+}
+
+// The suppression list: clinics that said no (not_interested) or asked to stop
+// (unsubscribed). Blocks every channel — email sends, LinkedIn drafting and
+// sending, and Discovery imports and promotion — matched on the email address,
+// the website domain, or the lead. Never deleted by the app; it is the record
+// of a promise.
+model Suppression {
+  id         String   @id @default(cuid())
+  email      String?
+  domain     String?
+  clinicName String
+  leadId     String?
+  reason     String
+  createdAt  DateTime @default(now())
+
+  @@index([email])
+  @@index([domain])
+}
+
+// The one row of email settings: the templates, the follow-up delay and the
+// daily limit. A template still holding the starter copy it shipped with is
+// marked so the app can say so (see EMAIL_TEMPLATE_KEYS).
+model EmailSettings {
+  id String @id
+
+  subjectTemplate    String
+  ownerBodyTemplate  String
+  frontDeskTemplate  String
+  optOutLine         String
+  // JSON array of follow-up bodies, in order. The last one is the last email.
+  followUpTemplates  String
+  senderName         String  @default("")
+  followUpDelayDays  Int     @default(3)
+  dailyLimit         Int     @default(10)
+
+  updatedAt DateTime @updatedAt
 }
 
 // One drafted message in a lead's outreach sequence.

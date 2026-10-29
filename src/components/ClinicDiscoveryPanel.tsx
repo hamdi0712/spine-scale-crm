@@ -552,6 +552,7 @@ function ImportSummaryCard({ summary }: { summary: ClinicImportSummary }) {
       <p className="num mt-0.5 text-xs leading-relaxed text-muted">
         {summary.merged} merged into an email candidate already in Discovery ·{" "}
         {summary.skipped} skipped as already in the email pipeline.
+        {summary.suppressed > 0 && ` ${summary.suppressed} left out — on the suppression list.`}
         {summary.tagged > 0 &&
           ` ${summary.tagged} tagged ${TALKING_ON_LINKEDIN_LABEL} — already talking to us there, so they won’t be promoted to email.`}
       </p>

@@ -1,0 +1,376 @@
+// The cold email workflow, end to end, on seeded leads.
+//
+//   DATABASE_URL="file:$PWD/.verify.db" npx prisma migrate deploy
+//   DATABASE_URL="file:$PWD/.verify.db" npx tsx tools/verify-email-workflow.ts
+//
+// The model is scripted (tools/deepseek-json-stub.cjs), so nothing is spent.
+// Seeds an owner email, a front-desk email, a contact mismatch, a disqualified
+// lead, a lead whose evidence is too thin for an observation, and a bad
+// address; then drives them through drafting (the made-up-stats check, the
+// gap-as-a-question rule, the curiosity fallback), the check-results file,
+// approval, the contact pick, sending by hand, follow-ups coming due, a
+// bounce, an unsubscribe and a not-interested reply — and checks the
+// suppression list holds on every channel.
+
+import Module from "node:module";
+import path from "node:path";
+
+const CACHE_STUB = path.join(__dirname, "next-cache-stub.cjs");
+const DEEPSEEK_STUB = path.join(__dirname, "deepseek-json-stub.cjs");
+type Resolver = (request: string, ...args: unknown[]) => string;
+const resolveFilename = (Module as unknown as { _resolveFilename: Resolver })._resolveFilename;
+(Module as unknown as { _resolveFilename: Resolver })._resolveFilename = function (request: string, ...args: unknown[]) {
+  if (request === "next/cache") return CACHE_STUB;
+  if (request === "@/lib/deepseek") return DEEPSEEK_STUB;
+  return resolveFilename.call(this, request, ...args);
+};
+
+let failures = 0;
+function check(label: string, passed: boolean, detail = ""): void {
+  if (!passed) failures++;
+  console.log(`  ${passed ? "ok  " : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}`);
+}
+
+const DAY = 86_400_000;
+const note = { evidence: "the site", uncertainty: "none", stage: "cold" };
+
+async function main(): Promise<void> {
+  if (!/verify/.test(process.env.DATABASE_URL ?? "")) {
+    throw new Error("Refusing to run: DATABASE_URL must point at a scratch database with 'verify' in its name.");
+  }
+  const { prisma } = await import("../src/lib/prisma");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const stub = require(DEEPSEEK_STUB) as { setReplies: (m: Record<string, unknown>) => void };
+  const { loadActiveIcp } = await import("../src/lib/icpDefinitionStore");
+  const { buildBreakdownV2, finish } = await import("../src/lib/icpScoring");
+  const wf = await import("../src/lib/emailWorkflow");
+  const act = await import("../src/lib/actions/emailWorkflow");
+  const { emailLeadState, loadEmailView } = await import("../src/lib/emailWorkflowRead");
+  const { loadEmailSettings } = await import("../src/lib/emailSettingsStore");
+  const { generateOutreachStep, markMessageSent } = await import("../src/lib/actions/outreachSequence");
+  const { importClinicDiscoveryCandidates } = await import("../src/lib/actions/clinicDiscovery");
+  const { processDiscoveryCandidate } = await import("../src/lib/actions/discovery");
+  const { promoteToLead, SuppressedError } = await import("../src/lib/promoteLead");
+
+  // A clean slate for what this script writes.
+  await prisma.emailSend.deleteMany();
+  await prisma.suppression.deleteMany();
+  await prisma.emailSettings.deleteMany();
+  await prisma.task.deleteMany({ where: { title: { startsWith: "Reply to" } } });
+  await prisma.lead.deleteMany({ where: { clinicName: { endsWith: "(email verify)" } } });
+  await prisma.discoveryCandidate.deleteMany({ where: { clinicName: { endsWith: "(email verify)" } } });
+
+  // ─── Scorecards ──────────────────────────────────────────────────────────
+  const icp = (await loadActiveIcp())!;
+  const card = (clinic: string, decisionMaker: string | null) => {
+    const base = buildBreakdownV2({
+      icp,
+      evidence: { clinicName: clinic, websiteNotes: "Spinal decompression.", websiteUrl: null, metaAdsSignal: null, reviewCount: 40 } as never,
+      reply: null,
+      precheck: null,
+      threshold: 60,
+      evidenceLabels: [],
+      notes: [],
+      now: new Date(),
+    });
+    const cite = [{ quote: "We offer spinal decompression on the DRX9000.", source: "Clinic website" }];
+    return JSON.stringify(
+      finish(
+        {
+          ...base,
+          fit: base.fit.map((e) => ({
+            ...e,
+            points: e.max,
+            citations: cite,
+            source: "assist" as const,
+            shortfall: null,
+            ...(e.key === "title"
+              ? { reason: decisionMaker ? `${decisionMaker}, Owner on the site — named on the About page.` : "Nobody named.", points: decisionMaker ? e.max : 0 }
+              : {}),
+          })),
+          signals: base.signals.map((e, i) => ({ ...e, points: e.max, shortfall: i === 0 ? "online booking not found on the pages read" : null })),
+        },
+        60,
+      ),
+    );
+  };
+
+  const name = (n: string) => `${n} (email verify)`;
+  const notes = "Welcome to the clinic. We offer spinal decompression on the DRX9000 and laser therapy. Call (512) 555-0100 to book.";
+  const seed = (n: string, data: Record<string, unknown>) =>
+    prisma.lead.create({ data: { clinicName: name(n), stage: "NEW", channel: "email", websiteNotes: notes, reviewCount: 40, ...data } });
+
+  const owner = await seed("Owner Spine", {
+    contactName: "Dr. Jane Smith",
+    email: "drsmith@ownerspine.test",
+    emailType: "owner",
+    websiteUrl: "https://ownerspine.test",
+    icpBreakdown: card(name("Owner Spine"), "Dr. Jane Smith"),
+  });
+  const desk = await seed("Front Desk Clinic", {
+    contactName: "Dr. Amy Lee",
+    email: "info@frontdesk.test",
+    emailType: "generic",
+    websiteUrl: "https://frontdesk.test",
+    icpBreakdown: card(name("Front Desk Clinic"), "Dr. Amy Lee"),
+  });
+  const mismatch = await seed("Mismatch Clinic", {
+    contactName: "Mark Jones",
+    email: "mark@mismatch.test",
+    emailType: "owner",
+    websiteUrl: "https://mismatch.test",
+    icpBreakdown: card(name("Mismatch Clinic"), "Dr. Jane Doe"),
+  });
+  const dq = await seed("Disqualified Clinic", {
+    contactName: "Dr. Sam Park",
+    email: "sam@dq.test",
+    emailType: "owner",
+    icpDqSurgicalPractice: true,
+    icpDqTriggered: "surgical",
+    icpScoredAt: new Date(),
+  });
+  const thin = await seed("Thin Clinic", { contactName: null, email: "hello@thin.test", emailType: "generic", icpBreakdown: null });
+  const bad = await seed("Bad Address Clinic", { contactName: "Dr. Kim Ray", email: "info@bad.test", emailType: "generic" });
+
+  // Your name, for {sender}: until it is set, an email cannot be approved.
+  const reload = (id: string) => prisma.lead.findUniqueOrThrow({ where: { id }, include: { emailSends: { orderBy: { step: "asc" } } } });
+  const settings = await loadEmailSettings();
+  const state = async (id: string, now = new Date()) => emailLeadState(await reload(id), await loadEmailSettings(), now);
+
+  console.log("\nStarter copy");
+  check("every template starts as starter copy, so the banner shows", wf.startersRemaining(settings).length === 6, wf.startersRemaining(settings).join(", "));
+
+  console.log("\nDrafting the opener");
+  stub.setReplies({
+    // First answer invents a stat; the second is clean.
+    [name("Owner Spine")]: [
+      { opener: "Most clinics your size lose 30% of decompression leads.", basis: "cited", ...note },
+      { opener: "I noticed Owner Spine (email verify) runs spinal decompression on the DRX9000 alongside laser therapy.", basis: "cited", ...note },
+    ],
+    // First answer states a gap as a fact; the second asks about it.
+    [name("Front Desk Clinic")]: [
+      { opener: "I didn't see a way to book online on your site.", basis: "gap", ...note },
+      { opener: "I couldn't tell from the site how a new patient books outside office hours, is that by phone?", basis: "gap", ...note },
+    ],
+    [name("Mismatch Clinic")]: { opener: "I noticed the clinic offers spinal decompression alongside laser therapy.", basis: "cited", ...note },
+    [name("Disqualified Clinic")]: { opener: "I noticed the clinic offers spinal decompression alongside laser therapy.", basis: "cited", ...note },
+    // Nothing to observe: the curiosity fallback.
+    [name("Thin Clinic")]: [
+      { opener: null, basis: null, ...note },
+      { detail: "both spinal decompression and laser therapy under one roof", painSignal: null, ...note },
+    ],
+  });
+  const o1 = await act.generateEmailOpener(owner.id);
+  let ownerLead = await reload(owner.id);
+  check("a made-up stat is rejected and asked for again", o1.ok && !/30%|most clinics/i.test(ownerLead.emailOpener ?? ""), ownerLead.emailOpener ?? JSON.stringify(o1));
+  check("and the redraft naming the DRX9000 from their site is kept", (ownerLead.emailOpener ?? "").includes("DRX9000"));
+  check("owner email → owner-direct version, greeted by salutation()", ownerLead.emailVersion === "owner" && (ownerLead.emailBody ?? "").startsWith("Hi Dr. Smith,"), ownerLead.emailBody?.split("\n")[0]);
+  check("the email is subject, greeting, opener, body and opt-out",
+    ownerLead.emailSubject === `Quick question about ${name("Owner Spine")}` &&
+      (ownerLead.emailBody ?? "").includes(ownerLead.emailOpener ?? "@@") &&
+      (ownerLead.emailBody ?? "").trim().endsWith(wf.STARTER_OPT_OUT));
+  const o2 = await act.generateEmailOpener(desk.id);
+  const deskLead = await reload(desk.id);
+  check("a gap stated as fact is rejected; the question is kept", o2.ok && (deskLead.emailOpener ?? "").endsWith("?"), deskLead.emailOpener ?? JSON.stringify(o2));
+  check("front-desk email → front-desk version, greeting the team and naming the contact",
+    deskLead.emailVersion === "front_desk" &&
+      (deskLead.emailBody ?? "").startsWith(`Hi ${name("Front Desk Clinic")} team,`) &&
+      (deskLead.emailBody ?? "").includes("pass this to Dr. Lee") &&
+      (deskLead.emailBody ?? "").includes("{sender}"),
+    deskLead.emailBody?.split("\n").slice(0, 3).join(" / "));
+  check("the gate itself: a gap as a statement fails, as a question passes",
+    (await import("../src/lib/outreachSequence")).gapAsStatementReason("Your site has no online booking.", "gap") !== null &&
+      (await import("../src/lib/outreachSequence")).gapAsStatementReason("I couldn't find online booking, is that by phone?", "gap") === null);
+  const o3 = await act.generateEmailOpener(thin.id);
+  const thinLead = await reload(thin.id);
+  check("thin evidence falls back to the curiosity question", o3.ok && thinLead.emailOpenerMechanism === "curiosity_process" &&
+    (thinLead.emailOpener ?? "").includes("both spinal decompression and laser therapy under one roof"), thinLead.emailOpener ?? JSON.stringify(o3));
+  await act.generateEmailOpener(mismatch.id);
+  await act.generateEmailOpener(dq.id);
+
+  console.log("\nThe made-up-stats check and product names");
+  const { inventedStatsReason } = await import("../src/lib/outreachSequence");
+  const site = {
+    clinicName: "Owner Spine",
+    websiteNotes: "We treat disc pain on the DRX9000 and the X3-Laser. Serving Austin for 30 years. Call (512) 555-0100.",
+    reviewCount: 40,
+  };
+  const allowed = (line: string) => inventedStatsReason(line, site) === null;
+  check("a product name on the clinic's own site is allowed (DRX9000)", allowed("I noticed you offer decompression on the DRX9000."));
+  check("so is one with a hyphen (X3-Laser)", allowed("I saw the X3-Laser on your site."));
+  check("the same product name is blocked when the site doesn't mention it", !allowed("I noticed you run the DRX7000."));
+  check("a bare number is still blocked, even one that is on the site", !allowed("You've served Austin for 30 years."));
+  check("a percentage is still blocked", !allowed("Clinics lose 30% of DRX9000 leads."));
+  check("a dollar amount is still blocked", !allowed("The DRX9000 is a $5k a month opportunity."));
+  check("a count is still blocked", !allowed("The DRX9000 could bring in 12 more patients a month."));
+  check("a comparison is still blocked", !allowed("You run the DRX9000, unlike most clinics."));
+  check("the review count is still allowed", allowed("I saw your 40 Google reviews."));
+
+  console.log("\nChecking addresses by file");
+  check("unchecked addresses show Check email first", (await state(owner.id)).status === "check_email");
+  const exportRows = (await prisma.lead.findMany({ where: { channel: "email", emailStatus: null, email: { not: null }, clinicName: { endsWith: "(email verify)" } } }))
+    .map((l) => ({ id: l.id, clinicName: l.clinicName, email: l.email! }));
+  const csv = wf.checkExportCsv(exportRows);
+  check("the export lists every unchecked address with a blank result column", csv.startsWith("lead_id,clinic,email,result") && exportRows.length === 6);
+  // The checker's file back, in its own words.
+  const results = [
+    "Email,Result",
+    "drsmith@ownerspine.test,deliverable",
+    "info@frontdesk.test,valid",
+    "mark@mismatch.test,ok",
+    "sam@dq.test,valid",
+    "hello@thin.test,catch-all",
+    "info@bad.test,undeliverable",
+    "stranger@nowhere.test,valid",
+  ].join("\n");
+  const imported = await act.importCheckResults(results);
+  check("results imported, one unmatched address reported",
+    imported.ok && imported.summary.updated === 6 && imported.summary.invalid === 1 && imported.summary.risky === 1 && imported.summary.unmatched.length === 1,
+    JSON.stringify(imported));
+  const badLead = await reload(bad.id);
+  const badAlts = (await import("../src/lib/emailFind")).parseAlternates(badLead.emailAlternates);
+  check("an invalid address moves to the alternates, marked invalid", badLead.email === null && badAlts.some((a) => a.address === "info@bad.test" && a.status === "invalid"));
+  check("and the lead goes back to No email", (await state(bad.id)).status === "no_email");
+  check("risky is not valid: still Check email", (await state(thin.id)).status === "check_email");
+
+  console.log("\nApproving, the contact check, and the Ready rule");
+  check("checked but not approved: Needs opener", (await state(owner.id)).status === "needs_opener");
+  const unsigned = await act.approveEmail(owner.id);
+  check("with no sender name set, the email still reads {sender} and cannot be approved",
+    !unsigned.ok && /\{sender\}/.test(unsigned.error), unsigned.ok ? "approved?" : unsigned.error);
+  await prisma.emailSettings.create({ data: { id: wf.EMAIL_SETTINGS_ID, ...wf.emailSettingsRow({ ...settings, senderName: "Alex" }) } });
+  for (const id of [owner.id, desk.id, mismatch.id, dq.id]) await act.generateEmailOpener(id);
+  const savedEdit = await act.saveEmailDraft(owner.id, { subject: "Hi {clinic}", body: "A body with the placeholder left in." });
+  const approvedEdit = await act.approveEmail(owner.id);
+  check("an edit saves, and an email with an unfilled placeholder cannot be approved",
+    savedEdit.ok && !approvedEdit.ok && /\{clinic\}/.test(approvedEdit.ok ? "" : approvedEdit.error), approvedEdit.ok ? "approved?" : approvedEdit.error);
+  await act.generateEmailOpener(owner.id); // fresh draft after the test edit
+  ownerLead = await reload(owner.id);
+  check("approve → Ready (A tier, valid, approved, contact matches)", (await act.approveEmail(owner.id)).ok && (await state(owner.id)).status === "ready", (await state(owner.id)).status);
+  await act.approveEmail(desk.id);
+  check("front desk Ready too", (await state(desk.id)).status === "ready");
+  await act.approveEmail(mismatch.id);
+  check("contact mismatch: flagged, Ready blocked", (await state(mismatch.id)).status === "check_contact");
+  check("and Mark sent refuses it", !(await act.markEmailSent(mismatch.id, { step: 0, subject: "s", body: "b" })).ok);
+  await act.resolveContact(mismatch.id, "scorecard");
+  const mm = await reload(mismatch.id);
+  check("picking the scorecard's person sets the contact and rebuilds the greeting",
+    mm.contactName === "Dr. Jane Doe" && (mm.emailBody ?? "").startsWith("Hi Dr. Doe,") && mm.emailApprovedAt === null, mm.emailBody?.split("\n")[0]);
+  await act.approveEmail(mismatch.id);
+  check("then Ready once approved again", (await state(mismatch.id)).status === "ready");
+  await act.approveEmail(dq.id);
+  check("disqualified: never Ready, however complete", (await state(dq.id)).status === "not_ab");
+  check("and Mark sent refuses it", !(await act.markEmailSent(dq.id, { step: 0, subject: "s", body: "b" })).ok);
+
+  console.log("\nSending by hand");
+  const send0 = (await state(owner.id)).toSend!;
+  const gmail = new URL(wf.gmailComposeUrl(send0.to, send0.subject, send0.body));
+  check("Open in Gmail: compose with to, subject and body filled in",
+    gmail.hostname === "mail.google.com" && gmail.searchParams.get("view") === "cm" &&
+      gmail.searchParams.get("to") === "drsmith@ownerspine.test" && gmail.searchParams.get("su") === send0.subject && gmail.searchParams.get("body") === send0.body);
+  check("Copy email: subject then body", wf.copyText(send0.subject, send0.body).startsWith(`Subject: ${send0.subject}\n\n`));
+  await prisma.emailSettings.upsert({
+    where: { id: wf.EMAIL_SETTINGS_ID },
+    create: { id: wf.EMAIL_SETTINGS_ID, ...wf.emailSettingsRow({ ...settings, senderName: "Alex", dailyLimit: 2 }) },
+    update: { dailyLimit: 2 },
+  });
+  const sent0 = await act.markEmailSent(owner.id, { step: 0, subject: send0.subject, body: send0.body });
+  check("Mark sent records Email 1 and its date, and moves it to In sequence",
+    sent0.ok && sent0.step === 0 && (await prisma.emailSend.count({ where: { leadId: owner.id, step: 0 } })) === 1 && (await state(owner.id)).status === "in_sequence");
+  const deskSend = (await state(desk.id)).toSend!;
+  await act.markEmailSent(desk.id, { step: 0, subject: deskSend.subject, body: deskSend.body });
+  const mmSend = (await state(mismatch.id)).toSend!;
+  const third = await act.markEmailSent(mismatch.id, { step: 0, subject: mmSend.subject, body: mmSend.body });
+  check("the daily count: 3 sent today against a limit of 2 (allowed, reported)", third.ok && third.sentToday === 3 && third.dailyLimit === 2);
+  const view = await loadEmailView();
+  check("the Email view reads 3 of 2 sent today", view.sentToday === 3 && view.settings.dailyLimit === 2);
+
+  console.log("\nFollow-ups");
+  const now = new Date();
+  check("not due before three days", (await state(owner.id, new Date(now.getTime() + 2 * DAY))).toSend === null);
+  const due = await state(owner.id, new Date(now.getTime() + 3 * DAY));
+  check("due on day three: Follow-up due, drafted from the template as a reply",
+    due.followUpDueToday && due.toSend?.step === 1 && due.toSend.subject === `Re: ${send0.subject}` && due.toSend.body.startsWith("Hi Dr. Smith,"), due.toSend?.subject);
+  // Move Email 1 back three days, and send follow-up 1.
+  await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 0 }, data: { sentAt: new Date(now.getTime() - 3 * DAY) } });
+  const viewDue = await loadEmailView();
+  check("the Follow-up due today chip counts it", viewDue.rows.filter((r) => r.followUpDueToday).length === 1);
+  const f1 = (await state(owner.id)).toSend!;
+  check("follow-up 1 marked sent", (await act.markEmailSent(owner.id, { step: 1, subject: f1.subject, body: f1.body })).ok);
+  await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 1 }, data: { sentAt: new Date(now.getTime() - 3 * DAY) } });
+  const f2 = (await state(owner.id)).toSend!;
+  check("follow-up 2 comes due after it", f2?.step === 2);
+  await act.markEmailSent(owner.id, { step: 2, subject: f2.subject, body: f2.body });
+  await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 2 }, data: { sentAt: new Date(now.getTime() - 30 * DAY) } });
+  const after = await state(owner.id);
+  check("and it stops after the last template", after.toSend === null && !after.followUpDueToday && after.sequence.includes("last email"), after.sequence);
+
+  console.log("\nResults");
+  const bounced = await act.markEmailBounced(mismatch.id);
+  const mmAfter = await reload(mismatch.id);
+  check("Bounced: the address moves to alternates as invalid and the lead goes back to No email",
+    bounced.ok && mmAfter.email === null && (await state(mismatch.id)).status === "no_email" &&
+      (await import("../src/lib/emailFind")).parseAlternates(mmAfter.emailAlternates).some((a) => a.address === "mark@mismatch.test" && a.status === "invalid"));
+  check("and the clinic is not suppressed", mmAfter.suppressedAt === null && (await prisma.suppression.count()) === 0);
+
+  const replied = await act.markEmailReplied(desk.id, { text: "Thanks, but we're all set.", type: "not_interested" });
+  const deskAfter = await reload(desk.id);
+  check("Not interested: follow-ups stop", replied.ok && (await state(desk.id, new Date(now.getTime() + 10 * DAY))).toSend === null);
+  check("a task is created to answer it", (await prisma.task.count({ where: { leadId: desk.id, title: { startsWith: "Reply to" } } })) === 1);
+  check("and the clinic goes on the suppression list", deskAfter.suppressedAt !== null && (await state(desk.id)).status === "stopped" &&
+    (await prisma.suppression.count({ where: { email: "info@frontdesk.test", domain: "frontdesk.test", reason: "not_interested" } })) === 1);
+
+  console.log("\nSuppression blocks every channel");
+  const li = await generateOutreachStep(desk.id, "CONNECTION");
+  check("LinkedIn drafting is refused", !li.ok && /suppression list/.test(li.error), li.ok ? "ok?" : li.error);
+  const msg = await prisma.outreachMessage.create({ data: { leadId: desk.id, step: "CONNECTION", content: "Hello there, a connection note." } });
+  const marked = await markMessageSent(desk.id, msg.id);
+  check("LinkedIn Mark sent is refused", typeof marked === "string" && /suppression list/.test(marked));
+  const imp = await importClinicDiscoveryCandidates({
+    clinics: [{ clinicName: name("Front Desk Clinic Two"), location: "Austin, TX", websiteUrl: "https://www.frontdesk.test/", emails: [], email: null, sourceQuery: "x" }],
+  });
+  check("a Discovery search result on the same domain is not imported", imp.suppressed === 1 && imp.created === 0, JSON.stringify(imp));
+  const cand = await prisma.discoveryCandidate.create({ data: { clinicName: name("Desk Candidate"), email: "info@frontdesk.test", channel: "email" } });
+  const processed = await processDiscoveryCandidate(cand.id);
+  check("a candidate with that address is rejected by the queue, nothing spent", processed.status === "REJECTED" && /suppression list/.test(processed.headline));
+  let refused = false;
+  try {
+    await promoteToLead(cand.id, null, new Date());
+  } catch (e) {
+    refused = e instanceof SuppressedError;
+  }
+  check("and promotion refuses it", refused);
+  const unsub = await act.markEmailUnsubscribed(thin.id);
+  check("Unsubscribed suppresses the clinic too", unsub.ok && (await state(thin.id)).status === "stopped" &&
+    (await prisma.suppression.count({ where: { reason: "unsubscribed" } })) === 1);
+
+  console.log("\nThe chips");
+  const finalView = await loadEmailView();
+  const by = (n: string) => finalView.rows.find((r) => r.clinicName === name(n))?.status;
+  check("each lead lands in its status",
+    by("Owner Spine") === "in_sequence" && by("Front Desk Clinic") === "stopped" && by("Mismatch Clinic") === "no_email" &&
+      by("Disqualified Clinic") === "not_ab" && by("Thin Clinic") === "stopped" && by("Bad Address Clinic") === "no_email",
+    JSON.stringify(finalView.rows.map((r) => [r.clinicName, r.status])));
+
+  console.log("\nEditing every template clears the banner");
+  const edited = {
+    ...settings,
+    subjectTemplate: "A thought for {clinic}",
+    ownerBodyTemplate: "{opener}\n\nMine.\n\n{sender}",
+    frontDeskTemplate: "{opener}\n\nMine, for {contact}.\n\n{sender}",
+    optOutLine: "Reply stop and I won't write again.",
+    followUpTemplates: ["My follow-up.", "My last note."],
+  };
+  check("a template without {opener} is refused", !(await act.saveEmailSettings({ ...edited, ownerBodyTemplate: "No opener here." })).ok);
+  check("saved", (await act.saveEmailSettings(edited)).ok);
+  check("no starter copy left, so no banner", wf.startersRemaining(await loadEmailSettings()).length === 0 && (await loadEmailView()).starters.length === 0);
+
+  await prisma.$disconnect();
+  console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);
+  process.exit(failures === 0 ? 0 : 1);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

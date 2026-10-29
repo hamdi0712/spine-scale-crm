@@ -16,13 +16,10 @@ import OpenerScoreboard from "@/components/OpenerScoreboard";
 import { cookies } from "next/headers";
 import ChannelToggle from "@/components/ChannelToggle";
 import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
-import {
-  PIPELINE_CHANNEL_COOKIE,
-  emailDetailLine,
-  emailLeadStatus,
-  emailSequenceLabel,
-  readPipelineChannel,
-} from "@/lib/emailChannel";
+import { PIPELINE_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
+import { loadEmailView } from "@/lib/emailWorkflowRead";
+import EmailCheckFile from "@/components/EmailCheckFile";
+import StarterCopyBanner from "@/components/StarterCopyBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -228,32 +225,12 @@ export default async function PipelinePage({
 }
 
 // The Email view: the clinics on the email channel, built around the one
-// thing to do next for each. Nothing here sends — "Send to Instantly" is
-// drawn, disabled, so the page has its final shape before that part exists.
+// thing to do next. Cold email goes out by hand from Gmail: the rows that are
+// Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
+// it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
 async function EmailPipeline() {
-  const leads = await prisma.lead.findMany({
-    where: { ...PIPELINE_DEFAULT_WHERE, channel: "email" },
-    orderBy: { updatedAt: "desc" },
-  });
-
-  const rows: EmailLeadRow[] = leads.map((l) => {
-    const s = leadScore(l);
-    return {
-      id: l.id,
-      clinicName: l.clinicName,
-      contactName: l.contactName,
-      location: l.location,
-      email: (l.email ?? "").trim() || null,
-      emailDetail: emailDetailLine(l),
-      icpTier: leadTier(l),
-      icpVerdict: leadVerdictBadge(l),
-      icpScore: s ? `${s.total}/${s.max}` : null,
-      status: emailLeadStatus(l),
-      // Nothing is sent yet, so there is no sequence to read.
-      sequence: emailSequenceLabel(null),
-    };
-  });
-  const ready = rows.filter((r) => r.status === "ready").length;
+  const { rows, settings, sentToday, starters, unchecked } = await loadEmailView();
+  const over = sentToday > settings.dailyLimit;
 
   return (
     <div>
@@ -264,25 +241,22 @@ async function EmailPipeline() {
             <ChannelToggle channel="email" />
           </div>
           <p className="helper-text mt-1.5 text-sm text-muted">
-            Clinics worked by email — what each one needs next
+            Clinics worked by email, sent by hand from Gmail — what each one needs next
+          </p>
+          <p className={`num mt-2 text-sm font-medium ${over ? "text-bad" : "text-ink"}`}>
+            {sentToday} of {settings.dailyLimit} sent today
+            {over && <span className="font-normal"> — over your daily limit</span>}
           </p>
         </div>
-        {/* Kept on screen on a phone too: finding clinics is how this view
-            fills, and there are only two. */}
-        <div className="flex items-center gap-2 max-md:[&>*]:flex-1 max-md:[&>*]:justify-center">
-          <Link href="/discovery/import/clinic" className="btn">
+        <div className="flex flex-col items-end gap-2 max-md:items-stretch">
+          <EmailCheckFile unchecked={unchecked} />
+          <Link href="/discovery/import/clinic" className="btn max-md:justify-center">
             Find clinics
           </Link>
-          <button
-            type="button"
-            disabled
-            title="Sending to Instantly is not wired up yet"
-            className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Send {ready} to Instantly
-          </button>
         </div>
       </div>
+
+      {starters.length > 0 && <StarterCopyBanner remaining={starters} className="mt-6" />}
 
       <div className="mt-8">
         {rows.length === 0 ? (
@@ -297,7 +271,7 @@ async function EmailPipeline() {
             </Link>
           </div>
         ) : (
-          <EmailLeadTable rows={rows} />
+          <EmailLeadTable rows={rows} sentToday={sentToday} dailyLimit={settings.dailyLimit} />
         )}
       </div>
     </div>

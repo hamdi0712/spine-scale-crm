@@ -18,6 +18,7 @@
 import { prisma } from "@/lib/prisma";
 import { parseBreakdownV2, rejudgeChiroProgram, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { promoteToLead } from "@/lib/promoteLead";
+import { findSuppression } from "@/lib/suppression";
 
 // The status the hold wrote. No longer one of DISCOVERY_STATUSES; named here
 // so this is the only place that still knows it.
@@ -36,6 +37,8 @@ export async function resolveHeldCandidates(now = new Date()): Promise<HeldClean
     where: { status: RETIRED_HELD_STATUS, linkedinConflictLeadId: null },
   });
   for (const c of held) {
+    // On the suppression list: left as it is, never promoted.
+    if (!c.promotedLeadId && (await findSuppression({ email: c.email, websiteUrl: c.websiteUrl }))) continue;
     if (c.promotedLeadId) {
       await prisma.discoveryCandidate.update({ where: { id: c.id }, data: { status: "PROMOTED" } });
       result.promoted.push(c.clinicName);
