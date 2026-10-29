@@ -127,9 +127,9 @@ export default async function DiscoveryCandidatePage({
               </>
             )}
           </p>
-          {/* A phone keeps the pathway and the enrichment age and drops the
+          {/* Pro keeps the pathway and the enrichment age and drops the
               sentence explaining the status — the badge above names it. */}
-          <p className="md:hidden mt-2 text-xs leading-relaxed text-muted">
+          <p className="pro-only mt-2 text-xs leading-relaxed text-muted">
             {DISCOVERY_SOURCE_KIND_LABELS[pathway]}
             {candidate.enrichedAt && (
               <>
@@ -165,6 +165,7 @@ export default async function DiscoveryCandidatePage({
                   ? `Promote ${candidate.clinicName} to the pipeline anyway? The scorecard it arrives with is the one this run produced — including anything flagged against it — and it stays editable on the lead.`
                   : `Promote ${candidate.clinicName} to the pipeline? It has never been scored, so the lead arrives with an empty ICP scorecard.`
               }
+              proMessage={`Promote ${candidate.clinicName} to the pipeline?`}
               className="btn shrink-0"
             >
               Promote anyway
@@ -177,6 +178,7 @@ export default async function DiscoveryCandidatePage({
             <ConfirmForm
               action={requeue}
               message={`Score ${candidate.clinicName} again? Its current score and reasoning are cleared, and the next “Process queue” run puts it through the whole chain from the top — which costs a full round of actor runs.`}
+              proMessage={`Re-score ${candidate.clinicName}? · A full round of actor runs · Current score is cleared.`}
               className="btn shrink-0"
             >
               Re-run enrichment

@@ -1839,29 +1839,93 @@ tbody tr {
   }
 }
 
-/* ─── Helper text ─────────────────────────────────────────────────────────
+/* ─── Helper text and the display mode ───────────────────────────────────
    Explanation, as opposed to information: page and card subtitles, "how
    this works" notes, field hints, empty-state paragraphs, the copilot's
-   disclaimers, tool receipts. Every piece of it wears .helper-text, and on a
-   phone all of it goes — the screen is for the data and the controls.
+   disclaimers, tool receipts. Every piece of it wears .helper-text.
 
-   Only a phone. The rule is a display: none inside a max-width query and
-   nothing else, so from md up a tagged element is drawn exactly as it was,
-   with whatever display it already had (block, inline, flex).
+   Errors, warnings, status flags, failure reasons, validation messages, costs
+   and KPI deltas are information and are never tagged.
 
-   Errors, warnings, status flags, failure reasons, validation messages and
-   KPI deltas are information and are never tagged. */
-@media (max-width: 767px) {
-  .helper-text {
-    display: none !important;
-  }
-  /* A stack's spacing (space-y-*) is a margin on every child after the
-     first, and a hidden first child still counts as the first. When the
-     helper text opened the stack, the element that now leads it drops the
-     gap it no longer sits under. */
-  .helper-text:first-child + * {
-    margin-top: 0 !important;
-  }
+   Guided (no data-mode on <html>) draws all of it, phone and desktop alike.
+   Pro (data-mode="pro", lib/displayMode.ts) folds each piece down to a small
+   ⓘ where it was; pressing it adds .helper-open and the text is back, with
+   whatever display it had (HelperInfo.tsx). Folding is done by emptying the
+   box rather than display: none, so the ⓘ needs no extra markup: the text
+   goes to font-size 0, children go, and the glyph is a ::before.
+
+   Three companions:
+   - .pro-only: drawn only in Pro — the one-line versions of something whose
+     Guided version is long (an empty state, the queue's summary line).
+   - .guided-only: the long version of something that must still be said in
+     Pro, where a .pro-only line says it instead. Hidden in Pro, never an ⓘ.
+   - [data-guided-scope]: a dialog with a Pro summary line. Inside it nothing
+     folds to its own ⓘ; the summary's InfoToggle opens the whole scope
+     (.show-guided), which is the Guided dialog again. */
+html:not([data-mode="pro"]) .pro-only,
+html:not([data-mode="pro"]) .info-toggle {
+  display: none !important;
+}
+/* A stack's spacing (space-y-*) is a margin on every child after the first,
+   and a hidden first child still counts as the first. */
+html:not([data-mode="pro"]) .pro-only:first-child + * {
+  margin-top: 0 !important;
+}
+
+html[data-mode="pro"] .guided-only:not([data-guided-scope] *),
+html[data-mode="pro"] [data-guided-scope]:not(.show-guided) :is(.helper-text, .guided-only) {
+  display: none !important;
+}
+
+html[data-mode="pro"] .helper-text:not(.helper-open):not([data-guided-scope] *) {
+  display: inline-flex !important;
+  width: auto !important;
+  max-width: none !important;
+  height: 18px !important;
+  margin-top: 2px !important;
+  margin-bottom: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  box-shadow: none !important;
+  font-size: 0 !important;
+  line-height: 0 !important;
+  vertical-align: middle;
+  cursor: pointer;
+  align-items: center;
+}
+html[data-mode="pro"] .helper-text:not(.helper-open):not([data-guided-scope] *) > *,
+html[data-mode="pro"] .helper-text:not(.helper-open):not([data-guided-scope] *)::after {
+  display: none !important;
+}
+html[data-mode="pro"] .helper-text:not(.helper-open):not([data-guided-scope] *)::before,
+.info-toggle {
+  content: "ⓘ";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 500;
+  color: rgb(var(--c-muted));
+  transition: color var(--motion) var(--motion-ease);
+}
+html[data-mode="pro"] .helper-text:not(.helper-open):not([data-guided-scope] *):hover::before,
+.info-toggle:hover,
+.show-guided .info-toggle {
+  color: rgb(var(--c-accent));
+}
+html[data-mode="pro"] .helper-text[data-info]:focus-visible,
+.info-toggle:focus-visible {
+  outline: 2px solid rgb(var(--c-accent) / 0.35);
+  outline-offset: 2px;
+  border-radius: 9999px;
+}
+html[data-mode="pro"] .helper-text.helper-open {
+  cursor: pointer;
 }
 
 /* The dashboard's KPI cards on a phone: four to a 2×2 grid, so each is

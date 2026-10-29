@@ -125,6 +125,7 @@ export default async function ClientsPage() {
                   <ConfirmForm
                     action={deleteClient.bind(null, client.id)}
                     message={clientDeleteMessage(client.clinicName)}
+            proMessage={`Delete ${client.clinicName}, its checklist and reporting?`}
                     className="px-1 text-sm text-muted hover:text-bad"
                   >
                     Delete

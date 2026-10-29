@@ -14,6 +14,7 @@
 // scrolled under the bar — the page is never titled twice at once.
 
 import Link from "next/link";
+import DisplayModeToggle from "@/components/DisplayModeToggle";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -109,6 +110,7 @@ export function MobileTopBar() {
           </Link>
           <div className="flex-1" />
           <JobPill variant="topbar" />
+          <DisplayModeToggle variant="topbar" />
           {/* PageActions portals the ⋯ button in here. */}
           <div id={TOPBAR_ACTIONS_ID} className="flex shrink-0 items-center" />
         </div>
@@ -140,6 +142,7 @@ export function MobileTopBar() {
           {title}
         </div>
         <JobPill variant="topbar" />
+        <DisplayModeToggle variant="topbar" />
         {/* PageActions portals the ⋯ button in here. */}
         <div id={TOPBAR_ACTIONS_ID} className="flex shrink-0 items-center" />
       </div>

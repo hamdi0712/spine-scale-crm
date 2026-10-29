@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import { MobileTabBar, MobileTopBar } from "@/components/MobileNav";
 import useMediaQuery from "@/components/useMediaQuery";
 import { JobsProvider } from "@/components/JobProgress";
+import { HelperInfoController } from "@/components/HelperInfo";
 
 // Three shells for three widths, and the desktop one is the app as it always
 // was:
@@ -27,6 +28,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // between pages (JobProgress.tsx).
   return (
     <JobsProvider>
+    <HelperInfoController />
     <div>
       <Sidebar collapsed={collapsed || tablet} onToggle={() => setCollapsed((c) => !c)} />
       <MobileTopBar />

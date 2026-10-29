@@ -69,6 +69,7 @@ import {
 import Icon from "@/components/Icons";
 import { useDiscoverySelection } from "@/components/DiscoverySelection";
 import { useIsPhone } from "@/components/useMediaQuery";
+import { confirmText } from "@/lib/displayMode";
 
 export interface DiscoveryRow {
   id: string;
@@ -278,9 +279,12 @@ export default function DiscoveryList({
     const skipped = chosen.length - targets.length;
     if (
       !confirm(
-        `Re-crawl the website of ${targets.length} candidate${targets.length === 1 ? "" : "s"}? ${fmtEstimate(targets.length * recrawlCostPerClinic)} in Apify usage (Website Content Crawler only).\n\nTheir stored website notes and links are replaced. Nothing is re-scored and no status changes.${
-          skipped > 0 ? `\n\n${skipped} selected without a website URL ${skipped === 1 ? "is" : "are"} skipped.` : ""
-        }`,
+        confirmText(
+          `Re-crawl the website of ${targets.length} candidate${targets.length === 1 ? "" : "s"}? ${fmtEstimate(targets.length * recrawlCostPerClinic)} in Apify usage (Website Content Crawler only).\n\nTheir stored website notes and links are replaced. Nothing is re-scored and no status changes.${
+            skipped > 0 ? `\n\n${skipped} selected without a website URL ${skipped === 1 ? "is" : "are"} skipped.` : ""
+          }`,
+          `Re-crawl ${targets.length} website${targets.length === 1 ? "" : "s"}? · ${fmtEstimate(targets.length * recrawlCostPerClinic)} · Replaces stored website notes.${skipped > 0 ? ` ${skipped} skipped (no URL).` : ""}`,
+        ),
       )
     ) {
       return;
@@ -301,11 +305,14 @@ export default function DiscoveryList({
     const promoted = chosen.filter((r) => r.promotedLeadId !== null).length;
     if (
       !confirm(
-        `Delete ${ids.length} candidate${ids.length === 1 ? "" : "s"}? This cannot be undone.${
-          promoted > 0
-            ? `\n\n${promoted} of them ${promoted === 1 ? "has" : "have"} already been promoted — ${promoted === 1 ? "that lead stays" : "those leads stay"} in the pipeline, only the discovery record goes.`
-            : ""
-        }`,
+        confirmText(
+          `Delete ${ids.length} candidate${ids.length === 1 ? "" : "s"}? This cannot be undone.${
+            promoted > 0
+              ? `\n\n${promoted} of them ${promoted === 1 ? "has" : "have"} already been promoted — ${promoted === 1 ? "that lead stays" : "those leads stay"} in the pipeline, only the discovery record goes.`
+              : ""
+          }`,
+          `Delete ${ids.length} candidate${ids.length === 1 ? "" : "s"}? Can't be undone.${promoted > 0 ? ` ${promoted} promoted lead${promoted === 1 ? "" : "s"} stay.` : ""}`,
+        ),
       )
     ) {
       return;

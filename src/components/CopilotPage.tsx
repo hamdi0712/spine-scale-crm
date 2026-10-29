@@ -39,6 +39,7 @@ import CopilotActionCard from "@/components/CopilotActionCard";
 import ImanAvatar from "@/components/ImanAvatar";
 import Sheet from "@/components/Sheet";
 import { useIsPhone } from "@/components/useMediaQuery";
+import { confirmText } from "@/lib/displayMode";
 
 // The quick starts behind the sparkle. Each is a real question the lookups can
 // answer, so the first thing anybody tries works; the subtitle says what it
@@ -180,7 +181,10 @@ export default function CopilotPage({
   async function remove(summary: ConversationSummary) {
     if (
       !window.confirm(
-        `Delete “${summary.title}”? The whole conversation goes with it, and this cannot be undone.`,
+        confirmText(
+          `Delete “${summary.title}”? The whole conversation goes with it, and this cannot be undone.`,
+          `Delete “${summary.title}”? Can't be undone.`,
+        ),
       )
     ) {
       return;
@@ -255,7 +259,7 @@ export default function CopilotPage({
           No saved conversations yet. The first question you ask saves
           one.
         </p>
-        <p className="md:hidden px-3 py-4 text-center text-xs text-muted">No saved conversations yet.</p>
+        <p className="pro-only px-3 py-4 text-center text-xs text-muted">No saved conversations yet.</p>
       </>
     ) : (
       conversations.map((c) => (

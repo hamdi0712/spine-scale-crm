@@ -48,6 +48,7 @@ import {
   fmtEstimate,
   mapsContactsCost,
 } from "@/lib/pipelineSettings";
+import { confirmText } from "@/lib/displayMode";
 
 export default function ClinicDiscoveryPanel({
   enabled,
@@ -169,10 +170,13 @@ export default function ClinicDiscoveryPanel({
     const places = terms.length * perTerm;
     if (
       !confirm(
-        `Search ${terms.length} term${terms.length === 1 ? "" : "s"} × up to ${perTerm} result${perTerm === 1 ? "" : "s"}?\n\n` +
-          `Contact scraping adds ${fmtEstimate(mapsContactsCost(terms.length, perTerm))} at most ` +
-          `(${places} place${places === 1 ? "" : "s"}), on top of the search itself. ` +
-          `Emails it finds are not verified here.`,
+        confirmText(
+          `Search ${terms.length} term${terms.length === 1 ? "" : "s"} × up to ${perTerm} result${perTerm === 1 ? "" : "s"}?\n\n` +
+            `Contact scraping adds ${fmtEstimate(mapsContactsCost(terms.length, perTerm))} at most ` +
+            `(${places} place${places === 1 ? "" : "s"}), on top of the search itself. ` +
+            `Emails it finds are not verified here.`,
+          `Search ${terms.length} × ${perTerm}? · +${fmtEstimate(mapsContactsCost(terms.length, perTerm))} max for contacts, plus the search.`,
+        ),
       )
     )
       return;

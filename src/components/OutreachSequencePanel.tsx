@@ -227,7 +227,7 @@ export default function OutreachSequencePanel({
           <p className="helper-text mt-4 text-xs leading-relaxed text-muted">
             No step is reachable yet. What each one is waiting for is below.
           </p>
-          <p className="md:hidden mt-4 text-xs leading-relaxed text-muted">No step is reachable yet.</p>
+          <p className="pro-only mt-4 text-xs leading-relaxed text-muted">No step is reachable yet.</p>
         </>
       )}
 

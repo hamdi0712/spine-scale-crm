@@ -28,16 +28,18 @@ export default function CostEstimate({
   // What the estimate is *for*, when that is not "running this now" — the
   // import wizard is quoting a bill that lands later, at the queue.
   note,
+  className = "",
 }: {
   candidates: number;
   settings: PipelineSettings;
   note?: string;
+  className?: string;
 }) {
   const on = PIPELINE_STEP_KEYS.filter((k) => settings.steps[k].enabled);
   const perCandidate = costPerCandidate(settings);
 
   return (
-    <div className="rounded-[10px] border border-line bg-wash/50 px-4 py-3">
+    <div className={`rounded-[10px] border border-line bg-wash/50 px-4 py-3 ${className}`}>
       <p className="num text-sm font-medium">
         Rough cost: {estimateSentence(candidates, settings)}
       </p>

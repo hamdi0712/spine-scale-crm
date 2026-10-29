@@ -108,6 +108,7 @@ export default async function ConceptDetailPage({
           <ConfirmForm
             action={remove}
             message={`Delete "${concept.name}"? Its ${countLabel(concept.creatives.length, "creative")} and their compliance checks and performance history go with it.`}
+            proMessage={`Delete "${concept.name}" and its ${countLabel(concept.creatives.length, "creative")}?`}
             className="btn-danger"
           >
             Delete
@@ -368,7 +369,7 @@ export default async function ConceptDetailPage({
                   No creatives yet. The wizard walks type → hook and headline → ad
                   copy → CTA, and drops the result here as a Draft.
                 </p>
-                <p className="md:hidden p-6 text-sm text-muted">No creatives yet.</p>
+                <p className="pro-only p-6 text-sm text-muted">No creatives yet.</p>
               </>
             ) : (
               <ul>

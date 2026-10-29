@@ -67,6 +67,7 @@ export default async function ConnectorsPage() {
           <ConfirmForm
             action={revokeAllConnectorAccessAction}
             message="Revoke all connector access? Every connected client is signed out at once, and reconnecting means clicking Connect in Claude and typing the app password again."
+            proMessage="Revoke all connector access? Every client is signed out."
             className="btn-danger"
           >
             Revoke all connector access

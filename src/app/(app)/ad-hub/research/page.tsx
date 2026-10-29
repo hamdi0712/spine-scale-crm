@@ -111,7 +111,7 @@ export default async function ResearchPage({
                 Nothing here yet — research fills this up before any of it becomes
                 a persona or a concept.
               </p>
-              <p className="md:hidden px-4 py-6 text-sm text-muted">Nothing here yet.</p>
+              <p className="pro-only px-4 py-6 text-sm text-muted">Nothing here yet.</p>
             </>
           ) : (
             <ul className="flex-1">

@@ -8,6 +8,7 @@ import Icon from "@/components/Icons";
 import ImanAvatar from "@/components/ImanAvatar";
 import { LogoIconChip } from "@/components/Logo";
 import ThemeToggle from "@/components/ThemeToggle";
+import DisplayModeToggle from "@/components/DisplayModeToggle";
 import { JobPill } from "@/components/JobProgress";
 import {
   activeHref,
@@ -170,6 +171,9 @@ export default function Sidebar({
             reason Settings does: it changes how the app is drawn, not where
             you are in it. */}
         <ThemeToggle collapsed={collapsed} />
+        {/* Guided / Pro: how much the app explains itself. Same block, same
+            reason — it changes how the app is drawn. */}
+        <DisplayModeToggle variant={collapsed ? "rail" : "sidebar"} />
       </div>
       <form
         action={logout}

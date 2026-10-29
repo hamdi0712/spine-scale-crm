@@ -129,6 +129,7 @@ export default async function ClientDetailPage({
           <ConfirmForm
             action={remove}
             message={clientDeleteMessage(client.clinicName)}
+            proMessage={`Delete ${client.clinicName}, its checklist and reporting?`}
             className="btn-danger"
           >
             Delete

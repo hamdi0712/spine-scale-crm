@@ -10,6 +10,7 @@
 import { useState } from "react";
 import AiButton from "@/components/AiButton";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
+import { confirmText } from "@/lib/displayMode";
 
 export default function ScoringComparisonRunner({
   estimate,
@@ -30,7 +31,10 @@ export default function ScoringComparisonRunner({
     if (running || starting) return;
     if (
       !confirm(
-        `Compare scoring rescores ${subjects} record${subjects === 1 ? "" : "s"} from stored enrichment — one DeepSeek call each, ${estimate}. No Apify runs, and no status changes. Start?`,
+        confirmText(
+          `Compare scoring rescores ${subjects} record${subjects === 1 ? "" : "s"} from stored enrichment — one DeepSeek call each, ${estimate}. No Apify runs, and no status changes. Start?`,
+          `Rescore ${subjects} record${subjects === 1 ? "" : "s"}? · ${estimate}`,
+        ),
       )
     ) {
       return;

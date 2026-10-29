@@ -43,7 +43,7 @@ export default function CallLog({
             No calls logged yet. Schedule one below — this log sits alongside the
             record&rsquo;s other dates, it doesn&rsquo;t replace them.
           </p>
-          <p className="md:hidden px-5 py-6 text-sm text-muted">No calls logged yet.</p>
+          <p className="pro-only px-5 py-6 text-sm text-muted">No calls logged yet.</p>
         </>
       ) : (
         <>
