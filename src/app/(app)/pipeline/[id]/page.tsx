@@ -49,8 +49,8 @@ import { hasAssistEvidence } from "@/lib/icpAssist";
 import { sequenceState, toMessageViews } from "@/lib/outreachSequenceRead";
 import { salutation, salutationNote } from "@/lib/outreachSequence";
 import { fmtRelative } from "@/lib/activity";
-import { US_TIME_ZONES } from "@/lib/timezones";
-import { fmtDateTime, toDateInput } from "@/lib/format";
+import { US_TIME_ZONES, isUsTimeZone, zoneLabel } from "@/lib/timezones";
+import { fmtDate, fmtDateTime, fmtMoney, toDateInput } from "@/lib/format";
 import {
   IconClockHour4,
   IconSpeakerphone,
@@ -65,6 +65,9 @@ import OutreachSequencePanel from "@/components/OutreachSequencePanel";
 import EmailPanel from "@/components/EmailPanel";
 import { contactFormProps, emailPanelProps } from "@/lib/emailWorkflowRead";
 import ContactFormButtons from "@/components/ContactFormButtons";
+import { OPEN_TASK_STATUSES } from "@/lib/tasks";
+import DetailsCard from "@/components/DetailsCard";
+import DropdownMenu, { MENU_ITEM } from "@/components/DropdownMenu";
 import IcpScorecardV2 from "@/components/IcpScorecardV2";
 import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
@@ -134,6 +137,14 @@ export default async function LeadDetailPage({
   // plan reads from the same row the run will.
   const settings = await loadPipelineSettings();
   const plan = enrichPlan(lead, settings);
+  // The task to do next on this lead: the open one due soonest.
+  const nextTask = await prisma.task.findFirst({
+    where: { leadId: lead.id, status: { in: OPEN_TASK_STATUSES } },
+    orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+    select: { title: true, description: true, dueDate: true },
+  });
+  const overdue = nextTask?.dueDate ? nextTask.dueDate.getTime() < Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) : false;
+
   // Email leads only: the message is the front-desk email.
   const contactForm = lead.channel === "email" ? await contactFormProps(lead) : null;
 
@@ -176,13 +187,13 @@ export default async function LeadDetailPage({
           <UnflagLeadButton leadId={lead.id} />
         </div>
       )}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <Link href="/pipeline" className="text-sm text-accent hover:underline">
+        ← Pipeline
+      </Link>
+      <div className="card relative z-10 mt-3 flex flex-wrap items-start justify-between gap-4 overflow-visible p-6 max-md:p-4">
         <div className="min-w-0">
-          <Link href="/pipeline" className="text-sm text-accent hover:underline">
-            ← Pipeline
-          </Link>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <h1 className="display text-[32px] font-semibold">{lead.clinicName}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="display text-[30px] font-semibold leading-tight">{lead.clinicName}</h1>
             <StageBadge stage={lead.stage} />
             <IcpTierBadge tier={leadTier(lead)} />
             {lead.archived && (
@@ -191,6 +202,11 @@ export default async function LeadDetailPage({
               </span>
             )}
           </div>
+          {(lead.contactName || lead.location || lead.timeZone) && (
+            <p className="mt-1 text-sm text-muted">
+              {[lead.contactName, lead.location, isUsTimeZone(lead.timeZone) ? `${zoneLabel(lead.timeZone)} time` : null].filter(Boolean).join(" · ")}
+            </p>
+          )}
           {/* The last enrichment at a glance, a chip per figure. The run's date
               leads, because it is the one thing that says how much any of the
               rest is worth today. The values in full are in the card below.
@@ -258,37 +274,151 @@ export default async function LeadDetailPage({
               </button>
             </form>
           ) : null}
-          {/* Which Pipeline view the lead sits in. Nothing but the channel
-              changes, so it is undone by the same button. */}
-          <form action={moveChannel}>
-            <button type="submit" className="btn">
-              {lead.channel === "email" ? "Move to LinkedIn" : "Move to email"}
-            </button>
-          </form>
-          {/* Secondary, not destructive, and no confirmation: nothing is lost
-              by pressing it — the lead keeps every field it had and one stage
-              change puts it back. Hidden on a lead already in the status,
-              where it would be a button that does nothing. */}
-          {lead.stage !== "NO_CONTACT" && (
-            <form action={markNoContact}>
-              <button type="submit" className="btn">
-                No Contact
+          {/* The rarer moves, behind ⋯: which Pipeline view the lead sits in
+              (undone by the same item), No Contact (nothing is lost — one
+              stage change puts it back), and Delete, which asks first. */}
+          <DropdownMenu label="More actions" icon>
+            <form action={moveChannel}>
+              <button type="submit" className={MENU_ITEM}>
+                {lead.channel === "email" ? "Move to LinkedIn" : "Move to email"}
+                <span className="text-xs font-normal text-muted">Changes which Pipeline view it is in</span>
               </button>
             </form>
-          )}
-          <ConfirmForm
-            action={remove}
-            message={`Delete lead "${lead.clinicName}" and its activity log?`}
-            className="btn-danger"
-          >
-            Delete
-          </ConfirmForm>
+            {lead.stage !== "NO_CONTACT" && (
+              <form action={markNoContact}>
+                <button type="submit" className={MENU_ITEM}>
+                  No Contact
+                  <span className="text-xs font-normal text-muted">Off today&apos;s lists; the stage select brings it back</span>
+                </button>
+              </form>
+            )}
+            <div className="my-1 border-t border-line/60" />
+            <div className="[&>form]:block">
+              <ConfirmForm
+                action={remove}
+                message={`Delete lead "${lead.clinicName}" and its activity log?`}
+                className={`${MENU_ITEM} text-bad`}
+              >
+                Delete lead
+              </ConfirmForm>
+            </div>
+          </DropdownMenu>
         </PageActions>
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-2 max-md:grid-cols-1">
-        <section>
-          <h2 className="display mb-4 text-xl font-semibold">Details</h2>
+        <section className="space-y-8">
+          {/* A launchpad for outreach done by hand, sitting with the contact
+              details it belongs to. Opening a profile is the whole feature —
+              nothing here sends, connects, or messages anyone. */}
+          {(lead.linkedinUrl ||
+            lead.companyLinkedinUrl ||
+            lead.websiteUrl ||
+            lead.facebookUrl ||
+            contactForm ||
+            // A mark outlives the URL it was made against: a profile link
+            // deleted later shouldn't take the record of the outreach with it.
+            lead.connectionRequestSentAt) && (
+            <div className="card space-y-4 p-6 max-md:p-4">
+              <h2 className="text-base font-semibold">Reach out</h2>
+              <div className="flex flex-wrap items-center gap-2">
+              {lead.linkedinUrl && (
+                <a
+                  href={lead.linkedinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
+                >
+                  View LinkedIn profile ↗
+                </a>
+              )}
+              {lead.companyLinkedinUrl && (
+                <a
+                  href={lead.companyLinkedinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
+                >
+                  View company page ↗
+                </a>
+              )}
+              {lead.websiteUrl && (
+                <a
+                  href={lead.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
+                >
+                  Visit website ↗
+                </a>
+              )}
+              {lead.facebookUrl && (
+                <a
+                  href={lead.facebookUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
+                >
+                  View Facebook page ↗
+                </a>
+              )}
+              {/* The one thing in this row that records rather than opens.
+                  Sending the request is still done by hand on LinkedIn; this
+                  is where you say you did it, so the pipeline can show it.
+
+                  Once marked it stops being a button — the useful state is
+                  the date, and a button that has already been pressed is an
+                  invitation to press it again. Offered only where there is a
+                  LinkedIn profile to have sent it to, but shown wherever the
+                  mark exists. */}
+              {(lead.connectionRequestSentAt ||
+                lead.linkedinUrl ||
+                lead.companyLinkedinUrl) && (
+                <ConnectionRequestToggle
+                  sentLabel={
+                    lead.connectionRequestSentAt
+                      ? `Connection sent ${fmtRelative(lead.connectionRequestSentAt)}`
+                      : null
+                  }
+                  sentTitle={
+                    lead.connectionRequestSentAt
+                      ? `Marked sent ${fmtDateTime(lead.connectionRequestSentAt)}`
+                      : null
+                  }
+                  mark={markConnectionSent}
+                  clear={clearConnectionSent}
+                />
+              )}
+            </div>
+              {/* The clinic's own contact form, for a front-desk message
+                  sent by hand: open it, paste the message, mark it sent. */}
+              {contactForm && <ContactFormButtons {...contactForm} />}
+            </div>
+          )}
+          <DetailsCard
+            summary={
+              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+                <SummaryItem label="Contact">
+                  {lead.contactName ? (
+                    <>
+                      {lead.contactName}
+                      {lead.contactTitle && <span className="block text-xs text-muted">{lead.contactTitle}</span>}
+                    </>
+                  ) : null}
+                </SummaryItem>
+                <SummaryItem label="Email" wide>
+                  {lead.email ? <span className="break-all">{lead.email}</span> : null}
+                </SummaryItem>
+                <SummaryItem label="Phone" num>{lead.phone}</SummaryItem>
+                <SummaryItem label="Location">{lead.location}</SummaryItem>
+                <SummaryItem label="Time zone">{isUsTimeZone(lead.timeZone) ? zoneLabel(lead.timeZone) : null}</SummaryItem>
+                <SummaryItem label="Stage">{LEAD_STAGE_LABELS[lead.stage as keyof typeof LEAD_STAGE_LABELS] ?? lead.stage}</SummaryItem>
+                <SummaryItem label="Staff" num>{lead.staffCountRaw}</SummaryItem>
+                <SummaryItem label="Est. value" num>{lead.estValue != null ? `${fmtMoney(lead.estValue)}/mo` : null}</SummaryItem>
+                <SummaryItem label="Next follow-up" num>{lead.nextFollowUp ? fmtDate(lead.nextFollowUp) : null}</SummaryItem>
+              </dl>
+            }
+          >
           <form action={update} className="card space-y-5 p-6">
             {/* Six columns, and each field takes the width its value needs
                 rather than the half the form used to hand out flat. A staff
@@ -513,92 +643,6 @@ export default async function LeadDetailPage({
                 </select>
               </div>
             </div>
-            {/* A launchpad for outreach done by hand, sitting with the contact
-                details it belongs to. Opening a profile is the whole feature —
-                nothing here sends, connects, or messages anyone. */}
-            {(lead.linkedinUrl ||
-              lead.companyLinkedinUrl ||
-              lead.websiteUrl ||
-              lead.facebookUrl ||
-              contactForm ||
-              // A mark outlives the URL it was made against: a profile link
-              // deleted later shouldn't take the record of the outreach with it.
-              lead.connectionRequestSentAt) && (
-              <div className="flex flex-wrap items-center gap-2 border-t border-line/60 pt-5">
-                {lead.linkedinUrl && (
-                  <a
-                    href={lead.linkedinUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn h-[34px] px-3.5 text-xs"
-                  >
-                    View LinkedIn profile ↗
-                  </a>
-                )}
-                {lead.companyLinkedinUrl && (
-                  <a
-                    href={lead.companyLinkedinUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn h-[34px] px-3.5 text-xs"
-                  >
-                    View company page ↗
-                  </a>
-                )}
-                {lead.websiteUrl && (
-                  <a
-                    href={lead.websiteUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn h-[34px] px-3.5 text-xs"
-                  >
-                    Visit website ↗
-                  </a>
-                )}
-                {lead.facebookUrl && (
-                  <a
-                    href={lead.facebookUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn h-[34px] px-3.5 text-xs"
-                  >
-                    View Facebook page ↗
-                  </a>
-                )}
-                {/* The clinic's own contact form, for a front-desk message
-                    sent by hand. The button only shows when a stored link
-                    reads as the contact page. */}
-                {contactForm && <ContactFormButtons {...contactForm} />}
-                {/* The one thing in this row that records rather than opens.
-                    Sending the request is still done by hand on LinkedIn; this
-                    is where you say you did it, so the pipeline can show it.
-
-                    Once marked it stops being a button — the useful state is
-                    the date, and a button that has already been pressed is an
-                    invitation to press it again. Offered only where there is a
-                    LinkedIn profile to have sent it to, but shown wherever the
-                    mark exists. */}
-                {(lead.connectionRequestSentAt ||
-                  lead.linkedinUrl ||
-                  lead.companyLinkedinUrl) && (
-                  <ConnectionRequestToggle
-                    sentLabel={
-                      lead.connectionRequestSentAt
-                        ? `Connection sent ${fmtRelative(lead.connectionRequestSentAt)}`
-                        : null
-                    }
-                    sentTitle={
-                      lead.connectionRequestSentAt
-                        ? `Marked sent ${fmtDateTime(lead.connectionRequestSentAt)}`
-                        : null
-                    }
-                    mark={markConnectionSent}
-                    clear={clearConnectionSent}
-                  />
-                )}
-              </div>
-            )}
-
             {/* The Loom, which is step 4's one unfillable blank. It sits in the
                 details form because it is a fact about the lead somebody types
                 and saves, exactly like the four URLs above it — the panel below
@@ -649,13 +693,14 @@ export default async function LeadDetailPage({
               </button>
             </div>
           </form>
+          </DetailsCard>
 
           {/* Written only by “Enrich this lead”, and shown apart from the form
               above because it is not the same kind of fact: these are readings
               taken on a day, not fields somebody keeps up to date. */}
           {enriched && (
-            <>
-              <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
+            <div>
+              <div className="mb-4 flex items-baseline justify-between gap-4">
                 <h2 className="display text-xl font-semibold">Enrichment</h2>
                 <p className="helper-text num text-xs text-muted">
                   {lead.enrichedAt
@@ -695,11 +740,26 @@ export default async function LeadDetailPage({
                   </div>
                 )}
               </div>
-            </>
+            </div>
           )}
         </section>
 
         <section>
+          {nextTask && (
+            <div className="card mb-8 border-accent/30 bg-accent-soft/40 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-accent">Next step</p>
+              <p className="mt-1.5 text-base font-semibold text-ink">{nextTask.title}</p>
+              {nextTask.description && <p className="mt-0.5 text-sm text-muted">{nextTask.description}</p>}
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                <span className={`num text-sm font-medium ${overdue ? "text-bad" : "text-ink"}`}>
+                  {nextTask.dueDate ? `${overdue ? "Overdue · was due" : "Due"} ${fmtDate(nextTask.dueDate)}` : "No due date"}
+                </span>
+                <Link href="/activities" className="text-sm font-medium text-accent hover:underline">
+                  Open tasks →
+                </Link>
+              </div>
+            </div>
+          )}
           <h2 className="display mb-4 text-xl font-semibold">Activity log</h2>
           <form action={addNote} className="card flex gap-3 p-4">
             <input
@@ -892,6 +952,28 @@ function EmailFacts({
             .join(", ")}
         </p>
       )}
+    </div>
+  );
+}
+
+// One fact in the details summary. An empty one reads as a dash, so the grid
+// keeps its shape and a missing value is visible as missing.
+function SummaryItem({
+  label,
+  children,
+  num = false,
+  wide = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  num?: boolean;
+  wide?: boolean;
+}) {
+  const empty = children === null || children === undefined || children === "";
+  return (
+    <div className={`min-w-0 ${wide ? "col-span-2" : ""}`}>
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className={`mt-1 text-sm text-ink ${num ? "num" : ""}`}>{empty ? <span className="text-muted">—</span> : children}</dd>
     </div>
   );
 }

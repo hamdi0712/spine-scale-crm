@@ -23,6 +23,7 @@ import {
   sequenceLabel,
   startersRemaining,
   frontDeskMessage,
+  CONTACT_FORM_CALL_AFTER_DAYS,
   senderFor,
   emailStepLabel,
   undoSendBlocker,
@@ -34,7 +35,10 @@ import { getInstantlyApiKey } from "@/lib/appSecretsStore";
 import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import type { EmailPanelProps } from "@/components/EmailPanel";
 import { pickContactFormLink } from "@/lib/contactForm";
-import { fmtDate } from "@/lib/format";
+
+function fmtDayMonth(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 export interface EmailLeadState {
   status: EmailWorkflowStatus;
@@ -246,6 +250,9 @@ export async function contactFormProps(lead: LeadWithSends) {
     leadId: lead.id,
     contactFormUrl: pickContactFormLink(lead.websiteLinks, lead.websiteUrl),
     message: frontDeskMessage(lead, settings, sender),
-    lastSentLabel: last ? `Form sent ${fmtDate(last.createdAt)}` : null,
+    // "Sent Oct 30 · call Nov 2": the day it went, and the call Mark form sent booked.
+    lastSentLabel: last
+      ? `Sent ${fmtDayMonth(last.createdAt)} · call ${fmtDayMonth(new Date(last.createdAt.getTime() + CONTACT_FORM_CALL_AFTER_DAYS * 86_400_000))}`
+      : null,
   };
 }

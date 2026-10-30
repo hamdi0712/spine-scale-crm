@@ -19,7 +19,7 @@ import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
 import { PIPELINE_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 import { loadEmailView } from "@/lib/emailWorkflowRead";
 import FacebookEmailButton, { FacebookEmailProgress } from "@/components/FacebookEmailButton";
-import FindEmailsMenu from "@/components/FindEmailsMenu";
+import DropdownMenu from "@/components/DropdownMenu";
 import { facebookEmailLeads } from "@/lib/facebookEmailRun";
 import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
 import { fmtCredits } from "@/lib/emailCheck";
@@ -256,10 +256,10 @@ async function EmailPipeline() {
           </p>
         </div>
         <div className="flex items-center gap-2 max-md:[&>*]:flex-1">
-          <FindEmailsMenu badge={unchecked + (pipelineSettings.facebookEmails.enabled ? facebookLeads.length : 0)}>
+          <DropdownMenu label="Find emails" badge={unchecked + (pipelineSettings.facebookEmails.enabled ? facebookLeads.length : 0)}>
             <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} menu />
             <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} menu />
-          </FindEmailsMenu>
+          </DropdownMenu>
           <Link href="/discovery/import/clinic" className="btn-primary justify-center">
             Find clinics
           </Link>

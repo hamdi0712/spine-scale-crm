@@ -6,6 +6,7 @@
 // shared progress panel.
 
 import { useState } from "react";
+import { MENU_ITEM } from "@/components/DropdownMenu";
 import { startFacebookEmailJob } from "@/lib/actions/jobs";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import { facebookEmailsCost, fmtEstimate } from "@/lib/pipelineSettings";
@@ -46,7 +47,7 @@ export default function FacebookEmailButton({
   if (menu) {
     return (
       <div>
-        <button type="button" onClick={() => void run()} disabled={running || starting || count === 0} className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-wash focus:outline-none focus-visible:bg-wash disabled:cursor-not-allowed disabled:opacity-50">
+        <button type="button" onClick={() => void run()} disabled={running || starting || count === 0} className={MENU_ITEM}>
           <span>
             {running || starting ? "Reading pages…" : "Find emails on Facebook"}
             {count > 0 && <span className="num ml-1.5 text-muted">{count}</span>}
