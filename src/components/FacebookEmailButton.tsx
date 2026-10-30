@@ -10,7 +10,16 @@ import { startFacebookEmailJob } from "@/lib/actions/jobs";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import { facebookEmailsCost, fmtEstimate } from "@/lib/pipelineSettings";
 
-export default function FacebookEmailButton({ count, enabled }: { count: number; enabled: boolean }) {
+export default function FacebookEmailButton({
+  count,
+  enabled,
+  menu = false,
+}: {
+  count: number;
+  enabled: boolean;
+  // An item in the pipeline's Find emails menu rather than a button of its own.
+  menu?: boolean;
+}) {
   const { running, track } = useJobRun("facebook-emails");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -32,6 +41,23 @@ export default function FacebookEmailButton({ count, enabled }: { count: number;
     setStarting(false);
     if (!r.ok) setError(r.error);
     else track(r.id);
+  }
+
+  if (menu) {
+    return (
+      <div>
+        <button type="button" onClick={() => void run()} disabled={running || starting || count === 0} className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-wash focus:outline-none focus-visible:bg-wash disabled:cursor-not-allowed disabled:opacity-50">
+          <span>
+            {running || starting ? "Reading pages…" : "Find emails on Facebook"}
+            {count > 0 && <span className="num ml-1.5 text-muted">{count}</span>}
+          </span>
+          <span className="text-xs font-normal text-muted">
+            {enabled ? "Leads with no email and an unread Facebook page" : "Off — turn it on in Settings → Pipeline"}
+          </span>
+        </button>
+        {error && <p className="px-3 pb-2 text-xs text-bad">{error}</p>}
+      </div>
+    );
   }
 
   return (

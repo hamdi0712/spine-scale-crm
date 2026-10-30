@@ -20,6 +20,7 @@ export default function EmailCheckButton({
   budget,
   hasKey,
   compact = false,
+  menu = false,
 }: {
   label: string;
   count: number;
@@ -30,6 +31,8 @@ export default function EmailCheckButton({
   budget: number;
   hasKey: boolean;
   compact?: boolean;
+  // An item in the pipeline's Find emails menu rather than a button of its own.
+  menu?: boolean;
 }) {
   const { running, track } = useJobRun("email-check");
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +57,21 @@ export default function EmailCheckButton({
     setStarting(false);
     if (!r.ok) setError(r.error);
     else track(r.id);
+  }
+
+  if (menu) {
+    return (
+      <div>
+        <button type="button" onClick={() => void run()} disabled={running || starting || count === 0} className="flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-wash focus:outline-none focus-visible:bg-wash disabled:cursor-not-allowed disabled:opacity-50">
+          <span>
+            {running || starting ? "Checking…" : label}
+            {count > 0 && <span className="num ml-1.5 text-muted">{count}</span>}
+          </span>
+          <span className="text-xs font-normal text-muted">Verify new addresses through Instantly</span>
+        </button>
+        {error && <p className="px-3 pb-2 text-xs text-bad">{error}</p>}
+      </div>
+    );
   }
 
   return (
