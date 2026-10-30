@@ -21,6 +21,9 @@
 // CONTACT_FORM_SENT is a message sent by hand through a clinic's own contact
 // form, marked from the lead page; it books a call three days later.
 //
+// EMAIL_MARKED_SENT and EMAIL_SEND_UNDONE are an email marked sent by hand
+// from Gmail, and that mark taken back with "Undo mark sent".
+//
 // LEADS_MOVED_TO_EMAIL is written once, by the migration that gave leads a
 // channel, to record how many Clinic-first leads it moved to email.
 // LEADS_MOVED_TO_LINKEDIN is written once, by the migration that gave
@@ -37,6 +40,8 @@ export const ACTIVITY_KINDS = [
   "COPILOT_ACTION",
   "CONNECTOR_CHANGE",
   "CONTACT_FORM_SENT",
+  "EMAIL_MARKED_SENT",
+  "EMAIL_SEND_UNDONE",
   "LEADS_MOVED_TO_EMAIL",
   "LEADS_MOVED_TO_LINKEDIN",
 ] as const;
@@ -54,6 +59,8 @@ export const ACTIVITY_ICONS: Record<ActivityKind, string> = {
   COPILOT_ACTION: "flag",
   CONNECTOR_CHANGE: "flag",
   CONTACT_FORM_SENT: "mail",
+  EMAIL_MARKED_SENT: "mail",
+  EMAIL_SEND_UNDONE: "mail",
   LEADS_MOVED_TO_EMAIL: "mail",
   LEADS_MOVED_TO_LINKEDIN: "pipeline",
 };

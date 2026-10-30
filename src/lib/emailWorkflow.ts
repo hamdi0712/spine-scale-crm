@@ -436,6 +436,29 @@ export function sendBlocker(
   return { blocked: EMAIL_STATUS_BLOCKERS[status] };
 }
 
+export function emailStepLabel(step: number): string {
+  return step === 0 ? "Email 1" : `Follow-up ${step}`;
+}
+
+// Whether "Undo mark sent" may take back this send, or why not. Only the
+// latest send, and only while nothing has happened since that an undo would
+// paper over: a reply, an unsubscribe or suppression, or a bounce — which
+// clears the lead's address, so the address no longer matches the one the
+// email went to. The server checks this again before deleting anything.
+export function undoSendBlocker(
+  lead: Pick<EmailWorkflowLead, "email" | "emailRepliedAt" | "emailUnsubscribedAt" | "suppressedAt">,
+  sends: { id: string; step: number; toEmail: string }[],
+  sendId: string,
+): string | null {
+  const send = sends.find((s) => s.id === sendId);
+  if (!send) return "That email is no longer marked sent — reload the page.";
+  if (sends.some((s) => s.step > send.step)) return "Only the last email sent can be undone.";
+  if (lead.emailRepliedAt) return "They replied since — it cannot be undone.";
+  if (lead.emailUnsubscribedAt || lead.suppressedAt) return "They unsubscribed or were suppressed since — it cannot be undone.";
+  if ((lead.email ?? "").trim().toLowerCase() !== send.toEmail.trim().toLowerCase()) return "It bounced since — it cannot be undone.";
+  return null;
+}
+
 const EMAIL_STATUS_BLOCKERS: Record<EmailWorkflowStatus, string> = {
   stopped: "This clinic is on the suppression list.",
   replied: "They replied — follow-ups have stopped.",
