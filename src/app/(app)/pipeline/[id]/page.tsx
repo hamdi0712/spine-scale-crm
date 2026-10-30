@@ -31,7 +31,8 @@ import {
 } from "@/lib/actions/icpScorecardV2";
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
-import { leadBreakdownV2, leadTier } from "@/lib/leadScore";
+import { leadBreakdownV2, leadScore, leadTier } from "@/lib/leadScore";
+import { FIT_MAX, SIGNALS_MAX } from "@/lib/icpWeights";
 import {
   EMAIL_SOURCE_LABELS,
   EMAIL_STATUS_LABELS,
@@ -50,14 +51,14 @@ import { sequenceState, toMessageViews } from "@/lib/outreachSequenceRead";
 import { salutation, salutationNote } from "@/lib/outreachSequence";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES, isUsTimeZone, zoneLabel } from "@/lib/timezones";
-import { fmtDate, fmtDateTime, fmtMoney, toDateInput } from "@/lib/format";
+import { fmtDate, fmtDateTime, toDateInput } from "@/lib/format";
 import {
-  IconClockHour4,
-  IconSpeakerphone,
-  IconStar,
-  IconUsers,
+  IconBrandFacebook,
+  IconBrandLinkedin,
+  IconMapPin,
+  IconWorld,
 } from "@tabler/icons-react";
-import { IcpTierBadge, StageBadge } from "@/components/Badge";
+import { EmailStatusBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
@@ -66,12 +67,13 @@ import EmailPanel from "@/components/EmailPanel";
 import { contactFormProps, emailPanelProps } from "@/lib/emailWorkflowRead";
 import ContactFormButtons from "@/components/ContactFormButtons";
 import { OPEN_TASK_STATUSES } from "@/lib/tasks";
+import { moveTaskStatus } from "@/lib/actions/tasks";
+import StageSelect from "@/components/StageSelect";
 import DetailsCard from "@/components/DetailsCard";
 import DropdownMenu, { MENU_ITEM } from "@/components/DropdownMenu";
 import IcpScorecardV2 from "@/components/IcpScorecardV2";
 import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
-import StatChip from "@/components/StatChip";
 
 export const dynamic = "force-dynamic";
 
@@ -141,8 +143,26 @@ export default async function LeadDetailPage({
   const nextTask = await prisma.task.findFirst({
     where: { leadId: lead.id, status: { in: OPEN_TASK_STATUSES } },
     orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
-    select: { title: true, description: true, dueDate: true },
+    select: { id: true, title: true, description: true, dueDate: true },
   });
+  const completeNextTask = nextTask ? moveTaskStatus.bind(null, nextTask.id, "DONE") : undefined;
+
+  // The email panel's props, worked out once: the header's status pill reads
+  // them too.
+  const emailProps = lead.channel === "email" ? await emailPanelProps(lead) : null;
+
+  // The side column's timeline: what happened to the lead (the activity feed)
+  // and what was written on it (notes), newest first.
+  const events = await prisma.activityLog.findMany({
+    where: { leadId: lead.id },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, kind: true, summary: true, createdAt: true },
+  });
+  const timeline = [
+    ...events.map((e) => ({ id: `a-${e.id}`, text: e.summary, at: e.createdAt, dot: activityDot(e.kind) })),
+    ...lead.notes.map((n) => ({ id: `n-${n.id}`, text: n.body, at: n.createdAt, dot: "bg-muted" })),
+  ].sort((a, b) => b.at.getTime() - a.at.getTime());
   const overdue = nextTask?.dueDate ? nextTask.dueDate.getTime() < Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) : false;
 
   // Email leads only: the message is the front-desk email.
@@ -158,21 +178,6 @@ export default async function LeadDetailPage({
     ? emptyBreakdownV2(activeIcp, settings.promotionThresholdV2, new Date())
     : null;
 
-  // Enrichment is scraped evidence with a date on it, so it is shown as its
-  // own thing rather than mixed into the editable details — a one-line summary
-  // by the title for a glance, and the values in full further down.
-  const enriched =
-    lead.metaAdsSignal !== null ||
-    lead.reviewCount !== null ||
-    lead.websiteNotes !== null;
-
-  // The ads signal is free text from the actor, and it usually opens with the
-  // number that is the whole point of it — "1 active ad", "3 active ads". Split
-  // where it does, so the chip can set the figure in the page's own ink and
-  // leave the words around it muted like every other chip in the row; left
-  // whole where it does not, because a sentence with no count in it is still
-  // worth showing and is not worth guessing at.
-  const adsCount = /^(\d+)\s+(\S.*)$/.exec((lead.metaAdsSignal ?? "").trim());
 
   return (
     <div>
@@ -187,190 +192,133 @@ export default async function LeadDetailPage({
           <UnflagLeadButton leadId={lead.id} />
         </div>
       )}
-      <Link href="/pipeline" className="text-sm text-accent hover:underline">
-        ← Pipeline
+      <Link href="/pipeline" className="text-sm text-muted hover:text-ink">
+        ← Pipeline{lead.channel === "email" ? " · Email" : ""}
       </Link>
-      <div className="card relative z-10 mt-3 flex flex-wrap items-start justify-between gap-4 overflow-visible p-6 max-md:p-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="display text-[30px] font-semibold leading-tight">{lead.clinicName}</h1>
-            <StageBadge stage={lead.stage} />
-            <IcpTierBadge tier={leadTier(lead)} />
-            {lead.archived && (
-              <span className="inline-flex h-[22px] items-center rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
-                Archived
-              </span>
-            )}
-          </div>
-          {(lead.contactName || lead.location || lead.timeZone) && (
-            <p className="mt-1 text-sm text-muted">
-              {[lead.contactName, lead.location, isUsTimeZone(lead.timeZone) ? `${zoneLabel(lead.timeZone)} time` : null].filter(Boolean).join(" · ")}
-            </p>
-          )}
-          {/* The last enrichment at a glance, a chip per figure. The run's date
-              leads, because it is the one thing that says how much any of the
-              rest is worth today. The values in full are in the card below.
 
-              This was one muted sentence with middots in it, which read as a
-              caption and scanned as nothing: three numbers, none of them louder
-              than the punctuation between them. A box each, an icon to
-              recognise it by, and the figure in the page's ink. */}
-          {(enriched || lead.enrichedAt || lead.staffCountRaw !== null) && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {lead.enrichedAt && (
-                <StatChip
-                  icon={<IconClockHour4 size={14} stroke={1.75} />}
-                  prefix="Enriched"
-                  value={fmtRelative(lead.enrichedAt)}
-                  title={`Last enrichment run ${fmtDateTime(lead.enrichedAt)}`}
-                />
-              )}
-              {lead.metaAdsSignal && (
-                <StatChip
-                  icon={<IconSpeakerphone size={14} stroke={1.75} />}
-                  value={adsCount ? adsCount[1] : lead.metaAdsSignal}
-                  label={adsCount ? adsCount[2] : undefined}
-                  title={lead.metaAdsSignal}
-                  className="max-w-[320px]"
-                />
-              )}
-              {lead.reviewCount !== null && (
-                <StatChip
-                  icon={<IconStar size={14} stroke={1.75} />}
-                  value={lead.reviewCount}
-                  label={lead.reviewCount === 1 ? "review" : "reviews"}
-                  title={
-                    lead.reviewsCheckedAt
-                      ? `Read ${fmtDateTime(lead.reviewsCheckedAt)}`
-                      : undefined
-                  }
-                />
-              )}
-              {lead.staffCountRaw !== null && (
-                <StatChip
-                  icon={<IconUsers size={14} stroke={1.75} />}
-                  value={lead.staffCountRaw}
-                  label="on staff"
-                />
+      {/* The header: tier, name, who and where; the status, the stage and the
+          rarer actions on the right. */}
+      <div className="card relative z-10 mt-3 flex flex-wrap items-center justify-between gap-4 overflow-visible p-6 max-md:p-4">
+        <div className="flex min-w-0 items-center gap-4">
+          <TierTile tier={leadTier(lead)} />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="display text-[28px] font-semibold leading-tight">{lead.clinicName}</h1>
+              {lead.archived && (
+                <span className="inline-flex h-[22px] items-center rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
+                  Archived
+                </span>
               )}
             </div>
-          )}
+            <p className="mt-0.5 text-sm text-muted">
+              {[lead.contactName ?? "No contact yet", lead.location, isUsTimeZone(lead.timeZone) ? `${zoneLabel(lead.timeZone)} time` : null]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
         </div>
-        <PageActions className="flex flex-wrap items-center gap-2">
-          <LeadEnrichPanel
-            run={runEnrichment}
-            applySelection={applySelection}
-            plan={plan}
-            clinicName={lead.clinicName}
-          />
-          {lead.client ? (
-            <Link href={`/clients/${lead.client.id}`} className="btn">
-              View client record →
-            </Link>
-          ) : lead.stage === "WON" ? (
-            <form action={convert}>
-              <button type="submit" className="btn-primary">
-                Convert to Client
-              </button>
-            </form>
-          ) : null}
-          {/* The rarer moves, behind ⋯: which Pipeline view the lead sits in
-              (undone by the same item), No Contact (nothing is lost — one
-              stage change puts it back), and Delete, which asks first. */}
-          <DropdownMenu label="More actions" icon>
-            <form action={moveChannel}>
-              <button type="submit" className={MENU_ITEM}>
-                {lead.channel === "email" ? "Move to LinkedIn" : "Move to email"}
-                <span className="text-xs font-normal text-muted">Changes which Pipeline view it is in</span>
-              </button>
-            </form>
-            {lead.stage !== "NO_CONTACT" && (
-              <form action={markNoContact}>
-                <button type="submit" className={MENU_ITEM}>
-                  No Contact
-                  <span className="text-xs font-normal text-muted">Off today&apos;s lists; the stage select brings it back</span>
+        <div className="flex flex-wrap items-center gap-2">
+          {emailProps && <EmailStatusBadge status={emailProps.status} />}
+          <StageSelect leadId={lead.id} stage={lead.stage} />
+          <PageActions className="flex flex-wrap items-center gap-2">
+            <LeadEnrichPanel
+              run={runEnrichment}
+              applySelection={applySelection}
+              plan={plan}
+              clinicName={lead.clinicName}
+            />
+            {lead.client ? (
+              <Link href={`/clients/${lead.client.id}`} className="btn">
+                View client record →
+              </Link>
+            ) : lead.stage === "WON" ? (
+              <form action={convert}>
+                <button type="submit" className="btn-primary">
+                  Convert to Client
                 </button>
               </form>
-            )}
-            <div className="my-1 border-t border-line/60" />
-            <div className="[&>form]:block">
-              <ConfirmForm
-                action={remove}
-                message={`Delete lead "${lead.clinicName}" and its activity log?`}
-                className={`${MENU_ITEM} text-bad`}
-              >
-                Delete lead
-              </ConfirmForm>
-            </div>
-          </DropdownMenu>
-        </PageActions>
+            ) : null}
+            {/* The rarer moves, behind ⋯: which Pipeline view the lead sits in
+                (undone by the same item), No Contact (nothing is lost — one
+                stage change puts it back), and Delete, which asks first. */}
+            <DropdownMenu label="More actions" icon>
+              <form action={moveChannel}>
+                <button type="submit" className={MENU_ITEM}>
+                  {lead.channel === "email" ? "Move to LinkedIn" : "Move to email"}
+                  <span className="text-xs font-normal text-muted">Changes which Pipeline view it is in</span>
+                </button>
+              </form>
+              {lead.stage !== "NO_CONTACT" && (
+                <form action={markNoContact}>
+                  <button type="submit" className={MENU_ITEM}>
+                    No Contact
+                    <span className="text-xs font-normal text-muted">Off today&apos;s lists; the stage select brings it back</span>
+                  </button>
+                </form>
+              )}
+              <div className="my-1 border-t border-line/60" />
+              <div className="[&>form]:block">
+                <ConfirmForm
+                  action={remove}
+                  message={`Delete lead "${lead.clinicName}" and its activity log?`}
+                  className={`${MENU_ITEM} text-bad`}
+                >
+                  Delete lead
+                </ConfirmForm>
+              </div>
+            </DropdownMenu>
+          </PageActions>
+        </div>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2 max-md:grid-cols-1">
-        <section className="space-y-8">
-          {/* A launchpad for outreach done by hand, sitting with the contact
-              details it belongs to. Opening a profile is the whole feature —
-              nothing here sends, connects, or messages anyone. */}
-          {(lead.linkedinUrl ||
-            lead.companyLinkedinUrl ||
-            lead.websiteUrl ||
-            lead.facebookUrl ||
-            contactForm ||
-            // A mark outlives the URL it was made against: a profile link
-            // deleted later shouldn't take the record of the outreach with it.
-            lead.connectionRequestSentAt) && (
-            <div className="card space-y-4 p-6 max-md:p-4">
-              <h2 className="text-base font-semibold">Reach out</h2>
-              <div className="flex flex-wrap items-center gap-2">
-              {lead.linkedinUrl && (
-                <a
-                  href={lead.linkedinUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
-                >
-                  View LinkedIn profile ↗
-                </a>
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        {/* ─── The main column: reach out, the message, the details ────── */}
+        <div className="min-w-0 space-y-6">
+          <section aria-labelledby="reach-out" className="card space-y-4 p-6 max-md:p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 id="reach-out" className="text-lg font-semibold">Reach out</h2>
+              {lead.channel === "email" && !(lead.email ?? "").trim() && (
+                <p className="text-sm text-muted">
+                  {lead.facebookEmailAt
+                    ? "No email found on Maps, the website or Facebook"
+                    : "No email yet"}
+                </p>
               )}
-              {lead.companyLinkedinUrl && (
-                <a
-                  href={lead.companyLinkedinUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
-                >
-                  View company page ↗
-                </a>
-              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               {lead.websiteUrl && (
-                <a
-                  href={lead.websiteUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
-                >
-                  Visit website ↗
+                <a href={lead.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
+                  <IconWorld size={16} stroke={1.75} aria-hidden className="text-muted" />
+                  Website
                 </a>
               )}
               {lead.facebookUrl && (
-                <a
-                  href={lead.facebookUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-9 items-center rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
-                >
-                  View Facebook page ↗
+                <a href={lead.facebookUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
+                  <IconBrandFacebook size={16} stroke={1.75} aria-hidden className="text-muted" />
+                  Facebook
                 </a>
               )}
-              {/* The one thing in this row that records rather than opens.
-                  Sending the request is still done by hand on LinkedIn; this
-                  is where you say you did it, so the pipeline can show it.
-
-                  Once marked it stops being a button — the useful state is
-                  the date, and a button that has already been pressed is an
-                  invitation to press it again. Offered only where there is a
-                  LinkedIn profile to have sent it to, but shown wherever the
-                  mark exists. */}
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.clinicName, lead.location].filter(Boolean).join(" "))}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
+              >
+                <IconMapPin size={16} stroke={1.75} aria-hidden className="text-muted" />
+                Google Maps
+              </a>
+              {lead.linkedinUrl && (
+                <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
+                  <IconBrandLinkedin size={16} stroke={1.75} aria-hidden className="text-muted" />
+                  LinkedIn profile
+                </a>
+              )}
+              {lead.companyLinkedinUrl && (
+                <a href={lead.companyLinkedinUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
+                  <IconBrandLinkedin size={16} stroke={1.75} aria-hidden className="text-muted" />
+                  Company page
+                </a>
+              )}
               {(lead.connectionRequestSentAt ||
                 lead.linkedinUrl ||
                 lead.companyLinkedinUrl) && (
@@ -390,36 +338,88 @@ export default async function LeadDetailPage({
                 />
               )}
             </div>
-              {/* The clinic's own contact form, for a front-desk message
-                  sent by hand: open it, paste the message, mark it sent. */}
-              {contactForm && <ContactFormButtons {...contactForm} />}
+            {/* The clinic's own contact form, for a front-desk message sent
+                by hand: open it, paste the message, mark it sent. */}
+            {contactForm && <ContactFormButtons {...contactForm} />}
+          </section>
+
+          {/* The message: the email and its send buttons on the email
+              channel, the five-message sequence on LinkedIn. Outside the
+              details form on purpose — every control in it acts on its own. */}
+          {emailProps ? (
+            <section aria-labelledby="the-message" className="card p-6 max-md:p-4">
+              <h2 id="the-message" className="mb-4 text-lg font-semibold">The message</h2>
+              <EmailPanel {...emailProps} />
+            </section>
+          ) : (
+            <section aria-labelledby="the-message" className="space-y-4">
+            {lead.suppressedAt && (
+              // On the suppression list: drafting and marking sent are refused
+              // on the server too.
+              <div className="rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
+                <p className="text-sm font-medium text-bad">On the suppression list</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-muted">
+                  This clinic said no to email. It is not contacted on any channel, LinkedIn included.
+                </p>
+              </div>
+            )}
+            <div className="flex items-baseline justify-between gap-4">
+              <h2 id="the-message" className="text-lg font-semibold">Outreach sequence</h2>
+              <p className="helper-text text-xs text-muted">
+                Drafts to copy — nothing here is sent
+              </p>
             </div>
+            <div className="card p-6">
+              <OutreachSequencePanel
+                messages={toMessageViews(lead.outreach)}
+                state={sequenceState(lead)}
+                actions={sequence}
+                acceptedLabel={
+                  lead.connectionAcceptedAt
+                    ? `Accepted ${fmtRelative(lead.connectionAcceptedAt)}`
+                    : null
+                }
+                repliedLabel={
+                  lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
+                }
+                salutationNote={salutationNote(
+                  salutation(lead.contactName, lead.contactTitle, lead.websiteNotes),
+                )}
+              />
+            </div>
+            </section>
           )}
+
           <DetailsCard
             summary={
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
-                <SummaryItem label="Contact">
-                  {lead.contactName ? (
-                    <>
-                      {lead.contactName}
-                      {lead.contactTitle && <span className="block text-xs text-muted">{lead.contactTitle}</span>}
-                    </>
-                  ) : null}
-                </SummaryItem>
-                <SummaryItem label="Email" wide>
-                  {lead.email ? <span className="break-all">{lead.email}</span> : null}
-                </SummaryItem>
-                <SummaryItem label="Phone" num>{lead.phone}</SummaryItem>
-                <SummaryItem label="Location">{lead.location}</SummaryItem>
-                <SummaryItem label="Time zone">{isUsTimeZone(lead.timeZone) ? zoneLabel(lead.timeZone) : null}</SummaryItem>
-                <SummaryItem label="Stage">{LEAD_STAGE_LABELS[lead.stage as keyof typeof LEAD_STAGE_LABELS] ?? lead.stage}</SummaryItem>
-                <SummaryItem label="Staff" num>{lead.staffCountRaw}</SummaryItem>
-                <SummaryItem label="Est. value" num>{lead.estValue != null ? `${fmtMoney(lead.estValue)}/mo` : null}</SummaryItem>
-                <SummaryItem label="Next follow-up" num>{lead.nextFollowUp ? fmtDate(lead.nextFollowUp) : null}</SummaryItem>
-              </dl>
+              <>
+                <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+                  <SummaryItem label="Contact">
+                    {lead.contactName ? (
+                      <>
+                        {lead.contactName}
+                        {lead.contactTitle && <span className="block text-xs text-muted">{lead.contactTitle}</span>}
+                      </>
+                    ) : null}
+                  </SummaryItem>
+                  <SummaryItem label="Phone" num>{lead.phone}</SummaryItem>
+                  <SummaryItem label="Reviews" num>{lead.reviewCount}</SummaryItem>
+                  <SummaryItem label="Staff" num>{lead.staffCountRaw}</SummaryItem>
+                  <SummaryItem label="Meta ads">{lead.metaAdsSignal}</SummaryItem>
+                  <SummaryItem label="Enriched">{lead.enrichedAt ? fmtDate(lead.enrichedAt) : null}</SummaryItem>
+                </dl>
+                {lead.websiteNotes && (
+                  <details className="mt-5 border-t border-line/60 pt-4">
+                    <summary className="cursor-pointer text-sm font-medium text-accent">Website notes</summary>
+                    <p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-ink">
+                      {lead.websiteNotes}
+                    </p>
+                  </details>
+                )}
+              </>
             }
           >
-          <form action={update} className="card space-y-5 p-6">
+          <form action={update} className="space-y-5">
             {/* Six columns, and each field takes the width its value needs
                 rather than the half the form used to hand out flat. A staff
                 count and a time zone in half-width boxes is a column of mostly
@@ -694,181 +694,64 @@ export default async function LeadDetailPage({
             </div>
           </form>
           </DetailsCard>
+        </div>
 
-          {/* Written only by “Enrich this lead”, and shown apart from the form
-              above because it is not the same kind of fact: these are readings
-              taken on a day, not fields somebody keeps up to date. */}
-          {enriched && (
-            <div>
-              <div className="mb-4 flex items-baseline justify-between gap-4">
-                <h2 className="display text-xl font-semibold">Enrichment</h2>
-                <p className="helper-text num text-xs text-muted">
-                  {lead.enrichedAt
-                    ? `Last run ${fmtDateTime(lead.enrichedAt)} — a snapshot, not live`
-                    : "From an actor run — a snapshot, not live"}
-                </p>
-              </div>
-              <div className="card">
-                {lead.metaAdsSignal && (
-                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
-                    <div className="field-label mb-1">Meta ads signal</div>
-                    <p className="text-sm">{lead.metaAdsSignal}</p>
-                  </div>
-                )}
-                {lead.reviewCount !== null && (
-                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
-                    <div className="field-label mb-1">Review count</div>
-                    <p className="num text-sm">
-                      {lead.reviewCount}
-                      {/* Its own date, because a run where the Maps actor was
-                          skipped or failed leaves this count older than the
-                          run that sits above it. */}
-                      {lead.reviewsCheckedAt && (
-                        <span className="ml-2 text-xs text-muted">
-                          read {fmtDateTime(lead.reviewsCheckedAt)}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                )}
-                {lead.websiteNotes && (
-                  <div className="border-b border-line/60 px-6 py-4 last:border-b-0">
-                    <div className="field-label mb-1">Website notes</div>
-                    <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed">
-                      {lead.websiteNotes}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section>
+        {/* ─── The side column: next step, score, activity ─────────────── */}
+        <aside className="min-w-0 space-y-6">
           {nextTask && (
-            <div className="card mb-8 border-accent/30 bg-accent-soft/40 p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-accent">Next step</p>
-              <p className="mt-1.5 text-base font-semibold text-ink">{nextTask.title}</p>
-              {nextTask.description && <p className="mt-0.5 text-sm text-muted">{nextTask.description}</p>}
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                <span className={`num text-sm font-medium ${overdue ? "text-bad" : "text-ink"}`}>
-                  {nextTask.dueDate ? `${overdue ? "Overdue · was due" : "Due"} ${fmtDate(nextTask.dueDate)}` : "No due date"}
-                </span>
-                <Link href="/activities" className="text-sm font-medium text-accent hover:underline">
-                  Open tasks →
-                </Link>
-              </div>
-            </div>
-          )}
-          <h2 className="display mb-4 text-xl font-semibold">Activity log</h2>
-          <form action={addNote} className="card flex gap-3 p-4">
-            <input
-              name="body"
-              placeholder="Add a note — calls, emails, objections…"
-              required
-              className="field"
-            />
-            <button type="submit" className="btn shrink-0">
-              Log
-            </button>
-          </form>
-          {/* Empty, this is a line and a dashed rule — not a card. A lead with
-              no notes on it is the common case, and the panel used to answer
-              that by reserving a filled box the height of several notes that
-              were not there, which is a hole in the column beside the details
-              form. It grows into a card the moment there is something to
-              hold. */}
-          {lead.notes.length === 0 ? (
-            <>
-              <p className="helper-text mt-3 rounded-[10px] border border-dashed border-line px-4 py-3.5 text-center text-xs leading-relaxed text-muted">
-                No activity yet. Notes are append-only and timestamped.
+            <section aria-labelledby="next-step" className="rounded-2xl bg-hero p-6 text-white shadow-card">
+              <p className="text-xs font-semibold uppercase tracking-wider text-hero-ink">Next step</p>
+              <h2 id="next-step" className="mt-2 text-lg font-semibold leading-snug">
+                {nextTask.title}
+                {nextTask.dueDate && <> on {fmtDayMonth(nextTask.dueDate)}</>}
+              </h2>
+              <p className={`mt-1.5 text-sm ${overdue ? "font-medium text-[#FFB4AB]" : "text-hero-ink"}`}>
+                {overdue ? `Overdue — was due ${fmtDate(nextTask.dueDate)}. ` : ""}
+                {nextTask.description}
               </p>
-              <p className="md:hidden mt-3 rounded-[10px] border border-dashed border-line px-4 py-3.5 text-center text-xs leading-relaxed text-muted">No activity yet.</p>
-            </>
-          ) : (
-            <div className="card mt-4">
-              <ul>
-                {lead.notes.map((note) => (
-                  <li key={note.id} className="border-b border-line/60 px-5 py-4 last:border-b-0">
-                    <div className="num text-xs text-muted">
-                      {fmtDateTime(note.createdAt)}
-                    </div>
-                    <div className="mt-0.5 whitespace-pre-wrap text-sm">
-                      {note.body}
+              <div className="mt-4 flex items-center gap-2">
+                <a href="#calls" className="inline-flex h-10 flex-1 items-center justify-center rounded-[10px] bg-teal text-sm font-semibold text-hero transition-opacity hover:opacity-90">
+                  Log the call
+                </a>
+                <form action={completeNextTask}>
+                  <button type="submit" className="h-10 rounded-[10px] border border-white/25 px-3 text-sm font-medium text-white transition-colors hover:bg-white/10">
+                    Done
+                  </button>
+                </form>
+              </div>
+            </section>
+          )}
+
+          <ScoreSummary lead={lead} />
+
+          <section aria-labelledby="activity" className="card p-5">
+            <h2 id="activity" className="text-lg font-semibold">Activity</h2>
+            <form action={addNote} className="mt-3 flex gap-2">
+              <label className="sr-only" htmlFor="note-body">Add a note</label>
+              <input id="note-body" name="body" placeholder="Add a note…" required className="field h-9 text-sm" />
+              <button type="submit" className="btn h-9 shrink-0 px-3 text-sm">Log</button>
+            </form>
+            {timeline.length === 0 ? (
+              <p className="mt-4 text-sm text-muted">Nothing yet. Notes and what happens to this lead show here.</p>
+            ) : (
+              <ul className="mt-4 space-y-3.5">
+                {timeline.map((item) => (
+                  <li key={item.id} className="flex gap-3">
+                    <span className={`mt-[7px] h-2 w-2 shrink-0 rounded-full ${item.dot}`} aria-hidden />
+                    <div className="min-w-0">
+                      <p className="whitespace-pre-wrap break-words text-sm text-ink">{item.text}</p>
+                      <p className="num text-xs text-muted" title={fmtDateTime(item.at)}>{fmtRelative(item.at)}</p>
                     </div>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-
-          {/* The five messages, in the order they happen. Its own section
-              rather than a control in the outreach row above: it is a sequence
-              with states in it, not a button, and it is the length of a card.
-
-              In this column rather than under the details form: the form is
-              the long thing on this page and the sequence is the thing you came
-              to the page to work, so putting them side by side is what stops
-              the sequence starting a screen and a half down — and it is what
-              fills the space the activity log gave back by no longer reserving
-              a card for notes that are not there.
-
-              Outside the details form on purpose — every control in it acts on
-              its own the moment it is pressed, and nesting that in a form whose
-              own Save is somewhere above would make "did that save?" a fair
-              question about both. */}
-          {lead.channel === "email" ? (
-            <>
-              <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
-                <h2 className="display text-xl font-semibold">Email</h2>
-                <p className="helper-text text-xs text-muted">Sent by hand from Gmail</p>
-              </div>
-              <div className="card p-6">
-                <EmailPanel {...(await emailPanelProps(lead))} />
-              </div>
-            </>
-          ) : (
-            <>
-            {lead.suppressedAt && (
-              // On the suppression list: drafting and marking sent are refused
-              // on the server too.
-              <div className="mt-8 rounded-[10px] border border-bad/30 bg-bad-soft/60 px-4 py-3">
-                <p className="text-sm font-medium text-bad">On the suppression list</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-muted">
-                  This clinic said no to email. It is not contacted on any channel, LinkedIn included.
-                </p>
-              </div>
             )}
-            <div className="mb-4 mt-8 flex items-baseline justify-between gap-4">
-              <h2 className="display text-xl font-semibold">Outreach sequence</h2>
-              <p className="helper-text text-xs text-muted">
-                Drafts to copy — nothing here is sent
-              </p>
-            </div>
-            <div className="card p-6">
-              <OutreachSequencePanel
-                messages={toMessageViews(lead.outreach)}
-                state={sequenceState(lead)}
-                actions={sequence}
-                acceptedLabel={
-                  lead.connectionAcceptedAt
-                    ? `Accepted ${fmtRelative(lead.connectionAcceptedAt)}`
-                    : null
-                }
-                repliedLabel={
-                  lead.repliedAt ? `Replied ${fmtRelative(lead.repliedAt)}` : null
-                }
-                salutationNote={salutationNote(
-                  salutation(lead.contactName, lead.contactTitle, lead.websiteNotes),
-                )}
-              />
-            </div>
-            </>
-          )}
-        </section>
+          </section>
+        </aside>
       </div>
 
-      <section className="mt-8">
+
+      <section id="calls" className="mt-8 scroll-mt-6">
         <div className="mb-4 flex items-baseline justify-between gap-4">
           <h2 className="display text-xl font-semibold">Calls</h2>
           <p className="helper-text text-sm text-muted">
@@ -878,7 +761,7 @@ export default async function LeadDetailPage({
         <CallLog calls={lead.calls} addAction={addCall} />
       </section>
 
-      <section className="mt-8">
+      <section id="scorecard" className="mt-8 scroll-mt-6">
         <div className="mb-4 flex items-baseline justify-between gap-4">
           <h2 className="display text-xl font-semibold">ICP Scorecard</h2>
           <p className="helper-text max-w-xl text-right text-sm text-muted">
@@ -975,5 +858,80 @@ function SummaryItem({
       <dt className="text-xs text-muted">{label}</dt>
       <dd className={`mt-1 text-sm text-ink ${num ? "num" : ""}`}>{empty ? <span className="text-muted">—</span> : children}</dd>
     </div>
+  );
+}
+
+// "Nov 2": a due date is a day, stored at UTC midnight.
+function fmtDayMonth(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+// A dot per kind of event in the timeline: sends and forms blue, wins and
+// conversions teal, anything the copilot or connector did purple.
+function activityDot(kind: string): string {
+  if (kind === "LEAD_CONVERTED" || kind === "CONTRACT_SIGNED") return "bg-teal";
+  if (kind === "COPILOT_ACTION" || kind === "CONNECTOR_CHANGE") return "bg-purple";
+  return "bg-accent";
+}
+
+// The tier as a tile beside the clinic's name: the letter on its own colour,
+// a dash where nobody has scored it.
+function TierTile({ tier }: { tier: string | null }) {
+  const tone =
+    tier === "A" ? "bg-teal-soft text-teal" : tier === "B" ? "bg-accent-soft text-accent" : tier ? "bg-warn-soft text-warn-on-soft" : "bg-line/70 text-muted";
+  return (
+    <div
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold ${tone}`}
+      title={tier ? `${tier}-tier` : "Not scored"}
+    >
+      {tier ?? "—"}
+    </div>
+  );
+}
+
+// The score at a glance: the total, and on the ICP model a bar for each half
+// of it — Fit and Signals — against what each is out of. The full card is
+// further down.
+function ScoreSummary({ lead }: { lead: Parameters<typeof leadScore>[0] }) {
+  const score = leadScore(lead);
+  const v2 = leadBreakdownV2(lead);
+  const bars = v2
+    ? [
+        { label: "Fit", value: v2.fitTotal, max: FIT_MAX, bar: "bg-teal" },
+        { label: "Signals", value: v2.signalsTotal, max: SIGNALS_MAX, bar: "bg-accent" },
+      ]
+    : [];
+  return (
+    <section aria-labelledby="icp-score" className="card p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id="icp-score" className="text-lg font-semibold">ICP score</h2>
+        {score ? (
+          <span className="num text-2xl font-semibold text-teal">
+            {score.total}
+            <span className="text-sm font-normal text-muted">/{score.max}</span>
+          </span>
+        ) : (
+          <span className="text-sm text-muted">Not scored</span>
+        )}
+      </div>
+      {bars.length > 0 && (
+        <div className="mt-3 space-y-2.5">
+          {bars.map((b) => (
+            <div key={b.label} className="flex items-center gap-3 text-sm">
+              <span className="w-16 text-muted">{b.label}</span>
+              <div className="h-1.5 flex-1 rounded-full bg-line/70" aria-hidden>
+                <div className={`h-1.5 rounded-full ${b.bar}`} style={{ width: `${b.max > 0 ? Math.min(100, (b.value / b.max) * 100) : 0}%` }} />
+              </div>
+              <span className="num w-12 text-right text-xs text-muted">
+                {b.value}/{b.max}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <a href="#scorecard" className="mt-3 inline-block text-sm font-medium text-accent hover:underline">
+        Open scorecard →
+      </a>
+    </section>
   );
 }

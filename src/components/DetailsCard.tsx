@@ -17,9 +17,9 @@ export default function DetailsCard({
 }) {
   const [editing, setEditing] = useState(false);
   return (
-    <div>
+    <section aria-labelledby="details" className="card p-6 max-md:p-4">
       <div className="mb-4 flex items-baseline justify-between gap-4">
-        <h2 className="display text-xl font-semibold">Details</h2>
+        <h2 id="details" className="text-lg font-semibold">Details</h2>
         <button
           type="button"
           onClick={() => setEditing((e) => !e)}
@@ -29,7 +29,7 @@ export default function DetailsCard({
           {editing ? "Cancel" : "Edit"}
         </button>
       </div>
-      {!editing && <div className="card p-6 max-md:p-4">{summary}</div>}
+      {!editing && summary}
       <div
         className={editing ? "" : "hidden"}
         // Back to the summary once the form is submitted; the save itself is
@@ -38,6 +38,6 @@ export default function DetailsCard({
       >
         {children}
       </div>
-    </div>
+    </section>
   );
 }
