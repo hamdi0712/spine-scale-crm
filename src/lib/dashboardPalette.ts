@@ -41,7 +41,7 @@ export const EMPTY_LIGHT = ["#C8DDF8", "#CFD8F5", "#D5D2F2", "#CBE2EC", "#C2EAE3
 // The same two ramps, rebuilt for a dark card.
 //
 // The light ramp is spaced by lightness starting from a deep #0C46A2, which is
-// what gives it its order — and on a #111111 card that first step is very
+// what gives it its order — and on a #30302E card that first step is very
 // nearly the card itself, so the sequence loses its darkest two segments to
 // the background. The dark ramp keeps the identical construction (deep primary
 // blue → primary → secondary teal, each step ≥0.06 OKLCH L from its
@@ -50,11 +50,11 @@ export const EMPTY_LIGHT = ["#C8DDF8", "#CFD8F5", "#D5D2F2", "#CBE2EC", "#C2EAE3
 //
 // The empty ramp moves the other way. Its light values are pale pastels chosen
 // to sit *below* the live ramp in saturation; on a dark card pale pastels are
-// the loudest thing on the page, so the dark empty ramp is a set of neutral
-// grey mid-tones instead — fully desaturated, so an empty donut on the black
-// theme carries no blue at all, and still stepped by lightness so the
-// segments read apart.
+// the loudest thing on the page, so the dark empty ramp is a set of warm
+// charcoal mid-tones instead — the same family as the dark surfaces, so an
+// empty donut carries no blue at all, and still stepped by lightness so the
+// segments read apart against the card.
 export const STAGE_RAMP_DARK = ["#3B82F6", "#4C93FF", "#60A5FA", "#2DD4BF", "#5EEAD4"];
 export const RAMP_LIGHT_DARK = ["#5B9CFF", "#6BA9FF", "#7DB8FF", "#4EE0CE", "#7FF0E0"];
-export const EMPTY_RAMP_DARK = ["#3A3A3A", "#444444", "#4E4E4E", "#585858", "#626262"];
-export const EMPTY_LIGHT_DARK = ["#4A4A4A", "#545454", "#5E5E5E", "#686868", "#727272"];
+export const EMPTY_RAMP_DARK = ["#4A4945", "#53524D", "#5C5B55", "#65645E", "#6E6D66"];
+export const EMPTY_LIGHT_DARK = ["#5A5953", "#63625C", "#6C6B64", "#75746D", "#7E7D75"];

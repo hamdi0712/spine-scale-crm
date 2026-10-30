@@ -24,7 +24,7 @@ export interface TrendPoint {
 // counterpart, picked with `useTheme()`.
 //
 // The series colours climb in dark for the same reason the accent token does:
-// a bar in #126DFB against a #111111 card is a dark shape on a dark ground.
+// a bar in #126DFB against a #30302E card is a dark shape on a dark ground.
 // The grid, axis and tick values are simply the line/muted tokens' two
 // halves, and the tooltip is the card surface it is supposed to look like.
 interface ChartPalette {
@@ -52,11 +52,11 @@ const PALETTE: Record<"light" | "dark", ChartPalette> = {
   dark: {
     primary: "#4D8DFF",
     secondary: "#3FD1C8",
-    line: "#262626",
-    tick: "#949494",
-    tooltipBg: "#111111",
-    tooltipInk: "#EDEDED",
-    cursor: "#1A1A1A",
+    line: "#3D3D3A",
+    tick: "#A8A69E",
+    tooltipBg: "#30302E",
+    tooltipInk: "#F2F1EC",
+    cursor: "#3A3A37",
     shadow: "0 4px 16px rgba(0, 0, 0, 0.5)",
   },
 };

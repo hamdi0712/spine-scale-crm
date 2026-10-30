@@ -63,7 +63,7 @@ const config: Config = {
         "purple-soft": c("purple-soft"),
         pink: c("pink"),
         // The hero widget keeps its own scale: navy on a light page by design,
-        // neutral graphite on the true-black dark theme.
+        // warm charcoal in dark, with the rest of the dark surfaces.
         hero: c("hero"),
         "hero-ink": c("hero-ink"),
       },

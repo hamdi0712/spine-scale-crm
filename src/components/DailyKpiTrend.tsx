@@ -47,7 +47,7 @@ export interface DailyKpiPoint {
 // in step with the --kpi-* tokens in globals.css if either moves.
 //
 // Dark lifts each hue for the same reason the tokens do: the fill under a
-// curve is the hue at 22% and less, and a mid-tone at 22% over a #111111 card
+// curve is the hue at 22% and less, and a mid-tone at 22% over a #30302E card
 // is not a glow, it is nothing.
 const SERIES: Record<"light" | "dark", Record<DailyKpiKey, string>> = {
   light: {
@@ -87,13 +87,13 @@ const FURNITURE: Record<"light" | "dark", Furniture> = {
     shadow: "0 1px 2px rgba(0, 0, 0, 0.04)",
   },
   dark: {
-    line: "#262626",
-    // A touch lighter than the border, as in light — the rules behind the
+    line: "#3D3D3A",
+    // Between the card and the border, as in light — the rules behind the
     // curves are quieter than the axis that frames them.
-    grid: "#1F1F1F",
-    tick: "#949494",
-    tooltipBg: "#111111",
-    tooltipInk: "#EDEDED",
+    grid: "#373734",
+    tick: "#A8A69E",
+    tooltipBg: "#30302E",
+    tooltipInk: "#F2F1EC",
     shadow: "0 4px 16px rgba(0, 0, 0, 0.5)",
   },
 };
