@@ -24,6 +24,8 @@ import {
   startersRemaining,
   frontDeskMessage,
   senderFor,
+  emailStepLabel,
+  undoSendBlocker,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { autoCheckEmails } from "@/lib/actions/jobs";
@@ -146,6 +148,13 @@ export async function loadEmailView(now = new Date()) {
 }
 
 // Everything the Email panel on a lead's page shows.
+// The latest send, when "Undo mark sent" may take it back.
+function undoProp(lead: LeadWithSends): EmailPanelProps["undo"] {
+  const last = lead.emailSends.reduce<EmailSend | null>((a, b) => (a && a.step > b.step ? a : b), null);
+  if (!last || undoSendBlocker(lead, lead.emailSends, last.id)) return null;
+  return { sendId: last.id, label: emailStepLabel(last.step) };
+}
+
 export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Promise<EmailPanelProps> {
   const [settings, inboxes] = await Promise.all([loadEmailSettings(), loadInboxes()]);
   await assignReady([lead], inboxes);
@@ -182,6 +191,7 @@ export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Pr
     body: lead.emailBody,
     approved: lead.emailApprovedAt !== null,
     unfilled: unfilledPlaceholders(`${lead.emailSubject ?? ""}\n${lead.emailBody ?? ""}`),
+    undo: undoProp(lead),
     sends: lead.emailSends.map((s) => ({
       step: s.step,
       sentAt: s.sentAt.toISOString(),

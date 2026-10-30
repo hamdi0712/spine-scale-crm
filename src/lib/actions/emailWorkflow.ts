@@ -44,8 +44,10 @@ import {
   readEmailSettings,
   readEmailVersion,
   renderEmail,
+  emailStepLabel,
   scorecardEvidence,
   sendBlocker,
+  undoSendBlocker,
   unfilledPlaceholders,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
@@ -59,6 +61,12 @@ type Result = { ok: true } | { ok: false; error: string };
 function revalidate(leadId: string): void {
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
+}
+
+function revalidateFeed(): void {
+  revalidatePath("/activities");
+  revalidatePath("/activity");
+  revalidatePath("/");
 }
 
 // ─── Settings ──────────────────────────────────────────────────────────────
@@ -376,12 +384,55 @@ export async function markEmailSent(
   const subject = typeof sent.subject === "string" ? sent.subject.slice(0, 300) : "";
   const body = typeof sent.body === "string" ? sent.body.slice(0, 8000) : "";
 
-  await prisma.emailSend.create({
-    data: { leadId, step: next.step, toEmail: (lead.email ?? "").trim(), inboxId: inbox.id, fromEmail: inbox.address, subject, body, sentAt: now },
-  });
+  await prisma.$transaction([
+    prisma.emailSend.create({
+      data: { leadId, step: next.step, toEmail: (lead.email ?? "").trim(), inboxId: inbox.id, fromEmail: inbox.address, subject, body, sentAt: now },
+    }),
+    prisma.activityLog.create({
+      data: {
+        kind: "EMAIL_MARKED_SENT",
+        summary: `${emailStepLabel(next.step)} marked sent to ${lead.clinicName} from ${inbox.address}`,
+        leadId,
+      },
+    }),
+  ]);
   const sentToday = (await sentTodayByInbox(now))[inbox.id] ?? 0;
   revalidate(leadId);
+  revalidateFeed();
   return { ok: true, step: next.step, inbox: inbox.address, sentToday, dailyLimit: inbox.dailyLimit };
+}
+
+// "Undo mark sent": takes back the latest send, marked by mistake. The send
+// is the only record of it — status, follow-up timing and the per-inbox
+// count today are all worked out from the sends — so deleting the row puts
+// the lead back to Ready (Email 1) or Follow-up due (a follow-up), drops it
+// from the count, and cancels the follow-up it started. The assigned inbox
+// and the approved email are left as they are.
+export async function undoEmailSent(leadId: string, sendId: string): Promise<Result> {
+  const lead = await loadLead(leadId);
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  const blocked = undoSendBlocker(lead, lead.emailSends, sendId);
+  if (blocked) return { ok: false, error: blocked };
+  const send = lead.emailSends.find((s) => s.id === sendId)!;
+  // Checked again inside the transaction: a follow-up marked sent in another
+  // tab since would make this no longer the last one.
+  const changed = await prisma.$transaction(async (tx) => {
+    if ((await tx.emailSend.count({ where: { leadId, step: { gt: send.step } } })) > 0) return true;
+    const gone = await tx.emailSend.deleteMany({ where: { id: send.id, leadId } });
+    if (gone.count !== 1) return true;
+    await tx.activityLog.create({
+      data: {
+        kind: "EMAIL_SEND_UNDONE",
+        summary: `Undid ${emailStepLabel(send.step)} marked sent to ${lead.clinicName}${send.fromEmail ? ` from ${send.fromEmail}` : ""}`,
+        leadId,
+      },
+    });
+    return false;
+  });
+  if (changed) return { ok: false, error: "The emails changed since the page loaded — reload it and try again." };
+  revalidate(leadId);
+  revalidateFeed();
+  return { ok: true };
 }
 
 // ─── Results ───────────────────────────────────────────────────────────────

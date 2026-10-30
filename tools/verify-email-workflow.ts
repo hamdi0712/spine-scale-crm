@@ -285,6 +285,24 @@ async function main(): Promise<void> {
     sent0.ok && sent0.step === 0 && (await prisma.emailSend.count({ where: { leadId: owner.id, step: 0 } })) === 1 && (await state(owner.id)).status === "in_sequence");
   check("Mark sent records which inbox sent it", (await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 0 } })).fromEmail === "hamdi@spinescale.co" &&
     sent0.ok && sent0.inbox === "hamdi@spinescale.co" && sent0.sentToday === 1 && sent0.dailyLimit === 1);
+  check("Mark sent is logged in the activity feed",
+    (await prisma.activityLog.count({ where: { leadId: owner.id, kind: "EMAIL_MARKED_SENT", summary: { startsWith: "Email 1 marked sent to " , endsWith: " from hamdi@spinescale.co" } } })) === 1);
+
+  console.log("\nUndo mark sent");
+  const email1 = await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 0 } });
+  const undo0 = await act.undoEmailSent(owner.id, email1.id);
+  const undone = await state(owner.id, new Date(Date.now() + 10 * DAY));
+  check("undo Email 1: the send is gone and the lead is Ready again",
+    undo0.ok && (await prisma.emailSend.count({ where: { leadId: owner.id } })) === 0 && (await state(owner.id)).status === "ready", undo0.ok ? "" : undo0.error);
+  check("and today's count for hamdi@ drops by one", ((await (await import("../src/lib/emailInboxes")).sentTodayByInbox())[hamdi.id] ?? 0) === 0);
+  check("and no follow-up comes due", undone.toSend?.step === 0 && !undone.followUpDueToday);
+  check("and the assigned inbox is kept", (await leadInbox(owner.id)) === hamdi.id);
+  check("and the undo is logged in the activity feed",
+    (await prisma.activityLog.count({ where: { leadId: owner.id, kind: "EMAIL_SEND_UNDONE", summary: { startsWith: "Undid Email 1 marked sent to ", endsWith: " from hamdi@spinescale.co" } } })) === 1);
+  check("undoing it twice is refused", !(await act.undoEmailSent(owner.id, email1.id)).ok);
+  const again0 = await act.markEmailSent(owner.id, { step: 0, subject: send0.subject, body: send0.body, inboxId: send0.inboxId });
+  check("and it can be marked sent again", again0.ok && again0.sentToday === 1);
+
   const locked = await act.setLeadInbox(owner.id, team.id);
   check("and the inbox cannot be changed after Email 1", !locked.ok && (await leadInbox(owner.id)) === hamdi.id, locked.ok ? "changed?" : locked.error);
   const deskSend = (await state(desk.id)).toSend!;
@@ -322,6 +340,16 @@ async function main(): Promise<void> {
   check("marking it sent from another inbox is refused", !wrongInbox.ok, wrongInbox.ok ? "accepted?" : wrongInbox.error);
   check("follow-up 1 marked sent, from hamdi@", (await act.markEmailSent(owner.id, { step: 1, subject: f1.subject, body: f1.body, inboxId: f1.inboxId })).ok &&
     (await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 1 } })).inboxId === hamdi.id);
+  const fu1 = await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 1 } });
+  check("undoing Email 1 while follow-up 1 is the latest is refused",
+    !(await act.undoEmailSent(owner.id, (await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 0 } })).id)).ok);
+  const undo1 = await act.undoEmailSent(owner.id, fu1.id);
+  const fuBack = await state(owner.id);
+  check("undo a follow-up: it is Follow-up due again, from the same inbox",
+    undo1.ok && fuBack.followUpDueToday && fuBack.toSend?.step === 1 && fuBack.toSend.inboxId === hamdi.id &&
+      (await prisma.emailSend.count({ where: { leadId: owner.id } })) === 1, undo1.ok ? "" : undo1.error);
+  check("and the undo is logged", (await prisma.activityLog.count({ where: { leadId: owner.id, summary: { startsWith: "Undid Follow-up 1 marked sent" } } })) === 1);
+  await act.markEmailSent(owner.id, { step: 1, subject: f1.subject, body: f1.body, inboxId: f1.inboxId });
   await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 1 }, data: { sentAt: new Date(now.getTime() - 3 * DAY) } });
   const f2 = (await state(owner.id)).toSend!;
   check("follow-up 2 comes due after it", f2?.step === 2);
@@ -342,6 +370,12 @@ async function main(): Promise<void> {
   const replied = await act.markEmailReplied(desk.id, { text: "Thanks, but we're all set.", type: "not_interested" });
   const deskAfter = await reload(desk.id);
   check("Not interested: follow-ups stop", replied.ok && (await state(desk.id, new Date(now.getTime() + 10 * DAY))).toSend === null);
+  const deskLast = await prisma.emailSend.findFirstOrThrow({ where: { leadId: desk.id, step: 0 } });
+  const undoReplied = await act.undoEmailSent(desk.id, deskLast.id);
+  check("undo is refused once they have replied, and the send is kept",
+    !undoReplied.ok && (await prisma.emailSend.count({ where: { id: deskLast.id } })) === 1, undoReplied.ok ? "accepted?" : undoReplied.error);
+  const mmLast = await prisma.emailSend.findFirstOrThrow({ where: { leadId: mismatch.id } });
+  check("and once it has bounced", !(await act.undoEmailSent(mismatch.id, mmLast.id)).ok);
   check("a task is created to answer it", (await prisma.task.count({ where: { leadId: desk.id, title: { startsWith: "Reply to" } } })) === 1);
   check("and the clinic goes on the suppression list", deskAfter.suppressedAt !== null && (await state(desk.id)).status === "stopped" &&
     (await prisma.suppression.count({ where: { email: "info@frontdesk.test", domain: "frontdesk.test", reason: "not_interested" } })) === 1);

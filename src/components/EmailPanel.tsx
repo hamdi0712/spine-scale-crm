@@ -34,6 +34,7 @@ import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { EmailStatusBadge } from "@/components/Badge";
 import EmailSendButtons from "@/components/EmailSendButtons";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
+import UndoMarkSentButton from "@/components/UndoMarkSentButton";
 import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
 import { confirmText } from "@/lib/displayMode";
 
@@ -53,6 +54,9 @@ export interface EmailPanelProps {
   inboxLocked: boolean;
   inboxSentToday: number;
   inboxLimit: number;
+  // The latest send, when it may be undone: no reply, bounce or unsubscribe
+  // since. Null hides "Undo mark sent".
+  undo: { sendId: string; label: string } | null;
   // Checking the address through Instantly: whether it has been already,
   // and what the confirm quotes.
   check: { checked: boolean; hasKey: boolean; used: number; budget: number; perCheck: number };
@@ -327,6 +331,7 @@ export default function EmailPanel(p: EmailPanelProps) {
               </li>
             ))}
           </ul>
+          {p.undo && <UndoMarkSentButton leadId={p.leadId} sendId={p.undo.sendId} label={p.undo.label} />}
         </div>
       )}
 
