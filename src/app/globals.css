@@ -121,11 +121,12 @@
 
 .dark {
   /* Warm charcoal — neutral greys with a slight beige/brown undertone (red a
-     touch above blue at every step), and no blue in any surface. The sidebar
-     sits a step below the page; cards, fields and dialogs lift off it, and
-     hover fills and inset rows lift once more. */
-  --c-bg: 38 38 36;             /* #262624 — the page */
-  --c-panel: 31 30 29;          /* #1F1E1D — the sidebar, a step below the page */
+     touch above blue at every step), and no blue in any surface. The page is
+     the darkest ground and the sidebar a lighter, greyer step beside it;
+     cards, fields and dialogs lift off both, and hover fills and inset rows
+     lift once more. */
+  --c-bg: 31 30 29;             /* #1F1E1D — the page */
+  --c-panel: 38 38 36;          /* #262624 — the sidebar, a step above the page */
   --c-wash: 58 58 55;           /* #3A3A37 — hover fills, inset rows */
   --c-surface: 48 48 46;        /* #30302E — cards, fields, dialogs */
   --c-line: 61 61 58;           /* #3D3D3A — borders, low contrast */
