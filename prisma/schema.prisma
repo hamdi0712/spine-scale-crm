@@ -288,6 +288,10 @@ model Lead {
   emailSource     String?
   emailCheckedAt  DateTime?
   emailAlternates String?
+  // When the clinic's Facebook page was last read for an address
+  // (src/lib/facebookEmailRun.ts) — set whether or not one was found, so a
+  // page is paid for once and the bulk action leaves it alone after that.
+  facebookEmailAt DateTime?
 
   // Which channel the lead is worked on: email | linkedin | call, constrained
   // by LEAD_CHANNELS in src/lib/emailChannel.ts. Every lead that existed
@@ -1133,6 +1137,12 @@ model PipelineSettings {
   // needs — "who is the owner at this clinic" — rather than a new integration.
   decisionMakerEnabled Boolean @default(false)
   decisionMakerActorId String  @default("harvestapi~linkedin-profile-search")
+
+  // Facebook page emails — the backup email finder. Reads the address off a
+  // promoted email lead's Facebook page when Maps and the website had none.
+  // Same toggle-plus-actor-ID shape, off by default: it spends actor runs.
+  facebookEmailsEnabled Boolean @default(false)
+  facebookEmailsActorId String  @default("apify~facebook-pages-scraper")
 
   // The score a candidate must reach to be promoted rather than rejected,
   // out of ICP_MAX_SCORE. It is the promotion bar and not a tier band: the

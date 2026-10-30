@@ -63,7 +63,8 @@ import ConfirmForm from "@/components/ConfirmForm";
 import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
 import OutreachSequencePanel from "@/components/OutreachSequencePanel";
 import EmailPanel from "@/components/EmailPanel";
-import { emailPanelProps } from "@/lib/emailWorkflowRead";
+import { contactFormProps, emailPanelProps } from "@/lib/emailWorkflowRead";
+import ContactFormButtons from "@/components/ContactFormButtons";
 import IcpScorecardV2 from "@/components/IcpScorecardV2";
 import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
@@ -133,6 +134,8 @@ export default async function LeadDetailPage({
   // plan reads from the same row the run will.
   const settings = await loadPipelineSettings();
   const plan = enrichPlan(lead, settings);
+  // Email leads only: the message is the front-desk email.
+  const contactForm = lead.channel === "email" ? await contactFormProps(lead) : null;
 
   // The scorecard. The ICP model's card where the lead has one; a blank card
   // against the active ICP where it does not, to score by hand or with the
@@ -517,6 +520,7 @@ export default async function LeadDetailPage({
               lead.companyLinkedinUrl ||
               lead.websiteUrl ||
               lead.facebookUrl ||
+              contactForm ||
               // A mark outlives the URL it was made against: a profile link
               // deleted later shouldn't take the record of the outreach with it.
               lead.connectionRequestSentAt) && (
@@ -561,6 +565,10 @@ export default async function LeadDetailPage({
                     View Facebook page ↗
                   </a>
                 )}
+                {/* The clinic's own contact form, for a front-desk message
+                    sent by hand. The button only shows when a stored link
+                    reads as the contact page. */}
+                {contactForm && <ContactFormButtons {...contactForm} />}
                 {/* The one thing in this row that records rather than opens.
                     Sending the request is still done by hand on LinkedIn; this
                     is where you say you did it, so the pipeline can show it.

@@ -20,7 +20,9 @@ import {
   DEFAULT_ACTOR_IDS,
   DEFAULT_CLINIC_DISCOVERY_ACTOR_ID,
   DEFAULT_DECISION_MAKER_ACTOR_ID,
+  DEFAULT_FACEBOOK_EMAILS_ACTOR_ID,
   DEFAULT_PIPELINE_SETTINGS,
+  FACEBOOK_PAGE_USD_PER_PAGE,
   DEFAULT_PROMOTION_THRESHOLD,
   DEFAULT_V2_PROMOTION_THRESHOLD,
   MAX_PROMOTION_THRESHOLD,
@@ -76,6 +78,10 @@ export default function PipelineSettingsForm({
   const dmActorTyped = draft.decisionMaker.actorId.trim();
   const dmActorMalformed =
     dmActorTyped !== "" && normalizeApifyId(dmActorTyped) === null;
+
+  const fbActorTyped = draft.facebookEmails.actorId.trim();
+  const fbActorMalformed =
+    fbActorTyped !== "" && normalizeApifyId(fbActorTyped) === null;
 
   const enabledCount = PIPELINE_STEP_KEYS.filter(
     (k) => draft.steps[k].enabled,
@@ -370,6 +376,72 @@ export default function PipelineSettingsForm({
               {dmActorMalformed
                 ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
                 : `Every step of this stage that costs anything is a Google search, so this is a search actor: any that returns a result's link, title and snippet works. Blank runs ${DEFAULT_DECISION_MAKER_ACTOR_ID}, the one the chain already searches with.`}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── The backup email finder ─────────────────────────────────────── */}
+      <section>
+        <h2 className="display mb-1 text-xl font-semibold">
+          Facebook page emails
+        </h2>
+        <p className="helper-text mb-4 text-sm text-muted">
+          The backup email finder — for promoted email leads that still have no
+          address after Google Maps and the website
+        </p>
+        <div className="card p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Find emails on Facebook</p>
+              <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
+                Reads the email the clinic lists on its Facebook page&apos;s
+                About and contact info. Junk and web-vendor addresses are
+                dropped, an existing email is never replaced, and what it finds
+                is checked through Instantly like any new address. Runs once per
+                page, about {fmtEstimate(FACEBOOK_PAGE_USD_PER_PAGE)} each. Off
+                until it is switched on.
+              </p>
+            </div>
+            <Toggle
+              name="facebookEmailsEnabled"
+              checked={draft.facebookEmails.enabled}
+              onChange={(enabled) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  facebookEmails: { ...prev.facebookEmails, enabled },
+                }))
+              }
+              label={`Facebook page emails — ${draft.facebookEmails.enabled ? "on" : "off"}`}
+            />
+          </div>
+
+          <div className="mt-4">
+            <label className="field-label" htmlFor="facebookEmailsActorId">
+              Page scraper actor
+            </label>
+            <input
+              id="facebookEmailsActorId"
+              name="facebookEmailsActorId"
+              value={draft.facebookEmails.actorId}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  facebookEmails: { ...prev.facebookEmails, actorId: e.target.value },
+                }))
+              }
+              spellCheck={false}
+              autoComplete="off"
+              placeholder={DEFAULT_FACEBOOK_EMAILS_ACTOR_ID}
+              aria-invalid={fbActorMalformed || undefined}
+              className={`field font-mono text-xs ${
+                fbActorMalformed ? "border-bad focus:border-bad focus:ring-bad/15" : ""
+              }`}
+            />
+            <p className={`${fbActorMalformed ? "" : "helper-text "}mt-1.5 text-xs leading-relaxed text-muted`}>
+              {fbActorMalformed
+                ? "That is not an actor ID. Use the 17-character ID or the username~name form shown in the Apify console — saving as it stands will keep the default instead."
+                : `Any actor that takes startUrls and returns the page's email and About/contact lines by name works. Blank runs ${DEFAULT_FACEBOOK_EMAILS_ACTOR_ID}.`}
             </p>
           </div>
         </div>

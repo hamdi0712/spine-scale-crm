@@ -1,7 +1,7 @@
 // The internal activity feed — what counts as an event, and how one reads.
 //
 // The list of kinds below is the whole contract: an event is logged when one
-// of these seven things happens to an engagement and at no other time. Routine
+// of these things happens to an engagement and at no other time. Routine
 // field edits (renaming a clinic, fixing a phone number, moving a checklist
 // item along) are not events. Keeping the list short is what makes the feed
 // worth reading — a log of everything is a log of nothing.
@@ -18,6 +18,9 @@
 // tools (src/lib/mcpWrites.ts): every one says "via Claude connector" and
 // carries an Undo, and undoing it logs a line of its own.
 //
+// CONTACT_FORM_SENT is a message sent by hand through a clinic's own contact
+// form, marked from the lead page; it books a call three days later.
+//
 // LEADS_MOVED_TO_EMAIL is written once, by the migration that gave leads a
 // channel, to record how many Clinic-first leads it moved to email.
 // LEADS_MOVED_TO_LINKEDIN is written once, by the migration that gave
@@ -33,6 +36,7 @@ export const ACTIVITY_KINDS = [
   "ONBOARDING_COMPLETED",
   "COPILOT_ACTION",
   "CONNECTOR_CHANGE",
+  "CONTACT_FORM_SENT",
   "LEADS_MOVED_TO_EMAIL",
   "LEADS_MOVED_TO_LINKEDIN",
 ] as const;
@@ -49,6 +53,7 @@ export const ACTIVITY_ICONS: Record<ActivityKind, string> = {
   ONBOARDING_COMPLETED: "check",
   COPILOT_ACTION: "flag",
   CONNECTOR_CHANGE: "flag",
+  CONTACT_FORM_SENT: "mail",
   LEADS_MOVED_TO_EMAIL: "mail",
   LEADS_MOVED_TO_LINKEDIN: "pipeline",
 };

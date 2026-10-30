@@ -16,7 +16,9 @@ prisma/*.db
 prisma/*.db-journal
 # the scratch database the tools/verify-* scripts are pointed at
 .verify.db
+.verify-*.db
 .verify.db-journal
+.verify-*.db-journal
 
 # local env — real password lives here, never committed
 .env

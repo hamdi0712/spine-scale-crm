@@ -8,7 +8,7 @@
 import { prisma } from "@/lib/prisma";
 import { dismissJob, JobItemResult, launchJob, LaunchResult, requestJobStop } from "@/lib/jobRunner";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
-import { costPerCandidate, stepCostPerCandidate } from "@/lib/pipelineSettings";
+import { FACEBOOK_PAGE_USD_PER_PAGE, costPerCandidate, stepCostPerCandidate } from "@/lib/pipelineSettings";
 import {
   discoveryQueue,
   discoveryQueueSelected,
@@ -36,6 +36,7 @@ import { clinicTermLine, runClinicSearchTerm } from "@/lib/clinicSearchRun";
 import { checkLeadEmail, checkReadiness, creditsUsedThisMonth, uncheckedEmailLeads } from "@/lib/emailCheckRun";
 import { fmtCredits } from "@/lib/emailCheck";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
+import { facebookEmailLeads, findBackupEmail } from "@/lib/facebookEmailRun";
 
 // ─── Re-crawl website ──────────────────────────────────────────────────────
 
@@ -249,6 +250,12 @@ export async function startQueueJob(channel: unknown, selectedIds: string[] | nu
         result,
       };
     },
+    // Addresses the email finder found on promoted leads, checked once the
+    // run is over (one may have been running while they turned up).
+    finish: async () => {
+      await autoCheckEmails();
+      return null;
+    },
   });
 }
 
@@ -379,6 +386,50 @@ export async function autoCheckEmails(): Promise<void> {
     await startEmailCheckJob({ auto: true });
   } catch {
     // An automatic check that cannot start is not an error anybody is waiting on.
+  }
+}
+
+// ─── Find emails on Facebook ───────────────────────────────────────────────
+
+// Email leads with no address, a Facebook page, and that page not read yet:
+// the website first (free), then the page. Every new address is checked
+// through Instantly when the run is over. The page shows the estimate and asks
+// before this is pressed.
+export async function startFacebookEmailJob(): Promise<LaunchResult> {
+  const settings = await loadPipelineSettings();
+  if (!settings.facebookEmails.enabled) {
+    return { ok: false, error: "Facebook page emails is turned off. Turn it on under Settings → Pipeline, where its actor is set too." };
+  }
+  const rows = await facebookEmailLeads();
+  if (rows.length === 0) return { ok: false, error: "No email lead without an address has an unread Facebook page." };
+  let found = 0;
+  return launchJob({
+    kind: "facebook-emails",
+    source: "facebook-emails",
+    verb: "Reading",
+    href: "/pipeline",
+    items: rows.map((r) => ({ id: r.id, name: r.clinicName, estimateUsd: FACEBOOK_PAGE_USD_PER_PAGE })),
+    work: async (item) => {
+      const r = await findBackupEmail(item.id, settings);
+      if (r.kind === "found") found++;
+      return { outcome: r.kind === "found" ? "ok" : r.kind === "failed" ? "error" : "warn", detail: r.detail };
+    },
+    finish: async ({ status }) => {
+      if (found > 0) await autoCheckEmails();
+      const head = `${found} email${found === 1 ? "" : "s"} found${found > 0 ? " — checking them through Instantly" : ""}.`;
+      return status === "stopped" ? `Stopped. ${head}` : head;
+    },
+  });
+}
+
+// A lead just promoted outside the queue (by hand, or by the decision-maker
+// stage): the email finder in the background, and the check if it found one.
+export async function autoFindBackupEmail(leadId: string): Promise<void> {
+  try {
+    const r = await findBackupEmail(leadId, await loadPipelineSettings());
+    if (r.kind === "found") await autoCheckEmails();
+  } catch {
+    // Nobody is waiting on it; the bulk action can try the lead again.
   }
 }
 

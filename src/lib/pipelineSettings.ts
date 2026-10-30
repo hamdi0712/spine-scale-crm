@@ -115,6 +115,10 @@ export interface PipelineSettings {
   // (src/lib/decisionMaker.ts). Same shape again, and off for the same reason:
   // it spends actor runs the moment somebody presses the button.
   decisionMaker: PipelineStepSetting;
+  // The backup email finder (src/lib/facebookEmailRun.ts): a promoted email
+  // lead with a Facebook page and still no address has the page read for one.
+  // Same shape, off by default for the same reason.
+  facebookEmails: PipelineStepSetting;
   // Which framework Process Queue scores with. "v1" until somebody has read a
   // Compare scoring dry run and pressed Apply new scoring (src/app/(app)/
   // discovery/compare) — never switched by the settings form itself.
@@ -174,6 +178,12 @@ const RETIRED_DECISION_MAKER_ACTOR_ID = "harvestapi~linkedin-profile-search";
 
 export const DEFAULT_DECISION_MAKER_ENABLED = false;
 
+// The page scraper the email finder runs: one item per page, with the email
+// and the About/contact lines it lists. Any actor that returns those fields by
+// name works the same way.
+export const DEFAULT_FACEBOOK_EMAILS_ACTOR_ID = "apify~facebook-pages-scraper";
+export const DEFAULT_FACEBOOK_EMAILS_ENABLED = false;
+
 export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   steps: Object.fromEntries(
     PIPELINE_STEP_KEYS.map((key) => [
@@ -189,6 +199,10 @@ export const DEFAULT_PIPELINE_SETTINGS: PipelineSettings = {
   decisionMaker: {
     enabled: DEFAULT_DECISION_MAKER_ENABLED,
     actorId: DEFAULT_DECISION_MAKER_ACTOR_ID,
+  },
+  facebookEmails: {
+    enabled: DEFAULT_FACEBOOK_EMAILS_ENABLED,
+    actorId: DEFAULT_FACEBOOK_EMAILS_ACTOR_ID,
   },
   scoringModel: "v1",
   promotionThresholdV2: DEFAULT_V2_PROMOTION_THRESHOLD,
@@ -235,6 +249,10 @@ export function readPipelineSettings(row: unknown): PipelineSettings {
       enabled: record.decisionMakerEnabled === true,
       actorId: readDecisionMakerActorId(record.decisionMakerActorId),
     },
+    facebookEmails: {
+      enabled: record.facebookEmailsEnabled === true,
+      actorId: readFacebookEmailsActorId(record.facebookEmailsActorId),
+    },
     // Anything but a stored "v2" is the old model: the switch is only ever
     // thrown on purpose.
     scoringModel: record.scoringModel === "v2" ? "v2" : "v1",
@@ -266,6 +284,12 @@ export function readDecisionMakerActorId(raw: unknown): string {
   if (typeof raw !== "string") return DEFAULT_DECISION_MAKER_ACTOR_ID;
   const id = normalizeApifyId(raw) ?? DEFAULT_DECISION_MAKER_ACTOR_ID;
   return id === RETIRED_DECISION_MAKER_ACTOR_ID ? DEFAULT_DECISION_MAKER_ACTOR_ID : id;
+}
+
+// The Facebook page scraper, held to the same shape as every other stored ID.
+export function readFacebookEmailsActorId(raw: unknown): string {
+  if (typeof raw !== "string") return DEFAULT_FACEBOOK_EMAILS_ACTOR_ID;
+  return normalizeApifyId(raw) ?? DEFAULT_FACEBOOK_EMAILS_ACTOR_ID;
 }
 
 // The bar, held to the scale. A number outside it, or no number at all, is the
@@ -312,6 +336,8 @@ export function pipelineSettingsRow(
   row.clinicDiscoveryActorId = settings.clinicDiscovery.actorId;
   row.decisionMakerEnabled = settings.decisionMaker.enabled;
   row.decisionMakerActorId = settings.decisionMaker.actorId;
+  row.facebookEmailsEnabled = settings.facebookEmails.enabled;
+  row.facebookEmailsActorId = settings.facebookEmails.actorId;
   row.scoringModel = settings.scoringModel;
   row.promotionThresholdV2 = settings.promotionThresholdV2;
   row.websiteCrawlPages = settings.websiteCrawlPages;
@@ -340,6 +366,8 @@ export function isDefaultPipelineSettings(settings: PipelineSettings): boolean {
     settings.clinicDiscovery.actorId === DEFAULT_CLINIC_DISCOVERY_ACTOR_ID &&
     settings.decisionMaker.enabled === DEFAULT_DECISION_MAKER_ENABLED &&
     settings.decisionMaker.actorId === DEFAULT_DECISION_MAKER_ACTOR_ID &&
+    settings.facebookEmails.enabled === DEFAULT_FACEBOOK_EMAILS_ENABLED &&
+    settings.facebookEmails.actorId === DEFAULT_FACEBOOK_EMAILS_ACTOR_ID &&
     PIPELINE_STEP_KEYS.every(
       (key) =>
         settings.steps[key].enabled &&
@@ -399,6 +427,14 @@ export const MAPS_CONTACTS_USD_PER_PLACE = 0.002;
 // asking before the money is spent and fewer results only make it cheaper.
 export function mapsContactsCost(terms: number, resultsPerTerm: number): number {
   return Math.max(0, terms) * Math.max(0, resultsPerTerm) * MAPS_CONTACTS_USD_PER_PLACE;
+}
+
+// The Facebook page scraper, per page read. One page per lead: the finder
+// only ever reads the lead's own page.
+export const FACEBOOK_PAGE_USD_PER_PAGE = 0.01;
+
+export function facebookEmailsCost(leads: number): number {
+  return Math.max(0, leads) * FACEBOOK_PAGE_USD_PER_PAGE;
 }
 
 // What one candidate consumes of a step under these settings. Only the crawl

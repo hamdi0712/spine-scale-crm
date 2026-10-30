@@ -924,16 +924,45 @@ route answers 404 in production.
 
 Beside a lead's email: `emailType` (owner / generic / not found),
 `emailStatus` (valid / risky / invalid / unknown; empty is not checked),
-`emailSource` (site crawl / extractor / name pattern / imported / manual),
-`emailCheckedAt`, and `emailAlternates` (other addresses, as JSON). The lead
-page shows them under the email field. An address typed into the lead form is
-`manual`; one with no source on it reads as `imported`. Verification is done in
-Instantly, not in this app.
+`emailSource` (site crawl / extractor / name pattern / Maps contacts /
+Facebook page / imported / manual), `emailCheckedAt`, and `emailAlternates`
+(other addresses, as JSON). The lead page shows them under the email field. An
+address typed into the lead form is `manual`; one with no source on it reads
+as `imported`. Every new address is checked automatically through Instantly's
+email-verification API (`src/lib/emailCheckRun.ts`), within the monthly credit
+budget set in Settings → Email; the manual export / import of a checker's CSV
+is gone.
 
 `src/lib/emailFind.ts` holds the plain helpers for reading addresses out of
 scraped text (junk and vendor addresses dropped, other businesses' domains
 ignored) and labelling them owner or generic against the decision-maker's
 name. Crawls keep `mailto:` links on `websiteLinks` for the same reason.
+
+Where an email lead's address comes from, in order, and only while it has
+none — an existing email is never replaced:
+
+1. **Google Maps** — the Clinic-first search's contact scraping.
+2. **The website** — free: the copy and links the crawler already stored,
+   read at promotion and again before step 3.
+3. **The Facebook page** — the backup finder (`src/lib/facebookEmailRun.ts`).
+   The page scraper set under Settings → Pipeline → *Facebook page emails*
+   (off by default) reads the email listed in the page's About / contact info.
+   It runs on promoted email leads only — after the queue promotes one, after
+   a promotion by hand or by the decision-maker stage, and at the end of a lead
+   page enrichment run — and once per page (`facebookEmailAt`), found or not.
+   *Find emails on Facebook* on the Email pipeline does the same for every
+   existing email lead with no address and an unread page, with a cost
+   estimate first, in the shared job runner.
+
+**Contact form.** An email lead's page has, beside *Visit website* and *View
+Facebook page*: **Contact form** — the clinic's own contact page, picked from
+the stored `websiteLinks` (same domain; link text or path saying contact,
+appointment, schedule, request or book; *contact* preferred; hidden when none
+matches — `src/lib/contactForm.ts`); **Copy message** — the front-desk email,
+subject and body: the approved one when it is the front-desk version, otherwise
+the front-desk template with the approved opener (none if there is none); and
+**Mark form sent** — logged in the activity feed with the date, plus a task to
+call the clinic in three days. The email sequence is not touched.
 
 ## On a phone or tablet
 

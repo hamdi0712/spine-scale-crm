@@ -14,7 +14,7 @@ import { deepSeekJson } from "@/lib/deepseek";
 import { loadActiveIcp } from "@/lib/icpDefinitionStore";
 import { hasAssistEvidence } from "@/lib/icpAssist";
 import { leadTier } from "@/lib/leadScore";
-import { EmailCandidate, parseAlternates, scorecardDecisionMaker } from "@/lib/emailFind";
+import { EmailCandidate, parseAlternates, readEmailSource, scorecardDecisionMaker } from "@/lib/emailFind";
 import {
   EMAIL_OPENER_MAX_CHARS,
   SEQUENCE_MAX_TOKENS,
@@ -31,6 +31,7 @@ import {
   parseFirstMessageFallbackReply,
 } from "@/lib/outreachSequence";
 import {
+  CONTACT_FORM_CALL_AFTER_DAYS,
   EMAIL_REPLY_TYPE_LABELS,
   EmailVersion,
   EmailSettingsValues,
@@ -39,7 +40,6 @@ import {
   contactCheck,
   defaultEmailVersion,
   isInboxAddress,
-  readCheckResults,
   readEmailReplyType,
   readEmailSettings,
   readEmailVersion,
@@ -51,6 +51,8 @@ import {
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
 import { findSuppression, suppressLead, suppressedMessage } from "@/lib/suppression";
 import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
+
+import { fmtDate } from "@/lib/format";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -335,86 +337,6 @@ export async function resolveContact(leadId: string, choice: string): Promise<Re
   return { ok: true };
 }
 
-// ─── Checking addresses, by file ───────────────────────────────────────────
-
-export interface CheckImportSummary {
-  updated: number;
-  valid: number;
-  risky: number;
-  unknown: number;
-  invalid: number;
-  unmatched: string[];
-  unreadable: number;
-}
-
-// The checker's results back onto the leads. Matched by lead and address
-// where the export's lead_id survived, by address alone where it did not —
-// and only ever onto the lead's current address: a result for an address the
-// lead no longer has is about somebody else's record now.
-//
-// Invalid: the address moves to the alternates, marked invalid, and the lead
-// has no email again.
-export async function importCheckResults(
-  fileText: string,
-): Promise<{ ok: true; summary: CheckImportSummary } | { ok: false; error: string }> {
-  if (typeof fileText !== "string" || fileText.trim() === "") return { ok: false, error: "That file is empty." };
-  if (fileText.length > 5_000_000) return { ok: false, error: "That file is too large." };
-  const read = readCheckResults(fileText);
-  if (read.error) return { ok: false, error: read.error };
-
-  const summary: CheckImportSummary = { updated: 0, valid: 0, risky: 0, unknown: 0, invalid: 0, unmatched: [], unreadable: read.unreadable };
-  const now = new Date();
-  for (const row of read.rows) {
-    const leads = await prisma.lead.findMany({
-      where: { email: row.email, ...(row.leadId ? { id: row.leadId } : {}) },
-      select: { id: true, email: true, emailType: true, emailSource: true, emailAlternates: true },
-    });
-    // A lead_id the address does not match is a stale file; the address alone
-    // still names the lead.
-    const targets = leads.length > 0 || !row.leadId
-      ? leads
-      : await prisma.lead.findMany({
-          where: { email: row.email },
-          select: { id: true, email: true, emailType: true, emailSource: true, emailAlternates: true },
-        });
-    if (targets.length === 0) {
-      summary.unmatched.push(row.email);
-      continue;
-    }
-    for (const lead of targets) {
-      if (row.status === "invalid") {
-        const alternates: EmailCandidate[] = [
-          ...parseAlternates(lead.emailAlternates).filter((a) => a.address !== row.email),
-          {
-            address: row.email,
-            type: lead.emailType === "owner" ? "owner" : "generic",
-            status: "invalid",
-            source: lead.emailSource === "maps_contacts" ? "maps_contacts" : "imported",
-          },
-        ];
-        await prisma.lead.update({
-          where: { id: lead.id },
-          data: {
-            email: null,
-            emailType: null,
-            emailStatus: null,
-            emailSource: null,
-            emailCheckedAt: now,
-            emailAlternates: JSON.stringify(alternates),
-            emailApprovedAt: null,
-          },
-        });
-      } else {
-        await prisma.lead.update({ where: { id: lead.id }, data: { emailStatus: row.status, emailCheckedAt: now } });
-      }
-      summary.updated++;
-      summary[row.status]++;
-    }
-  }
-  revalidatePath("/pipeline");
-  return { ok: true, summary };
-}
-
 // ─── Sending, by hand ──────────────────────────────────────────────────────
 
 export type MarkSentResult =
@@ -507,7 +429,7 @@ export async function markEmailBounced(leadId: string): Promise<Result> {
       address,
       type: lead.emailType === "owner" ? "owner" : "generic",
       status: "invalid",
-      source: lead.emailSource === "maps_contacts" ? "maps_contacts" : "imported",
+      source: readEmailSource(lead.emailSource) ?? "imported",
     },
   ];
   await prisma.lead.update({
@@ -535,5 +457,36 @@ export async function markEmailUnsubscribed(leadId: string): Promise<Result> {
     if (!lead.suppressedAt) await suppressLead(tx, lead, "unsubscribed", now);
   });
   revalidate(leadId);
+  return { ok: true };
+}
+
+// ─── A clinic's contact form ───────────────────────────────────────────────
+
+// "Mark form sent": the message went through the clinic's own contact form,
+// by hand. Logged in the activity feed with the date, and a call booked three
+// days out. The email sequence is not touched — nothing here counts as Email 1.
+export async function markContactFormSent(leadId: string): Promise<Result> {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { id: true, clinicName: true } });
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  const now = new Date();
+  // A due date is a day, stored at UTC midnight like every other.
+  const due = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + CONTACT_FORM_CALL_AFTER_DAYS));
+  await prisma.$transaction([
+    prisma.activityLog.create({
+      data: { kind: "CONTACT_FORM_SENT", summary: `Contact form sent to ${lead.clinicName} on ${fmtDate(now)}`, leadId },
+    }),
+    prisma.task.create({
+      data: {
+        title: `Call ${lead.clinicName}`,
+        description: `Follow up on the contact form sent ${fmtDate(now)}.`,
+        dueDate: due,
+        leadId,
+      },
+    }),
+  ]);
+  revalidate(leadId);
+  revalidatePath("/activities");
+  revalidatePath("/activity");
+  revalidatePath("/");
   return { ok: true };
 }
