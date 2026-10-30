@@ -22,6 +22,7 @@ import {
   readActorId,
   readClinicDiscoveryActorId,
   readDecisionMakerActorId,
+  readFacebookEmailsActorId,
   readPromotionThreshold,
   readPromotionThresholdV2,
 } from "@/lib/pipelineSettings";
@@ -58,6 +59,10 @@ export async function savePipelineSettings(formData: FormData): Promise<void> {
     decisionMaker: {
       enabled: formData.get("decisionMakerEnabled") === "on",
       actorId: readDecisionMakerActorId(formData.get("decisionMakerActorId")),
+    },
+    facebookEmails: {
+      enabled: formData.get("facebookEmailsEnabled") === "on",
+      actorId: readFacebookEmailsActorId(formData.get("facebookEmailsActorId")),
     },
     scoringModel: current.scoringModel,
     promotionThresholdV2: formData.has("promotionThresholdV2")

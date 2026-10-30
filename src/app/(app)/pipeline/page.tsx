@@ -18,7 +18,8 @@ import ChannelToggle from "@/components/ChannelToggle";
 import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
 import { PIPELINE_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 import { loadEmailView } from "@/lib/emailWorkflowRead";
-import EmailCheckFile from "@/components/EmailCheckFile";
+import FacebookEmailButton, { FacebookEmailProgress } from "@/components/FacebookEmailButton";
+import { facebookEmailLeads } from "@/lib/facebookEmailRun";
 import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
 import { fmtCredits } from "@/lib/emailCheck";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
@@ -231,7 +232,11 @@ export default async function PipelinePage({
 // Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
 // it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
 async function EmailPipeline() {
-  const { rows, counters, starters, unchecked, check } = await loadEmailView();
+  const [{ rows, counters, starters, unchecked, check }, facebookLeads, pipelineSettings] = await Promise.all([
+    loadEmailView(),
+    facebookEmailLeads(),
+    loadPipelineSettings(),
+  ]);
 
   return (
     <div>
@@ -269,7 +274,7 @@ async function EmailPipeline() {
         <div className="flex flex-col items-end gap-2 max-md:items-stretch">
           <div className="flex flex-wrap items-start gap-2">
             <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} />
-            <EmailCheckFile unchecked={unchecked} />
+            <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} />
           </div>
           <Link href="/discovery/import/clinic" className="btn max-md:justify-center">
             Find clinics
@@ -279,6 +284,7 @@ async function EmailPipeline() {
 
       {starters.length > 0 && <StarterCopyBanner remaining={starters} className="mt-6" />}
       <EmailCheckProgress className="mt-6" />
+      <FacebookEmailProgress className="mt-6" />
 
       <div className="mt-8">
         {rows.length === 0 ? (

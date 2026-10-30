@@ -577,6 +577,10 @@ export interface EnrichRunResult {
   enrichedAt: string | null;
   // Set only when the run could not start at all.
   error?: string;
+  // An email lead with no address after the run: what the backup finder
+  // (the website, then the Facebook page) made of it, in one line. Absent
+  // when it had nothing to do.
+  emailFinder?: { found: boolean; detail: string };
 }
 
 // How a candidate reads in the chooser: the identity fields it actually

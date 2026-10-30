@@ -101,7 +101,7 @@ function EnrichDialog({
       setResult(next);
       // The page behind the dialog is showing values this may have just
       // changed.
-      if (next.written.length > 0) router.refresh();
+      if (next.written.length > 0 || next.emailFinder?.found) router.refresh();
     } catch {
       setResult({
         outcomes: [],
@@ -282,6 +282,13 @@ function EnrichDialog({
               );
             })}
           </ul>
+
+          {result?.emailFinder && !running && (
+            <p className={`text-xs leading-relaxed ${result.emailFinder.found ? "text-ink" : "text-muted"}`}>
+              Email finder: {result.emailFinder.detail}
+              {result.emailFinder.found && " — it will be checked through Instantly."}
+            </p>
+          )}
 
           {result && !running && (
             <p className="text-xs leading-relaxed text-muted">

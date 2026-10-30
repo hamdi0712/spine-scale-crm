@@ -22,6 +22,8 @@ import {
   nextFollowUp,
   sequenceLabel,
   startersRemaining,
+  frontDeskMessage,
+  senderFor,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { autoCheckEmails } from "@/lib/actions/jobs";
@@ -29,6 +31,8 @@ import { creditsUsedThisMonth } from "@/lib/emailCheckRun";
 import { getInstantlyApiKey } from "@/lib/appSecretsStore";
 import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import type { EmailPanelProps } from "@/components/EmailPanel";
+import { pickContactFormLink } from "@/lib/contactForm";
+import { fmtDate } from "@/lib/format";
 
 export interface EmailLeadState {
   status: EmailWorkflowStatus;
@@ -211,4 +215,27 @@ export async function loadLeadEmailState(leadId: string, now = new Date()): Prom
 export async function checkInfo(now = new Date()) {
   const [settings, used, key] = await Promise.all([loadEmailSettings(), creditsUsedThisMonth(now), getInstantlyApiKey()]);
   return { hasKey: key !== null, used, budget: settings.checkCreditBudget, perCheck: settings.creditsPerCheck };
+}
+
+// The lead page's contact-form buttons: the clinic's contact page off the
+// stored links, the front-desk message signed from the lead's inbox (or Your
+// name), and when a form was last marked sent.
+export async function contactFormProps(lead: LeadWithSends) {
+  const [settings, inboxes, last] = await Promise.all([
+    loadEmailSettings(),
+    loadInboxes(),
+    prisma.activityLog.findFirst({
+      where: { leadId: lead.id, kind: "CONTACT_FORM_SENT" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    }),
+  ]);
+  const inbox = inboxForLead(lead, inboxes);
+  const sender = inbox ? senderFor(inbox, settings) : settings.senderName.trim();
+  return {
+    leadId: lead.id,
+    contactFormUrl: pickContactFormLink(lead.websiteLinks, lead.websiteUrl),
+    message: frontDeskMessage(lead, settings, sender),
+    lastSentLabel: last ? `Form sent ${fmtDate(last.createdAt)}` : null,
+  };
 }

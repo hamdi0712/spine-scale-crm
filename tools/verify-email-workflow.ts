@@ -7,7 +7,7 @@
 // Seeds an owner email, a front-desk email, a contact mismatch, a disqualified
 // lead, a lead whose evidence is too thin for an observation, and a bad
 // address; then drives them through drafting (the made-up-stats check, the
-// gap-as-a-question rule, the curiosity fallback), the check-results file,
+// gap-as-a-question rule, the curiosity fallback), checked addresses,
 // approval, the contact pick, sending by hand, follow-ups coming due, a
 // bounce, an unsubscribe and a not-interested reply — and checks the
 // suppression list holds on every channel.
@@ -211,31 +211,23 @@ async function main(): Promise<void> {
   check("a comparison is still blocked", !allowed("You run the DRX9000, unlike most clinics."));
   check("the review count is still allowed", allowed("I saw your 40 Google reviews."));
 
-  console.log("\nChecking addresses by file");
+  console.log("\nChecked addresses");
   check("unchecked addresses show Check email first", (await state(owner.id)).status === "check_email");
-  const exportRows = (await prisma.lead.findMany({ where: { channel: "email", emailStatus: null, email: { not: null }, clinicName: { endsWith: "(email verify)" } } }))
-    .map((l) => ({ id: l.id, clinicName: l.clinicName, email: l.email! }));
-  const csv = wf.checkExportCsv(exportRows);
-  check("the export lists every unchecked address with a blank result column", csv.startsWith("lead_id,clinic,email,result") && exportRows.length === 6);
-  // The checker's file back, in its own words.
-  const results = [
-    "Email,Result",
-    "drsmith@ownerspine.test,deliverable",
-    "info@frontdesk.test,valid",
-    "mark@mismatch.test,ok",
-    "sam@dq.test,valid",
-    "hello@thin.test,catch-all",
-    "info@bad.test,undeliverable",
-    "stranger@nowhere.test,valid",
-  ].join("\n");
-  const imported = await act.importCheckResults(results);
-  check("results imported, one unmatched address reported",
-    imported.ok && imported.summary.updated === 6 && imported.summary.invalid === 1 && imported.summary.risky === 1 && imported.summary.unmatched.length === 1,
-    JSON.stringify(imported));
-  const badLead = await reload(bad.id);
-  const badAlts = (await import("../src/lib/emailFind")).parseAlternates(badLead.emailAlternates);
-  check("an invalid address moves to the alternates, marked invalid", badLead.email === null && badAlts.some((a) => a.address === "info@bad.test" && a.status === "invalid"));
-  check("and the lead goes back to No email", (await state(bad.id)).status === "no_email");
+  // What the Instantly check writes (tools/verify-instantly.ts covers the
+  // check itself): a status on each address, and an invalid one moved to the
+  // alternates with the lead back at No email.
+  const checkedAt = new Date();
+  for (const [lead, status] of [[owner, "valid"], [desk, "valid"], [mismatch, "valid"], [dq, "valid"], [thin, "risky"]] as const) {
+    await prisma.lead.update({ where: { id: lead.id }, data: { emailStatus: status, emailCheckedAt: checkedAt } });
+  }
+  await prisma.lead.update({
+    where: { id: bad.id },
+    data: {
+      email: null, emailType: null, emailStatus: null, emailSource: null, emailCheckedAt: checkedAt,
+      emailAlternates: JSON.stringify([{ address: "info@bad.test", type: "generic", status: "invalid", source: "imported" }]),
+    },
+  });
+  check("an invalid address leaves the lead at No email", (await state(bad.id)).status === "no_email");
   check("risky is not valid: still Check email", (await state(thin.id)).status === "check_email");
 
   console.log("\nApproving, the contact check, and the Ready rule");

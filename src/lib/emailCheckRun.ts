@@ -13,7 +13,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
-import { EmailCandidate, parseAlternates } from "@/lib/emailFind";
+import { EmailCandidate, parseAlternates, readEmailSource } from "@/lib/emailFind";
 import { budgetFor, mapVerification, monthStart } from "@/lib/emailCheck";
 import { verifyEmail, InstantlyErrorCode } from "@/lib/instantly";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
@@ -74,7 +74,8 @@ export async function checkLeadEmail(leadId: string, opts: { force?: boolean } =
         address: email,
         type: lead.emailType === "owner" ? "owner" : "generic",
         status: "invalid",
-        source: lead.emailSource === "maps_contacts" ? "maps_contacts" : "imported",
+        // Where it came from, kept: an address off a Facebook page stays one.
+        source: readEmailSource(lead.emailSource) ?? "imported",
       },
     ];
     await prisma.lead.update({

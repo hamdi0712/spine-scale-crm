@@ -4,7 +4,7 @@
 // their starter copy, how an email is put together from a template and an
 // opener, whether the contact agrees with the scorecard's decision-maker,
 // what status a lead is in and whether it is Ready, when a follow-up is due,
-// the check-results file, and the Gmail compose link.
+// and the Gmail compose link.
 //
 // Nothing here sends. An email is drafted and approved in the app, opened in
 // Gmail (or copied), sent there by hand, and marked sent here. The reads and
@@ -12,9 +12,8 @@
 //
 // Pure: no network, no database. Imported by client components.
 
-import { CsvTable, parseCsv } from "@/lib/csv";
 import { EmailLeadStatus } from "@/lib/emailChannel";
-import { EmailStatus, clinicDomain, readDecisionMakerName, scorecardDecisionMaker } from "@/lib/emailFind";
+import { clinicDomain, readDecisionMakerName, scorecardDecisionMaker } from "@/lib/emailFind";
 import { leadBreakdownV2 } from "@/lib/leadScore";
 import { ScorecardEvidence } from "@/lib/outreachSequence";
 import { IcpTier } from "@/lib/icp";
@@ -469,69 +468,6 @@ export const SUPPRESSION_REASON_LABELS: Record<SuppressionReason, string> = {
   unsubscribed: "Unsubscribed",
 };
 
-// ─── Checking addresses, by file ───────────────────────────────────────────
-
-const RESULT_WORDS: [RegExp, EmailStatus][] = [
-  [/^(invalid|undeliverable|bounced?|bad|rejected|does[ _-]?not[ _-]?exist|disabled|spamtrap|syntax[ _-]?error)$/i, "invalid"],
-  [/^(valid|deliverable|ok|good|safe|verified)$/i, "valid"],
-  [/^(risky|catch[ _-]?all|accept[ _-]?all|accept_all|role|disposable)$/i, "risky"],
-  [/^(unknown|unverifiable|timeout|error)$/i, "unknown"],
-];
-
-// One result cell in the words checkers use, as one of the four statuses.
-export function readCheckResult(raw: string): EmailStatus | null {
-  const t = raw.trim().toLowerCase();
-  for (const [re, status] of RESULT_WORDS) if (re.test(t)) return status;
-  return null;
-}
-
-const EMAIL_HEADERS = ["email", "email address", "address", "e-mail"];
-const RESULT_HEADERS = ["result", "status", "check result", "verification", "verification status", "email status", "state", "deliverability"];
-const LEAD_HEADERS = ["lead_id", "lead id", "id"];
-
-export interface CheckResultRow {
-  email: string;
-  leadId: string | null;
-  status: EmailStatus;
-}
-
-// The results file back: whichever columns hold the address, the result and
-// (where the export's lead_id survived) the lead. Rows that cannot be read
-// are counted, not guessed at.
-export function readCheckResults(textIn: string): { rows: CheckResultRow[]; unreadable: number; error: string | null } {
-  const table: CsvTable = parseCsv(textIn);
-  const find = (names: string[]) => table.headers.findIndex((h) => names.includes(h.trim().toLowerCase()));
-  const emailCol = find(EMAIL_HEADERS);
-  const resultCol = find(RESULT_HEADERS);
-  const leadCol = find(LEAD_HEADERS);
-  if (emailCol === -1 || resultCol === -1) {
-    return { rows: [], unreadable: 0, error: "The file needs an email column and a result (or status) column." };
-  }
-  const rows: CheckResultRow[] = [];
-  let unreadable = 0;
-  for (const r of table.rows) {
-    const email = (r[emailCol] ?? "").trim().toLowerCase();
-    const status = readCheckResult(r[resultCol] ?? "");
-    if (!email.includes("@") || !status) {
-      unreadable++;
-      continue;
-    }
-    rows.push({ email, leadId: leadCol === -1 ? null : (r[leadCol] ?? "").trim() || null, status });
-  }
-  return { rows, unreadable, error: null };
-}
-
-function csvCell(v: string): string {
-  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-}
-
-// The export: one row per unchecked address, with a blank result column for
-// whatever checker it goes through to fill in.
-export function checkExportCsv(rows: { id: string; clinicName: string; email: string }[]): string {
-  const lines = ["lead_id,clinic,email,result", ...rows.map((r) => [r.id, r.clinicName, r.email, ""].map(csvCell).join(","))];
-  return `${lines.join("\r\n")}\r\n`;
-}
-
 // ─── Sending ───────────────────────────────────────────────────────────────
 
 // A Gmail compose window on the sending inbox's own account — authuser picks
@@ -655,4 +591,32 @@ export function sequenceLabel(
   if (halted) return `${sent} · ${halted}`;
   const next = nextFollowUp(sends, settings);
   return next ? `${sent} · follow-up ${next.n} due ${day(next.dueAt)}` : `${sent} · last email`;
+}
+
+// ─── A clinic's contact form ───────────────────────────────────────────────
+
+// "Mark form sent" books a call this many days later.
+export const CONTACT_FORM_CALL_AFTER_DAYS = 3;
+
+// What "Copy message" puts on the clipboard for a contact form: the
+// front-desk email. The approved email when that is the front-desk version;
+// otherwise built from the front-desk template, with the opener in it when
+// one was approved and without one when not. Signed as sender.
+export function frontDeskMessage(
+  lead: EmailLeadInput & {
+    emailVersion: string | null;
+    emailSubject: string | null;
+    emailBody: string | null;
+    emailOpener: string | null;
+    emailApprovedAt: Date | null;
+  },
+  settings: EmailSettingsValues,
+  sender: string,
+): { subject: string; body: string } {
+  if (lead.emailApprovedAt && readEmailVersion(lead.emailVersion) === "front_desk" && lead.emailSubject && lead.emailBody) {
+    return { subject: lead.emailSubject, body: fillSender(lead.emailBody, sender) };
+  }
+  const opener = lead.emailApprovedAt ? (lead.emailOpener ?? "") : "";
+  const built = renderEmail(settings, lead, "front_desk", opener);
+  return { subject: built.subject, body: fillSender(built.body, sender) };
 }

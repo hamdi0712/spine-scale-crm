@@ -38,13 +38,14 @@ export const EMAIL_STATUS_LABELS: Record<EmailStatus | "unchecked", string> = {
   unchecked: "Not checked",
 };
 
-export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "maps_contacts", "imported", "manual"] as const;
+export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "maps_contacts", "facebook_page", "imported", "manual"] as const;
 export type EmailSource = (typeof EMAIL_SOURCES)[number];
 export const EMAIL_SOURCE_LABELS: Record<EmailSource, string> = {
   site_crawl: "Site crawl",
   extractor: "Extractor",
   name_pattern: "Name pattern",
   maps_contacts: "Maps contacts",
+  facebook_page: "Facebook page",
   imported: "Imported",
   manual: "Entered by hand",
 };
@@ -323,8 +324,19 @@ export function pickMapsEmails(
   raw: readonly string[],
   clinic: { websiteUrl: string | null; contactName: string | null },
 ): MapsEmailPick {
+  return pickEmails(raw, clinic, readDecisionMakerName(clinic.contactName), "maps_contacts");
+}
+
+// The same cleaning and ranking for any source: the Maps search, the stored
+// crawl, a Facebook page. person is whoever the record names, for owner or
+// front desk.
+export function pickEmails(
+  raw: readonly string[],
+  clinic: { websiteUrl: string | null },
+  person: DecisionMakerName | null,
+  source: EmailSource,
+): MapsEmailPick {
   const domain = clinicDomain(clinic.websiteUrl);
-  const person = readDecisionMakerName(clinic.contactName);
   const kept = extractEmails(raw.join("\n")).filter((a) => belongsToClinic(a, domain));
   // Owner first, then the clinic's own domain over a mailbox provider; the
   // actor's order breaks a tie (sort is stable).
@@ -335,7 +347,7 @@ export function pickMapsEmails(
       address,
       type: classifyAddress(address, person),
       status: null,
-      source: "maps_contacts",
+      source,
     }))
     .sort((a, b) => rank(a) - rank(b));
   return { main: ranked[0] ?? null, alternates: ranked.slice(1) };
@@ -358,7 +370,7 @@ export function mapsEmailFields(pick: MapsEmailPick): {
     email: pick.main.address,
     emailType: pick.main.type,
     emailStatus: null,
-    emailSource: "maps_contacts",
+    emailSource: pick.main.source,
     emailAlternates: pick.alternates.length > 0 ? JSON.stringify(pick.alternates) : null,
   };
 }
@@ -386,4 +398,92 @@ export function repickMapsEmails(candidate: {
   if (candidate.emailSource !== "maps_contacts" || !candidate.email) return stored;
   const all = [candidate.email, ...parseAlternates(candidate.emailAlternates).map((a) => a.address)];
   return mapsEmailFields(pickMapsEmails(all, candidate));
+}
+
+// ─── The backup finders ────────────────────────────────────────────────────
+
+// A pick with the addresses already tried taken out: anything in the
+// alternates that a check found invalid is not offered again as the email.
+export function withoutTried(pick: MapsEmailPick, alternatesRaw: string | null): MapsEmailPick {
+  const tried = new Set(parseAlternates(alternatesRaw).filter((a) => a.status === "invalid").map((a) => a.address));
+  const left = [pick.main, ...pick.alternates].filter((c): c is EmailCandidate => c !== null && !tried.has(c.address));
+  return { main: left[0] ?? null, alternates: left.slice(1) };
+}
+
+// The pick's address as the email, with its runners-up added to whatever
+// alternates the record already had (each address once). Null without one.
+export function backupEmailFields(
+  pick: MapsEmailPick,
+  alternatesRaw: string | null,
+): { email: string; emailType: string; emailStatus: null; emailSource: string; emailAlternates: string | null } | null {
+  if (!pick.main) return null;
+  const existing = parseAlternates(alternatesRaw);
+  const known = new Set(existing.map((a) => a.address));
+  const alternates = [...existing.filter((a) => a.address !== pick.main!.address), ...pick.alternates.filter((a) => !known.has(a.address))];
+  return {
+    email: pick.main.address,
+    emailType: pick.main.type,
+    emailStatus: null,
+    emailSource: pick.main.source,
+    emailAlternates: alternates.length > 0 ? JSON.stringify(alternates) : null,
+  };
+}
+
+// The free website step: an address in the copy and links the crawler already
+// stored, for a record Maps found none for. Nothing is fetched.
+export function pickSiteCrawlEmails(record: {
+  websiteUrl: string | null;
+  websiteNotes: string | null;
+  websiteLinks: string | null;
+  contactName: string | null;
+  icpBreakdown: string | null;
+  emailAlternates: string | null;
+}): MapsEmailPick {
+  const found = emailsFromStoredCrawl(record.websiteNotes, record.websiteLinks);
+  return withoutTried(pickEmails(found, record, decisionMakerFor(record), "site_crawl"), record.emailAlternates);
+}
+
+// The fields of a Facebook page scraper's item worth reading for an address:
+// the email itself and the About/contact lines. Matched on the last segment of
+// the flattened name ("info.0", "about.email"), so a nested one counts too.
+// Posts, reviews and anything else on the page are not read — an address in a
+// post is as likely somebody else's.
+const FACEBOOK_FIELDS = /^(e-?mails?|info|intro|about|contact|contacts|contactinfo|contact_info|description|pageinfo)$/i;
+
+export function facebookPageText(table: { headers: string[]; rows: string[][] }): string[] {
+  const cols = table.headers.flatMap((h, i) => {
+    const parts = h.split(".").filter((p) => !/^\d+$/.test(p));
+    const leaf = parts[parts.length - 1] ?? "";
+    const parent = parts[parts.length - 2] ?? "";
+    return FACEBOOK_FIELDS.test(leaf) || /email/i.test(leaf) || FACEBOOK_FIELDS.test(parent) ? [i] : [];
+  });
+  return table.rows.flatMap((row) => cols.map((i) => row[i] ?? "").filter((v) => v.trim() !== ""));
+}
+
+export function pickFacebookEmails(
+  table: { headers: string[]; rows: string[][] },
+  record: { websiteUrl: string | null; contactName: string | null; icpBreakdown: string | null; emailAlternates: string | null },
+): MapsEmailPick {
+  return withoutTried(pickEmails(facebookPageText(table), record, decisionMakerFor(record), "facebook_page"), record.emailAlternates);
+}
+
+// Promotion's email: the Maps addresses picked again (repickMapsEmails), or —
+// when Maps found nothing — the free website step. Facebook is not tried here;
+// it costs a run, and runs on the lead once it exists.
+export function promotedEmailFields(candidate: {
+  email: string | null;
+  emailType: string | null;
+  emailStatus: string | null;
+  emailSource: string | null;
+  emailAlternates: string | null;
+  websiteUrl: string | null;
+  contactName: string | null;
+  websiteNotes: string | null;
+  websiteLinks: string | null;
+  icpBreakdown: string | null;
+}): ReturnType<typeof mapsEmailFields> {
+  const fields = repickMapsEmails(candidate);
+  if ((fields.email ?? "").trim() !== "") return fields;
+  const site = pickSiteCrawlEmails({ ...candidate, emailAlternates: fields.emailAlternates });
+  return backupEmailFields(site, fields.emailAlternates) ?? fields;
 }

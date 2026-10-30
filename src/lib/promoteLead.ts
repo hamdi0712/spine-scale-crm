@@ -15,7 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { DiscoveryBreakdown, leadScorecardPrefill } from "@/lib/discovery";
 import { IcpBreakdownV2, serializeBreakdownV2 } from "@/lib/icpScoring";
 import { isUsTimeZone } from "@/lib/timezones";
-import { repickMapsEmails } from "@/lib/emailFind";
+import { promotedEmailFields } from "@/lib/emailFind";
 import { findSuppression, suppressedMessage } from "@/lib/suppression";
 import { TALKING_ON_LINKEDIN_BLOCK, readLeadChannel } from "@/lib/emailChannel";
 
@@ -96,7 +96,8 @@ export async function promoteWithin(
         // The email and what is known about it. Addresses the Maps search
         // found are ranked again against whoever the candidate now names, so
         // an owner's address found before the owner was is labelled theirs.
-        ...repickMapsEmails(candidate),
+        // With none from Maps, the stored crawl is read for one (free).
+        ...promotedEmailFields(candidate),
         leadSource: candidate.source,
         // Onto the candidate's own channel and no other: an email candidate
         // becomes an email lead, everything else a LinkedIn one. Not how it

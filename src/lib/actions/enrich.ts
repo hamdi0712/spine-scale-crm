@@ -20,6 +20,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
+import { findBackupEmail } from "@/lib/facebookEmailRun";
+import { autoCheckEmails } from "@/lib/actions/jobs";
 import {
   ENRICH_FIELD_LABELS,
   EnrichInputs,
@@ -63,16 +65,34 @@ export async function runLeadEnrichment(
   //
   // The settings are read at the moment the button is pressed rather than when
   // the page rendered, so a step turned off in another tab is off for this run.
+  const settings = await loadPipelineSettings();
   const { outcomes, update } = await runEnrichActors(inputs, {
     onChoice: "ask",
-    settings: await loadPipelineSettings(),
+    settings,
   });
 
   const enrichedAt = await writeEnrichment(leadId, update);
+
+  // An email lead still without an address: the website just crawled, then
+  // its Facebook page — the URL this run may just have found.
+  let emailFinder: EnrichRunResult["emailFinder"];
+  try {
+    const r = await findBackupEmail(leadId, settings);
+    if (!(r.kind === "skipped" && r.quiet)) emailFinder = { found: r.kind === "found", detail: r.detail };
+    if (r.kind === "found") {
+      void autoCheckEmails();
+      revalidatePath("/pipeline");
+      revalidatePath(`/pipeline/${leadId}`);
+    }
+  } catch {
+    emailFinder = { found: false, detail: "The email finder could not run." };
+  }
+
   return {
     outcomes,
     written: enrichFieldsWritten(update),
     enrichedAt,
+    ...(emailFinder ? { emailFinder } : {}),
   };
 }
 

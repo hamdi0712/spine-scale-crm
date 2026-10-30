@@ -12,6 +12,7 @@ export type JobKind =
   | "process-queue"
   | "clinic-search"
   | "email-check"
+  | "facebook-emails"
   | "demo";
 
 // running     the loop is alive on the server
@@ -102,6 +103,7 @@ export const JOB_TITLES: Record<JobKind, string> = {
   "process-queue": "Process queue",
   "clinic-search": "Clinic-first search",
   "email-check": "Email check",
+  "facebook-emails": "Find emails on Facebook",
   demo: "Demo re-crawl",
 };
 
@@ -113,6 +115,7 @@ export function itemHref(kind: JobKind, subjectId: string): string | null {
     case "process-queue":
       return `/discovery/${subjectId}`;
     case "recrawl-leads":
+    case "facebook-emails":
       return `/pipeline/${subjectId}`;
     default:
       return null;
