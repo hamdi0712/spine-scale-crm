@@ -66,7 +66,7 @@ const RAMP: Record<"light" | "dark", Record<string, Shade>> = {
   dark: {
     complete: { deep: "#1C7F5C", base: "#34D399", lit: "#7DF0C4" },
     partial: { deep: "#2D5CB8", base: "#4D8DFF", lit: "#8FB8FF" },
-    missed: { deep: "#4A4945", base: "#5E5D57", lit: "#7A7871" },
+    missed: { deep: "#333A47", base: "#4A5262", lit: "#697386" },
   },
 };
 

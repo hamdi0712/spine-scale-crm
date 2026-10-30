@@ -75,8 +75,20 @@ export default function UsNightMap() {
           somebody is trying to read has to win. Horizontal: both edges soften
           into the container so the picture is embedded in the panel rather than
           cropped and pasted into it. */}
-      <div className="night-map-scrim-v absolute inset-0" />
-      <div className="night-map-scrim-h absolute inset-0" />
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(to bottom, rgba(9,29,58,0.58) 0%, rgba(9,29,58,0.2) 20%, rgba(9,29,58,0) 44%, rgba(9,29,58,0.18) 70%, rgba(7,23,48,0.52) 100%)",
+        }}
+      />
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, rgba(9,29,58,0.72) 0%, rgba(9,29,58,0) 15%, rgba(9,29,58,0) 85%, rgba(9,29,58,0.72) 100%)",
+        }}
+      />
     </div>
   );
 }
