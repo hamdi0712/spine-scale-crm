@@ -31,6 +31,7 @@
   --c-accent-hover: 35 120 255; /* #2378FF */
   --c-accent-press: 15 94 221;  /* #0F5EDD */
   --c-accent-soft: 232 240 254; /* #E8F0FE — the blue pill fill */
+  --c-accent-ink: 18 109 251;   /* #126DFB — links and active text */
   --c-accent2: 63 209 200;      /* #3FD1C8 */
 
   /* The AI pair. */
@@ -118,16 +119,23 @@
 }
 
 .dark {
-  --c-bg: 11 14 20;             /* #0B0E14 — the page floor */
-  --c-panel: 16 20 27;          /* #10141B — the sidebar, just off the floor */
-  --c-wash: 30 36 46;           /* #1E242E — hover fills, inset rows */
-  --c-surface: 22 27 36;        /* #161B24 — cards lift off the page */
-  --c-line: 42 49 61;           /* #2A313D */
+  /* True black and neutral greys — no blue in any surface. Elevation is the
+     same climb as before (page darkest, sidebar, cards, hover fills), just
+     with zero chroma at every step. */
+  --c-bg: 0 0 0;                /* #000000 — the page floor */
+  --c-panel: 10 10 10;          /* #0A0A0A — the sidebar, just off the floor */
+  --c-wash: 26 26 26;           /* #1A1A1A — hover fills, inset rows */
+  --c-surface: 17 17 17;        /* #111111 — cards, fields, dialogs */
+  --c-line: 38 38 38;           /* #262626 — borders, low contrast */
 
-  --c-accent: 77 141 255;       /* #4D8DFF */
-  --c-accent-hover: 107 161 255;/* #6BA1FF */
-  --c-accent-press: 59 130 255; /* #3B82FF */
-  --c-accent-soft: 25 45 80;    /* #192D50 */
+  /* Fills wear the brand blue itself; lettering takes --c-accent-ink, a lift
+     of it, because #126DFB as small text on #111 is just under 4.5:1. */
+  --c-accent: 18 109 251;       /* #126DFB */
+  --c-accent-hover: 35 120 255; /* #2378FF */
+  --c-accent-press: 15 94 221;  /* #0F5EDD */
+  --c-accent-soft: 12 30 62;    /* #0C1E3E — the blue pill fill, deep enough
+                                   that --c-accent-ink holds 4.5:1 on it */
+  --c-accent-ink: 59 135 255;   /* #3B87FF — links and active text */
   --c-accent2: 63 209 200;
 
   --c-ai: 167 139 250;          /* #A78BFA */
@@ -135,9 +143,9 @@
                                    climbs rather than deepens */
   --c-ai-soft: 44 34 66;        /* #2C2242 */
 
-  --c-ink: 232 234 240;         /* #E8EAF0 */
-  --c-ink-soft: 195 201 214;    /* #C3C9D6 */
-  --c-muted: 148 156 171;       /* #949CAB — held at ≥4.5:1 on --c-surface */
+  --c-ink: 237 237 237;         /* #EDEDED — off-white */
+  --c-ink-soft: 196 196 196;    /* #C4C4C4 */
+  --c-muted: 148 148 148;       /* #949494 — held at ≥4.5:1 on --c-wash */
 
   --c-ok: 52 211 153;           /* #34D399 */
   --c-ok-soft: 18 51 38;        /* #123326 */
@@ -157,9 +165,9 @@
   --c-purple-soft: 44 34 66;    /* #2C2242 */
   --c-pink: 244 114 182;        /* #F472B6 */
 
-  /* The hero stays navy — see .hero-navy below for why. */
-  --c-hero: 18 48 90;
-  --c-hero-ink: 207 228 255;
+  /* The hero goes graphite with everything else — see .hero-navy below. */
+  --c-hero: 26 26 26;
+  --c-hero-ink: 230 230 230;
 
   --kpi-blue: 96 165 250;       /* #60A5FA */
   --kpi-teal: 45 212 191;       /* #2DD4BF */
@@ -171,11 +179,11 @@
   --empty-halo-a: 0.11;
   --mark-inner-light: rgba(255, 255, 255, 0.08);
 
-  --chart-grid: 42 49 61;
-  --chart-axis: 42 49 61;
-  --chart-tick: 148 156 171;
-  --chart-tooltip-bg: 22 27 36;
-  --chart-cursor: 30 36 46;
+  --chart-grid: 38 38 38;
+  --chart-axis: 38 38 38;
+  --chart-tick: 148 148 148;
+  --chart-tooltip-bg: 17 17 17;
+  --chart-cursor: 26 26 26;
 
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
   /* Dark draws the lift with a deeper well rather than a softer one — there is
@@ -184,8 +192,8 @@
     0 1px 2px rgba(0, 0, 0, 0.45),
     0 6px 16px rgba(0, 0, 0, 0.5);
   --shadow-btn-hover: 0 2px 6px rgba(0, 0, 0, 0.45);
-  --selection: rgba(77, 141, 255, 0.28);
-  --glass-panel-edge: rgb(51 68 100);
+  --selection: rgba(59, 135, 255, 0.32);
+  --glass-panel-edge: rgb(46 46 46);
   /* Dark: a deep tint of the same hue rather than the pastel, mixed off the
      card surface so the disc reads as part of the card and not a sticker. */
   --glass-chip: rgba(255, 255, 255, 0.09);
@@ -647,6 +655,16 @@
     0 6px 18px rgba(4, 16, 36, 0.3);
 }
 
+/* The two scrims over the night map — vertical for the header and the tiles,
+   horizontal to feather the photograph into the panel's edges. Classes rather
+   than inline styles only so dark mode can swap their navy for black. */
+.night-map-scrim-v {
+  background-image: linear-gradient(to bottom, rgba(9, 29, 58, 0.58) 0%, rgba(9, 29, 58, 0.2) 20%, rgba(9, 29, 58, 0) 44%, rgba(9, 29, 58, 0.18) 70%, rgba(7, 23, 48, 0.52) 100%);
+}
+.night-map-scrim-h {
+  background-image: linear-gradient(to right, rgba(9, 29, 58, 0.72) 0%, rgba(9, 29, 58, 0) 15%, rgba(9, 29, 58, 0) 85%, rgba(9, 29, 58, 0.72) 100%);
+}
+
 /* Single-line controls get a fixed 42px height; multi-line fields keep
    vertical padding and a taller default. */
 input.field,
@@ -853,11 +871,11 @@ tbody tr:last-child > .td {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
-/* Today's focus and the Now banner. The same diagonal blue glass, rebuilt from
-   the dark end: a deep blue-slate that is still visibly *blue* against the
-   neutral cards beside it, which is the whole point of the material. */
+/* Today's focus and the Now banner. The same diagonal glass, rebuilt in
+   neutral graphite: a step lighter than the card it sits in, so the two halves
+   of the Now card still read as one raised material without a blue cast. */
 .dark .glass-panel {
-  background-image: linear-gradient(135deg, #17202F 0%, #182338 45%, #1A2740 100%);
+  background-image: linear-gradient(135deg, #161616 0%, #191919 45%, #1C1C1C 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 1px 2px rgba(0, 0, 0, 0.3),
@@ -865,7 +883,7 @@ tbody tr:last-child > .td {
 }
 @media (hover: hover) {
 .dark .glass-panel-hover:hover {
-  background-image: linear-gradient(135deg, #1B2537 0%, #1D2942 45%, #20304C 100%);
+  background-image: linear-gradient(135deg, #1B1B1B 0%, #1F1F1F 45%, #232323 100%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
     0 1px 2px rgba(0, 0, 0, 0.35),
@@ -874,33 +892,102 @@ tbody tr:last-child > .td {
 }
 
 /* The business-hours widget.
-   This is the one panel that was already dark on a light page on purpose, and
-   the risk in dark mode is the opposite of everywhere else: it stops being a
-   focal object and dissolves into the page.
-
-   So it keeps its navy — the field, the map inside it and the frosted zone
-   tiles are all built for that ground, and re-lighting them would be a
-   redesign rather than a dark variant. What changes is only what separates it
-   from what is behind it: the top-left blue glow is brought up so the widget
-   is visibly *lit* against an unlit page, the border goes from a hairline to a
-   readable edge, and the drop shadow is replaced by a wide ambient blue bloom
-   — on a dark page the widget has to push light outward to read as raised,
-   because there is nothing left to darken underneath it. */
+   In light it is navy on purpose — the one dark panel on a white page. In dark
+   it goes graphite with every other surface: the field, its edges, the frosted
+   zone tiles and the scrims over the map are all neutral, so the only colour
+   left in the panel is the night-map photograph itself. What keeps it a focal
+   object rather than another card is the same lit construction as before — a
+   soft white light off the top, a lit top edge and a readable border — with
+   the blue bloom removed. */
 .dark .hero-navy {
   background-image:
     radial-gradient(
       90% 70% at 30% -10%,
-      rgba(84, 158, 250, 0.5),
-      rgba(84, 158, 250, 0) 68%
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0) 68%
     ),
-    linear-gradient(168deg, #21507f 0%, #143563 42%, #071a36 100%);
-  border: 1px solid rgba(126, 173, 232, 0.34);
+    linear-gradient(168deg, #262626 0%, #161616 42%, #0A0A0A 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    inset 0 1px 0 rgba(190, 219, 255, 0.32),
-    inset 0 -1px 0 rgba(3, 12, 28, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
     0 1px 2px rgba(0, 0, 0, 0.5),
-    0 16px 44px rgba(0, 0, 0, 0.55),
-    0 0 40px rgba(37, 99, 235, 0.16);
+    0 16px 44px rgba(0, 0, 0, 0.55);
+}
+.dark .zone-tile {
+  background-image: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.09),
+    rgba(10, 10, 10, 0.55)
+  );
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 18px rgba(0, 0, 0, 0.4);
+}
+.dark .night-map-scrim-v {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.58) 0%,
+    rgba(0, 0, 0, 0.2) 20%,
+    rgba(0, 0, 0, 0) 44%,
+    rgba(0, 0, 0, 0.18) 70%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+.dark .night-map-scrim-h {
+  background-image: linear-gradient(
+    to right,
+    rgba(10, 10, 10, 0.75) 0%,
+    rgba(10, 10, 10, 0) 15%,
+    rgba(10, 10, 10, 0) 85%,
+    rgba(10, 10, 10, 0.75) 100%
+  );
+}
+/* The clock at the head of the widget. Its tint arrives inline as a pale blue;
+   on the graphite field it is frosted white instead. */
+.dark .glass-mark-dark {
+  background-image:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.24),
+      rgba(255, 255, 255, 0.05) 48%,
+      rgba(255, 255, 255, 0) 64%
+    ),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* The Monk Mode banner. Same idea: the dawn photograph is untouched, and what
+   goes neutral is the field it sits on (also the fallback when the file is
+   slow), the edges, and the scrim that makes the lettering readable. The warm
+   sunrise glow stays — it is part of the picture's light, not a blue tint. */
+.dark .monk-hero {
+  background-image:
+    radial-gradient(
+      120% 120% at 78% 8%,
+      rgba(243, 158, 94, 0.45),
+      rgba(243, 158, 94, 0) 55%
+    ),
+    linear-gradient(168deg, #2A2A2A 0%, #1A1A1A 45%, #0A0A0A 100%);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.dark .monk-hero-scrim {
+  background-image: linear-gradient(
+    100deg,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.7) 38%,
+    rgba(0, 0, 0, 0.28) 68%,
+    rgba(0, 0, 0, 0.6) 100%
+  );
 }
 
 /* ═══ Motion ════════════════════════════════════════════════════════════════
@@ -1194,6 +1281,10 @@ tbody tr {
    white at low alpha rather than a token fill, for the same reason the
    lettering on it is white: the surface below it is a photograph in both
    themes, so the tokens that follow the theme would be wrong in one of them. */
+.monk-hero-scrim {
+  background-image: linear-gradient(100deg, rgba(6, 12, 28, 0.92) 0%, rgba(6, 12, 28, 0.72) 38%, rgba(6, 12, 28, 0.3) 68%, rgba(6, 12, 28, 0.62) 100%);
+}
+
 .monk-hero-track {
   background: rgba(255, 255, 255, 0.18);
 }

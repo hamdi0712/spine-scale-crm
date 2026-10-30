@@ -48,13 +48,7 @@ export function MonkHeroArt() {
       {/* Dark on the left where the title, the counter and the day ticks sit,
           opening up across the middle so the picture is actually seen, and
           closing again under the quotation on the right. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            "linear-gradient(100deg, rgba(6,12,28,0.92) 0%, rgba(6,12,28,0.72) 38%, rgba(6,12,28,0.3) 68%, rgba(6,12,28,0.62) 100%)",
-        }}
-      />
+      <div className="monk-hero-scrim absolute inset-0" />
     </div>
   );
 }
