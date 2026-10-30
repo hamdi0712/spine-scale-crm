@@ -29,6 +29,9 @@ const config: Config = {
         wash: c("wash"),
         surface: c("surface"),
         line: c("line"),
+        // Form controls only (.field) — equal to line in light, a step
+        // stronger in dark so an empty field is easy to find.
+        "line-field": c("line-field"),
         accent: c("accent"),
         "accent-hover": c("accent-hover"),
         "accent-press": c("accent-press"),
@@ -62,10 +65,16 @@ const config: Config = {
         purple: c("purple"),
         "purple-soft": c("purple-soft"),
         pink: c("pink"),
-        // The navy hero widget keeps its own scale: it is dark on a light page
-        // by design, and stays a distinct focal surface on a dark one.
+        // The hero widget keeps its own scale: navy on a light page by design,
+        // warm charcoal in dark, with the rest of the dark surfaces.
         hero: c("hero"),
         "hero-ink": c("hero-ink"),
+      },
+      // Blue lettering reads its own token so dark mode can lift links and
+      // active text off the brand blue that fills still wear. In light the two
+      // are the same #126DFB.
+      textColor: {
+        accent: c("accent-ink"),
       },
       boxShadow: {
         card: "var(--shadow-card)",
