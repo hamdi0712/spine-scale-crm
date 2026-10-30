@@ -25,6 +25,7 @@
   --c-wash: 244 245 247;        /* #F4F5F7 — hover fills, inset rows */
   --c-surface: 255 255 255;     /* #FFFFFF — cards, fields */
   --c-line: 231 233 238;        /* #E7E9EE */
+  --c-line-field: 231 233 238;  /* #E7E9EE — form fields share the border in light */
 
   /* Brand blue and its states. */
   --c-accent: 18 109 251;       /* #126DFB */
@@ -128,6 +129,9 @@
   --c-wash: 58 58 55;           /* #3A3A37 — hover fills, inset rows */
   --c-surface: 48 48 46;        /* #30302E — cards, fields, dialogs */
   --c-line: 61 61 58;           /* #3D3D3A — borders, low contrast */
+  --c-line-field: 74 74 70;     /* #4A4A46 — inputs, selects and textareas: a
+                                   step stronger than --c-line, so an empty field
+                                   on a card of the same colour is still seen */
 
   /* Fills wear the brand blue itself; lettering takes --c-accent-ink, a lift
      of it, because #126DFB is too dark to read as small text on charcoal. */
@@ -136,7 +140,8 @@
   --c-accent-press: 15 94 221;  /* #0F5EDD */
   --c-accent-soft: 12 30 62;    /* #0C1E3E — the blue pill fill, deep enough
                                    that --c-accent-ink holds 4.5:1 on it */
-  --c-accent-ink: 59 135 255;   /* #3B87FF — links and active text */
+  --c-accent-ink: 106 163 255;  /* #6AA3FF — links and active text: 5.2:1 on
+                                   --c-surface, 4.5:1 on --c-wash */
   --c-accent2: 63 209 200;
 
   --c-ai: 167 139 250;          /* #A78BFA */
@@ -237,7 +242,7 @@
 
 @layer components {
   .field {
-    @apply w-full rounded-[10px] border border-line bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/80 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15;
+    @apply w-full rounded-[10px] border border-line-field bg-surface px-3.5 py-2.5 text-sm text-ink placeholder:text-muted/80 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15;
   }
   .field-label {
     @apply mb-2 block text-xs font-medium tracking-[0.02em] text-muted;

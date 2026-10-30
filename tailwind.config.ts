@@ -29,6 +29,9 @@ const config: Config = {
         wash: c("wash"),
         surface: c("surface"),
         line: c("line"),
+        // Form controls only (.field) — equal to line in light, a step
+        // stronger in dark so an empty field is easy to find.
+        "line-field": c("line-field"),
         accent: c("accent"),
         "accent-hover": c("accent-hover"),
         "accent-press": c("accent-press"),
