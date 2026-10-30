@@ -254,7 +254,7 @@ export default function EmailPanel(p: EmailPanelProps) {
               </label>
               <label className="block">
                 <span className="field-label">Email</span>
-                <textarea className="field !min-h-[420px] font-[inherit] text-sm" value={body} onChange={(e) => setBody(e.target.value)} />
+                <textarea className="field !min-h-[200px] font-[inherit] text-sm" rows={Math.max(8, body.split("\n").length + 3)} value={body} onChange={(e) => setBody(e.target.value)} />
               </label>
               {body.includes("{sender}") && (
                 <p className="text-xs text-muted">

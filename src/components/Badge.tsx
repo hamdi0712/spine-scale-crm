@@ -145,18 +145,19 @@ export function StageBadge({ stage }: { stage: string }) {
   return <Pill tone={STAGE_TONES[stage] ?? "neutral"} label={label} />;
 }
 
-// An email lead's status. Amber for what waits on the operator, blue for
-// ready to go, indigo while the sequence runs, green for a reply, red for a
-// clinic on the suppression list — and neutral for no email and below A/B,
-// which are facts about the record rather than faults.
+// An email lead's status. Teal for ready to go, indigo while the email is
+// still being written, amber for a check that waits on the operator, blue
+// while the sequence runs, purple for a reply, red for a clinic on the
+// suppression list — and neutral for no email and below A/B, which are facts
+// about the record rather than faults.
 const EMAIL_LEAD_TONES: Record<EmailLeadStatus, Tone> = {
-  needs_opener: "amber",
+  needs_opener: "indigo",
   check_email: "amber",
   check_contact: "amber",
   not_ab: "neutral",
-  ready: "blue",
-  in_sequence: "indigo",
-  replied: "green",
+  ready: "teal",
+  in_sequence: "blue",
+  replied: "purple",
   stopped: "red",
   no_email: "neutral",
 };

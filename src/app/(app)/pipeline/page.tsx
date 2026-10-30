@@ -19,6 +19,7 @@ import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
 import { PIPELINE_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 import { loadEmailView } from "@/lib/emailWorkflowRead";
 import FacebookEmailButton, { FacebookEmailProgress } from "@/components/FacebookEmailButton";
+import DropdownMenu from "@/components/DropdownMenu";
 import { facebookEmailLeads } from "@/lib/facebookEmailRun";
 import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
 import { fmtCredits } from "@/lib/emailCheck";
@@ -238,6 +239,10 @@ async function EmailPipeline() {
     loadPipelineSettings(),
   ]);
 
+  const ready = rows.filter((r) => r.status === "ready").length;
+  const due = rows.filter((r) => r.followUpDueToday).length;
+  const overBudget = check.used > check.budget;
+
   return (
     <div>
       <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
@@ -249,37 +254,48 @@ async function EmailPipeline() {
           <p className="helper-text mt-1.5 text-sm text-muted">
             Clinics worked by email, sent by hand from Gmail — what each one needs next
           </p>
-          {/* Sent today, per inbox, each against its own limit. */}
-          <p className="num mt-2 text-sm font-medium text-ink">
-            {counters.length === 0 ? (
-              <Link href="/settings/email" className="text-bad hover:underline">
-                No sending inboxes — add one in Settings → Email
-              </Link>
-            ) : (
-              counters.map((c, i) => (
-                <span key={c.id} className={c.sent > c.limit ? "text-bad" : undefined} title={c.address}>
-                  {i > 0 && <span className="text-muted"> · </span>}
-                  {c.short}: {c.sent} of {c.limit}
-                  {c.sent > c.limit && <span className="font-normal"> (over)</span>}
-                </span>
-              ))
-            )}
-            {counters.length > 0 && <span className="font-normal text-muted"> sent today</span>}
-          </p>
-          <p className={`num mt-1 text-xs ${check.used > check.budget ? "text-bad" : "text-muted"}`}>
-            Email checks: {fmtCredits(check.used)} of {check.budget} Instantly credits used this month
-            {!check.hasKey && " · no Instantly API key yet"}
-          </p>
         </div>
-        <div className="flex flex-col items-end gap-2 max-md:items-stretch">
-          <div className="flex flex-wrap items-start gap-2">
-            <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} />
-            <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} />
-          </div>
-          <Link href="/discovery/import/clinic" className="btn max-md:justify-center">
+        <div className="flex items-center gap-2 max-md:[&>*]:flex-1">
+          <DropdownMenu label="Find emails" badge={unchecked + (pipelineSettings.facebookEmails.enabled ? facebookLeads.length : 0)}>
+            <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} menu />
+            <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} menu />
+          </DropdownMenu>
+          <Link href="/discovery/import/clinic" className="btn-primary justify-center">
             Find clinics
           </Link>
         </div>
+      </div>
+
+      {/* Today at a glance: what can go now, what is due, and each inbox and
+          the check budget against their limits. */}
+      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
+        <StatCard label="Ready to send" value={String(ready)} tone={ready > 0 ? "text-teal" : "text-ink"} />
+        <StatCard label="Follow-ups due today" value={String(due)} tone={due > 0 ? "text-warn" : "text-ink"} />
+        {counters.length === 0 ? (
+          <Link href="/settings/email" className="card card-interactive flex flex-col justify-center gap-1 px-4 py-3.5">
+            <span className="text-sm font-medium text-bad">No sending inboxes</span>
+            <span className="text-xs text-muted">Add one in Settings → Email</span>
+          </Link>
+        ) : (
+          counters.map((c) => (
+            <MeterCard
+              key={c.id}
+              label={`${c.short} · sent today`}
+              title={c.address}
+              used={c.sent}
+              limit={c.limit}
+              bar="bg-accent"
+            />
+          ))
+        )}
+        <MeterCard
+          label="Instantly credits"
+          note={check.hasKey ? null : "No API key yet"}
+          used={check.used}
+          limit={check.budget}
+          bar={overBudget ? "bg-bad" : "bg-teal"}
+          fmt={fmtCredits}
+        />
       </div>
 
       {starters.length > 0 && <StarterCopyBanner remaining={starters} className="mt-6" />}
@@ -302,6 +318,52 @@ async function EmailPipeline() {
           <EmailLeadTable rows={rows} />
         )}
       </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div className="card flex flex-col gap-1 px-4 py-3.5">
+      <span className="text-sm text-muted">{label}</span>
+      <span className={`num text-2xl font-semibold ${tone}`}>{value}</span>
+    </div>
+  );
+}
+
+// A count against its limit, as a number and a bar. Over the limit reads red.
+function MeterCard({
+  label,
+  title,
+  used,
+  limit,
+  bar,
+  fmt = String,
+  note = null,
+}: {
+  label: string;
+  note?: string | null;
+  title?: string;
+  used: number;
+  limit: number;
+  bar: string;
+  fmt?: (n: number) => string;
+}) {
+  const over = used > limit;
+  const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
+  return (
+    <div className="card flex flex-col gap-2 px-4 py-3.5" title={title}>
+      <span className="truncate text-sm text-muted">{label}</span>
+      <div className="flex items-center gap-3">
+        <span className={`num text-lg font-semibold ${over ? "text-bad" : "text-ink"}`}>
+          {fmt(used)}
+          <span className="text-sm font-normal text-muted">/{limit}</span>
+        </span>
+        <div className="h-1.5 flex-1 rounded-full bg-line/70" aria-hidden>
+          <div className={`h-1.5 rounded-full ${over ? "bg-bad" : bar}`} style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+      {note && <span className="text-xs text-muted">{note}</span>}
     </div>
   );
 }

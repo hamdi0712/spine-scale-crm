@@ -6,6 +6,7 @@
 // budget; the job runs on the server and shows in the shared progress panel.
 
 import { useState } from "react";
+import { MENU_ITEM } from "@/components/DropdownMenu";
 import { startEmailCheckJob } from "@/lib/actions/jobs";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import { fmtCredits } from "@/lib/emailCheck";
@@ -20,6 +21,7 @@ export default function EmailCheckButton({
   budget,
   hasKey,
   compact = false,
+  menu = false,
 }: {
   label: string;
   count: number;
@@ -30,6 +32,8 @@ export default function EmailCheckButton({
   budget: number;
   hasKey: boolean;
   compact?: boolean;
+  // An item in the pipeline's Find emails menu rather than a button of its own.
+  menu?: boolean;
 }) {
   const { running, track } = useJobRun("email-check");
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +58,21 @@ export default function EmailCheckButton({
     setStarting(false);
     if (!r.ok) setError(r.error);
     else track(r.id);
+  }
+
+  if (menu) {
+    return (
+      <div>
+        <button type="button" onClick={() => void run()} disabled={running || starting || count === 0} className={MENU_ITEM}>
+          <span>
+            {running || starting ? "Checking…" : label}
+            {count > 0 && <span className="num ml-1.5 text-muted">{count}</span>}
+          </span>
+          <span className="text-xs font-normal text-muted">Verify new addresses through Instantly</span>
+        </button>
+        {error && <p className="px-3 pb-2 text-xs text-bad">{error}</p>}
+      </div>
+    );
   }
 
   return (
