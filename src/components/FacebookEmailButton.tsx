@@ -6,7 +6,7 @@
 // shared progress panel.
 
 import { useState } from "react";
-import { MENU_ITEM } from "@/components/DropdownMenu";
+import { MENU_ITEM } from "@/lib/menuItem";
 import { startFacebookEmailJob } from "@/lib/actions/jobs";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import { facebookEmailsCost, fmtEstimate } from "@/lib/pipelineSettings";

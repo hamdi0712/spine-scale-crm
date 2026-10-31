@@ -9,9 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconChevronDown, IconDots } from "@tabler/icons-react";
 
-// The look of one item, for a button or a form's submit button inside a menu.
-export const MENU_ITEM =
-  "flex w-full flex-col items-start gap-0.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-wash focus:outline-none focus-visible:bg-wash disabled:cursor-not-allowed disabled:opacity-50";
+export { MENU_ITEM } from "@/lib/menuItem";
 
 export default function DropdownMenu({
   label,

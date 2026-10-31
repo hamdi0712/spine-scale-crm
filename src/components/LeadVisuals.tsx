@@ -14,6 +14,7 @@ import {
   IconUserCheck,
 } from "@tabler/icons-react";
 import { fmtRelative } from "@/lib/activity";
+import ScoreRing from "@/components/ScoreRing";
 import { fmtDateTime } from "@/lib/format";
 
 export type Tone = "blue" | "indigo" | "teal" | "purple" | "amber" | "pink" | "neutral" | "green" | "red";
@@ -84,12 +85,12 @@ export function scoreTip(fit: number, fitMax: number, signals: number, signalsMa
   return "Some fit and signal points are missing — the scorecard shows which lines.";
 }
 
-// The ring in the tier's colour — A green, B amber, C red — with a glow
-// behind it in dark mode only; on a light page a glow reads as a smudge.
-const RING_TONE: Record<string, { stroke: string; glow: string; pill: Tone }> = {
-  A: { stroke: "stroke-ok", glow: "dark:shadow-[0_0_40px_rgb(var(--c-ok)/0.2)]", pill: "green" },
-  B: { stroke: "stroke-warn", glow: "dark:shadow-[0_0_40px_rgb(var(--c-warn)/0.18)]", pill: "amber" },
-  C: { stroke: "stroke-bad", glow: "dark:shadow-[0_0_40px_rgb(var(--c-bad)/0.18)]", pill: "red" },
+// The tier pill's colour: A green, B amber, C red, as the ring is
+// (src/components/ScoreRing.tsx).
+const RING_TONE: Record<string, { pill: Tone }> = {
+  A: { pill: "green" },
+  B: { pill: "amber" },
+  C: { pill: "red" },
 };
 
 export function ScoreRingCard({
@@ -106,10 +107,7 @@ export function ScoreRingCard({
   parts: { label: string; value: number; max?: number; dot: string }[];
   tip: string | null;
 }) {
-  const r = 76;
-  const c = 2 * Math.PI * r;
-  const pct = total === null || max <= 0 ? 0 : Math.max(0, Math.min(1, total / max));
-  const tone = RING_TONE[tier ?? ""] ?? { stroke: "stroke-muted", glow: "", pill: "neutral" as Tone };
+  const tone = RING_TONE[tier ?? ""] ?? { pill: "neutral" as Tone };
   return (
     <section aria-labelledby="icp-score" className="card card-sheen space-y-5 p-6 max-md:p-4">
       <div className="flex items-center gap-2.5">
@@ -123,29 +121,8 @@ export function ScoreRingCard({
           </span>
         )}
       </div>
-      <div className="flex justify-center">
-        <div className={`relative h-44 w-44 rounded-full ${tone.glow}`}>
-          <svg viewBox="0 0 176 176" className="h-44 w-44" role="img" aria-label={total === null ? "Not scored" : `${total} out of ${max}`}>
-            <circle cx="88" cy="88" r={r} fill="none" className="stroke-line" strokeWidth="14" />
-            {pct > 0 && (
-              <circle
-                cx="88"
-                cy="88"
-                r={r}
-                fill="none"
-                className={tone.stroke}
-                strokeWidth="14"
-                strokeLinecap="round"
-                strokeDasharray={`${pct * c} ${c}`}
-                transform="rotate(-90 88 88)"
-              />
-            )}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="num text-[40px] font-bold leading-none tracking-tight text-ink">{total ?? "—"}</span>
-            <span className="num mt-1 text-sm text-muted">{total === null ? "Not scored" : `/ ${max}`}</span>
-          </div>
-        </div>
+      <div className="py-2">
+        <ScoreRing total={total} max={max} tier={tier} />
       </div>
       {parts.length > 0 && (
         <>
@@ -230,7 +207,7 @@ export function Timeline({ items, now = new Date() }: { items: TimelineItem[]; n
               const { icon } = iconFor(item);
               return (
                 <li key={item.id} className="relative flex gap-3">
-                  <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-surface ring-4 ring-surface ${TONE_BADGE.blue}`} aria-hidden>
+                  <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-surface ring-4 ring-surface ${TONE_BADGE.neutral}`} aria-hidden>
                     {icon}
                   </span>
                   <div className="min-w-0 pt-0.5">
