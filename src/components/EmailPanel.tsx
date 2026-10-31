@@ -137,7 +137,16 @@ export default function EmailPanel(p: EmailPanelProps) {
 
       {/* Who it goes to: the address, and whether the contact agrees with
           the scorecard. */}
-      <div className="text-sm">
+      {/* The addresses as an email's own header: who it goes to and from. */}
+      <div className="flex gap-3 rounded-xl border border-line bg-wash/50 p-4 text-sm">
+        {/* A blank profile head, like a social account with no photo. */}
+        <span className="relative flex h-10 w-10 shrink-0 items-end justify-center overflow-hidden rounded-full bg-accent-soft ring-1 ring-accent/30" aria-hidden>
+          <svg viewBox="0 0 40 40" className="h-10 w-10 text-accent">
+            <circle cx="20" cy="15.5" r="7" fill="currentColor" opacity="0.9" />
+            <path d="M6 38c1.6-7.6 7.3-12 14-12s12.4 4.4 14 12z" fill="currentColor" opacity="0.9" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
         <p>
           <span className="text-muted">To </span>
           {p.email ? <span className="break-all font-medium">{p.email}</span> : <span className="text-muted">no address yet</span>}
@@ -185,6 +194,7 @@ export default function EmailPanel(p: EmailPanelProps) {
             </select>
           )}
           {p.inbox && p.inboxLocked && <span className="text-xs text-muted">· fixed, same thread</span>}
+        </div>
         </div>
       </div>
       {p.contact.state === "mismatch" && !sentAny && (
