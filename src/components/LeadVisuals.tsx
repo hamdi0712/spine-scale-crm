@@ -16,7 +16,7 @@ import {
 import { fmtRelative } from "@/lib/activity";
 import { fmtDateTime } from "@/lib/format";
 
-export type Tone = "blue" | "indigo" | "teal" | "purple" | "amber" | "pink" | "neutral" | "green";
+export type Tone = "blue" | "indigo" | "teal" | "purple" | "amber" | "pink" | "neutral" | "green" | "red";
 
 // Tinted square + coloured glyph, per tone.
 export const TONE_BADGE: Record<Tone, string> = {
@@ -28,6 +28,7 @@ export const TONE_BADGE: Record<Tone, string> = {
   pink: "bg-pink/15 text-pink",
   neutral: "bg-line/70 text-muted",
   green: "bg-ok-soft text-ok",
+  red: "bg-bad-soft text-bad",
 };
 
 export function SectionTitle({
@@ -83,10 +84,12 @@ export function scoreTip(fit: number, fitMax: number, signals: number, signalsMa
   return "Some fit and signal points are missing — the scorecard shows which lines.";
 }
 
-const RING_TONE: Record<string, { stroke: string; text: string; glow: string }> = {
-  A: { stroke: "stroke-teal", text: "text-teal", glow: "shadow-[0_0_40px_rgb(var(--c-teal)/0.18)]" },
-  B: { stroke: "stroke-accent", text: "text-accent", glow: "shadow-[0_0_40px_rgb(var(--c-accent)/0.18)]" },
-  C: { stroke: "stroke-warn", text: "text-warn", glow: "shadow-[0_0_40px_rgb(var(--c-warn)/0.16)]" },
+// The ring in the tier's colour — A green, B amber, C red — with a glow
+// behind it in dark mode only; on a light page a glow reads as a smudge.
+const RING_TONE: Record<string, { stroke: string; glow: string; pill: Tone }> = {
+  A: { stroke: "stroke-ok", glow: "dark:shadow-[0_0_40px_rgb(var(--c-ok)/0.2)]", pill: "green" },
+  B: { stroke: "stroke-warn", glow: "dark:shadow-[0_0_40px_rgb(var(--c-warn)/0.18)]", pill: "amber" },
+  C: { stroke: "stroke-bad", glow: "dark:shadow-[0_0_40px_rgb(var(--c-bad)/0.18)]", pill: "red" },
 };
 
 export function ScoreRingCard({
@@ -106,14 +109,16 @@ export function ScoreRingCard({
   const r = 76;
   const c = 2 * Math.PI * r;
   const pct = total === null || max <= 0 ? 0 : Math.max(0, Math.min(1, total / max));
-  const tone = RING_TONE[tier ?? ""] ?? { stroke: "stroke-muted", text: "text-muted", glow: "" };
+  const tone = RING_TONE[tier ?? ""] ?? { stroke: "stroke-muted", glow: "", pill: "neutral" as Tone };
   return (
     <section aria-labelledby="icp-score" className="card card-sheen space-y-5 p-6 max-md:p-4">
       <div className="flex items-center gap-2.5">
-        <IconStarFilled size={18} className={tone.text} aria-hidden />
-        <h2 id="icp-score" className="text-lg font-bold">ICP score</h2>
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${TONE_BADGE.blue}`} aria-hidden>
+          <IconStarFilled size={17} />
+        </span>
+        <h2 id="icp-score" className="text-lg font-semibold">ICP score</h2>
         {tier && (
-          <span className={`ml-auto rounded-full px-2.5 py-1 text-xs font-bold ${TONE_BADGE[tier === "A" ? "teal" : tier === "B" ? "blue" : "amber"]}`}>
+          <span className={`ml-auto rounded-full px-2.5 py-1 text-xs font-bold ${TONE_BADGE[tone.pill]}`}>
             {tier}-tier
           </span>
         )}
@@ -222,10 +227,10 @@ export function Timeline({ items, now = new Date() }: { items: TimelineItem[]; n
           <ul className="relative space-y-4">
             <span className="absolute bottom-3 left-[13px] top-3 w-0.5 bg-line" aria-hidden />
             {g.items.map((item) => {
-              const { icon, tone } = iconFor(item);
+              const { icon } = iconFor(item);
               return (
                 <li key={item.id} className="relative flex gap-3">
-                  <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-surface ring-4 ring-surface ${TONE_BADGE[tone]}`} aria-hidden>
+                  <span className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-surface ring-4 ring-surface ${TONE_BADGE.blue}`} aria-hidden>
                     {icon}
                   </span>
                   <div className="min-w-0 pt-0.5">

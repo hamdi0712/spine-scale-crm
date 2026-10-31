@@ -209,7 +209,7 @@ export default async function LeadDetailPage({
 
       {/* The header: tier, name, who and where; the status, the stage and the
           rarer actions on the right. */}
-      <div className={`card card-sheen relative z-10 mt-3 space-y-5 overflow-visible bg-gradient-to-r p-6 max-md:p-4 ${HEADER_TINT[leadTier(lead) ?? ""] ?? "from-surface"} via-surface to-surface`}>
+      <div className="card card-sheen relative z-10 mt-3 space-y-5 overflow-visible p-6 max-md:p-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <TierTile tier={leadTier(lead)} />
@@ -383,7 +383,7 @@ export default async function LeadDetailPage({
               details form on purpose — every control in it acts on its own. */}
           {emailProps ? (
             <section aria-labelledby="the-message" className="card card-sheen space-y-4 p-6 max-md:p-4">
-              <SectionTitle id="the-message" tone="indigo" icon={<IconMail size={18} stroke={2} />}>
+              <SectionTitle id="the-message" tone="blue" icon={<IconMail size={18} stroke={2} />}>
                 The message
               </SectionTitle>
               <EmailPanel {...emailProps} />
@@ -766,9 +766,8 @@ export default async function LeadDetailPage({
             parts={
               storedV2
                 ? [
-                    { label: "Fit", value: storedV2.fitTotal, max: FIT_MAX, dot: "bg-teal" },
-                    { label: "Signals", value: storedV2.signalsTotal, max: SIGNALS_MAX, dot: "bg-accent" },
-                    { label: "Not earned", value: Math.max(0, FIT_MAX - storedV2.fitTotal) + Math.max(0, SIGNALS_MAX - storedV2.signalsTotal), dot: "bg-line" },
+                    { label: "Clinic fit", value: storedV2.fitTotal, max: FIT_MAX, dot: "bg-ok" },
+                    { label: "Buying signals", value: storedV2.signalsTotal, max: SIGNALS_MAX, dot: "bg-accent" },
                   ]
                 : []
             }
@@ -776,7 +775,7 @@ export default async function LeadDetailPage({
           />
 
           <section aria-labelledby="activity" className="card card-sheen space-y-4 p-5">
-            <SectionTitle id="activity" tone="purple" icon={<IconHistory size={18} stroke={2} />}>
+            <SectionTitle id="activity" tone="blue" icon={<IconHistory size={18} stroke={2} />}>
               Activity
             </SectionTitle>
             <form action={addNote} className="flex gap-2">
@@ -904,23 +903,16 @@ function SummaryItem({
   );
 }
 
-// The header's tint, from the tier's own colour into the card.
-const HEADER_TINT: Record<string, string> = {
-  A: "from-teal-soft/60",
-  B: "from-accent-soft/60",
-  C: "from-warn-soft/50",
-};
-
 // "Nov 2": a due date is a day, stored at UTC midnight.
 function fmtDayMonth(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-// The tier as a tile beside the clinic's name: the letter on its own colour,
+// The tier as a tile beside the clinic's name: A green, B amber, C red,
 // a dash where nobody has scored it.
 function TierTile({ tier }: { tier: string | null }) {
   const tone =
-    tier === "A" ? "bg-teal-soft text-teal" : tier === "B" ? "bg-accent-soft text-accent" : tier ? "bg-warn-soft text-warn-on-soft" : "bg-line/70 text-muted";
+    tier === "A" ? "bg-ok-soft text-ok" : tier === "B" ? "bg-warn-soft text-warn" : tier ? "bg-bad-soft text-bad" : "bg-line/70 text-muted";
   return (
     <div
       className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold ${tone}`}
