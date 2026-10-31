@@ -82,7 +82,9 @@ const MECHANISM_LABELS: Record<string, string> = {
   curiosity_pain_signal: "Curiosity question about no-shows",
 };
 
-export default function EmailPanel(p: EmailPanelProps) {
+// statusInTitle: the page shows the status pill in the card's title row, so
+// the panel leaves it out of its own first line.
+export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelProps & { statusInTitle?: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export default function EmailPanel(p: EmailPanelProps) {
       {p.starters.length > 0 && !sentAny && <StarterCopyBanner remaining={p.starters} />}
 
       <div className="flex flex-wrap items-center gap-2.5">
-        <EmailStatusBadge status={p.status} />
+        {!statusInTitle && <EmailStatusBadge status={p.status} />}
         <span className="text-sm text-muted">{EMAIL_LEAD_NEXT[p.status]}</span>
         <span className="num ml-auto text-xs text-muted">{p.sequence}</span>
       </div>
@@ -139,11 +141,12 @@ export default function EmailPanel(p: EmailPanelProps) {
           the scorecard. */}
       {/* The addresses as an email's own header: who it goes to and from. */}
       <div className="flex gap-3 rounded-xl border border-line bg-wash/50 p-4 text-sm">
-        {/* A blank profile head, like a social account with no photo. */}
-        <span className="relative flex h-10 w-10 shrink-0 items-end justify-center overflow-hidden rounded-full bg-accent-soft ring-1 ring-accent/30" aria-hidden>
-          <svg viewBox="0 0 40 40" className="h-10 w-10 text-accent">
-            <circle cx="20" cy="15.5" r="7" fill="currentColor" opacity="0.9" />
-            <path d="M6 38c1.6-7.6 7.3-12 14-12s12.4 4.4 14 12z" fill="currentColor" opacity="0.9" />
+        {/* The blank profile picture a social account has before a photo is
+            added: a grey disc, and the head and shoulders cut by its edge. */}
+        <span className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-[#C9CCD1] dark:bg-[#3A3B3C]" aria-hidden>
+          <svg viewBox="0 0 40 40" className="h-10 w-10 text-white dark:text-[#8A8D91]">
+            <circle cx="20" cy="15" r="7.5" fill="currentColor" />
+            <path d="M3 44c0-10 7.6-16.5 17-16.5S37 34 37 44z" fill="currentColor" />
           </svg>
         </span>
         <div className="min-w-0 flex-1">

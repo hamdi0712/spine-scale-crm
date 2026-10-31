@@ -61,12 +61,17 @@ import {
   IconSend,
   IconSpeakerphone,
   IconStarFilled,
+  IconUser,
+  IconRefresh,
+  IconBuildingHospital,
+  IconTrash,
+  IconUserOff,
   IconUsers,
   IconWorld,
   IconHistory,
 } from "@tabler/icons-react";
-import { FactTile, ScoreRingCard, SectionTitle, Timeline, scoreTip } from "@/components/LeadVisuals";
-import { EmailStatusBadge } from "@/components/Badge";
+import { ScoreRingCard, SectionTitle, Timeline, scoreTip } from "@/components/LeadVisuals";
+import { EmailStatusBadge, StageBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
 import ConnectionRequestToggle from "@/components/ConnectionRequestToggle";
@@ -78,7 +83,8 @@ import { OPEN_TASK_STATUSES } from "@/lib/tasks";
 import { moveTaskStatus } from "@/lib/actions/tasks";
 import StageSelect from "@/components/StageSelect";
 import DetailsCard from "@/components/DetailsCard";
-import DropdownMenu, { MENU_ITEM } from "@/components/DropdownMenu";
+import DropdownMenu from "@/components/DropdownMenu";
+import { MENU_ROW, MENU_ROW_DANGER } from "@/lib/menuItem";
 import IcpScorecardV2 from "@/components/IcpScorecardV2";
 import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
@@ -207,31 +213,44 @@ export default async function LeadDetailPage({
         ← Pipeline{lead.channel === "email" ? " · Email" : ""}
       </Link>
 
-      {/* The header: tier, name, who and where; the status, the stage and the
-          rarer actions on the right. */}
-      <div className="card card-sheen relative z-10 mt-3 space-y-5 overflow-visible p-6 max-md:p-4">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <TierTile tier={leadTier(lead)} />
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="display text-[28px] font-semibold leading-tight">{lead.clinicName}</h1>
-              {lead.archived && (
-                <span className="inline-flex h-[22px] items-center rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
-                  Archived
-                </span>
-              )}
+      {/* The header: the tier and the clinic, who and where on one quiet
+          line, the controls top-right; the status and the enrichment's
+          readings along a strip at the foot. */}
+      <div className="card card-sheen relative z-10 mt-3 overflow-visible">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 p-6 max-md:p-4 lg:flex-nowrap">
+          <div className="flex min-w-0 flex-1 items-center gap-4 max-md:basis-full max-md:items-start">
+            <TierTile tier={leadTier(lead)} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="display text-2xl font-semibold leading-tight tracking-tight max-md:text-xl">{lead.clinicName}</h1>
+                {lead.archived && (
+                  <span className="inline-flex h-[22px] items-center rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
+                    Archived
+                  </span>
+                )}
+              </div>
+              <ul className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+                <li className="flex min-w-0 items-center gap-1.5">
+                  <IconUser size={15} stroke={1.75} aria-hidden className="shrink-0" />
+                  <span className="truncate">{lead.contactName ?? "No contact yet"}</span>
+                </li>
+                {lead.location && (
+                  <li className="flex min-w-0 items-center gap-1.5" title={lead.location}>
+                    <IconMapPin size={15} stroke={1.75} aria-hidden className="shrink-0" />
+                    <span className="max-w-[360px] truncate">{lead.location}</span>
+                  </li>
+                )}
+                {isUsTimeZone(lead.timeZone) && (
+                  <li className="flex items-center gap-1.5">
+                    <IconClockHour4 size={15} stroke={1.75} aria-hidden className="shrink-0" />
+                    {zoneLabel(lead.timeZone)} time
+                  </li>
+                )}
+              </ul>
             </div>
-            <p className="mt-0.5 text-sm text-muted">
-              {[lead.contactName ?? "No contact yet", lead.location, isUsTimeZone(lead.timeZone) ? `${zoneLabel(lead.timeZone)} time` : null]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
           </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {emailProps && <EmailStatusBadge status={emailProps.status} />}
-          <StageSelect leadId={lead.id} stage={lead.stage} />
+          <div className="flex shrink-0 items-center gap-2 max-md:w-full max-md:[&>*:first-child]:flex-1 max-md:[&>*:first-child>button]:w-full">
+            <StageSelect leadId={lead.id} stage={lead.stage} />
           <PageActions className="flex flex-wrap items-center gap-2">
             <LeadEnrichPanel
               run={runEnrichment}
@@ -255,51 +274,90 @@ export default async function LeadDetailPage({
                 stage change puts it back), and Delete, which asks first. */}
             <DropdownMenu label="More actions" icon>
               <form action={moveChannel}>
-                <button type="submit" className={MENU_ITEM}>
-                  {lead.channel === "email" ? "Move to LinkedIn" : "Move to email"}
-                  <span className="text-xs font-normal text-muted">Changes which Pipeline view it is in</span>
+                <button type="submit" className={MENU_ROW}>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-wash text-muted" aria-hidden>
+                    {lead.channel === "email" ? <IconBrandLinkedin size={16} stroke={2} /> : <IconMail size={16} stroke={2} />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block">{lead.channel === "email" ? "Move to LinkedIn" : "Move to email"}</span>
+                    <span className="block text-xs font-normal text-muted">Changes which Pipeline view it is in</span>
+                  </span>
                 </button>
               </form>
               {lead.stage !== "NO_CONTACT" && (
                 <form action={markNoContact}>
-                  <button type="submit" className={MENU_ITEM}>
-                    No Contact
-                    <span className="text-xs font-normal text-muted">Off today&apos;s lists; the stage select brings it back</span>
+                  <button type="submit" className={MENU_ROW}>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-wash text-muted" aria-hidden>
+                      <IconUserOff size={16} stroke={2} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block">No Contact</span>
+                      <span className="block text-xs font-normal text-muted">Off today&apos;s lists; changing the stage brings it back</span>
+                    </span>
                   </button>
                 </form>
               )}
-              <div className="my-1 border-t border-line/60" />
+              <div className="mx-2 my-1.5 border-t border-line/70" />
               <div className="[&>form]:block">
                 <ConfirmForm
                   action={remove}
                   message={`Delete lead "${lead.clinicName}" and its activity log?`}
-                  className={`${MENU_ITEM} text-bad`}
+                  className={MENU_ROW_DANGER}
                 >
-                  Delete lead
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bad-soft text-bad" aria-hidden>
+                    <IconTrash size={16} stroke={2} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block">Delete lead</span>
+                    <span className="block text-xs font-normal text-muted">Removes it and its activity log for good</span>
+                  </span>
                 </ConfirmForm>
               </div>
             </DropdownMenu>
           </PageActions>
+          </div>
         </div>
-      </div>
-      {/* The facts worth a glance, a tile each: the last enrichment's readings. */}
-      {(lead.reviewCount !== null || lead.staffCountRaw !== null || lead.metaAdsSignal || lead.enrichedAt) && (
-        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+
+        {/* The strip: where the lead stands, then the readings worth a glance,
+            each an icon, a figure and a word — divided, not boxed, so two
+            facts read as complete as four. */}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2.5 rounded-b-2xl border-t border-line/70 bg-wash/50 px-6 py-3 text-sm max-md:px-4 sm:[&>*+*]:border-l sm:[&>*+*]:border-line sm:[&>*+*]:pl-5">
+          {emailProps ? <EmailStatusBadge status={emailProps.status} /> : <StageBadge stage={lead.stage} />}
           {lead.reviewCount !== null && (
-            <FactTile icon={<IconStarFilled size={16} />} tone="amber" value={lead.reviewCount} label="Google reviews"
-              title={lead.reviewsCheckedAt ? `Read ${fmtDateTime(lead.reviewsCheckedAt)}` : undefined} />
+            <span className="flex items-center gap-1.5" title={lead.reviewsCheckedAt ? `Read ${fmtDateTime(lead.reviewsCheckedAt)}` : undefined}>
+              <IconStarFilled size={15} aria-hidden className="text-warn" />
+              <span className="num font-semibold text-ink">{lead.reviewCount}</span>
+              <span className="text-muted">Google {lead.reviewCount === 1 ? "review" : "reviews"}</span>
+            </span>
           )}
-          {lead.staffCountRaw !== null && <FactTile icon={<IconUsers size={16} stroke={2} />} tone="blue" value={lead.staffCountRaw} label="on staff" />}
+          {lead.staffCountRaw !== null && (
+            <span className="flex items-center gap-1.5">
+              <IconUsers size={15} stroke={2} aria-hidden className="text-accent" />
+              <span className="num font-semibold text-ink">{lead.staffCountRaw}</span>
+              <span className="text-muted">on staff</span>
+            </span>
+          )}
           {lead.metaAdsSignal && (
-            <FactTile icon={<IconSpeakerphone size={16} stroke={2} />} tone="pink"
-              value={adsCount ? `${adsCount[1]} ad${adsCount[1] === "1" ? "" : "s"}` : "Ads"} label={adsCount ? "on Meta" : lead.metaAdsSignal} title={lead.metaAdsSignal} />
+            <span className="flex items-center gap-1.5" title={lead.metaAdsSignal}>
+              <IconSpeakerphone size={15} stroke={2} aria-hidden className="text-pink" />
+              {adsCount ? (
+                <>
+                  <span className="num font-semibold text-ink">{adsCount[1]}</span>
+                  <span className="text-muted">Meta {adsCount[1] === "1" ? "ad" : "ads"}</span>
+                </>
+              ) : (
+                <span className="max-w-[240px] truncate text-muted">{lead.metaAdsSignal}</span>
+              )}
+            </span>
           )}
           {lead.enrichedAt && (
-            <FactTile icon={<IconClockHour4 size={16} stroke={2} />} tone="neutral" value={fmtRelative(lead.enrichedAt)} label="last enriched"
-              title={fmtDateTime(lead.enrichedAt)} />
+            <span className="flex items-center gap-1.5" title={fmtDateTime(lead.enrichedAt)}>
+              <IconRefresh size={15} stroke={2} aria-hidden className="text-muted" />
+              <span className="text-muted">Enriched</span>
+              <span className="num font-semibold text-ink">{fmtRelative(lead.enrichedAt)}</span>
+            </span>
           )}
         </div>
-      )}
       </div>
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -383,10 +441,15 @@ export default async function LeadDetailPage({
               details form on purpose — every control in it acts on its own. */}
           {emailProps ? (
             <section aria-labelledby="the-message" className="card card-sheen space-y-4 p-6 max-md:p-4">
-              <SectionTitle id="the-message" tone="blue" icon={<IconMail size={18} stroke={2} />}>
+              <SectionTitle
+                id="the-message"
+                tone="blue"
+                icon={<IconMail size={18} stroke={2} />}
+                aside={<EmailStatusBadge status={emailProps.status} />}
+              >
                 The message
               </SectionTitle>
-              <EmailPanel {...emailProps} />
+              <EmailPanel {...emailProps} statusInTitle />
             </section>
           ) : (
             <section aria-labelledby="the-message" className="space-y-4">
@@ -912,13 +975,19 @@ function fmtDayMonth(d: Date): string {
 // a dash where nobody has scored it.
 function TierTile({ tier }: { tier: string | null }) {
   const tone =
-    tier === "A" ? "bg-ok-soft text-ok" : tier === "B" ? "bg-warn-soft text-warn" : tier ? "bg-bad-soft text-bad" : "bg-line/70 text-muted";
+    tier === "A"
+      ? "border-ok/30 bg-ok-soft text-ok"
+      : tier === "B"
+        ? "border-warn/30 bg-warn-soft text-warn"
+        : tier
+          ? "border-bad/30 bg-bad-soft text-bad"
+          : "border-line bg-wash text-muted";
   return (
     <div
-      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold ${tone}`}
-      title={tier ? `${tier}-tier` : "Not scored"}
+      className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border text-2xl font-bold max-md:h-11 max-md:w-11 max-md:text-xl ${tone}`}
+      title={tier ? `${tier}-tier` : "Not scored yet"}
     >
-      {tier ?? "—"}
+      {tier ?? <IconBuildingHospital size={24} stroke={1.75} aria-hidden />}
     </div>
   );
 }
