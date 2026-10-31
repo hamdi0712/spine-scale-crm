@@ -286,6 +286,11 @@
   .card {
     @apply overflow-hidden rounded-2xl border border-line bg-surface shadow-card;
   }
+  /* A faint highlight along a card's top edge, so it reads as a raised
+     surface. Light mode has the shadow for that; dark needs the edge. */
+  .dark .card-sheen {
+    box-shadow: var(--shadow-card), inset 0 1px 0 rgb(255 255 255 / 0.05);
+  }
   /* ─── Dashboard only ──────────────────────────────────────────────────────
      The classes below are used by the dashboard and nothing else. They
      are here rather than inline because each needs a gradient or a shadow

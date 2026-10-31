@@ -137,7 +137,16 @@ export default function EmailPanel(p: EmailPanelProps) {
 
       {/* Who it goes to: the address, and whether the contact agrees with
           the scorecard. */}
-      <div className="text-sm">
+      {/* The addresses as an email's own header: who it goes from, with the
+          inbox's initial, and who it goes to. */}
+      <div className="flex gap-3 rounded-xl border border-line bg-wash/50 p-4 text-sm">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-teal text-sm font-bold uppercase text-white"
+          aria-hidden
+        >
+          {(p.inbox?.address ?? "?").charAt(0)}
+        </span>
+        <div className="min-w-0 flex-1">
         <p>
           <span className="text-muted">To </span>
           {p.email ? <span className="break-all font-medium">{p.email}</span> : <span className="text-muted">no address yet</span>}
@@ -185,6 +194,7 @@ export default function EmailPanel(p: EmailPanelProps) {
             </select>
           )}
           {p.inbox && p.inboxLocked && <span className="text-xs text-muted">· fixed, same thread</span>}
+        </div>
         </div>
       </div>
       {p.contact.state === "mismatch" && !sentAny && (

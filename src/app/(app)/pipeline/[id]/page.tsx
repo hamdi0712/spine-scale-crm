@@ -32,7 +32,7 @@ import {
 import { addLeadCall } from "@/lib/actions/calls";
 import { LEAD_STAGES, LEAD_STAGE_LABELS } from "@/lib/constants";
 import { leadBreakdownV2, leadScore, leadTier } from "@/lib/leadScore";
-import { FIT_MAX, SIGNALS_MAX } from "@/lib/icpWeights";
+import { FIT_MAX, SIGNALS_MAX, V2_MAX_SCORE } from "@/lib/icpWeights";
 import {
   EMAIL_SOURCE_LABELS,
   EMAIL_STATUS_LABELS,
@@ -53,11 +53,19 @@ import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES, isUsTimeZone, zoneLabel } from "@/lib/timezones";
 import { fmtDate, fmtDateTime, toDateInput } from "@/lib/format";
 import {
-  IconBrandFacebook,
+  IconBrandFacebookFilled,
   IconBrandLinkedin,
+  IconClockHour4,
+  IconMail,
   IconMapPin,
+  IconSend,
+  IconSpeakerphone,
+  IconStarFilled,
+  IconUsers,
   IconWorld,
+  IconHistory,
 } from "@tabler/icons-react";
+import { FactTile, ScoreRingCard, SectionTitle, Timeline, scoreTip } from "@/components/LeadVisuals";
 import { EmailStatusBadge } from "@/components/Badge";
 import CallLog from "@/components/CallLog";
 import ConfirmForm from "@/components/ConfirmForm";
@@ -145,6 +153,9 @@ export default async function LeadDetailPage({
     orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
     select: { id: true, title: true, description: true, dueDate: true },
   });
+  // The ads signal usually opens with its count: "6 active ads".
+  const scoreNow = leadScore(lead);
+  const adsCount = /(\d+)/.exec(lead.metaAdsSignal ?? "");
   const completeNextTask = nextTask ? moveTaskStatus.bind(null, nextTask.id, "DONE") : undefined;
 
   // The email panel's props, worked out once: the header's status pill reads
@@ -160,8 +171,8 @@ export default async function LeadDetailPage({
     select: { id: true, kind: true, summary: true, createdAt: true },
   });
   const timeline = [
-    ...events.map((e) => ({ id: `a-${e.id}`, text: e.summary, at: e.createdAt, dot: activityDot(e.kind) })),
-    ...lead.notes.map((n) => ({ id: `n-${n.id}`, text: n.body, at: n.createdAt, dot: "bg-muted" })),
+    ...events.map((e) => ({ id: `a-${e.id}`, kind: e.kind, text: e.summary, at: e.createdAt })),
+    ...lead.notes.map((n) => ({ id: `n-${n.id}`, kind: "NOTE", text: n.body, at: n.createdAt })),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
   const overdue = nextTask?.dueDate ? nextTask.dueDate.getTime() < Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) : false;
 
@@ -198,7 +209,8 @@ export default async function LeadDetailPage({
 
       {/* The header: tier, name, who and where; the status, the stage and the
           rarer actions on the right. */}
-      <div className="card relative z-10 mt-3 flex flex-wrap items-center justify-between gap-4 overflow-visible p-6 max-md:p-4">
+      <div className={`card card-sheen relative z-10 mt-3 space-y-5 overflow-visible bg-gradient-to-r p-6 max-md:p-4 ${HEADER_TINT[leadTier(lead) ?? ""] ?? "from-surface"} via-surface to-surface`}>
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-4">
           <TierTile tier={leadTier(lead)} />
           <div className="min-w-0">
@@ -270,31 +282,54 @@ export default async function LeadDetailPage({
           </PageActions>
         </div>
       </div>
+      {/* The facts worth a glance, a tile each: the last enrichment's readings. */}
+      {(lead.reviewCount !== null || lead.staffCountRaw !== null || lead.metaAdsSignal || lead.enrichedAt) && (
+        <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+          {lead.reviewCount !== null && (
+            <FactTile icon={<IconStarFilled size={16} />} tone="amber" value={lead.reviewCount} label="Google reviews"
+              title={lead.reviewsCheckedAt ? `Read ${fmtDateTime(lead.reviewsCheckedAt)}` : undefined} />
+          )}
+          {lead.staffCountRaw !== null && <FactTile icon={<IconUsers size={16} stroke={2} />} tone="blue" value={lead.staffCountRaw} label="on staff" />}
+          {lead.metaAdsSignal && (
+            <FactTile icon={<IconSpeakerphone size={16} stroke={2} />} tone="pink"
+              value={adsCount ? `${adsCount[1]} ad${adsCount[1] === "1" ? "" : "s"}` : "Ads"} label={adsCount ? "on Meta" : lead.metaAdsSignal} title={lead.metaAdsSignal} />
+          )}
+          {lead.enrichedAt && (
+            <FactTile icon={<IconClockHour4 size={16} stroke={2} />} tone="neutral" value={fmtRelative(lead.enrichedAt)} label="last enriched"
+              title={fmtDateTime(lead.enrichedAt)} />
+          )}
+        </div>
+      )}
+      </div>
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         {/* ─── The main column: reach out, the message, the details ────── */}
         <div className="min-w-0 space-y-6">
-          <section aria-labelledby="reach-out" className="card space-y-4 p-6 max-md:p-4">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 id="reach-out" className="text-lg font-semibold">Reach out</h2>
-              {lead.channel === "email" && !(lead.email ?? "").trim() && (
-                <p className="text-sm text-muted">
-                  {lead.facebookEmailAt
-                    ? "No email found on Maps, the website or Facebook"
-                    : "No email yet"}
-                </p>
-              )}
-            </div>
+          <section aria-labelledby="reach-out" className="card card-sheen space-y-4 p-6 max-md:p-4">
+            <SectionTitle
+              id="reach-out"
+              tone="blue"
+              icon={<IconSend size={18} stroke={2} />}
+              aside={
+                lead.channel === "email" && !(lead.email ?? "").trim() ? (
+                  <p className="text-sm text-muted">
+                    {lead.facebookEmailAt ? "No email found on Maps, the website or Facebook" : "No email yet"}
+                  </p>
+                ) : undefined
+              }
+            >
+              Reach out
+            </SectionTitle>
             <div className="flex flex-wrap items-center gap-2">
               {lead.websiteUrl && (
-                <a href={lead.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
+                <a href={lead.websiteUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
                   <IconWorld size={16} stroke={1.75} aria-hidden className="text-muted" />
                   Website
                 </a>
               )}
               {lead.facebookUrl && (
-                <a href={lead.facebookUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
-                  <IconBrandFacebook size={16} stroke={1.75} aria-hidden className="text-muted" />
+                <a href={lead.facebookUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#1877F2]/35 bg-[#1877F2]/10 px-3 text-sm font-medium text-[#1462D4] transition-colors hover:bg-[#1877F2]/15 dark:text-[#8DB8FF]">
+                  <IconBrandFacebookFilled size={16} aria-hidden className="text-[#1877F2] dark:text-[#4C8DFF]" />
                   Facebook
                 </a>
               )}
@@ -302,19 +337,19 @@ export default async function LeadDetailPage({
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.clinicName, lead.location].filter(Boolean).join(" "))}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60"
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-ok/35 bg-ok-soft px-3 text-sm font-medium text-ok-on-soft transition-colors hover:bg-ok/15"
               >
-                <IconMapPin size={16} stroke={1.75} aria-hidden className="text-muted" />
+                <IconMapPin size={16} stroke={2} aria-hidden className="text-ok" />
                 Google Maps
               </a>
               {lead.linkedinUrl && (
-                <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
+                <a href={lead.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
                   <IconBrandLinkedin size={16} stroke={1.75} aria-hidden className="text-muted" />
                   LinkedIn profile
                 </a>
               )}
               {lead.companyLinkedinUrl && (
-                <a href={lead.companyLinkedinUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
+                <a href={lead.companyLinkedinUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-lg border border-line bg-wash px-3 text-sm font-medium text-ink transition-colors hover:bg-line/60">
                   <IconBrandLinkedin size={16} stroke={1.75} aria-hidden className="text-muted" />
                   Company page
                 </a>
@@ -347,8 +382,10 @@ export default async function LeadDetailPage({
               channel, the five-message sequence on LinkedIn. Outside the
               details form on purpose — every control in it acts on its own. */}
           {emailProps ? (
-            <section aria-labelledby="the-message" className="card p-6 max-md:p-4">
-              <h2 id="the-message" className="mb-4 text-lg font-semibold">The message</h2>
+            <section aria-labelledby="the-message" className="card card-sheen space-y-4 p-6 max-md:p-4">
+              <SectionTitle id="the-message" tone="indigo" icon={<IconMail size={18} stroke={2} />}>
+                The message
+              </SectionTitle>
               <EmailPanel {...emailProps} />
             </section>
           ) : (
@@ -722,29 +759,35 @@ export default async function LeadDetailPage({
             </section>
           )}
 
-          <ScoreSummary lead={lead} />
+          <ScoreRingCard
+            total={scoreNow?.total ?? null}
+            max={scoreNow?.max ?? V2_MAX_SCORE}
+            tier={scoreNow?.tier ?? null}
+            parts={
+              storedV2
+                ? [
+                    { label: "Fit", value: storedV2.fitTotal, max: FIT_MAX, dot: "bg-teal" },
+                    { label: "Signals", value: storedV2.signalsTotal, max: SIGNALS_MAX, dot: "bg-accent" },
+                    { label: "Not earned", value: Math.max(0, FIT_MAX - storedV2.fitTotal) + Math.max(0, SIGNALS_MAX - storedV2.signalsTotal), dot: "bg-line" },
+                  ]
+                : []
+            }
+            tip={storedV2 ? scoreTip(storedV2.fitTotal, FIT_MAX, storedV2.signalsTotal, SIGNALS_MAX) : null}
+          />
 
-          <section aria-labelledby="activity" className="card p-5">
-            <h2 id="activity" className="text-lg font-semibold">Activity</h2>
-            <form action={addNote} className="mt-3 flex gap-2">
+          <section aria-labelledby="activity" className="card card-sheen space-y-4 p-5">
+            <SectionTitle id="activity" tone="purple" icon={<IconHistory size={18} stroke={2} />}>
+              Activity
+            </SectionTitle>
+            <form action={addNote} className="flex gap-2">
               <label className="sr-only" htmlFor="note-body">Add a note</label>
               <input id="note-body" name="body" placeholder="Add a note…" required className="field h-9 text-sm" />
               <button type="submit" className="btn h-9 shrink-0 px-3 text-sm">Log</button>
             </form>
             {timeline.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">Nothing yet. Notes and what happens to this lead show here.</p>
+              <p className="text-sm text-muted">Nothing yet. Notes and what happens to this lead show here.</p>
             ) : (
-              <ul className="mt-4 space-y-3.5">
-                {timeline.map((item) => (
-                  <li key={item.id} className="flex gap-3">
-                    <span className={`mt-[7px] h-2 w-2 shrink-0 rounded-full ${item.dot}`} aria-hidden />
-                    <div className="min-w-0">
-                      <p className="whitespace-pre-wrap break-words text-sm text-ink">{item.text}</p>
-                      <p className="num text-xs text-muted" title={fmtDateTime(item.at)}>{fmtRelative(item.at)}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <Timeline items={timeline} />
             )}
           </section>
         </aside>
@@ -861,17 +904,16 @@ function SummaryItem({
   );
 }
 
+// The header's tint, from the tier's own colour into the card.
+const HEADER_TINT: Record<string, string> = {
+  A: "from-teal-soft/60",
+  B: "from-accent-soft/60",
+  C: "from-warn-soft/50",
+};
+
 // "Nov 2": a due date is a day, stored at UTC midnight.
 function fmtDayMonth(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-// A dot per kind of event in the timeline: sends and forms blue, wins and
-// conversions teal, anything the copilot or connector did purple.
-function activityDot(kind: string): string {
-  if (kind === "LEAD_CONVERTED" || kind === "CONTRACT_SIGNED") return "bg-teal";
-  if (kind === "COPILOT_ACTION" || kind === "CONNECTOR_CHANGE") return "bg-purple";
-  return "bg-accent";
 }
 
 // The tier as a tile beside the clinic's name: the letter on its own colour,
@@ -886,52 +928,5 @@ function TierTile({ tier }: { tier: string | null }) {
     >
       {tier ?? "—"}
     </div>
-  );
-}
-
-// The score at a glance: the total, and on the ICP model a bar for each half
-// of it — Fit and Signals — against what each is out of. The full card is
-// further down.
-function ScoreSummary({ lead }: { lead: Parameters<typeof leadScore>[0] }) {
-  const score = leadScore(lead);
-  const v2 = leadBreakdownV2(lead);
-  const bars = v2
-    ? [
-        { label: "Fit", value: v2.fitTotal, max: FIT_MAX, bar: "bg-teal" },
-        { label: "Signals", value: v2.signalsTotal, max: SIGNALS_MAX, bar: "bg-accent" },
-      ]
-    : [];
-  return (
-    <section aria-labelledby="icp-score" className="card p-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 id="icp-score" className="text-lg font-semibold">ICP score</h2>
-        {score ? (
-          <span className="num text-2xl font-semibold text-teal">
-            {score.total}
-            <span className="text-sm font-normal text-muted">/{score.max}</span>
-          </span>
-        ) : (
-          <span className="text-sm text-muted">Not scored</span>
-        )}
-      </div>
-      {bars.length > 0 && (
-        <div className="mt-3 space-y-2.5">
-          {bars.map((b) => (
-            <div key={b.label} className="flex items-center gap-3 text-sm">
-              <span className="w-16 text-muted">{b.label}</span>
-              <div className="h-1.5 flex-1 rounded-full bg-line/70" aria-hidden>
-                <div className={`h-1.5 rounded-full ${b.bar}`} style={{ width: `${b.max > 0 ? Math.min(100, (b.value / b.max) * 100) : 0}%` }} />
-              </div>
-              <span className="num w-12 text-right text-xs text-muted">
-                {b.value}/{b.max}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-      <a href="#scorecard" className="mt-3 inline-block text-sm font-medium text-accent hover:underline">
-        Open scorecard →
-      </a>
-    </section>
   );
 }
