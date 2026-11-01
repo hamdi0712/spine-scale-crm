@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { IconSearch } from "@tabler/icons-react";
+import { IconChevronRight, IconSearch } from "@tabler/icons-react";
 import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
 import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
@@ -38,9 +39,15 @@ export interface EmailLeadRow {
 // work is. "Needs work" is everything waiting on the operator before it can be
 // sent; "Done" is everything the sequence has finished with, one way or
 // another. Due today cuts across them (every lead in it is In sequence).
-type Filter = "all" | "ready" | "due" | "work" | "sequence" | "done";
+type Filter = "all" | "email" | "ready" | "due" | "work" | "sequence" | "done";
 
-const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due">, EmailLeadStatus[]> = {
+const FILTERS: Filter[] = ["all", "email", "ready", "due", "work", "sequence", "done"];
+
+function readFilter(v: unknown): Filter | null {
+  return (FILTERS as unknown[]).includes(v) ? (v as Filter) : null;
+}
+
+const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email">, EmailLeadStatus[]> = {
   ready: ["ready"],
   work: ["needs_opener", "check_email", "check_contact", "no_email"],
   sequence: ["in_sequence"],
@@ -50,6 +57,8 @@ const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due">, EmailLeadStatus[]>
 function matches(row: EmailLeadRow, filter: Filter): boolean {
   if (filter === "all") return true;
   if (filter === "due") return row.followUpDueToday;
+  // Every lead with an address, whatever it is waiting on.
+  if (filter === "email") return row.email !== null;
   return FILTER_STATUSES[filter].includes(row.status);
 }
 
@@ -57,9 +66,11 @@ function matches(row: EmailLeadRow, filter: Filter): boolean {
 // thing to do next. Every tab is always shown with its count, so the set
 // reads the same on every visit. Due today opens first when there is any:
 // it is the work that cannot wait.
-export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
+// initialTab: the tab a link opened the page on (?tab=, from a Dashboard card).
+export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRow[]; initialTab?: string }) {
+  const router = useRouter();
   const due = rows.filter((r) => r.followUpDueToday).length;
-  const [filter, setFilter] = useState<Filter>(due > 0 ? "due" : "all");
+  const [filter, setFilter] = useState<Filter>(readFilter(initialTab) ?? (due > 0 ? "due" : "all"));
   const [query, setQuery] = useState("");
 
   const tabs = useMemo(
@@ -67,6 +78,7 @@ export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
       (
         [
           ["all", "All"],
+          ["email", "Has email"],
           ["ready", "Ready"],
           ["due", "Due today"],
           ["work", "Needs work"],
@@ -162,13 +174,27 @@ export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
               <th className="th">Tier</th>
               <th className="th">Status</th>
               <th className="th text-right">Next step</th>
+              <th className="th w-8" aria-hidden />
             </tr>
           </thead>
           <tbody>
             {shown.map((row) => (
-              <tr key={row.id} className="hover:bg-wash/70">
+              <tr
+                key={row.id}
+                // The whole row opens the lead. A press on one of its own
+                // buttons or links (Gmail, Copy, Mark sent, the next step) does
+                // that thing instead.
+                onClick={(e) => {
+                  if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
+                  router.push(`/pipeline/${row.id}`);
+                }}
+                className="group cursor-pointer transition-colors hover:bg-wash/70"
+              >
                 <td className="td">
-                  <Link href={`/pipeline/${row.id}`} className="font-medium text-ink hover:underline">
+                  <Link
+                    href={`/pipeline/${row.id}`}
+                    className="inline-block font-medium text-ink transition-transform duration-200 group-hover:translate-x-1"
+                  >
                     {row.clinicName}
                   </Link>
                   <div className="mt-0.5 text-xs text-muted">
@@ -212,11 +238,21 @@ export default function EmailLeadTable({ rows }: { rows: EmailLeadRow[] }) {
                     </Link>
                   )}
                 </td>
+                {/* The arrow that says the row opens: hidden until the row is
+                    hovered, then sliding in. */}
+                <td className="td w-8 pl-0 pr-4">
+                  <IconChevronRight
+                    size={18}
+                    stroke={2}
+                    aria-hidden
+                    className="-translate-x-1 text-muted opacity-0 transition duration-200 group-hover:translate-x-0 group-hover:opacity-100"
+                  />
+                </td>
               </tr>
             ))}
             {shown.length === 0 && (
               <tr>
-                <td className="td text-muted" colSpan={5}>
+                <td className="td text-muted" colSpan={6}>
                   {q ? "No clinic matches that search." : "Nothing here right now."}
                 </td>
               </tr>

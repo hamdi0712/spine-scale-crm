@@ -495,7 +495,12 @@ export async function markEmailBounced(leadId: string): Promise<Result> {
       emailAlternates: JSON.stringify(alternates),
     },
   });
+  // The send it bounced on: the latest one, which is the one that went to
+  // this address. Counted by the dashboard's bounce rate.
+  const last = await prisma.emailSend.findFirst({ where: { leadId, bouncedAt: null }, orderBy: { step: "desc" }, select: { id: true } });
+  if (last) await prisma.emailSend.update({ where: { id: last.id }, data: { bouncedAt: new Date() } });
   revalidate(leadId);
+  revalidatePath("/");
   return { ok: true };
 }
 

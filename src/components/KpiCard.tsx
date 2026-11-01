@@ -9,6 +9,7 @@
 // naming what each card is about. The layout, the tinted disc, the type scale
 // and the tone order are the same ones that were built.
 
+import Link from "next/link";
 import {
   IconCalendarCheck,
   IconMessage2,
@@ -76,6 +77,9 @@ export interface Kpi {
   delta: string;
   shortDelta?: string | null;
   tone: "up" | "alert" | "flat";
+  // Where the card leads: the view of the pipeline it counts. Without one the
+  // card is a plain panel.
+  href?: string;
 }
 
 export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
@@ -87,7 +91,7 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
   return (
     // .kpi-compact tightens the card below md (globals.css); the short copies
     // are separate phone-only elements so the desktop text is untouched.
-    <div className="card-kpi kpi-compact p-6">
+    <Wrap href={kpi.href}>
       <div className="flex items-start justify-between gap-3">
         <div className="text-xs font-medium tracking-[0.02em] text-muted max-md:hidden">
           {kpi.label}
@@ -137,6 +141,20 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
         </div>
       )}
 
-    </div>
+    </Wrap>
+  );
+}
+
+// The card's outer box: a link to its view when it has one, lifting on hover
+// the way the app's other clickable cards do, or a plain panel.
+function Wrap({ href, children }: { href?: string; children: React.ReactNode }) {
+  if (!href) return <div className="card-kpi kpi-compact p-6">{children}</div>;
+  return (
+    <Link
+      href={href}
+      className="card-kpi kpi-compact block p-6 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+    >
+      {children}
+    </Link>
   );
 }

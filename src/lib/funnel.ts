@@ -249,3 +249,67 @@ export function discoverySubtitle(d: DiscoveryBooked): string {
   if (d.held > 0) return "Held this month";
   return "Booked this month";
 }
+
+// ─── The Email view ────────────────────────────────────────────────────────
+
+// The dashboard's Email view puts four email numbers in the same four cards.
+// Qualified is qualifiedLeads above, over the email channel's open leads.
+
+// Emails sent today, Email 1 and follow-ups, across every inbox, against the
+// inboxes' daily limits added together.
+export interface EmailsSentToday {
+  sent: number;
+  limit: number;
+}
+
+export function emailsSentValue(e: EmailsSentToday): string {
+  return `${e.sent} / ${e.limit}`;
+}
+
+export function emailsSentSubtitle(e: EmailsSentToday, inboxes: number): string {
+  if (inboxes === 0) return "No sending inbox yet";
+  if (e.sent > e.limit) return `${e.sent - e.limit} over today's limit`;
+  if (e.sent === e.limit) return "Today's limit reached";
+  return `${e.limit - e.sent} left today across ${inboxes} ${inboxes === 1 ? "inbox" : "inboxes"}`;
+}
+
+// Replies over leads emailed: of the leads whose Email 1 went out in the last
+// 30 days, how many wrote back. The same cohort rule as the LinkedIn rate —
+// scoped by when the email went, not when the reply came.
+export function emailReplyRate(
+  firstSends: { sentAt: Date; lead: { emailRepliedAt: Date | null } }[],
+  now: Date,
+): ReplyRate {
+  const since = daysAgo(now, REPLY_RATE_WINDOW_DAYS);
+  const emailed = firstSends.filter((s) => s.sentAt >= since);
+  const replied = emailed.filter((s) => s.lead.emailRepliedAt !== null);
+  return {
+    replied: replied.length,
+    contacted: emailed.length,
+    percent: emailed.length === 0 ? null : Math.round((replied.length / emailed.length) * 100),
+  };
+}
+
+export function emailReplySubtitle(r: ReplyRate): string {
+  if (r.contacted === 0) return `No emails sent in ${REPLY_RATE_WINDOW_DAYS} days`;
+  return `${r.replied} replied of ${r.contacted} emailed`;
+}
+
+// The bounce rate the warning reads: Email 1 sends in the last 30 days that
+// were later marked bounced, over all of them. Above BOUNCE_WARN_PERCENT the
+// dashboard says so; at or below it, nothing is shown.
+export const BOUNCE_WARN_PERCENT = 2;
+
+export function bounceRate(
+  firstSends: { sentAt: Date; bouncedAt: Date | null }[],
+  now: Date,
+): { bounced: number; sent: number; percent: number | null } {
+  const since = daysAgo(now, REPLY_RATE_WINDOW_DAYS);
+  const sent = firstSends.filter((s) => s.sentAt >= since);
+  const bounced = sent.filter((s) => s.bouncedAt !== null).length;
+  return { bounced, sent: sent.length, percent: sent.length === 0 ? null : (bounced / sent.length) * 100 };
+}
+
+export function callsBookedSubtitle(n: number): string {
+  return n === 0 ? "None booked this month" : "Reached Discovery Call Booked this month";
+}
