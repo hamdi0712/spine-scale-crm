@@ -46,6 +46,10 @@ export function readPipelineChannel(v: unknown): PipelineChannel {
 // toggle is remembered separately from Pipeline's.
 export const DISCOVERY_CHANNEL_COOKIE = "discovery-channel";
 
+// The Dashboard's headline cards are split the same way, and remembered on
+// their own: picking LinkedIn on the Dashboard leaves Pipeline as it was.
+export const DASHBOARD_CHANNEL_COOKIE = "dashboard-channel";
+
 // ─── Talking on LinkedIn ───────────────────────────────────────────────────
 
 // The stages that mean a LinkedIn conversation is under way: Discovery Call

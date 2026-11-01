@@ -30,12 +30,13 @@ export const dynamic = "force-dynamic";
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: { view?: string; scoring?: string };
+  searchParams: { view?: string; scoring?: string; channel?: string; tab?: string };
 }) {
-  // Which channel the page shows: Email unless this browser last chose
-  // LinkedIn (src/components/ChannelToggle.tsx).
-  const channel = readPipelineChannel(cookies().get(PIPELINE_CHANNEL_COOKIE)?.value);
-  if (channel === "email") return <EmailPipeline />;
+  // Which channel the page shows: the one a link names (?channel=, from a
+  // Dashboard card), else Email unless this browser last chose LinkedIn
+  // (src/components/ChannelToggle.tsx).
+  const channel = readPipelineChannel(searchParams.channel ?? cookies().get(PIPELINE_CHANNEL_COOKIE)?.value);
+  if (channel === "email") return <EmailPipeline tab={searchParams.tab} />;
 
   // The table is what loads. It is the view that answers the questions asked
   // most often of a pipeline — who is where, what is scored, what is due — and
@@ -232,7 +233,7 @@ export default async function PipelinePage({
 // thing to do next. Cold email goes out by hand from Gmail: the rows that are
 // Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
 // it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
-async function EmailPipeline() {
+async function EmailPipeline({ tab }: { tab?: string }) {
   const [{ rows, counters, starters, unchecked, check }, facebookLeads, pipelineSettings] = await Promise.all([
     loadEmailView(),
     facebookEmailLeads(),
@@ -315,7 +316,7 @@ async function EmailPipeline() {
             </Link>
           </div>
         ) : (
-          <EmailLeadTable rows={rows} />
+          <EmailLeadTable rows={rows} initialTab={tab} />
         )}
       </div>
     </div>

@@ -26,8 +26,19 @@ import {
   replyRateSubtitle,
   replyRateValue,
   qualifiedShortSubtitle,
-  replyRateShortSubtitle
+  replyRateShortSubtitle,
+  BOUNCE_WARN_PERCENT,
+  bounceRate,
+  callsBookedSubtitle,
+  emailReplyRate,
+  emailReplySubtitle,
+  emailsSentSubtitle,
+  emailsSentValue,
 } from "@/lib/funnel";
+import { cookies } from "next/headers";
+import ChannelToggle from "@/components/ChannelToggle";
+import { DASHBOARD_CHANNEL_COOKIE, LINKEDIN_ENGAGED_STAGES, readPipelineChannel } from "@/lib/emailChannel";
+import { loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import ActivityFeed from "@/components/ActivityFeed";
 import { connectorUndoIds } from "@/lib/mcpWrites";
 import BusinessHoursPanel, {
@@ -62,6 +73,10 @@ const HEALTH_ROWS = 2;
 const KPI_TONES: KpiTone[] = ["blue", "teal", "purple", "pink"];
 
 export default async function DashboardPage() {
+  // Which channel the headline cards count: Email unless this browser last
+  // chose LinkedIn (src/components/ChannelToggle.tsx). Everything below the
+  // cards is shared and does not change with it.
+  const channel = readPipelineChannel(cookies().get(DASHBOARD_CHANNEL_COOKIE)?.value);
   const now = new Date();
   const dayEnd = new Date(now);
   dayEnd.setHours(23, 59, 59, 999);
@@ -138,6 +153,7 @@ export default async function DashboardPage() {
     // week look quieter than it was. Bounded by the longer of the two windows.
     prisma.lead.findMany({
       where: {
+        channel: "linkedin",
         connectionRequestSentAt: { gte: daysAgo(now, REPLY_RATE_WINDOW_DAYS) },
       },
       select: { connectionRequestSentAt: true, repliedAt: true },
@@ -151,10 +167,12 @@ export default async function DashboardPage() {
         type: "DISCOVERY",
         status: { not: "CANCELLED" },
         scheduledAt: { gte: monthStart, lt: nextMonthStart },
+        lead: { channel: "linkedin" },
       },
       select: { status: true },
     }),
   ]);
+  const email = channel === "email" ? await loadEmailCards(now, monthStart, nextMonthStart) : null;
   const undoIds = await connectorUndoIds(activity.map((a) => a.id));
 
   // ─── Headline numbers ────────────────────────────────────────────────────
@@ -165,14 +183,15 @@ export default async function DashboardPage() {
 
   const pipelineValue = openLeads.reduce((s, l) => s + (l.estValue ?? 0), 0);
 
-  const qualified = qualifiedLeads(openLeads);
+  // The cards count the chosen channel's leads only.
+  const qualified = qualifiedLeads(openLeads.filter((l) => l.channel === channel));
   // Qualified leads (A or B) at Contacted or beyond — the same group as the
   // Qualified card's "in play", so the two cards agree.
   const messages = qualified.contacted;
   const replies = replyRate(outreachLeads, now);
   const discovery = discoveryBooked(discoveryCalls);
 
-  const kpis: Kpi[] = [
+  const linkedinKpis: Kpi[] = [
     {
       label: "Qualified leads",
       shortLabel: "Qualified",
@@ -217,6 +236,53 @@ export default async function DashboardPage() {
       tone: discovery.total > 0 ? "up" : "flat",
     },
   ];
+
+  const kpis: Kpi[] = email
+    ? [
+        {
+          label: "Qualified leads",
+          shortLabel: "Qualified",
+          value: String(qualified.total),
+          icon: "qualified",
+          delta: qualifiedSubtitle(qualified),
+          shortDelta: qualifiedShortSubtitle(qualified),
+          tone: qualified.untouched > 0 ? "up" : "flat",
+          href: "/pipeline?channel=email&tab=all",
+        },
+        {
+          label: "Emails sent today",
+          shortLabel: "Emails today",
+          value: emailsSentValue(email.sent),
+          icon: "messages",
+          delta: emailsSentSubtitle(email.sent, email.inboxes),
+          shortDelta: email.inboxes === 0 ? "No inbox yet" : "Across inboxes",
+          tone: email.sent.sent > email.sent.limit ? "alert" : email.sent.sent > 0 ? "up" : "flat",
+          href: "/pipeline?channel=email&tab=sequence",
+        },
+        {
+          label: `Reply rate (${REPLY_RATE_WINDOW_DAYS}d)`,
+          shortLabel: "Reply rate",
+          value: replyRateValue(email.replies),
+          icon: "replies",
+          delta: emailReplySubtitle(email.replies),
+          shortDelta: replyRateShortSubtitle(email.replies),
+          tone: email.replies.replied > 0 ? "up" : "flat",
+          href: "/pipeline?channel=email&tab=done",
+        },
+        {
+          label: "Calls booked",
+          shortLabel: "Calls booked",
+          value: String(email.callsBooked),
+          icon: "calls",
+          delta: callsBookedSubtitle(email.callsBooked),
+          shortDelta: "This month",
+          tone: email.callsBooked > 0 ? "up" : "flat",
+          href: "/pipeline?channel=email&tab=all",
+        },
+      ]
+    : linkedinKpis;
+  const bounce = email?.bounce;
+  const bounceWarning = bounce && bounce.percent !== null && bounce.percent > BOUNCE_WARN_PERCENT ? bounce : null;
 
   // ─── Today's focus ───────────────────────────────────────────────────────
 
@@ -297,11 +363,27 @@ export default async function DashboardPage() {
         </PageActions>
       </div>
 
+      {/* Which channel the four cards count, remembered per browser. The rest
+          of the page is the same on every channel. */}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 max-md:mt-8">
+        <ChannelToggle channel={channel} cookie={DASHBOARD_CHANNEL_COOKIE} label="Dashboard channel" />
+        {bounceWarning && (
+          <Link
+            href="/pipeline?channel=email&tab=all"
+            className="inline-flex items-center gap-1.5 rounded-full border border-bad/30 bg-bad-soft px-3 py-1 text-xs font-medium text-bad"
+            title={`${bounceWarning.bounced} of ${bounceWarning.sent} first emails bounced in the last ${REPLY_RATE_WINDOW_DAYS} days`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-bad" aria-hidden />
+            Bounce rate {bounceWarning.percent!.toFixed(1)}% in {REPLY_RATE_WINDOW_DAYS} days — above {BOUNCE_WARN_PERCENT}%, check your addresses
+          </Link>
+        )}
+      </div>
+
       {/* On a phone all four cards sit in a 2×2 grid, each drawn compact
           (KpiCard) so the four read at once without scrolling. */}
-      <div className="mt-6 grid grid-cols-2 gap-6 max-md:mt-8 max-md:gap-3 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4">
         {kpis.map((kpi, i) => (
-          <KpiCard key={kpi.label} kpi={kpi} tone={KPI_TONES[i]} />
+          <KpiCard key={`${channel}-${kpi.label}`} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
       </div>
 
@@ -488,4 +570,38 @@ export default async function DashboardPage() {
       </div>
     </div>
   );
+}
+
+// The Email view's four numbers. Only read when the Email view is showing.
+async function loadEmailCards(now: Date, monthStart: Date, nextMonthStart: Date) {
+  const [inboxes, sentToday, firstSends, booked] = await Promise.all([
+    loadInboxes(),
+    sentTodayByInbox(now),
+    // Email 1 in the last 30 days: the cohort the reply and bounce rates are
+    // counted over.
+    prisma.emailSend.findMany({
+      where: { step: 0, sentAt: { gte: daysAgo(now, REPLY_RATE_WINDOW_DAYS) } },
+      select: { sentAt: true, bouncedAt: true, lead: { select: { emailRepliedAt: true } } },
+    }),
+    // Email leads that moved to Discovery Call Booked — or past it — this
+    // month, by the date their stage last changed.
+    prisma.lead.count({
+      where: {
+        channel: "email",
+        archived: false,
+        stage: { in: [...LINKEDIN_ENGAGED_STAGES] },
+        stageChangedAt: { gte: monthStart, lt: nextMonthStart },
+      },
+    }),
+  ]);
+  return {
+    inboxes: inboxes.length,
+    sent: {
+      sent: Object.values(sentToday).reduce((a, b) => a + b, 0),
+      limit: inboxes.reduce((a, i) => a + i.dailyLimit, 0),
+    },
+    replies: emailReplyRate(firstSends, now),
+    bounce: bounceRate(firstSends, now),
+    callsBooked: booked,
+  };
 }

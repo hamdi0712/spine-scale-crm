@@ -556,6 +556,10 @@ model EmailSend {
   subject   String
   body      String
   sentAt    DateTime      @default(now())
+  // Set when the lead is marked bounced: the send it was marked against (the
+  // latest). The dashboard's bounce rate is these over the last 30 days'
+  // Email 1 sends. Null for every send marked before the column existed.
+  bouncedAt DateTime?
 
   @@unique([leadId, step])
   @@index([sentAt])
