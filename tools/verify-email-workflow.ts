@@ -190,8 +190,52 @@ async function main(): Promise<void> {
   const thinLead = await reload(thin.id);
   check("thin evidence falls back to the curiosity question", o3.ok && thinLead.emailOpenerMechanism === "curiosity_process" &&
     (thinLead.emailOpener ?? "").includes("both spinal decompression and laser therapy under one roof"), thinLead.emailOpener ?? JSON.stringify(o3));
+  check("the note says this was not a fallback", !(thinLead.emailOpenerNote ?? "").startsWith("Fell back"));
+
   await act.generateEmailOpener(mismatch.id);
   await act.generateEmailOpener(dq.id);
+
+  // Both tries fail the check: the curiosity opener, not nothing.
+  const stubborn = await seed("Stubborn Clinic", { contactName: "Dr. Lou Hart", email: "lou@stubborn.test", emailType: "owner" });
+  const ownerReply = { opener: "I noticed Owner Spine (email verify) runs spinal decompression on the DRX9000 alongside laser therapy.", basis: "cited", ...note };
+  stub.setReplies({
+    [name("Owner Spine")]: ownerReply,
+    [name("Stubborn Clinic")]: [
+      { opener: "Most clinics lose 30% of decompression leads.", basis: "cited", ...note },
+      { opener: "That's a $500 a month leak on the DRX9000.", basis: "cited", ...note },
+      { detail: "both spinal decompression and laser therapy under one roof", painSignal: null, ...note },
+    ],
+  });
+  const o4 = await act.generateEmailOpener(stubborn.id);
+  const stubbornLead = await reload(stubborn.id);
+  check("both tries rejected → falls back to curiosity instead of saving nothing",
+    o4.ok && stubbornLead.emailOpenerMechanism === "curiosity_process" && (stubbornLead.emailOpener ?? "").includes("under one roof"),
+    stubbornLead.emailOpener ?? JSON.stringify(o4));
+  check("and says it fell back, and why", o4.ok && !!o4.fellBack && (stubbornLead.emailOpenerNote ?? "").startsWith("Fell back to curiosity: the observation opener was rejected twice (it uses "),
+    stubbornLead.emailOpenerNote ?? "");
+
+  // The same rule on LinkedIn Step 2: every variant rejected twice → curiosity.
+  const liLead = await seed("Stubborn LinkedIn Clinic", { channel: "linkedin", contactName: "Dr. Ana Bell", connectionAcceptedAt: new Date() });
+  const badVariants = { a: "Thanks for connecting. Most clinics lose 30% of leads, worth a look?", b: "That's a $500 a month leak, worth a look?", c: "On average 12 leads slip, already handled?", ...note };
+  const halfVariants = { a: "Thanks for connecting, Dr. Bell. Noticed the clinic runs decompression on the DRX9000, and the booking step looks form-only. Do most of those leads end up on the schedule?", b: "That's a $500 a month leak, worth a look?", c: null, ...note };
+  stub.setReplies({
+    [name("Owner Spine")]: ownerReply,
+    [name("Stubborn LinkedIn Clinic")]: [badVariants, badVariants, { detail: "both spinal decompression and laser therapy under one roof", painSignal: null, ...note }],
+  });
+  const s2 = await generateOutreachStep(liLead.id, "FIRST_MESSAGE");
+  const s2msgs = await prisma.outreachMessage.findMany({ where: { leadId: liLead.id, step: "FIRST_MESSAGE" } });
+  check("LinkedIn Step 2: all variants rejected twice → one curiosity message",
+    s2.ok && s2msgs.length === 1 && s2msgs[0].messageMechanism === "curiosity_process" && (s2msgs[0].internalNote ?? "").includes("Fell back to curiosity: every observation variant was rejected twice"),
+    JSON.stringify(s2.ok ? s2msgs.map((m) => [m.messageMechanism, m.internalNote]) : s2.error));
+  await prisma.outreachMessage.deleteMany({ where: { leadId: liLead.id } });
+  stub.setReplies({ [name("Owner Spine")]: ownerReply, [name("Stubborn LinkedIn Clinic")]: [halfVariants, halfVariants] });
+  const s2b = await generateOutreachStep(liLead.id, "FIRST_MESSAGE");
+  const s2bMsgs = await prisma.outreachMessage.findMany({ where: { leadId: liLead.id, step: "FIRST_MESSAGE" } });
+  check("LinkedIn Step 2: a variant that passes is kept, no fallback",
+    s2b.ok && s2bMsgs.length === 1 && s2bMsgs[0].variant === "A" && s2bMsgs[0].messageMechanism === "observation",
+    JSON.stringify(s2b.ok ? s2bMsgs.map((m) => [m.variant, m.messageMechanism]) : s2b.error));
+  await prisma.lead.deleteMany({ where: { id: { in: [stubborn.id, liLead.id] } } });
+
 
   console.log("\nThe made-up-stats check and product names");
   const { inventedStatsReason } = await import("../src/lib/outreachSequence");
@@ -206,7 +250,19 @@ async function main(): Promise<void> {
   check("the same product name is blocked when the site doesn't mention it", !allowed("I noticed you run the DRX7000."));
   check("a bare number is still blocked, even one that is on the site", !allowed("You've served Austin for 30 years."));
   check("a percentage is still blocked", !allowed("Clinics lose 30% of DRX9000 leads."));
-  check("a dollar amount is still blocked", !allowed("The DRX9000 is a $5k a month opportunity."));
+  check("a dollar figure not on the site is still blocked ($5k)", !allowed("The DRX9000 is a $5k a month opportunity."));
+  const priced = { ...site, websiteNotes: `${site.websiteNotes} New patient special: $149 first visit, exam and X-rays included. Consults $49.` };
+  const pricedOk = (line: string) => inventedStatsReason(line, priced) === null;
+  check("a $149 offer listed on the site is allowed", pricedOk("I saw the $149 first visit on your site, does that include the decompression consult?"), inventedStatsReason("I saw the $149 first visit on your site, does that include the decompression consult?", priced) ?? "");
+  check("$149.00 matches $149 on the site", pricedOk("Noticed the $149.00 new patient special on the DRX9000 page."));
+  check("two site prices in one line are both allowed", pricedOk("Saw the $149 first visit and the $49 consult."));
+  check("a $500 figure not on the site is blocked", !pricedOk("I saw the $500 decompression package on your site."));
+  check("a near-miss price ($150) is blocked", !pricedOk("I saw the $150 first visit on your site."));
+  check("a percentage beside a site price is still blocked", !pricedOk("The $149 first visit converts 30% of leads."));
+  check("a revenue claim on a site price is blocked", !pricedOk("At $149 a visit, that could add up to real revenue."));
+  check("an ROI/per-month claim on a site price is blocked", !pricedOk("The $149 first visit could be worth $3k a month."));
+  check("a count beside a site price is still blocked", !pricedOk("The $149 first visit could bring in 12 more patients."));
+  check("a comparison beside a site price is still blocked", !pricedOk("Your $149 first visit is cheaper than most clinics."));
   check("a count is still blocked", !allowed("The DRX9000 could bring in 12 more patients a month."));
   check("a comparison is still blocked", !allowed("You run the DRX9000, unlike most clinics."));
   check("the review count is still allowed", allowed("I saw your 40 Google reviews."));
