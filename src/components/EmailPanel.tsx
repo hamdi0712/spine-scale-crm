@@ -234,6 +234,11 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
                   Opener · {MECHANISM_LABELS[p.openerMechanism ?? ""] ?? "Drafted"}
                 </p>
                 <p className="mt-1 text-sm">{p.opener}</p>
+                {p.openerNote?.startsWith("Fell back to curiosity:") && (
+                  <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                    {p.openerNote.split("\n")[0]}
+                  </p>
+                )}
                 {p.openerNote && (
                   <details className="mt-1.5">
                     <summary className="cursor-pointer text-xs text-muted">What it was built on</summary>

@@ -152,7 +152,7 @@ async function loadLead(leadId: string) {
 }
 
 export type OpenerResult =
-  | { ok: true; mechanism: string }
+  | { ok: true; mechanism: string; fellBack?: string | null }
   | { ok: false; error: string };
 
 // Drafts the opener and builds the whole email around it from the template
@@ -208,9 +208,9 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
     opener = parsed.opener;
     note = formatInternalNote(parsed.note);
   }
-  if (opener === null && rejected !== null) {
-    return { ok: false, error: `Couldn't write a clean opener: ${rejected}, twice. Nothing was saved.` };
-  }
+  // Rejected twice: rather than saving nothing, the curiosity fallback below
+  // writes the opener, and the note and result say why.
+  const fellBack = opener === null && rejected !== null ? `the observation opener was rejected twice (${rejected})` : null;
 
   let mechanism = "observation";
   if (opener === null) {
@@ -234,6 +234,7 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
     }
     opener = line;
     note = formatInternalNote(parsed.note);
+    if (fellBack) note = [`Fell back to curiosity: ${fellBack}.`, note].filter(Boolean).join("\n");
     mechanism = parsed.painSignal ? "curiosity_pain_signal" : "curiosity_process";
   }
 
@@ -253,7 +254,7 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
     },
   });
   revalidate(leadId);
-  return { ok: true, mechanism };
+  return { ok: true, mechanism, fellBack };
 }
 
 // Switches between the owner-direct and front-desk templates: the email is

@@ -1724,6 +1724,33 @@ export function inventedStatsReason(
   evidence: Pick<IcpAssistEvidence, "clinicName" | "websiteNotes" | "reviewCount">,
 ): string | null {
   const text = message.replace(/\s+/g, " ");
+  // A revenue or ROI claim is invented whatever figure it hangs on, including
+  // a price that really is on the site ("$149 visits add up to ...").
+  if (/\b(revenue|roi|return\s+on|profit|bottom\s+line|per\s+(month|year|week|patient|case)|an?\s+(month|year|week))\b|\bworth\s+\$/i.test(text) && /\$\s?\d|\bdollars?\b|\b\d+(\.\d+)?\s?k\b/i.test(text)) {
+    return "it uses a revenue or ROI claim";
+  }
+  if (/\b(revenue|roi|return\s+on\s+investment)\b/i.test(text)) return "it uses a revenue or ROI claim";
+  // A dollar amount the clinic lists on its own site ("$149 first visit") is a
+  // fact about the clinic, the same as a product name; it is taken out before
+  // the bans below, which then catch any dollar figure that is not on the site.
+  const sitePrices = dollarAmounts(evidence.websiteNotes ?? "");
+  let screened = text;
+  for (const m of Array.from(text.matchAll(DOLLAR_RE))) {
+    if (sitePrices.has(dollarValue(m[0]))) screened = screened.replace(m[0], " ");
+  }
+  return inventedStatsAfterPrices(screened, evidence);
+}
+
+const DOLLAR_RE = /\$\s?\d[\d,]*(\.\d{1,2})?(?![\d.]*\s?k\b)/gi;
+const dollarValue = (s: string) => Number(s.replace(/[$,\s]/g, "")).toFixed(2);
+function dollarAmounts(notes: string): Set<string> {
+  return new Set(Array.from(notes.matchAll(DOLLAR_RE)).map((m) => dollarValue(m[0])));
+}
+
+function inventedStatsAfterPrices(
+  text: string,
+  evidence: Pick<IcpAssistEvidence, "clinicName" | "websiteNotes" | "reviewCount">,
+): string | null {
   const banned: [RegExp, string][] = [
     [/%|\bper\s?cent\b/i, "a percentage"],
     [/\$\s?\d|\b\d+(\.\d+)?\s?k\b|\bdollars?\b/i, "a dollar figure"],
@@ -1744,7 +1771,7 @@ export function inventedStatsReason(
   }
   const name = evidence.clinicName.trim();
   if (name !== "") rest = rest.split(name).join(" ");
-  for (const m of Array.from(rest.matchAll(/\d[\d,]*(\.\d+)?/g))) {
+  for (const m of Array.from(rest.matchAll(/\d+(?:,\d{3})*(\.\d+)?/g))) {
     const n = Number(m[0].replace(/,/g, ""));
     if (evidence.reviewCount != null && n === evidence.reviewCount) continue;
     if (namedOnSite(rest, m.index ?? 0, m[0].length, notes)) continue;

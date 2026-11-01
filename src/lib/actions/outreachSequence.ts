@@ -406,13 +406,12 @@ export async function generateOutreachStep(
     }
     const anyClean = FIRST_MESSAGE_VARIANTS.some((v) => parsed.variants[v] !== null);
     if (!anyClean) {
-      return {
-        ok: false,
-        error: `Couldn't write a clean opener: ${Array.from(rejected.entries())
-          .map(([v, why]) => `variant ${v}, ${why}`)
-          .join("; ")}. Nothing has been saved.`,
-        debug,
-      };
+      // None survived the retry: the curiosity opener rather than nothing.
+      const fellBack = `every observation variant was rejected twice (${Array.from(rejected.entries())
+        .map(([v, why]) => `${v}: ${why}`)
+        .join("; ")})`;
+      trace(debug, `falling back to curiosity: ${fellBack}`);
+      return await generateCuriosityFallback({ leadId, ctx, basedOn, debug, fellBack });
     }
   }
 
@@ -487,7 +486,9 @@ async function generateCuriosityFallback({
   basedOn,
   debug,
   attempt = 1,
+  fellBack = null,
 }: {
+  fellBack?: string | null;
   leadId: string;
   ctx: SequenceContext;
   basedOn: string[];
@@ -574,7 +575,7 @@ async function generateCuriosityFallback({
   const dirty = inventedStatsReason(chosen.content, ctx.evidence);
   if (dirty !== null) {
     trace(debug, `invented-stats gate rejected the curiosity opener: ${dirty}`);
-    if (attempt < 2) return await generateCuriosityFallback({ leadId, ctx, basedOn, debug, attempt: attempt + 1 });
+    if (attempt < 2) return await generateCuriosityFallback({ leadId, ctx, basedOn, debug, attempt: attempt + 1, fellBack });
     return { ok: false, error: `Couldn't write a clean opener: ${dirty}. Nothing has been saved.`, debug };
   }
   trace(debug, `writing one message, mechanism=${chosen.mechanism}`);
@@ -597,7 +598,9 @@ async function generateCuriosityFallback({
         // three observations, because that is the first question somebody reading
         // it will have. The soft signal goes in where it decided the wording.
         evidence: [
-          "No verified pain observation in the evidence, so this is the curiosity opener rather than an observation-led message.",
+          fellBack
+            ? `Fell back to curiosity: ${fellBack}.`
+            : "No verified pain observation in the evidence, so this is the curiosity opener rather than an observation-led message.",
           parsed.note.evidence,
           chosen.mechanism === "curiosity_pain_signal" && parsed.painSignal
             ? `Soft signal pointing at no-shows or follow-up: ${parsed.painSignal}`
