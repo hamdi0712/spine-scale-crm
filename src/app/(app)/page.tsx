@@ -44,6 +44,7 @@ import { loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import ActivityFeed from "@/components/ActivityFeed";
 import { connectorUndoIds } from "@/lib/mcpWrites";
 import BusinessHoursPanel, {
+  NextOpenLine,
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
 import ClientHealthList, { HealthRow } from "@/components/ClientHealthList";
@@ -189,6 +190,12 @@ export default async function DashboardPage() {
 
   // The cards count the chosen channel's leads only.
   const qualified = qualifiedLeads(openLeads.filter((l) => l.channel === channel));
+  // Open leads per US time zone, on the chosen channel: the big monitor's
+  // business-hours tiles say how many are reachable in each.
+  const zoneLeadCounts: Record<string, number> = {};
+  for (const l of openLeads) {
+    if (l.channel === channel && l.timeZone) zoneLeadCounts[l.timeZone] = (zoneLeadCounts[l.timeZone] ?? 0) + 1;
+  }
   // Qualified leads (A or B) at Contacted or beyond — the same group as the
   // Qualified card's "in play", so the two cards agree.
   const messages = qualified.contacted;
@@ -514,10 +521,13 @@ export default async function DashboardPage() {
                 </span>
                 US business hours
               </h2>
-              <span className="text-xs text-white/60">Mon–Fri · 9–5 local</span>
+              <span className="text-xs text-white/60 wide:hidden">Mon–Fri · 9–5 local</span>
+              <span className="hidden wide:inline">
+                <NextOpenLine leadCounts={zoneLeadCounts} />
+              </span>
             </div>
             <div className="mt-auto pt-4">
-              <BusinessHoursPanel />
+              <BusinessHoursPanel leadCounts={zoneLeadCounts} />
             </div>
           </div>
         </section>
