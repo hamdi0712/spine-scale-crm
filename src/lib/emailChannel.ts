@@ -46,6 +46,9 @@ export function readPipelineChannel(v: unknown): PipelineChannel {
 // toggle is remembered separately from Pipeline's.
 export const DISCOVERY_CHANNEL_COOKIE = "discovery-channel";
 
+// The Outreach Queue is split the same way, remembered on its own.
+export const OUTREACH_CHANNEL_COOKIE = "outreach-channel";
+
 // The Dashboard's headline cards are split the same way, and remembered on
 // their own: picking LinkedIn on the Dashboard leaves Pipeline as it was.
 export const DASHBOARD_CHANNEL_COOKIE = "dashboard-channel";
