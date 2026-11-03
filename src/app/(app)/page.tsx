@@ -355,6 +355,11 @@ export default async function DashboardPage() {
           </Suspense>
         </div>
         <PageActions className="flex items-center gap-3">
+          {/* On a big monitor the toggle sits up here with the other
+              controls; below that it has a row of its own under the title. */}
+          <div className="hidden wide:block">
+            <ChannelToggle channel={channel} cookie={DASHBOARD_CHANNEL_COOKIE} label="Dashboard channel" />
+          </div>
           <BusinessHoursChip />
           <Link href="/clients/new" className="btn-primary">
             <Icon name="plus" className="h-4 w-4" />
@@ -365,8 +370,10 @@ export default async function DashboardPage() {
 
       {/* Which channel the four cards count, remembered per browser. The rest
           of the page is the same on every channel. */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 max-md:mt-8">
-        <ChannelToggle channel={channel} cookie={DASHBOARD_CHANNEL_COOKIE} label="Dashboard channel" />
+      <div className={`mt-6 flex flex-wrap items-center justify-between gap-3 max-md:mt-8 ${bounceWarning ? "wide:justify-end" : "wide:hidden"}`}>
+        <div className="wide:hidden">
+          <ChannelToggle channel={channel} cookie={DASHBOARD_CHANNEL_COOKIE} label="Dashboard channel" />
+        </div>
         {bounceWarning && (
           <Link
             href="/pipeline?channel=email&tab=all"
@@ -381,7 +388,7 @@ export default async function DashboardPage() {
 
       {/* On a phone all four cards sit in a 2×2 grid, each drawn compact
           (KpiCard) so the four read at once without scrolling. */}
-      <div className="mt-4 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4 wide:mt-6 wide:gap-5">
         {kpis.map((kpi, i) => (
           <KpiCard key={`${channel}-${kpi.label}`} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
@@ -400,7 +407,7 @@ export default async function DashboardPage() {
 
           The flag comes off the data attribute TodaysFocus sets from the state
           behind its own "View all" toggle. */}
-      <div className="mt-5 grid items-stretch gap-6 max-md:mt-7 max-md:gap-7 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1">
+      <div className="mt-5 grid items-stretch gap-6 max-md:mt-7 max-md:gap-7 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] wide:gap-5">
         <section className="card self-stretch p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
@@ -522,7 +529,7 @@ export default async function DashboardPage() {
           The stretch reaches the bordered card directly because each section
           carries .card itself and is the grid item — no wrapper in between to
           stretch instead and leave the visible card floating short inside it. */}
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,3fr)_minmax(0,4fr)] wide:gap-5">
         <section className="card p-6">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Recent activity</h2>
