@@ -399,7 +399,7 @@ export default async function DashboardPage() {
 
       {/* On a phone all four cards sit in a 2×2 grid, each drawn compact
           (KpiCard) so the four read at once without scrolling. */}
-      <div className="mt-4 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4 wide:mt-6 wide:gap-5">
+      <div className="mt-4 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4 wide:mt-5 wide:gap-4">
         {kpis.map((kpi, i) => (
           <KpiCard key={`${channel}-${kpi.label}`} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
@@ -418,7 +418,7 @@ export default async function DashboardPage() {
 
           The flag comes off the data attribute TodaysFocus sets from the state
           behind its own "View all" toggle. */}
-      <div className="mt-5 grid items-stretch gap-6 max-md:mt-7 max-md:gap-7 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] wide:gap-5">
+      <div className="mt-5 grid items-stretch gap-6 max-md:mt-7 max-md:gap-7 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1 wide:mt-4 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] wide:gap-4">
         <section className="card self-stretch p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
@@ -545,11 +545,12 @@ export default async function DashboardPage() {
           stretch instead and leave the visible card floating short inside it. */}
       {/* Below the wide breakpoint: the three cards side by side, as they
           always were. From it up: Client health, Pipeline snapshot and Recent
-          activity stacked down the left, under Now, and a mini Ask Iman down
-          the right, under US business hours — placed by grid position, so the
+          activity under Now — the first two side by side, activity across
+          beneath them — and a mini Ask Iman down the right, under US business
+          hours — placed by grid position, so the
           narrower layout's order is untouched. */}
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] wide:gap-5">
-        <section className="card p-6 wide:col-start-1 wide:row-start-3">
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1 wide:mt-4 wide:grid-cols-[minmax(0,2.5fr)_minmax(0,2.5fr)_minmax(0,7fr)] wide:gap-4">
+        <section className="card p-6 wide:px-6 wide:py-5 wide:col-span-2 wide:col-start-1 wide:row-start-2">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Recent activity</h2>
             <Link href="/activity" className="text-xs font-medium text-accent hover:underline">
@@ -574,7 +575,7 @@ export default async function DashboardPage() {
           />
         </section>
 
-        <section className="card p-6 wide:col-start-1 wide:row-start-1">
+        <section className="card p-6 wide:px-6 wide:py-5 wide:col-start-1 wide:row-start-1">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Client health</h2>
             <Link href="/clients" className="text-xs font-medium text-accent hover:underline">
@@ -584,7 +585,7 @@ export default async function DashboardPage() {
           <ClientHealthList rows={healthRows} />
         </section>
 
-        <section className="card p-6 wide:col-start-1 wide:row-start-2">
+        <section className="card p-6 wide:px-6 wide:py-5 wide:col-start-2 wide:row-start-1">
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Pipeline snapshot</h2>
             <Link href="/pipeline" className="text-xs font-medium text-accent hover:underline">
@@ -596,7 +597,7 @@ export default async function DashboardPage() {
 
         {/* The mini Ask Iman: only on a big monitor. Its card is as tall as
             the stack beside it and never taller — the chat scrolls inside. */}
-        <section aria-label="Ask Iman" className="card relative hidden min-h-[560px] overflow-visible wide:col-start-2 wide:row-span-3 wide:row-start-1 wide:block">
+        <section aria-label="Ask Iman" className="card relative hidden min-h-[420px] overflow-visible wide:col-start-3 wide:row-span-2 wide:row-start-1 wide:block">
           <div className="absolute inset-0 flex flex-col px-5 pb-4 pt-5">
             <CopilotPage initialConversations={conversations} compact />
           </div>

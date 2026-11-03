@@ -164,7 +164,7 @@ function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<s
         const leads = leadCounts[zone.id] ?? 0;
         const time = now ? fmtTimeInZone(now, zone.id) : null;
         return (
-          <li key={zone.id} className="glass-night flex flex-col gap-2.5 p-4">
+          <li key={zone.id} className="glass-night flex flex-col gap-2 px-4 py-3">
             <span className="flex items-center justify-between text-[13px] font-medium text-white/80">
               <span className="flex items-center gap-1.5">
                 <span className={`h-2 w-2 rounded-full ${RICH_DOT[state]}`} aria-hidden />
