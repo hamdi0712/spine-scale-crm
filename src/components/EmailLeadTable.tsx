@@ -254,7 +254,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
 
       {/* The big monitor's cards: three across, a clinic each. The whole card
           opens the lead; its send buttons do their own thing. */}
-      <ul className={`hidden grid-cols-3 gap-3.5 ${cards ? "wide:grid" : ""}`}>
+      <ul className={`hidden grid-cols-3 gap-3 ${cards ? "wide:grid" : ""}`}>
         {shown.map((row) => (
           <li
             key={row.id}
@@ -262,14 +262,14 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
               router.push(`/pipeline/${row.id}`);
             }}
-            className="card card-sheen group flex cursor-pointer flex-col gap-3 p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-card-hover"
+            className="card card-sheen group flex cursor-pointer flex-col gap-2 p-3.5 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-card-hover"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <Link href={`/pipeline/${row.id}`} className="block truncate text-[15px] font-semibold text-ink">
+                <Link href={`/pipeline/${row.id}`} className="block truncate text-sm font-semibold text-ink">
                   {row.clinicName}
                 </Link>
-                <p className="mt-0.5 truncate text-xs text-muted">{row.contactName ?? "No contact yet"}</p>
+                <p className="mt-0.5 truncate text-[11px] text-muted">{row.contactName ?? "No contact yet"}</p>
               </div>
               {row.icpTier || row.icpVerdict ? (
                 <IcpTierChip tier={row.icpTier} verdict={row.icpVerdict} score={row.icpScore} />
@@ -277,24 +277,24 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <span className="text-xs text-muted">Not scored</span>
               )}
             </div>
-            <div className="space-y-1.5 text-sm">
+            <div className="space-y-0.5 text-[12.5px]">
               <p className="flex min-w-0 items-center gap-2 text-ink-soft">
-                <IconMapPin size={15} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
+                <IconMapPin size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.location ?? "—"}</span>
               </p>
               <p className={`flex min-w-0 items-center gap-2 ${row.email ? "text-ink-soft" : "text-muted"}`} title={row.emailDetail ?? undefined}>
-                <IconMail size={15} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
+                <IconMail size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.email ?? "No email yet"}</span>
               </p>
             </div>
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-3">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]">
               <EmailStatusBadge status={row.status} />
               {row.sendBlocked && !row.toSend ? (
                 <span className="truncate text-xs text-bad" title={row.sendBlocked}>Can&apos;t send yet</span>
               ) : row.toSend ? (
                 <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
               ) : (
-                <span className="truncate text-xs text-muted">{row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}</span>
+                <span className="truncate text-[11px] text-muted">{row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}</span>
               )}
             </div>
           </li>
@@ -340,7 +340,8 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
       </ul>
 
       <div className={`overflow-x-auto max-md:hidden wide:card ${cards ? "wide:hidden" : ""}`}>
-        <table className="w-full">
+        {/* On the big monitor the rows are drawn at the toolbar's scale. */}
+        <table className="w-full wide:[&_.td]:text-[13px] wide:[&_.td]:py-2.5 wide:[&_.th]:py-2 wide:[&_.th]:text-[11px]">
           <thead>
             <tr>
               <th className="th">Clinic</th>
