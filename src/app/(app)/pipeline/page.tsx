@@ -249,14 +249,14 @@ async function EmailPipeline({ tab }: { tab?: string }) {
       <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="display text-[32px] font-semibold">Pipeline</h1>
+            <h1 className="display text-[32px] font-semibold wide:text-2xl">Pipeline</h1>
             <ChannelToggle channel="email" />
           </div>
-          <p className="helper-text mt-1.5 text-sm text-muted">
+          <p className="helper-text mt-1.5 text-sm text-muted wide:mt-1 wide:text-xs">
             Clinics worked by email, sent by hand from Gmail — what each one needs next
           </p>
         </div>
-        <div className="flex items-center gap-2 max-md:[&>*]:flex-1">
+        <div className="flex items-center gap-2 max-md:[&>*]:flex-1 wide:[&_.btn-primary]:!h-8 wide:[&_.btn-primary]:!px-3.5 wide:[&_.btn-primary]:!text-[13px] wide:[&_.btn]:!h-8 wide:[&_.btn]:!px-3 wide:[&_.btn]:!text-[13px]">
           <DropdownMenu label="Find emails" badge={unchecked + (pipelineSettings.facebookEmails.enabled ? facebookLeads.length : 0)}>
             <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} menu />
             <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} menu />
@@ -269,7 +269,7 @@ async function EmailPipeline({ tab }: { tab?: string }) {
 
       {/* Today at a glance: what can go now, what is due, and each inbox and
           the check budget against their limits. */}
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
+      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fit,minmax(180px,1fr))] wide:mt-4 wide:gap-2.5">
         <StatCard label="Ready to send" value={String(ready)} tone={ready > 0 ? "text-teal" : "text-ink"} />
         <StatCard label="Follow-ups due today" value={String(due)} tone={due > 0 ? "text-warn" : "text-ink"} />
         {counters.length === 0 ? (
@@ -303,7 +303,7 @@ async function EmailPipeline({ tab }: { tab?: string }) {
       <EmailCheckProgress className="mt-6" />
       <FacebookEmailProgress className="mt-6" />
 
-      <div className="mt-8">
+      <div className="mt-8 wide:mt-4">
         {rows.length === 0 ? (
           <div className="card px-6 py-12 text-center">
             <p className="text-sm font-medium text-ink">No email leads yet</p>
@@ -325,9 +325,9 @@ async function EmailPipeline({ tab }: { tab?: string }) {
 
 function StatCard({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div className="card flex flex-col gap-1 px-4 py-3.5">
-      <span className="text-sm text-muted">{label}</span>
-      <span className={`num text-2xl font-semibold ${tone}`}>{value}</span>
+    <div className="card flex flex-col gap-1 px-4 py-3.5 wide:gap-0.5 wide:py-2.5">
+      <span className="text-sm text-muted wide:text-xs">{label}</span>
+      <span className={`num text-2xl font-semibold wide:text-xl ${tone}`}>{value}</span>
     </div>
   );
 }
@@ -353,10 +353,10 @@ function MeterCard({
   const over = used > limit;
   const pct = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
   return (
-    <div className="card flex flex-col gap-2 px-4 py-3.5" title={title}>
-      <span className="truncate text-sm text-muted">{label}</span>
+    <div className="card flex flex-col gap-2 px-4 py-3.5 wide:gap-1 wide:py-2.5" title={title}>
+      <span className="truncate text-sm text-muted wide:text-xs">{label}</span>
       <div className="flex items-center gap-3">
-        <span className={`num text-lg font-semibold ${over ? "text-bad" : "text-ink"}`}>
+        <span className={`num text-lg font-semibold wide:text-base ${over ? "text-bad" : "text-ink"}`}>
           {fmt(used)}
           <span className="text-sm font-normal text-muted">/{limit}</span>
         </span>
@@ -364,7 +364,7 @@ function MeterCard({
           <div className={`h-1.5 rounded-full ${over ? "bg-bad" : bar}`} style={{ width: `${pct}%` }} />
         </div>
       </div>
-      {note && <span className="text-xs text-muted">{note}</span>}
+      {note && <span className="text-xs text-muted wide:text-[11px]">{note}</span>}
     </div>
   );
 }
