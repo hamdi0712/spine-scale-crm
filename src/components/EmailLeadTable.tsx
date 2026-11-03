@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { IconChevronRight, IconSearch } from "@tabler/icons-react";
+import { useEffect, useMemo, useState } from "react";
+import { IconChevronRight, IconLayoutGrid, IconList, IconMail, IconMapPin, IconSearch } from "@tabler/icons-react";
 import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
 import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
@@ -34,6 +34,9 @@ export interface EmailLeadRow {
   inboxSentToday: number;
   inboxLimit: number;
 }
+
+const VIEW_KEY = "pipeline-email-view";
+const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C: "bg-bad" };
 
 // Six tabs rather than a chip per status: the statuses grouped by what the
 // work is. "Needs work" is everything waiting on the operator before it can be
@@ -72,6 +75,25 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   const due = rows.filter((r) => r.followUpDueToday).length;
   const [filter, setFilter] = useState<Filter>(readFilter(initialTab) ?? (due > 0 ? "due" : "all"));
   const [query, setQuery] = useState("");
+  // The big monitor's extras: cards or the table, a tier and an inbox filter,
+  // and a sort. Below the wide breakpoint none of these are shown and the
+  // table is the view; the choice of view is remembered per browser.
+  const [view, setView] = useState<"cards" | "table">("cards");
+  const [tiers, setTiers] = useState<Set<string>>(new Set());
+  const [inbox, setInbox] = useState("");
+  const [sort, setSort] = useState<"updated" | "score" | "name">("updated");
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(VIEW_KEY) === "table") setView("table");
+    } catch {}
+  }, []);
+  function chooseView(v: "cards" | "table") {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {}
+  }
+  const inboxes = useMemo(() => Array.from(new Set(rows.map((r) => r.inbox).filter((x): x is string => !!x))).sort(), [rows]);
 
   const tabs = useMemo(
     () =>
@@ -90,16 +112,114 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   );
 
   const q = query.trim().toLowerCase();
-  const shown = rows.filter(
-    (r) =>
-      matches(r, filter) &&
-      (q === "" ||
-        [r.clinicName, r.contactName, r.location, r.email].some((v) => (v ?? "").toLowerCase().includes(q))),
+  const shown = rows
+    .filter(
+      (r) =>
+        matches(r, filter) &&
+        (tiers.size === 0 || (r.icpTier !== null && tiers.has(r.icpTier))) &&
+        (inbox === "" || r.inbox === inbox) &&
+        (q === "" ||
+          [r.clinicName, r.contactName, r.location, r.email].some((v) => (v ?? "").toLowerCase().includes(q))),
+    )
+    .sort((a, b) =>
+      sort === "score"
+        ? (Number(b.icpScore) || -1) - (Number(a.icpScore) || -1)
+        : sort === "name"
+          ? a.clinicName.localeCompare(b.clinicName)
+          : 0,
+    );
+  const cards = view === "cards";
+  const extras = (
+    <>
+          <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field !h-8 w-auto text-[13px]">
+            <option value="">All inboxes</option>
+            {inboxes.map((i) => (
+              <option key={i} value={i}>
+                {inboxShort(i)}
+              </option>
+            ))}
+          </select>
+          <div className="flex rounded-[10px] border border-line p-0.5" role="group" aria-label="Tier">
+            {(["A", "B", "C"] as const).map((t) => {
+              const on = tiers.has(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() =>
+                    setTiers((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(t)) next.delete(t);
+                      else next.add(t);
+                      return next;
+                    })
+                  }
+                  className={`flex h-6 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors ${on ? "bg-wash text-ink" : "text-muted hover:text-ink"}`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${TIER_DOT[t]}`} aria-hidden />
+                  {t}
+                </button>
+              );
+            })}
+          </div>
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort" className="field !h-8 w-auto text-[13px]">
+            <option value="updated">Recently updated</option>
+            <option value="score">Highest score</option>
+            <option value="name">Clinic name</option>
+          </select>
+          <div className="flex rounded-[10px] border border-line p-0.5" role="group" aria-label="View">
+            <button type="button" aria-pressed={cards} aria-label="Cards" onClick={() => chooseView("cards")} className={`flex h-6 w-7 items-center justify-center rounded-md ${cards ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>
+              <IconLayoutGrid size={16} stroke={2} aria-hidden />
+            </button>
+            <button type="button" aria-pressed={!cards} aria-label="Table" onClick={() => chooseView("table")} className={`flex h-6 w-7 items-center justify-center rounded-md ${!cards ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>
+              <IconList size={16} stroke={2} aria-hidden />
+            </button>
+          </div>
+        </>
   );
 
   return (
-    <div className="md:card md:overflow-hidden">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3">
+    <div className="md:card md:overflow-hidden wide:overflow-visible wide:rounded-none wide:border-0 wide:bg-transparent wide:shadow-none">
+      {/* The big monitor's toolbar, its own card: search across the top with
+          the filters, sort and view beside it, and the tabs as chips below. */}
+      <div className="card mb-4 hidden flex-col gap-2 overflow-visible px-3 py-2.5 wide:flex">
+        <div className="flex items-center gap-2">
+          <label className="relative flex flex-1 items-center">
+            <span className="sr-only">Search</span>
+            <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search clinics, contacts, emails…"
+              className="field !h-8 w-full pl-9 text-[13px]"
+            />
+          </label>
+          {extras}
+        </div>
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter">
+          {tabs.map((tab) => {
+            const on = filter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setFilter(tab.key)}
+                aria-pressed={on}
+                className={`inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+                  on ? "border-accent/40 bg-accent-soft font-semibold text-accent" : "border-line font-medium text-ink-soft hover:bg-wash"
+                }`}
+              >
+                {tab.label}
+                <span className="num opacity-70">{tab.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 wide:hidden">
         <div className="m-pill-row flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
           {tabs.map((tab) => {
             const on = filter === tab.key;
@@ -131,6 +251,60 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           />
         </label>
       </div>
+
+      {/* The big monitor's cards: three across, a clinic each. The whole card
+          opens the lead; its send buttons do their own thing. */}
+      <ul className={`hidden grid-cols-3 gap-3.5 ${cards ? "wide:grid" : ""}`}>
+        {shown.map((row) => (
+          <li
+            key={row.id}
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
+              router.push(`/pipeline/${row.id}`);
+            }}
+            className="card card-sheen group flex cursor-pointer flex-col gap-3 p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-card-hover"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Link href={`/pipeline/${row.id}`} className="block truncate text-[15px] font-semibold text-ink">
+                  {row.clinicName}
+                </Link>
+                <p className="mt-0.5 truncate text-xs text-muted">{row.contactName ?? "No contact yet"}</p>
+              </div>
+              {row.icpTier || row.icpVerdict ? (
+                <IcpTierChip tier={row.icpTier} verdict={row.icpVerdict} score={row.icpScore} />
+              ) : (
+                <span className="text-xs text-muted">Not scored</span>
+              )}
+            </div>
+            <div className="space-y-1.5 text-sm">
+              <p className="flex min-w-0 items-center gap-2 text-ink-soft">
+                <IconMapPin size={15} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
+                <span className="truncate">{row.location ?? "—"}</span>
+              </p>
+              <p className={`flex min-w-0 items-center gap-2 ${row.email ? "text-ink-soft" : "text-muted"}`} title={row.emailDetail ?? undefined}>
+                <IconMail size={15} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
+                <span className="truncate">{row.email ?? "No email yet"}</span>
+              </p>
+            </div>
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-3">
+              <EmailStatusBadge status={row.status} />
+              {row.sendBlocked && !row.toSend ? (
+                <span className="truncate text-xs text-bad" title={row.sendBlocked}>Can&apos;t send yet</span>
+              ) : row.toSend ? (
+                <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
+              ) : (
+                <span className="truncate text-xs text-muted">{row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}</span>
+              )}
+            </div>
+          </li>
+        ))}
+        {shown.length === 0 && (
+          <li className="card col-span-3 px-4 py-10 text-center text-sm text-muted">
+            {q ? "No clinic matches that search." : "Nothing here right now."}
+          </li>
+        )}
+      </ul>
 
       {/* A phone gets a card per clinic: who, the address, the status and the
           next move. Tier and sequence are on the desktop table and the lead. */}
@@ -165,7 +339,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         )}
       </ul>
 
-      <div className="overflow-x-auto max-md:hidden">
+      <div className={`overflow-x-auto max-md:hidden wide:card ${cards ? "wide:hidden" : ""}`}>
         <table className="w-full">
           <thead>
             <tr>
