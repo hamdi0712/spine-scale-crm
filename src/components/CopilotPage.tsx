@@ -103,10 +103,16 @@ const TOOL_LABELS: Record<string, string> = {
   getOutreachFunnelSummary: "Outreach conversion",
 };
 
+// compact: the mini version in a Dashboard card on a big monitor. The same
+// conversation and composer, sized to its card rather than the viewport, and
+// it never moves the page — it scrolls its own thread and takes focus only
+// when asked to.
 export default function CopilotPage({
   initialConversations,
+  compact = false,
 }: {
   initialConversations: ConversationSummary[];
+  compact?: boolean;
 }) {
   // The list owns itself from here: every action that changes it hands back
   // the whole list, so the dropdown never has to guess at the new order.
@@ -121,18 +127,23 @@ export default function CopilotPage({
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
   const threadEnd = useRef<HTMLDivElement>(null);
+  const thread = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   // Bubbles the page itself puts in the thread — the one case a failure has
   // nothing stored behind it, because the request never reached the server.
   const localId = useRef(0);
 
   useEffect(() => {
-    threadEnd.current?.scrollIntoView({ block: "end" });
-  }, [messages, asking]);
+    // In the mini version the thread scrolls inside its card; scrolling the
+    // end into view would scroll the whole Dashboard down to it.
+    if (compact) {
+      if (thread.current) thread.current.scrollTop = thread.current.scrollHeight;
+    } else threadEnd.current?.scrollIntoView({ block: "end" });
+  }, [messages, asking, compact]);
 
   useEffect(() => {
-    input.current?.focus();
-  }, []);
+    if (!compact) input.current?.focus();
+  }, [compact]);
 
   // Escape closes whichever overlay is open, in the order they sit above the
   // page: the popover first, then the dropdown.
@@ -322,10 +333,20 @@ export default function CopilotPage({
     // the keyboard opens it shrinks (and the tab bar steps aside, zeroing
     // --tabbar-h), which is what keeps the input above the keyboard on iOS,
     // where the interactive-widget viewport key is ignored.
-    <div className="flex h-[calc(100dvh-5rem)] flex-col max-md:-mb-4 max-md:h-[calc(var(--vvh,100dvh)-72px-var(--tabbar-h)-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
+    <div
+      className={
+        compact
+          ? "flex h-full min-h-0 flex-col"
+          : "flex h-[calc(100dvh-5rem)] flex-col max-md:-mb-4 max-md:h-[calc(var(--vvh,100dvh)-72px-var(--tabbar-h)-env(safe-area-inset-top)-env(safe-area-inset-bottom))]"
+      }
+    >
       <header className="flex items-center gap-3 border-b border-line/70 pb-4">
         <ImanAvatar size="sm" />
-        <h1 className="display text-base font-semibold text-ink">Iman</h1>
+        {compact ? (
+          <h2 className="display text-xl font-semibold text-ink">Ask Iman</h2>
+        ) : (
+          <h1 className="display text-base font-semibold text-ink">Iman</h1>
+        )}
 
         <div className="relative">
           <button
@@ -378,13 +399,17 @@ export default function CopilotPage({
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto overscroll-contain py-6 max-md:py-4">
+      <div ref={thread} className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-6 max-md:py-4">
         {empty ? (
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <ImanAvatar size="hero" />
-            <h2 className="display mt-5 text-2xl font-semibold text-ink">
-              Ask Iman
-            </h2>
+            <ImanAvatar size={compact ? "md" : "hero"} />
+            {compact ? (
+              <p className="display mt-4 text-lg font-semibold text-ink">What can I look up?</p>
+            ) : (
+              <h2 className="display mt-5 text-2xl font-semibold text-ink">
+                Ask Iman
+              </h2>
+            )}
             <p className="helper-text mt-2 max-w-[440px] text-sm leading-relaxed text-muted">
               Ask me anything about your pipeline, clients, or what to focus on
               today.
@@ -421,7 +446,7 @@ export default function CopilotPage({
 
       {/* The composer, pinned under the thread. Sticky rather than fixed so it
           stays inside the shell's column and moves with the sidebar. */}
-      <div className="sticky bottom-0 bg-bg pb-1 pt-2">
+      <div className={`sticky bottom-0 pb-1 pt-2 ${compact ? "bg-surface" : "bg-bg"}`}>
         <div className="relative mx-auto max-w-3xl">
           {suggestionsOpen && !phone && (
             <>
@@ -514,7 +539,7 @@ export default function CopilotPage({
               now is ask — so the line says where the line is, because "it can
               change things" and "it can change things once you have read the
               card and clicked Confirm" are different products. */}
-          <p className="helper-text px-2 pb-2 pt-2 text-center text-xs text-muted max-md:pb-0 max-md:text-[11px] max-md:leading-snug">
+          <p className={`helper-text px-2 pb-2 pt-2 text-center text-xs text-muted max-md:pb-0 max-md:text-[11px] max-md:leading-snug ${compact ? "hidden" : ""}`}>
             Iman reads your records to answer. It can propose a change to a lead,
             a candidate or the task board — nothing happens until you confirm it.
             It cannot delete anything, touch clients or reporting, or send

@@ -37,6 +37,8 @@ import {
 } from "@/lib/funnel";
 import { cookies } from "next/headers";
 import ChannelToggle from "@/components/ChannelToggle";
+import CopilotPage from "@/components/CopilotPage";
+import { listCopilotConversations } from "@/lib/actions/copilotChat";
 import { DASHBOARD_CHANNEL_COOKIE, LINKEDIN_ENGAGED_STAGES, readPipelineChannel } from "@/lib/emailChannel";
 import { loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import ActivityFeed from "@/components/ActivityFeed";
@@ -174,6 +176,8 @@ export default async function DashboardPage() {
   ]);
   const email = channel === "email" ? await loadEmailCards(now, monthStart, nextMonthStart) : null;
   const undoIds = await connectorUndoIds(activity.map((a) => a.id));
+  // The saved chats, for the mini Ask Iman's history menu on a big monitor.
+  const conversations = await listCopilotConversations();
 
   // ─── Headline numbers ────────────────────────────────────────────────────
   //
@@ -529,8 +533,13 @@ export default async function DashboardPage() {
           The stretch reaches the bordered card directly because each section
           carries .card itself and is the grid item — no wrapper in between to
           stretch instead and leave the visible card floating short inside it. */}
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,3fr)_minmax(0,4fr)] wide:gap-5">
-        <section className="card p-6">
+      {/* Below the wide breakpoint: the three cards side by side, as they
+          always were. From it up: Client health, Pipeline snapshot and Recent
+          activity stacked down the left, under Now, and a mini Ask Iman down
+          the right, under US business hours — placed by grid position, so the
+          narrower layout's order is untouched. */}
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] wide:gap-5">
+        <section className="card p-6 wide:col-start-1 wide:row-start-3">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Recent activity</h2>
             <Link href="/activity" className="text-xs font-medium text-accent hover:underline">
@@ -555,7 +564,7 @@ export default async function DashboardPage() {
           />
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6 wide:col-start-1 wide:row-start-1">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Client health</h2>
             <Link href="/clients" className="text-xs font-medium text-accent hover:underline">
@@ -565,7 +574,7 @@ export default async function DashboardPage() {
           <ClientHealthList rows={healthRows} />
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6 wide:col-start-1 wide:row-start-2">
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Pipeline snapshot</h2>
             <Link href="/pipeline" className="text-xs font-medium text-accent hover:underline">
@@ -573,6 +582,14 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <PipelineDonut slices={slices} total={pipelineValue} />
+        </section>
+
+        {/* The mini Ask Iman: only on a big monitor. Its card is as tall as
+            the stack beside it and never taller — the chat scrolls inside. */}
+        <section aria-label="Ask Iman" className="card relative hidden min-h-[560px] overflow-visible wide:col-start-2 wide:row-span-3 wide:row-start-1 wide:block">
+          <div className="absolute inset-0 px-6 pt-5">
+            <CopilotPage initialConversations={conversations} compact />
+          </div>
         </section>
       </div>
     </div>
