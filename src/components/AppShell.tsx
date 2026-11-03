@@ -20,7 +20,7 @@ import { JobsProvider } from "@/components/JobProgress";
 //
 // Every class that changes a narrow layout is behind max-md: or md:max-lg:, so
 // the desktop classes are the ones that were here before, unconditionally.
-const WIDE_PAGES = ["/", "/pipeline"];
+const WIDE_PAGES = ["/", "/pipeline", "/discovery", "/outreach"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -29,7 +29,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // column lets go of its cap and runs edge to edge with a 32px gutter.
   // Every other page, and these below that width, keep the centred column.
   const pathname = usePathname();
-  const wide = WIDE_PAGES.includes(pathname);
+  const wide = WIDE_PAGES.includes(pathname) || /^\/pipeline\/(?!new$)[^/]+$/.test(pathname);
   // JobsProvider wraps the whole shell, so a long-running job's progress —
   // the header pill, the tab title, each page's panel — survives moving
   // between pages (JobProgress.tsx).

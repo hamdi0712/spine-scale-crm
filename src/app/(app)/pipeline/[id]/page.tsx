@@ -197,7 +197,7 @@ export default async function LeadDetailPage({
 
 
   return (
-    <div>
+    <div className="wide-format wide:[&_h2.display]:!text-base wide:[&_.card]:rounded-xl">
       {lead.scoringRejectedAt && (
         <div className="card mb-4 border-bad/40 px-5 py-3 text-xs leading-relaxed max-md:px-3">
           <p className="font-medium text-bad">Rejected by new scoring</p>
@@ -217,12 +217,12 @@ export default async function LeadDetailPage({
           line, the controls top-right; the status and the enrichment's
           readings along a strip at the foot. */}
       <div className="card card-sheen relative z-10 mt-3 overflow-visible">
-        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 p-6 max-md:p-4 lg:flex-nowrap">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4 p-6 max-md:p-4 lg:flex-nowrap wide:px-5 wide:py-4">
           <div className="flex min-w-0 flex-1 items-center gap-4 max-md:basis-full max-md:items-start">
             <TierTile tier={leadTier(lead)} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="display text-2xl font-semibold leading-tight tracking-tight max-md:text-xl">{lead.clinicName}</h1>
+                <h1 className="display text-2xl font-semibold leading-tight tracking-tight max-md:text-xl wide:!text-xl">{lead.clinicName}</h1>
                 {lead.archived && (
                   <span className="inline-flex h-[22px] items-center rounded-full bg-line/70 px-2.5 text-xs font-medium text-muted">
                     Archived
@@ -360,10 +360,10 @@ export default async function LeadDetailPage({
         </div>
       </div>
 
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] wide:mt-4 wide:gap-4 wide:grid-cols-[minmax(0,1fr)_380px]">
         {/* ─── The main column: reach out, the message, the details ────── */}
-        <div className="min-w-0 space-y-6">
-          <section aria-labelledby="reach-out" className="card card-sheen space-y-4 p-6 max-md:p-4">
+        <div className="min-w-0 space-y-6 wide:space-y-4">
+          <section aria-labelledby="reach-out" className="card card-sheen space-y-4 p-6 max-md:p-4 wide:space-y-3 wide:p-4 wide:text-[13px]">
             <SectionTitle
               id="reach-out"
               tone="blue"
@@ -440,12 +440,11 @@ export default async function LeadDetailPage({
               channel, the five-message sequence on LinkedIn. Outside the
               details form on purpose — every control in it acts on its own. */}
           {emailProps ? (
-            <section aria-labelledby="the-message" className="card card-sheen space-y-4 p-6 max-md:p-4">
+            <section aria-labelledby="the-message" className="card card-sheen space-y-4 p-6 max-md:p-4 wide:space-y-3 wide:p-4 wide:text-[13px]">
               <SectionTitle
                 id="the-message"
                 tone="blue"
                 icon={<IconMail size={18} stroke={2} />}
-                aside={<EmailStatusBadge status={emailProps.status} />}
               >
                 The message
               </SectionTitle>
@@ -469,7 +468,7 @@ export default async function LeadDetailPage({
                 Drafts to copy — nothing here is sent
               </p>
             </div>
-            <div className="card p-6">
+            <div className="card p-6 wide:p-4">
               <OutreachSequencePanel
                 messages={toMessageViews(lead.outreach)}
                 state={sequenceState(lead)}
@@ -797,7 +796,7 @@ export default async function LeadDetailPage({
         </div>
 
         {/* ─── The side column: next step, score, activity ─────────────── */}
-        <aside className="min-w-0 space-y-6">
+        <aside className="min-w-0 space-y-6 wide:space-y-4">
           {nextTask && (
             <section aria-labelledby="next-step" className="rounded-2xl bg-hero p-6 text-white shadow-card">
               <p className="text-xs font-semibold uppercase tracking-wider text-hero-ink">Next step</p>
@@ -829,7 +828,7 @@ export default async function LeadDetailPage({
             parts={
               storedV2
                 ? [
-                    { label: "Clinic fit", value: storedV2.fitTotal, max: FIT_MAX, dot: "bg-ok" },
+                    { label: "Clinic fit", value: storedV2.fitTotal, max: FIT_MAX, dot: "bg-accent" },
                     { label: "Buying signals", value: storedV2.signalsTotal, max: SIGNALS_MAX, dot: "bg-accent" },
                   ]
                 : []
@@ -837,7 +836,7 @@ export default async function LeadDetailPage({
             tip={storedV2 ? scoreTip(storedV2.fitTotal, FIT_MAX, storedV2.signalsTotal, SIGNALS_MAX) : null}
           />
 
-          <section aria-labelledby="activity" className="card card-sheen space-y-4 p-5">
+          <section aria-labelledby="activity" className="card card-sheen space-y-4 p-5 wide:space-y-3 wide:p-4 wide:text-[13px]">
             <SectionTitle id="activity" tone="blue" icon={<IconHistory size={18} stroke={2} />}>
               Activity
             </SectionTitle>

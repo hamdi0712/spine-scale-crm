@@ -353,7 +353,7 @@ export default function DiscoveryList({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center gap-3 max-md:gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-3 max-md:gap-2 wide:card wide:gap-2 wide:overflow-visible wide:px-3 wide:py-2.5 wide:[&_.field]:!h-8 wide:[&_.field]:text-[13px]">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -511,7 +511,7 @@ export default function DiscoveryList({
                 promoted candidate has no chain left to run. */}
             {queueableChosen > 0 && (
               <span className="num text-xs text-muted">
-                {queueableChosen} of them run on Process queue (selected)
+                {queueableChosen} of them run on Qualify selected
               </span>
             )}
             <button
@@ -589,7 +589,7 @@ export default function DiscoveryList({
                keeps the last column honest below 300px — a track that cannot
                have its minimum takes the container's width instead of
                overflowing it. */
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-stretch gap-4">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-stretch gap-4 wide:grid-cols-3 wide:gap-3">
               {visible.map((row) => (
                 <CandidateCard
                   key={row.id}
@@ -784,7 +784,7 @@ function CandidateCard({
        sits above the text so a click anywhere lands on it, and the checkbox is
        lifted above the overlay so it still takes its own clicks. */
     <div
-      className={`card card-interactive group relative flex flex-col p-4 ${
+      className={`card card-interactive group relative flex flex-col p-4 wide:card-sheen wide:p-3.5 ${
         selected ? "border-accent/40 bg-accent/5" : "hover:bg-wash/40"
       }`}
     >
@@ -803,12 +803,12 @@ function CandidateCard({
         />
         <div className="min-w-0 flex-1">
           <span
-            className="block truncate text-sm font-medium text-ink group-hover:underline"
+            className="block truncate text-sm font-medium text-ink group-hover:underline wide:font-semibold wide:group-hover:no-underline"
             title={row.clinicName}
           >
             {row.clinicName}
           </span>
-          <p className="mt-0.5 truncate text-xs text-muted">
+          <p className="mt-0.5 truncate text-xs text-muted wide:text-[11px]">
             {row.contactName ? (
               <>
                 {row.contactName}
@@ -829,7 +829,7 @@ function CandidateCard({
         />
       </div>
 
-      <div className="mt-3.5 space-y-1.5">
+      <div className="mt-3.5 space-y-1.5 wide:mt-2.5 wide:space-y-0.5">
         <CardMeta
           icon="building"
           value={`${DISCOVERY_SOURCE_KIND_LABELS[row.discoverySource]}${
@@ -856,7 +856,7 @@ function CandidateCard({
       {/* mt-auto so the footers line up across a row of cards whose middles
           are different heights — a clinic with no location is still a card the
           same shape as the one beside it. */}
-      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4">
+      <div className="mt-auto flex flex-wrap items-center gap-2 pt-4 wide:pt-2.5 wide:text-[11px] wide:[&_.text-xs]:text-[11px]">
         <DiscoveryStatusBadge status={row.status} />
         {row.talkingOnLinkedin && <TalkingOnLinkedinBadge />}
         <span className="num ml-auto shrink-0 text-xs text-muted">
@@ -872,8 +872,8 @@ function CandidateCard({
 function CardMeta({ icon, value }: { icon: string; value: string | null }) {
   if (!value) return null;
   return (
-    <p className="flex items-center gap-2 text-xs text-muted">
-      <Icon name={icon} className="h-3.5 w-3.5 text-muted/70" />
+    <p className="flex items-center gap-2 text-xs text-muted wide:text-[12.5px] wide:text-ink-soft">
+      <Icon name={icon} className="h-3.5 w-3.5 text-muted/70 wide:h-[13px] wide:w-[13px]" />
       <span className="min-w-0 truncate" title={value}>
         {value}
       </span>

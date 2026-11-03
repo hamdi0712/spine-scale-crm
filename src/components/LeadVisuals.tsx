@@ -47,10 +47,10 @@ export function SectionTitle({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${TONE_BADGE[tone]}`} aria-hidden>
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] wide:h-7 wide:w-7 wide:rounded-lg ${TONE_BADGE[tone]}`} aria-hidden>
         {icon}
       </span>
-      <h2 id={id} className="text-lg font-semibold">
+      <h2 id={id} className="text-lg font-semibold wide:text-[15px]">
         {children}
       </h2>
       {aside && <div className="ml-auto">{aside}</div>}
@@ -61,7 +61,7 @@ export function SectionTitle({
 export function FactTile({ icon, tone, value, label, title }: { icon: React.ReactNode; tone: Tone; value: React.ReactNode; label: string; title?: string }) {
   return (
     <div className="flex min-w-0 items-center gap-3 rounded-xl border border-line/80 bg-wash/60 px-3.5 py-3" title={title}>
-      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${TONE_BADGE[tone]}`} aria-hidden>
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] wide:h-7 wide:w-7 wide:rounded-lg ${TONE_BADGE[tone]}`} aria-hidden>
         {icon}
       </span>
       <div className="min-w-0">
@@ -109,47 +109,60 @@ export function ScoreRingCard({
 }) {
   const tone = RING_TONE[tier ?? ""] ?? { pill: "neutral" as Tone };
   return (
-    <section aria-labelledby="icp-score" className="card card-sheen space-y-5 p-6 max-md:p-4">
+    <section aria-labelledby="icp-score" className="card card-sheen space-y-5 p-6 max-md:p-4 wide:space-y-3 wide:p-4">
       <div className="flex items-center gap-2.5">
-        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] ${TONE_BADGE.blue}`} aria-hidden>
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] wide:h-7 wide:w-7 wide:rounded-lg ${TONE_BADGE.blue}`} aria-hidden>
           <IconStarFilled size={17} />
         </span>
-        <h2 id="icp-score" className="text-lg font-semibold">ICP score</h2>
+        <h2 id="icp-score" className="text-lg font-semibold wide:text-[15px]">ICP score</h2>
         {tier && (
           <span className={`ml-auto rounded-full px-2.5 py-1 text-xs font-bold ${TONE_BADGE[tone.pill]}`}>
             {tier}-tier
           </span>
         )}
       </div>
-      <div className="py-2">
-        <ScoreRing total={total} max={max} tier={tier} />
+      <div className="wide:flex wide:items-center wide:gap-5">
+        <div className="py-2 wide:shrink-0 wide:py-0 wide:[&>div]:!h-[124px] wide:[&>div]:!w-[124px]">
+          <ScoreRing total={total} max={max} tier={tier} />
+        </div>
+        {parts.length > 0 && (
+          <div className="mt-5 wide:mt-0 wide:min-w-0 wide:flex-1">
+            <div className="mb-5 h-px bg-line wide:hidden" />
+            <ul className="space-y-3 text-[15px] wide:space-y-3.5 wide:text-[13px]">
+              {parts.map((p) => (
+                <li key={p.label}>
+                  <div className="flex items-center gap-3 wide:gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full wide:hidden ${p.dot}`} aria-hidden />
+                    <span className="text-ink-soft">{p.label}</span>
+                    <span className="num ml-auto font-semibold text-ink">
+                      {p.value}
+                      {p.max !== undefined && <span className="font-normal text-muted"> / {p.max}</span>}
+                    </span>
+                  </div>
+                  {p.max !== undefined && p.max > 0 && (
+                    <div className="mt-1.5 hidden h-2 overflow-hidden rounded-full bg-line wide:block" aria-hidden>
+                      {/* The ring's faceted look, laid flat: a lit upper face and
+                          the base colour below, split by a hard crease. */}
+                      <div className="relative h-full overflow-hidden rounded-full bg-accent" style={{ width: `${Math.min(100, (p.value / p.max) * 100)}%` }}>
+                        <span className="absolute inset-x-0 top-0 h-1/2 bg-white/25" />
+                      </div>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
-      {parts.length > 0 && (
-        <>
-          <div className="h-px bg-line" />
-          <ul className="space-y-3 text-[15px]">
-            {parts.map((p) => (
-              <li key={p.label} className="flex items-center gap-3">
-                <span className={`h-2.5 w-2.5 rounded-full ${p.dot}`} aria-hidden />
-                <span className="text-ink-soft">{p.label}</span>
-                <span className="num ml-auto font-semibold text-ink">
-                  {p.value}
-                  {p.max !== undefined && <span className="font-normal text-muted"> / {p.max}</span>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
       {tip && (
-        <div className="flex items-center gap-3.5 rounded-2xl border border-accent/25 bg-accent-soft/50 px-4 py-3.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent-soft text-accent" aria-hidden>
+        <div className="flex items-center gap-3.5 rounded-2xl border border-accent/25 bg-accent-soft/50 px-4 py-3.5 wide:gap-3 wide:rounded-xl wide:px-3 wide:py-2.5">
+          <span className="flex h-10 w-10 wide:h-7 wide:w-7 wide:rounded-lg shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent-soft text-accent" aria-hidden>
             <IconStarFilled size={17} />
           </span>
-          <p className="text-sm leading-snug text-ink-soft">{tip}</p>
+          <p className="text-sm leading-snug text-ink-soft wide:text-[12.5px]">{tip}</p>
         </div>
       )}
-      <a href="#scorecard" className="inline-block text-sm font-medium text-accent hover:underline">
+      <a href="#scorecard" className="inline-block text-sm font-medium text-accent hover:underline wide:text-[13px]">
         Open scorecard →
       </a>
     </section>
