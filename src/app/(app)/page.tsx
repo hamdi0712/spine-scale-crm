@@ -587,7 +587,7 @@ export default async function DashboardPage() {
         {/* The mini Ask Iman: only on a big monitor. Its card is as tall as
             the stack beside it and never taller — the chat scrolls inside. */}
         <section aria-label="Ask Iman" className="card relative hidden min-h-[560px] overflow-visible wide:col-start-2 wide:row-span-3 wide:row-start-1 wide:block">
-          <div className="absolute inset-0 px-6 pt-5">
+          <div className="absolute inset-0 flex flex-col px-5 pb-4 pt-5">
             <CopilotPage initialConversations={conversations} compact />
           </div>
         </section>

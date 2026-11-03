@@ -632,8 +632,7 @@
   box-shadow:
     inset 0 1px 0 rgba(190, 219, 255, 0.28),
     inset 0 -1px 0 rgba(3, 12, 28, 0.5),
-    0 1px 2px rgba(7, 26, 54, 0.2),
-    0 16px 40px rgba(7, 26, 54, 0.28);
+    var(--shadow-card);
 }
 
 /* The frosted tiles that float over the map. Translucent on purpose and by a
@@ -919,9 +918,7 @@ tbody tr:last-child > .td {
   box-shadow:
     inset 0 1px 0 rgba(190, 219, 255, 0.32),
     inset 0 -1px 0 rgba(3, 12, 28, 0.5),
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 16px 44px rgba(0, 0, 0, 0.55),
-    0 0 40px rgba(37, 99, 235, 0.16);
+    var(--shadow-card);
 }
 
 /* ═══ Motion ════════════════════════════════════════════════════════════════

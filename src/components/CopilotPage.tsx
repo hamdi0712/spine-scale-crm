@@ -336,7 +336,7 @@ export default function CopilotPage({
     <div
       className={
         compact
-          ? "flex h-full min-h-0 flex-col"
+          ? "flex min-h-0 flex-1 flex-col"
           : "flex h-[calc(100dvh-5rem)] flex-col max-md:-mb-4 max-md:h-[calc(var(--vvh,100dvh)-72px-var(--tabbar-h)-env(safe-area-inset-top)-env(safe-area-inset-bottom))]"
       }
     >
@@ -446,8 +446,10 @@ export default function CopilotPage({
 
       {/* The composer, pinned under the thread. Sticky rather than fixed so it
           stays inside the shell's column and moves with the sidebar. */}
-      <div className={`sticky bottom-0 pb-1 pt-2 ${compact ? "bg-surface" : "bg-bg"}`}>
-        <div className="relative mx-auto max-w-3xl">
+      {/* Sticky on the page; in the mini version it simply sits at the foot
+          of its card — sticky there would pin it to the window instead. */}
+      <div className={`pb-1 pt-2 ${compact ? "bg-surface" : "sticky bottom-0 bg-bg"}`}>
+        <div className={`relative ${compact ? "" : "mx-auto max-w-3xl"}`}>
           {suggestionsOpen && !phone && (
             <>
               <button
@@ -539,7 +541,7 @@ export default function CopilotPage({
               now is ask — so the line says where the line is, because "it can
               change things" and "it can change things once you have read the
               card and clicked Confirm" are different products. */}
-          <p className={`helper-text px-2 pb-2 pt-2 text-center text-xs text-muted max-md:pb-0 max-md:text-[11px] max-md:leading-snug ${compact ? "hidden" : ""}`}>
+          <p className={`helper-text px-2 pb-2 pt-2 text-center text-xs text-muted max-md:pb-0 max-md:text-[11px] max-md:leading-snug ${compact ? "pb-0 text-[11px] leading-snug" : ""}`}>
             Iman reads your records to answer. It can propose a change to a lead,
             a candidate or the task board — nothing happens until you confirm it.
             It cannot delete anything, touch clients or reporting, or send
