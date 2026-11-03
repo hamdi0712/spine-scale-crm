@@ -7,7 +7,7 @@ import { leadScore } from "@/lib/leadScore";
 import { fmtDate } from "@/lib/format";
 import { IcpScoreBadge } from "@/components/Badge";
 import Icon from "@/components/Icons";
-import { LeadLocalTime } from "@/components/Clock";
+import OutreachList from "@/components/OutreachList";
 
 export const dynamic = "force-dynamic";
 
@@ -55,11 +55,11 @@ export default async function OutreachQueuePage() {
     .filter((l) => l.icpTier !== null && OUTREACH_TIERS.includes(l.icpTier));
 
   return (
-    <div>
+    <div className="wide-format">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <h1 className="display text-[32px] font-semibold">Outreach Queue</h1>
-          <p className="helper-text mt-1.5 text-sm text-muted">
+          <p className="helper-text page-sub mt-1.5 text-sm text-muted">
             Qualified leads nobody has written to yet — A and B tier, still at
             New
           </p>
@@ -84,80 +84,8 @@ export default async function OutreachQueuePage() {
           </p>
         </div>
       ) : (
-        /* The same grid Discovery's cards sit in, for the same reason: the
-           sidebar collapses under a window that does not change width, so the
-           columns come off the room this grid has rather than off a viewport
-           breakpoint. See the note in src/components/DiscoveryList.tsx. */
-        <div className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(min(300px,100%),1fr))] items-stretch gap-4">
-          {rows.map((row) => (
-            <Link
-              key={row.id}
-              href={`/pipeline/${row.id}`}
-              className="card card-interactive group flex flex-col p-4 hover:bg-wash/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
-            >
-              <div className="flex items-start gap-2.5">
-                <div className="min-w-0 flex-1">
-                  <span
-                    className="block truncate text-sm font-medium text-ink group-hover:underline"
-                    title={row.clinicName}
-                  >
-                    {row.clinicName}
-                  </span>
-                  {/* Never a blank line where a person would be. A lead
-                      promoted from a clinic-first candidate can arrive with
-                      nobody named on it, and it says so in words — the name is
-                      typed onto the lead when it is found. */}
-                  <p className="mt-0.5 truncate text-xs text-muted">
-                    {row.contactName || (
-                      <span className="text-muted/70">No contact yet</span>
-                    )}
-                  </p>
-                </div>
-                {/* The clock rides with the badge rather than down in the
-                    meta rows: whether now is a reasonable hour to call is read
-                    at the same moment as whether the lead is worth calling. */}
-                <div className="flex shrink-0 items-center gap-2">
-                  <LeadLocalTime timeZone={row.timeZone} />
-                  <IcpScoreBadge
-                    tier={row.icpTier}
-                    total={row.icpTotal}
-                    max={row.icpMax ?? 0}
-                  />
-                </div>
-              </div>
-
-              <div className="mt-3.5 space-y-1.5">
-                <CardMeta icon="building" value={row.leadSource} />
-                <CardMeta icon="mapPin" value={row.location} />
-                <CardMeta icon="mail" value={row.email} />
-              </div>
-
-              {/* mt-auto so the footers line up across a row of cards whose
-                  middles are different heights. */}
-              <div className="mt-auto flex items-center gap-2 pt-4">
-                <span className="text-xs text-muted">Awaiting first contact</span>
-                <span className="num ml-auto shrink-0 text-xs text-muted">
-                  {fmtDate(row.createdAt)}
-                </span>
-              </div>
-            </Link>
-          ))}
-        </div>
+        <OutreachList rows={rows} />
       )}
     </div>
-  );
-}
-
-// A fact about the lead, or nothing at all — the same rule Discovery's cards
-// follow: an empty row of dashes says nothing, so the card just gets shorter.
-function CardMeta({ icon, value }: { icon: string; value: string | null }) {
-  if (!value) return null;
-  return (
-    <p className="flex items-center gap-2 text-xs text-muted">
-      <Icon name={icon} className="h-3.5 w-3.5 text-muted/70" />
-      <span className="min-w-0 truncate" title={value}>
-        {value}
-      </span>
-    </p>
   );
 }

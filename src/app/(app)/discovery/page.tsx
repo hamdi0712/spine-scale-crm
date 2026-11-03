@@ -149,7 +149,7 @@ export default async function DiscoveryPage({
 
   return (
     <DiscoverySelectionProvider queueable={queueable}>
-      <div>
+      <div className="wide-format">
         {/* Five actions is more than any other page header carries, so the row
           is built to take it. Wide enough for both, they share a line and the
           buttons keep their own width — the title column is the one that
@@ -166,7 +166,7 @@ export default async function DiscoveryPage({
               <ChannelToggle channel={channel} cookie={DISCOVERY_CHANNEL_COOKIE} label="Discovery channel" />
             </div>
             {channel === "email" && (
-              <p className="helper-text mt-1.5 text-sm text-muted">
+              <p className="helper-text page-sub mt-1.5 text-sm text-muted">
                 Clinics found for email — scored here, promoted to the Email pipeline
               </p>
             )}
@@ -285,7 +285,7 @@ export default async function DiscoveryPage({
             </div>
           </div>
         ) : (
-          <div className="mt-8">
+          <div className="mt-8 wide:mt-4">
             <DiscoveryList rows={rows} recrawlCostPerClinic={stepCostPerCandidate("websiteContent", settings)} />
           </div>
         )}

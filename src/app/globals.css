@@ -651,6 +651,45 @@
     0 6px 18px rgba(4, 16, 36, 0.3);
 }
 
+/* The big-monitor format: the compact scale the Email pipeline settled on,
+   for any page that opts in by putting .wide-format on its root. From the
+   wide breakpoint (1600px) up — below it nothing here applies, so a laptop
+   sees every page exactly as it was. A 24px title and 12px subtitle, 32px
+   buttons and fields with 13px text, and table rows drawn tighter. Cards and
+   toolbars are sized on the page, where their shape is known. */
+@media (min-width: 1600px) {
+  .wide-format h1.display {
+    font-size: 24px;
+  }
+  .wide-format .page-sub {
+    margin-top: 4px;
+    font-size: 12px;
+  }
+  .wide-format .btn,
+  .wide-format .btn-primary,
+  .wide-format .btn-danger {
+    height: 32px;
+    padding-left: 12px;
+    padding-right: 12px;
+    font-size: 13px;
+  }
+  .wide-format input.field,
+  .wide-format select.field {
+    height: 32px;
+    font-size: 13px;
+  }
+  .wide-format .th {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-size: 11px;
+  }
+  .wide-format .td {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: 13px;
+  }
+}
+
 /* Single-line controls get a fixed 42px height; multi-line fields keep
    vertical padding and a taller default. */
 input.field,
