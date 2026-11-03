@@ -191,7 +191,7 @@ export default function LeadTable({
           under it as a row of pills that scrolls sideways. The wrapper round
           the pills is display: contents from md up, so the desktop row is the
           same flat row of controls it always was. */}
-      <div className="mb-4 flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
+      <div className="mb-4 flex items-center gap-3 max-md:flex-wrap max-md:gap-2 wide:card wide:gap-2 wide:overflow-visible wide:px-3 wide:py-2.5 wide:[&_.field]:!h-8 wide:[&_.field]:text-[13px]">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
