@@ -139,10 +139,18 @@ export default function BusinessHoursPanel({ leadCounts = {} }: { leadCounts?: R
 // that zone. The tile takes the state's colour — green open, amber in the hour
 // before, glass closed. Below the breakpoint this is hidden and the compact
 // tiles above are the panel, unchanged.
-const RICH_TILE: Record<OpenState, string> = {
-  open: "border-[#4ADE80]/45 bg-gradient-to-b from-[#22C55E]/[0.16] to-white/[0.05]",
-  "opening-soon": "border-[#FBBF24]/40 bg-gradient-to-b from-[#F59E0B]/[0.12] to-white/[0.05]",
-  closed: "border-white/[0.14] bg-white/[0.05]",
+// The tiles are the original 3D glass (.zone-tile): the diagonal sheen, the
+// lit top edge and the drop shadow. The state sits on top of it as a tinted
+// wash and border, so an open zone reads as lit glass rather than a flat card.
+const RICH_WASH: Record<OpenState, string | null> = {
+  open: "linear-gradient(180deg, rgba(34, 197, 94, 0.22), rgba(34, 197, 94, 0) 70%)",
+  "opening-soon": "linear-gradient(180deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0) 70%)",
+  closed: null,
+};
+const RICH_BORDER: Record<OpenState, string | undefined> = {
+  open: "rgba(74, 222, 128, 0.5)",
+  "opening-soon": "rgba(251, 191, 36, 0.45)",
+  closed: undefined,
 };
 const RICH_DOT: Record<OpenState, string> = {
   open: "bg-[#4ADE80]",
@@ -164,15 +172,22 @@ function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<s
         const PhaseIcon = day?.phase === "day" ? IconSun : day?.phase === "dawn" ? IconSunrise : IconMoon;
         const leads = leadCounts[zone.id] ?? 0;
         return (
-          <li key={zone.id} className={`flex flex-col gap-2.5 rounded-[14px] border p-4 backdrop-blur-md ${RICH_TILE[state]}`}>
-            <span className="flex items-center justify-between text-[13px] text-white/80">
+          <li
+            key={zone.id}
+            className="zone-tile relative flex flex-col gap-2.5 overflow-hidden rounded-[14px] p-4 backdrop-blur-md"
+            style={{ borderColor: RICH_BORDER[state] }}
+          >
+            {RICH_WASH[state] && (
+              <span aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: RICH_WASH[state]! }} />
+            )}
+            <span className="relative flex items-center justify-between text-[13px] text-white/80">
               <span className="flex items-center gap-1.5">
                 <span className={`h-2 w-2 rounded-full ${RICH_DOT[state]}`} aria-hidden />
                 {zone.label}
               </span>
               <PhaseIcon size={17} stroke={1.75} aria-hidden className="text-white/70" />
             </span>
-            <span className="num whitespace-nowrap text-white">
+            <span className="num relative whitespace-nowrap text-white">
               <span className="text-[26px] font-bold leading-none tracking-tight">
                 {now ? fmtTimeInZone(now, zone.id).replace(/\s?[AP]M$/i, "") : "\u2014:\u2014"}
               </span>
@@ -189,11 +204,11 @@ function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<s
                 </>
               )}
             </span>
-            <span className="flex justify-between text-[11px] text-white/55">
+            <span className="relative flex justify-between text-[11px] text-white/55">
               <span>9 AM</span>
               <span>5 PM</span>
             </span>
-            <span className="flex items-center justify-between gap-2">
+            <span className="relative flex items-center justify-between gap-2">
               <span className={`inline-flex h-6 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${RICH_BADGE[state]}`}>
                 {day ? day.label : "\u2014"}
               </span>
