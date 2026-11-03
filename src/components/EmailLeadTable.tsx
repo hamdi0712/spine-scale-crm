@@ -129,51 +129,9 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           : 0,
     );
   const cards = view === "cards";
-
-  return (
-    <div
-      className={`md:card md:overflow-hidden ${
-        cards ? "wide:overflow-visible wide:rounded-none wide:border-0 wide:bg-transparent wide:shadow-none" : ""
-      }`}
-    >
-      <div
-        className={`mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 ${
-          cards ? "wide:card wide:mb-4 wide:overflow-visible wide:border wide:border-line" : ""
-        }`}
-      >
-        <div className="m-pill-row flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
-          {tabs.map((tab) => {
-            const on = filter === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setFilter(tab.key)}
-                aria-pressed={on}
-                className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
-                  on ? "bg-accent-soft font-semibold text-accent" : "text-muted hover:bg-wash hover:text-ink"
-                }`}
-              >
-                {tab.label}
-                <span className={`num text-xs ${on ? "opacity-90" : "opacity-70"}`}>{tab.count}</span>
-              </button>
-            );
-          })}
-        </div>
-        <label className="relative flex w-full items-center md:w-60">
-          <span className="sr-only">Search clinics</span>
-          <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search clinics"
-            className="field h-9 w-full pl-9 text-sm"
-          />
-        </label>
-        {/* The big monitor's filters, sort and view. */}
-        <div className="hidden w-full flex-wrap items-center justify-end gap-2 wide:flex">
-          <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field h-9 w-auto text-sm">
+  const extras = (
+    <>
+          <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field h-10 w-auto text-sm">
             <option value="">All inboxes</option>
             {inboxes.map((i) => (
               <option key={i} value={i}>
@@ -205,7 +163,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               );
             })}
           </div>
-          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort" className="field h-9 w-auto text-sm">
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort" className="field h-10 w-auto text-sm">
             <option value="updated">Recently updated</option>
             <option value="score">Highest score</option>
             <option value="name">Clinic name</option>
@@ -218,7 +176,80 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               <IconList size={16} stroke={2} aria-hidden />
             </button>
           </div>
+        </>
+  );
+
+  return (
+    <div className="md:card md:overflow-hidden wide:overflow-visible wide:rounded-none wide:border-0 wide:bg-transparent wide:shadow-none">
+      {/* The big monitor's toolbar, its own card: search across the top with
+          the filters, sort and view beside it, and the tabs as chips below. */}
+      <div className="card mb-4 hidden flex-col gap-3 overflow-visible p-4 wide:flex">
+        <div className="flex items-center gap-2.5">
+          <label className="relative flex flex-1 items-center">
+            <span className="sr-only">Search</span>
+            <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search clinics, contacts, emails…"
+              className="field h-10 w-full pl-9 text-sm"
+            />
+          </label>
+          {extras}
         </div>
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter">
+          {tabs.map((tab) => {
+            const on = filter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setFilter(tab.key)}
+                aria-pressed={on}
+                className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+                  on ? "border-accent/40 bg-accent-soft font-semibold text-accent" : "border-line font-medium text-ink-soft hover:bg-wash"
+                }`}
+              >
+                {tab.label}
+                <span className="num opacity-70">{tab.count}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 wide:hidden">
+        <div className="m-pill-row flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
+          {tabs.map((tab) => {
+            const on = filter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setFilter(tab.key)}
+                aria-pressed={on}
+                className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+                  on ? "bg-accent-soft font-semibold text-accent" : "text-muted hover:bg-wash hover:text-ink"
+                }`}
+              >
+                {tab.label}
+                <span className={`num text-xs ${on ? "opacity-90" : "opacity-70"}`}>{tab.count}</span>
+              </button>
+            );
+          })}
+        </div>
+        <label className="relative flex w-full items-center md:w-60">
+          <span className="sr-only">Search clinics</span>
+          <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search clinics"
+            className="field h-9 w-full pl-9 text-sm"
+          />
+        </label>
       </div>
 
       {/* The big monitor's cards: three across, a clinic each. The whole card
@@ -308,7 +339,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         )}
       </ul>
 
-      <div className={`overflow-x-auto max-md:hidden ${cards ? "wide:hidden" : ""}`}>
+      <div className={`overflow-x-auto max-md:hidden wide:card ${cards ? "wide:hidden" : ""}`}>
         <table className="w-full">
           <thead>
             <tr>
