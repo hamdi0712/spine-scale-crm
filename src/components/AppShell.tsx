@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import { MobileTabBar, MobileTopBar } from "@/components/MobileNav";
 import useMediaQuery from "@/components/useMediaQuery";
@@ -19,9 +20,16 @@ import { JobsProvider } from "@/components/JobProgress";
 //
 // Every class that changes a narrow layout is behind max-md: or md:max-lg:, so
 // the desktop classes are the ones that were here before, unconditionally.
+const WIDE_PAGES = ["/"];
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const tablet = useMediaQuery("(min-width: 768px) and (max-width: 1023px)");
+  // The pages laid out for a big monitor: from the wide breakpoint up their
+  // column lets go of its cap and runs edge to edge with a 32px gutter.
+  // Every other page, and these below that width, keep the centred column.
+  const pathname = usePathname();
+  const wide = WIDE_PAGES.includes(pathname);
   // JobsProvider wraps the whole shell, so a long-running job's progress —
   // the header pill, the tab title, each page's panel — survives moving
   // between pages (JobProgress.tsx).
@@ -33,7 +41,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main
         className={`min-h-dvh transition-[margin] max-md:ml-0 md:max-lg:ml-16 ${collapsed ? "ml-16" : "ml-56"}`}
       >
-        <div className="mx-auto max-w-6xl px-10 py-10 max-md:px-4 max-md:pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+24px)] max-md:pt-4 md:max-lg:px-6 md:max-lg:py-8">
+        <div className={`mx-auto max-w-6xl px-10 py-10 ${wide ? "wide:max-w-none wide:px-8 wide:py-8" : ""} max-md:px-4 max-md:pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+24px)] max-md:pt-4 md:max-lg:px-6 md:max-lg:py-8`}>
           {children}
         </div>
       </main>

@@ -15,6 +15,8 @@ const SIZES = {
   nav: "h-5 w-5",
   // Beside an answer, and in the page's top bar.
   sm: "h-7 w-7",
+  // The mini chat's landing state, on the Dashboard.
+  md: "h-14 w-14",
   // The landing state's hero.
   hero: "h-[72px] w-[72px]",
 } as const;

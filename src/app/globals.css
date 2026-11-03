@@ -632,8 +632,7 @@
   box-shadow:
     inset 0 1px 0 rgba(190, 219, 255, 0.28),
     inset 0 -1px 0 rgba(3, 12, 28, 0.5),
-    0 1px 2px rgba(7, 26, 54, 0.2),
-    0 16px 40px rgba(7, 26, 54, 0.28);
+    var(--shadow-card);
 }
 
 /* The frosted tiles that float over the map. Translucent on purpose and by a
@@ -874,6 +873,23 @@ tbody tr:last-child > .td {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
+/* The big monitor's business-hours tiles: the Now card's dark glass in
+   both themes, since they always sit on the navy map — a light pane there
+   reads as a hole in it. Same gradient, lit edge and shadow as
+   .dark .glass-panel below, with a softer corner. */
+.glass-night {
+  border: 1px solid rgba(126, 160, 220, 0.28);
+  border-radius: 18px;
+  /* See-through: the map and its lights show behind the pane, softened. */
+  background-image: linear-gradient(135deg, rgba(23, 32, 47, 0.5) 0%, rgba(24, 35, 56, 0.42) 45%, rgba(26, 39, 64, 0.36) 100%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
 /* Today's focus and the Now banner. The same diagonal blue glass, rebuilt from
    the dark end: a deep blue-slate that is still visibly *blue* against the
    neutral cards beside it, which is the whole point of the material. */
@@ -919,9 +935,7 @@ tbody tr:last-child > .td {
   box-shadow:
     inset 0 1px 0 rgba(190, 219, 255, 0.32),
     inset 0 -1px 0 rgba(3, 12, 28, 0.5),
-    0 1px 2px rgba(0, 0, 0, 0.5),
-    0 16px 44px rgba(0, 0, 0, 0.55),
-    0 0 40px rgba(37, 99, 235, 0.16);
+    var(--shadow-card);
 }
 
 /* ═══ Motion ════════════════════════════════════════════════════════════════

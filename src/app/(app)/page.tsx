@@ -37,11 +37,14 @@ import {
 } from "@/lib/funnel";
 import { cookies } from "next/headers";
 import ChannelToggle from "@/components/ChannelToggle";
+import CopilotPage from "@/components/CopilotPage";
+import { listCopilotConversations } from "@/lib/actions/copilotChat";
 import { DASHBOARD_CHANNEL_COOKIE, LINKEDIN_ENGAGED_STAGES, readPipelineChannel } from "@/lib/emailChannel";
 import { loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import ActivityFeed from "@/components/ActivityFeed";
 import { connectorUndoIds } from "@/lib/mcpWrites";
 import BusinessHoursPanel, {
+  NextOpenLine,
   BusinessHoursChip,
 } from "@/components/BusinessHoursPanel";
 import ClientHealthList, { HealthRow } from "@/components/ClientHealthList";
@@ -174,6 +177,8 @@ export default async function DashboardPage() {
   ]);
   const email = channel === "email" ? await loadEmailCards(now, monthStart, nextMonthStart) : null;
   const undoIds = await connectorUndoIds(activity.map((a) => a.id));
+  // The saved chats, for the mini Ask Iman's history menu on a big monitor.
+  const conversations = await listCopilotConversations();
 
   // ─── Headline numbers ────────────────────────────────────────────────────
   //
@@ -185,6 +190,12 @@ export default async function DashboardPage() {
 
   // The cards count the chosen channel's leads only.
   const qualified = qualifiedLeads(openLeads.filter((l) => l.channel === channel));
+  // Open leads per US time zone, on the chosen channel: the big monitor's
+  // business-hours tiles say how many are reachable in each.
+  const zoneLeadCounts: Record<string, number> = {};
+  for (const l of openLeads) {
+    if (l.channel === channel && l.timeZone) zoneLeadCounts[l.timeZone] = (zoneLeadCounts[l.timeZone] ?? 0) + 1;
+  }
   // Qualified leads (A or B) at Contacted or beyond — the same group as the
   // Qualified card's "in play", so the two cards agree.
   const messages = qualified.contacted;
@@ -355,6 +366,11 @@ export default async function DashboardPage() {
           </Suspense>
         </div>
         <PageActions className="flex items-center gap-3">
+          {/* On a big monitor the toggle sits up here with the other
+              controls; below that it has a row of its own under the title. */}
+          <div className="hidden wide:block">
+            <ChannelToggle channel={channel} cookie={DASHBOARD_CHANNEL_COOKIE} label="Dashboard channel" />
+          </div>
           <BusinessHoursChip />
           <Link href="/clients/new" className="btn-primary">
             <Icon name="plus" className="h-4 w-4" />
@@ -365,8 +381,10 @@ export default async function DashboardPage() {
 
       {/* Which channel the four cards count, remembered per browser. The rest
           of the page is the same on every channel. */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 max-md:mt-8">
-        <ChannelToggle channel={channel} cookie={DASHBOARD_CHANNEL_COOKIE} label="Dashboard channel" />
+      <div className={`mt-6 flex flex-wrap items-center justify-between gap-3 max-md:mt-8 ${bounceWarning ? "wide:justify-end" : "wide:hidden"}`}>
+        <div className="wide:hidden">
+          <ChannelToggle channel={channel} cookie={DASHBOARD_CHANNEL_COOKIE} label="Dashboard channel" />
+        </div>
         {bounceWarning && (
           <Link
             href="/pipeline?channel=email&tab=all"
@@ -381,7 +399,7 @@ export default async function DashboardPage() {
 
       {/* On a phone all four cards sit in a 2×2 grid, each drawn compact
           (KpiCard) so the four read at once without scrolling. */}
-      <div className="mt-4 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-6 max-md:gap-3 lg:grid-cols-4 wide:mt-6 wide:gap-5">
         {kpis.map((kpi, i) => (
           <KpiCard key={`${channel}-${kpi.label}`} kpi={kpi} tone={KPI_TONES[i]} />
         ))}
@@ -400,7 +418,7 @@ export default async function DashboardPage() {
 
           The flag comes off the data attribute TodaysFocus sets from the state
           behind its own "View all" toggle. */}
-      <div className="mt-5 grid items-stretch gap-6 max-md:mt-7 max-md:gap-7 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1">
+      <div className="mt-5 grid items-stretch gap-6 max-md:mt-7 max-md:gap-7 has-[[data-focus-expanded]]:items-start lg:grid-cols-2 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] wide:gap-5">
         <section className="card self-stretch p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Now</h2>
@@ -503,10 +521,13 @@ export default async function DashboardPage() {
                 </span>
                 US business hours
               </h2>
-              <span className="text-xs text-white/60">Mon–Fri · 9–5 local</span>
+              <span className="text-xs text-white/60 wide:hidden">Mon–Fri · 9–5 local</span>
+              <span className="hidden wide:inline">
+                <NextOpenLine leadCounts={zoneLeadCounts} />
+              </span>
             </div>
             <div className="mt-auto pt-4">
-              <BusinessHoursPanel />
+              <BusinessHoursPanel leadCounts={zoneLeadCounts} />
             </div>
           </div>
         </section>
@@ -522,8 +543,13 @@ export default async function DashboardPage() {
           The stretch reaches the bordered card directly because each section
           carries .card itself and is the grid item — no wrapper in between to
           stretch instead and leave the visible card floating short inside it. */}
-      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1">
-        <section className="card p-6">
+      {/* Below the wide breakpoint: the three cards side by side, as they
+          always were. From it up: Client health, Pipeline snapshot and Recent
+          activity stacked down the left, under Now, and a mini Ask Iman down
+          the right, under US business hours — placed by grid position, so the
+          narrower layout's order is untouched. */}
+      <div className="mt-5 grid items-stretch gap-6 lg:grid-cols-3 max-md:grid-cols-1 wide:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] wide:gap-5">
+        <section className="card p-6 wide:col-start-1 wide:row-start-3">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Recent activity</h2>
             <Link href="/activity" className="text-xs font-medium text-accent hover:underline">
@@ -548,7 +574,7 @@ export default async function DashboardPage() {
           />
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6 wide:col-start-1 wide:row-start-1">
           <div className="mb-1 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Client health</h2>
             <Link href="/clients" className="text-xs font-medium text-accent hover:underline">
@@ -558,7 +584,7 @@ export default async function DashboardPage() {
           <ClientHealthList rows={healthRows} />
         </section>
 
-        <section className="card p-6">
+        <section className="card p-6 wide:col-start-1 wide:row-start-2">
           <div className="mb-5 flex items-center justify-between gap-3">
             <h2 className="display text-xl font-semibold">Pipeline snapshot</h2>
             <Link href="/pipeline" className="text-xs font-medium text-accent hover:underline">
@@ -566,6 +592,14 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <PipelineDonut slices={slices} total={pipelineValue} />
+        </section>
+
+        {/* The mini Ask Iman: only on a big monitor. Its card is as tall as
+            the stack beside it and never taller — the chat scrolls inside. */}
+        <section aria-label="Ask Iman" className="card relative hidden min-h-[560px] overflow-visible wide:col-start-2 wide:row-span-3 wide:row-start-1 wide:block">
+          <div className="absolute inset-0 flex flex-col px-5 pb-4 pt-5">
+            <CopilotPage initialConversations={conversations} compact />
+          </div>
         </section>
       </div>
     </div>

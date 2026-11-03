@@ -23,6 +23,12 @@ const config: Config = {
   future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
+      // A big desktop monitor (a 22" at 1920, say). Pages that opt in run edge
+      // to edge from here up; below it — a 13" laptop included — every page is
+      // exactly the layout it always was.
+      screens: {
+        wide: "1600px",
+      },
       colors: {
         bg: c("bg"),
         panel: c("panel"),

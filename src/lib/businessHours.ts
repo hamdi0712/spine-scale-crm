@@ -87,3 +87,73 @@ export function businessHours(date: Date, timeZone: string): BusinessHours {
 
   return { state: "closed", label: isWeekday ? "Closed" : "Weekend" };
 }
+
+// ─── The big-monitor tiles ─────────────────────────────────────────────────
+
+// What the wide Dashboard's richer tile says about a zone: how far through
+// its working day it is, exactly how long is left or how long until it opens,
+// and whether it is day, the hour before opening, or night there.
+export interface ZoneDay {
+  state: OpenState;
+  // 0–1 through 9–5 while open; null otherwise.
+  progress: number | null;
+  // "Open · 5h 18m left", "Opens in 18m", "Opens in 2h 18m", "Opens Monday".
+  label: string;
+  // Minutes until it next opens: for the "next to open" line. Null while open.
+  minutesUntilOpen: number | null;
+  phase: "day" | "dawn" | "night";
+}
+
+// "5h 18m", "18m".
+function hm(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h === 0 ? `${m}m` : `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+// Inside the hour before opening it is "opening soon" here — amber — and
+// further out it is simply closed with a countdown.
+const OPENING_SOON_MINUTES = 60;
+
+export function zoneDay(date: Date, timeZone: string): ZoneDay {
+  const { hour, minute, weekday } = zoneParts(date, timeZone);
+  const now = hour * 60 + minute;
+  const open = BUSINESS_OPEN_HOUR * 60;
+  const close = BUSINESS_CLOSE_HOUR * 60;
+  const isWeekday = weekday >= 1 && weekday <= 5;
+
+  if (isWeekday && now >= open && now < close) {
+    return {
+      state: "open",
+      progress: (now - open) / (close - open),
+      label: `Open · ${hm(close - now)} left`,
+      minutesUntilOpen: null,
+      phase: "day",
+    };
+  }
+
+  // Minutes until the next 9 AM on a weekday: today's, if it is still ahead
+  // on a weekday, else the next weekday's.
+  let days = 0;
+  let wd = weekday;
+  if (!(isWeekday && now < open)) {
+    do {
+      days++;
+      wd = (wd + 1) % 7;
+    } while (wd === 0 || wd === 6);
+  }
+  const until = days * 24 * 60 + open - now;
+  const soon = until <= OPENING_SOON_MINUTES;
+  const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  return {
+    state: soon ? "opening-soon" : "closed",
+    progress: null,
+    label: until < 24 * 60 ? `Opens in ${hm(until)}` : `Opens ${names[wd]}`,
+    minutesUntilOpen: until,
+    phase: soon ? "dawn" : "night",
+  };
+}
+
+export function fmtUntil(minutes: number): string {
+  return minutes < 24 * 60 ? `in ${hm(minutes)}` : `in ${Math.round(minutes / 60 / 24)}d`;
+}

@@ -5,9 +5,10 @@
 // and starts ticking on mount — the same hydration deal as the other clocks.
 
 import { useEffect, useState } from "react";
-import { businessHours, OpenState } from "@/lib/businessHours";
+import { businessHours, fmtUntil, OpenState, zoneDay } from "@/lib/businessHours";
 import { US_TIME_ZONES, fmtTimeInZone, zoneAbbr } from "@/lib/timezones";
 import Icon from "@/components/Icons";
+import { IconMoon, IconSun, IconSunrise } from "@tabler/icons-react";
 
 // The panel sits on navy now, so the dot and the badge are drawn for a dark
 // ground: the state colours lightened to stay legible on it, and the badge's
@@ -73,11 +74,15 @@ export function BusinessHoursChip() {
 //
 // Two columns below the sm breakpoint: at four across, a tile is narrower than
 // the time inside it.
-export default function BusinessHoursPanel() {
+//
+// leadCounts: open leads per zone id, for the big monitor's richer tiles.
+export default function BusinessHoursPanel({ leadCounts = {} }: { leadCounts?: Record<string, number> }) {
   const now = useNow();
 
   return (
-    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <>
+    <RichTiles now={now} leadCounts={leadCounts} />
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4 wide:hidden">
       {US_TIME_ZONES.map((zone) => {
         const hours = now ? businessHours(now, zone.id) : null;
         const state: OpenState = hours?.state ?? "closed";
@@ -122,5 +127,113 @@ export default function BusinessHoursPanel() {
         );
       })}
     </ul>
+    </>
+  );
+}
+
+// ─── The big monitor ───────────────────────────────────────────────────────
+
+// From the wide breakpoint up the tiles have the room to say more than the
+// time: a 9-to-5 track with where the day is, exactly how long is left or
+// how long until it opens, day or night there, and how many open leads sit in
+// that zone. The tile takes the state's colour — green open, amber in the hour
+// before, glass closed. Below the breakpoint this is hidden and the compact
+// tiles above are the panel, unchanged.
+// The tiles are the Now card's dark glass (.glass-night): the soft diagonal
+// blue-slate, the lit top edge and the soft shadow, in both themes — they
+// always sit on the navy map. The state is the dot and the badge: green open, amber in the
+// hour before, the panel's own edge closed.
+const RICH_DOT: Record<OpenState, string> = {
+  open: "bg-[#4ADE80]",
+  "opening-soon": "bg-[#FBBF24]",
+  closed: "bg-white/35",
+};
+const RICH_BADGE: Record<OpenState, string> = {
+  open: "bg-[#22C55E]/20 text-[#86EFAC]",
+  "opening-soon": "bg-[#F59E0B]/20 text-[#FCD34D]",
+  closed: "bg-white/[0.08] text-white/70",
+};
+
+function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<string, number> }) {
+  return (
+    <ul className="hidden grid-cols-4 gap-3.5 wide:grid">
+      {US_TIME_ZONES.map((zone) => {
+        const day = now ? zoneDay(now, zone.id) : null;
+        const state: OpenState = day?.state ?? "closed";
+        const PhaseIcon = day?.phase === "day" ? IconSun : day?.phase === "dawn" ? IconSunrise : IconMoon;
+        const leads = leadCounts[zone.id] ?? 0;
+        const time = now ? fmtTimeInZone(now, zone.id) : null;
+        return (
+          <li key={zone.id} className="glass-night flex flex-col gap-2.5 p-4">
+            <span className="flex items-center justify-between text-[13px] font-medium text-white/80">
+              <span className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${RICH_DOT[state]}`} aria-hidden />
+                {zone.label}
+              </span>
+              <PhaseIcon size={17} stroke={1.75} aria-hidden className={state === "open" ? "text-[#FBBF24]" : "text-white/55"} />
+            </span>
+            <span className="num whitespace-nowrap text-white">
+              <span className="text-[26px] font-bold leading-none tracking-tight">
+                {time ? time.replace(/\s?[AP]M$/i, "") : "\u2014:\u2014"}
+              </span>
+              <span className="ml-1.5 text-sm text-white/60">
+                {time && now ? `${time.match(/[AP]M$/i)?.[0] ?? ""} · ${zoneAbbr(now, zone.id)}` : ""}
+              </span>
+            </span>
+            {/* 9 to 5, and where the day is: filled to now while open. */}
+            <span className="relative mt-1 block h-1.5 rounded-full bg-white/[0.12]" aria-hidden>
+              {day?.progress != null && (
+                <>
+                  <span className="absolute inset-y-0 left-0 rounded-full bg-[#4ADE80]" style={{ width: `${day.progress * 100}%` }} />
+                  <span className="absolute -top-1 h-3.5 w-0.5 rounded bg-white" style={{ left: `${day.progress * 100}%` }} />
+                </>
+              )}
+            </span>
+            <span className="flex justify-between text-[11px] text-white/50">
+              <span>9 AM</span>
+              <span>5 PM</span>
+            </span>
+            <span className="flex items-center justify-between gap-2">
+              <span className={`inline-flex h-6 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${RICH_BADGE[state]}`}>
+                {day ? day.label : "\u2014"}
+              </span>
+              <span className="whitespace-nowrap text-xs text-white/70">
+                <b className="num font-semibold text-white">{leads}</b> {leads === 1 ? "lead" : "leads"}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// The header line on a big monitor: which zone opens next and how many leads
+// are waiting there — or, while any are open, how many leads are reachable now.
+export function NextOpenLine({ leadCounts = {} }: { leadCounts?: Record<string, number> }) {
+  const now = useNow();
+  if (!now) return <span className="text-xs text-white/60">Mon–Fri · 9–5 local</span>;
+  const days = US_TIME_ZONES.map((z) => ({ zone: z, day: zoneDay(now, z.id) }));
+  const open = days.filter((d) => d.day.state === "open");
+  if (open.length > 0) {
+    const reachable = open.reduce((n, d) => n + (leadCounts[d.zone.id] ?? 0), 0);
+    return (
+      <span className="text-[13px] text-white/70">
+        <b className="font-semibold text-white">{open.length} of 4 open</b> · {reachable} {reachable === 1 ? "lead" : "leads"} reachable now
+      </span>
+    );
+  }
+  const next = days
+    .filter((d) => d.day.minutesUntilOpen !== null)
+    .sort((a, b) => a.day.minutesUntilOpen! - b.day.minutesUntilOpen!)[0];
+  const waiting = next ? leadCounts[next.zone.id] ?? 0 : 0;
+  return (
+    <span className="text-[13px] text-white/70">
+      Next to open:{" "}
+      <b className="font-semibold text-white">
+        {next?.zone.label} {next ? fmtUntil(next.day.minutesUntilOpen!) : ""}
+      </b>{" "}
+      · {waiting} {waiting === 1 ? "lead" : "leads"} waiting
+    </span>
   );
 }
