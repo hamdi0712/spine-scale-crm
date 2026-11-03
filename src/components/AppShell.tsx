@@ -29,7 +29,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // column lets go of its cap and runs edge to edge with a 32px gutter.
   // Every other page, and these below that width, keep the centred column.
   const pathname = usePathname();
-  const wide = WIDE_PAGES.includes(pathname);
+  const wide = WIDE_PAGES.includes(pathname) || /^\/pipeline\/(?!new$)[^/]+$/.test(pathname);
   // JobsProvider wraps the whole shell, so a long-running job's progress —
   // the header pill, the tab title, each page's panel — survives moving
   // between pages (JobProgress.tsx).

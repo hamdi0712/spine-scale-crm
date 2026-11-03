@@ -86,7 +86,7 @@ export default function ScoreRing({
     <div className="relative mx-auto" style={{ height: size, width: size }}>
       <div
         aria-hidden
-        className="absolute rounded-full"
+        className="absolute rounded-full wide:hidden"
         style={{
           inset: (CENTRE - OUTER) * scale,
           boxShadow: `0 0 ${26 * scale}px ${2 * scale}px ${glow}59, 0 0 ${10 * scale}px 0 ${glow}40`,
@@ -123,10 +123,10 @@ export default function ScoreRing({
         ))}
       </svg>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <div className="num font-semibold leading-none tracking-tight text-ink" style={{ fontSize: 22 * scale }}>
+        <div className="num font-semibold leading-none tracking-tight text-ink wide:!text-[26px]" style={{ fontSize: 22 * scale }}>
           {total ?? "—"}
         </div>
-        <div className="num mt-1 text-muted" style={{ fontSize: 11 * scale }}>
+        <div className="num mt-1 text-muted wide:!text-[11px]" style={{ fontSize: 11 * scale }}>
           {total === null ? "Not scored" : `/ ${max}`}
         </div>
       </div>
