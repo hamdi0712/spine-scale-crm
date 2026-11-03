@@ -141,13 +141,8 @@ export default function BusinessHoursPanel({ leadCounts = {} }: { leadCounts?: R
 // tiles above are the panel, unchanged.
 // The tiles are the Now card's dark glass (.glass-night): the soft diagonal
 // blue-slate, the lit top edge and the soft shadow, in both themes — they
-// always sit on the navy map. The state is the border and the badge: green open, amber in the
+// always sit on the navy map. The state is the dot and the badge: green open, amber in the
 // hour before, the panel's own edge closed.
-const RICH_BORDER: Record<OpenState, string | undefined> = {
-  open: "rgba(74, 222, 128, 0.5)",
-  "opening-soon": "rgba(251, 191, 36, 0.5)",
-  closed: undefined,
-};
 const RICH_DOT: Record<OpenState, string> = {
   open: "bg-[#4ADE80]",
   "opening-soon": "bg-[#FBBF24]",
@@ -169,7 +164,7 @@ function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<s
         const leads = leadCounts[zone.id] ?? 0;
         const time = now ? fmtTimeInZone(now, zone.id) : null;
         return (
-          <li key={zone.id} className="glass-night flex flex-col gap-2.5 p-4" style={{ borderColor: RICH_BORDER[state] }}>
+          <li key={zone.id} className="glass-night flex flex-col gap-2.5 p-4">
             <span className="flex items-center justify-between text-[13px] font-medium text-white/80">
               <span className="flex items-center gap-1.5">
                 <span className={`h-2 w-2 rounded-full ${RICH_DOT[state]}`} aria-hidden />
