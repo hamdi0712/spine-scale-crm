@@ -20,7 +20,7 @@ import { JobsProvider } from "@/components/JobProgress";
 //
 // Every class that changes a narrow layout is behind max-md: or md:max-lg:, so
 // the desktop classes are the ones that were here before, unconditionally.
-const WIDE_PAGES = ["/"];
+const WIDE_PAGES = ["/", "/pipeline"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
