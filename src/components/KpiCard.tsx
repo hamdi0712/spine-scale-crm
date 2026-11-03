@@ -148,11 +148,11 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
 // The card's outer box: a link to its view when it has one, lifting on hover
 // the way the app's other clickable cards do, or a plain panel.
 function Wrap({ href, children }: { href?: string; children: React.ReactNode }) {
-  if (!href) return <div className="card-kpi kpi-compact p-6">{children}</div>;
+  if (!href) return <div className="card-kpi kpi-compact p-6 wide:px-6 wide:py-5">{children}</div>;
   return (
     <Link
       href={href}
-      className="card-kpi kpi-compact block p-6 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className="card-kpi kpi-compact block p-6 wide:px-6 wide:py-5 transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-card-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
       {children}
     </Link>

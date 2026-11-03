@@ -41,7 +41,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main
         className={`min-h-dvh transition-[margin] max-md:ml-0 md:max-lg:ml-16 ${collapsed ? "ml-16" : "ml-56"}`}
       >
-        <div className={`mx-auto max-w-6xl px-10 py-10 ${wide ? "wide:max-w-none wide:px-8 wide:py-8" : ""} max-md:px-4 max-md:pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+24px)] max-md:pt-4 md:max-lg:px-6 md:max-lg:py-8`}>
+        <div className={`mx-auto max-w-6xl px-10 py-10 ${wide ? "wide:max-w-none wide:px-8 wide:py-6" : ""} max-md:px-4 max-md:pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+24px)] max-md:pt-4 md:max-lg:px-6 md:max-lg:py-8`}>
           {children}
         </div>
       </main>
