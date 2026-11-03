@@ -139,25 +139,24 @@ export default function BusinessHoursPanel({ leadCounts = {} }: { leadCounts?: R
 // that zone. The tile takes the state's colour — green open, amber in the hour
 // before, glass closed. Below the breakpoint this is hidden and the compact
 // tiles above are the panel, unchanged.
-// The tiles are the Now card's glass (.glass-panel): the shallow diagonal
-// blue, the lit top edge and the soft blue shadow, so they read as the same
-// material as the two boxes beside them — set on the navy field like panes on
-// a window. The state is the border and the badge: green open, amber in the
+// The tiles are the Now card's dark glass (.glass-night): the soft diagonal
+// blue-slate, the lit top edge and the soft shadow, in both themes — they
+// always sit on the navy map. The state is the border and the badge: green open, amber in the
 // hour before, the panel's own edge closed.
 const RICH_BORDER: Record<OpenState, string | undefined> = {
-  open: "rgb(var(--c-ok) / 0.55)",
-  "opening-soon": "rgb(var(--c-warn) / 0.55)",
+  open: "rgba(74, 222, 128, 0.5)",
+  "opening-soon": "rgba(251, 191, 36, 0.5)",
   closed: undefined,
 };
 const RICH_DOT: Record<OpenState, string> = {
-  open: "bg-ok",
-  "opening-soon": "bg-warn",
-  closed: "bg-muted/60",
+  open: "bg-[#4ADE80]",
+  "opening-soon": "bg-[#FBBF24]",
+  closed: "bg-white/35",
 };
 const RICH_BADGE: Record<OpenState, string> = {
-  open: "bg-ok-soft text-ok-on-soft",
-  "opening-soon": "bg-warn-soft text-warn-on-soft",
-  closed: "bg-line/70 text-muted",
+  open: "bg-[#22C55E]/20 text-[#86EFAC]",
+  "opening-soon": "bg-[#F59E0B]/20 text-[#FCD34D]",
+  closed: "bg-white/[0.08] text-white/70",
 };
 
 function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<string, number> }) {
@@ -170,32 +169,32 @@ function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<s
         const leads = leadCounts[zone.id] ?? 0;
         const time = now ? fmtTimeInZone(now, zone.id) : null;
         return (
-          <li key={zone.id} className="glass-panel flex flex-col gap-2.5 p-4" style={{ borderColor: RICH_BORDER[state] }}>
-            <span className="flex items-center justify-between text-[13px] font-medium text-ink-soft">
+          <li key={zone.id} className="glass-night flex flex-col gap-2.5 p-4" style={{ borderColor: RICH_BORDER[state] }}>
+            <span className="flex items-center justify-between text-[13px] font-medium text-white/80">
               <span className="flex items-center gap-1.5">
                 <span className={`h-2 w-2 rounded-full ${RICH_DOT[state]}`} aria-hidden />
                 {zone.label}
               </span>
-              <PhaseIcon size={17} stroke={1.75} aria-hidden className={state === "open" ? "text-warn" : "text-muted"} />
+              <PhaseIcon size={17} stroke={1.75} aria-hidden className={state === "open" ? "text-[#FBBF24]" : "text-white/55"} />
             </span>
-            <span className="num whitespace-nowrap text-ink">
+            <span className="num whitespace-nowrap text-white">
               <span className="text-[26px] font-bold leading-none tracking-tight">
                 {time ? time.replace(/\s?[AP]M$/i, "") : "\u2014:\u2014"}
               </span>
-              <span className="ml-1.5 text-sm text-muted">
+              <span className="ml-1.5 text-sm text-white/60">
                 {time && now ? `${time.match(/[AP]M$/i)?.[0] ?? ""} · ${zoneAbbr(now, zone.id)}` : ""}
               </span>
             </span>
             {/* 9 to 5, and where the day is: filled to now while open. */}
-            <span className="relative mt-1 block h-1.5 rounded-full bg-line" aria-hidden>
+            <span className="relative mt-1 block h-1.5 rounded-full bg-white/[0.12]" aria-hidden>
               {day?.progress != null && (
                 <>
-                  <span className="absolute inset-y-0 left-0 rounded-full bg-ok" style={{ width: `${day.progress * 100}%` }} />
-                  <span className="absolute -top-1 h-3.5 w-0.5 rounded bg-ink" style={{ left: `${day.progress * 100}%` }} />
+                  <span className="absolute inset-y-0 left-0 rounded-full bg-[#4ADE80]" style={{ width: `${day.progress * 100}%` }} />
+                  <span className="absolute -top-1 h-3.5 w-0.5 rounded bg-white" style={{ left: `${day.progress * 100}%` }} />
                 </>
               )}
             </span>
-            <span className="flex justify-between text-[11px] text-muted">
+            <span className="flex justify-between text-[11px] text-white/50">
               <span>9 AM</span>
               <span>5 PM</span>
             </span>
@@ -203,8 +202,8 @@ function RichTiles({ now, leadCounts }: { now: Date | null; leadCounts: Record<s
               <span className={`inline-flex h-6 items-center whitespace-nowrap rounded-full px-2.5 text-xs font-semibold ${RICH_BADGE[state]}`}>
                 {day ? day.label : "\u2014"}
               </span>
-              <span className="whitespace-nowrap text-xs text-muted">
-                <b className="num font-semibold text-ink">{leads}</b> {leads === 1 ? "lead" : "leads"}
+              <span className="whitespace-nowrap text-xs text-white/70">
+                <b className="num font-semibold text-white">{leads}</b> {leads === 1 ? "lead" : "leads"}
               </span>
             </span>
           </li>

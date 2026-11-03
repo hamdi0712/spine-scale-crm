@@ -873,6 +873,20 @@ tbody tr:last-child > .td {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
+/* The big monitor's business-hours tiles: the Now card's dark glass in
+   both themes, since they always sit on the navy map — a light pane there
+   reads as a hole in it. Same gradient, lit edge and shadow as
+   .dark .glass-panel below, with a softer corner. */
+.glass-night {
+  border: 1px solid rgb(51 68 100);
+  border-radius: 18px;
+  background-image: linear-gradient(135deg, #17202F 0%, #182338 45%, #1A2740 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
 /* Today's focus and the Now banner. The same diagonal blue glass, rebuilt from
    the dark end: a deep blue-slate that is still visibly *blue* against the
    neutral cards beside it, which is the whole point of the material. */
