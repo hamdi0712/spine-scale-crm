@@ -73,7 +73,8 @@ export default function DiscoveryQueue({
 
   return (
     <>
-      <AiButton
+      <button
+        type="button"
         onClick={() => setOpen(true)}
         disabled={count === 0 && !running}
         title={
@@ -81,7 +82,7 @@ export default function DiscoveryQueue({
             ? "Run the chain on the candidates you have selected"
             : undefined
         }
-        className="disabled:cursor-not-allowed disabled:opacity-50"
+        className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
       >
         {running && job ? (
           <span className="num">
@@ -89,11 +90,11 @@ export default function DiscoveryQueue({
           </span>
         ) : (
           <>
-            Process queue{scoped && " (selected)"}
-            {count > 0 && <span className="num">({count})</span>}
+            Qualify{scoped && " selected"}
+            {count > 0 && <span className="num opacity-80">{count}</span>}
           </>
         )}
-      </AiButton>
+      </button>
       {open && (
         <QueueDialog
           start={start}
@@ -227,7 +228,7 @@ function QueueDialog({
         <div className="flex items-start justify-between gap-4 border-b border-line/60 px-6 py-4">
           <div className="min-w-0">
             <h2 id="queue-title" className="display text-lg font-semibold">
-              Process queue{selectedIds && " (selected)"}
+              Qualify{selectedIds && " selected"}
             </h2>
             <p className="helper-text mt-0.5 text-xs leading-relaxed text-muted">
               {selectedIds

@@ -511,7 +511,7 @@ export default function DiscoveryList({
                 promoted candidate has no chain left to run. */}
             {queueableChosen > 0 && (
               <span className="num text-xs text-muted">
-                {queueableChosen} of them run on Process queue (selected)
+                {queueableChosen} of them run on Qualify selected
               </span>
             )}
             <button
