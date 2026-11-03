@@ -131,7 +131,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   const cards = view === "cards";
   const extras = (
     <>
-          <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field h-10 w-auto text-sm">
+          <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field !h-8 w-auto text-[13px]">
             <option value="">All inboxes</option>
             {inboxes.map((i) => (
               <option key={i} value={i}>
@@ -155,7 +155,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                       return next;
                     })
                   }
-                  className={`flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors ${on ? "bg-wash text-ink" : "text-muted hover:text-ink"}`}
+                  className={`flex h-6 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors ${on ? "bg-wash text-ink" : "text-muted hover:text-ink"}`}
                 >
                   <span className={`h-2 w-2 rounded-full ${TIER_DOT[t]}`} aria-hidden />
                   {t}
@@ -163,16 +163,16 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               );
             })}
           </div>
-          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort" className="field h-10 w-auto text-sm">
+          <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort" className="field !h-8 w-auto text-[13px]">
             <option value="updated">Recently updated</option>
             <option value="score">Highest score</option>
             <option value="name">Clinic name</option>
           </select>
           <div className="flex rounded-[10px] border border-line p-0.5" role="group" aria-label="View">
-            <button type="button" aria-pressed={cards} aria-label="Cards" onClick={() => chooseView("cards")} className={`flex h-8 w-8 items-center justify-center rounded-lg ${cards ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>
+            <button type="button" aria-pressed={cards} aria-label="Cards" onClick={() => chooseView("cards")} className={`flex h-6 w-7 items-center justify-center rounded-md ${cards ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>
               <IconLayoutGrid size={16} stroke={2} aria-hidden />
             </button>
-            <button type="button" aria-pressed={!cards} aria-label="Table" onClick={() => chooseView("table")} className={`flex h-8 w-8 items-center justify-center rounded-lg ${!cards ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>
+            <button type="button" aria-pressed={!cards} aria-label="Table" onClick={() => chooseView("table")} className={`flex h-6 w-7 items-center justify-center rounded-md ${!cards ? "bg-accent-soft text-accent" : "text-muted hover:text-ink"}`}>
               <IconList size={16} stroke={2} aria-hidden />
             </button>
           </div>
@@ -183,8 +183,8 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
     <div className="md:card md:overflow-hidden wide:overflow-visible wide:rounded-none wide:border-0 wide:bg-transparent wide:shadow-none">
       {/* The big monitor's toolbar, its own card: search across the top with
           the filters, sort and view beside it, and the tabs as chips below. */}
-      <div className="card mb-4 hidden flex-col gap-3 overflow-visible p-4 wide:flex">
-        <div className="flex items-center gap-2.5">
+      <div className="card mb-4 hidden flex-col gap-2 overflow-visible px-3 py-2.5 wide:flex">
+        <div className="flex items-center gap-2">
           <label className="relative flex flex-1 items-center">
             <span className="sr-only">Search</span>
             <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
@@ -193,12 +193,12 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search clinics, contacts, emails…"
-              className="field h-10 w-full pl-9 text-sm"
+              className="field !h-8 w-full pl-9 text-[13px]"
             />
           </label>
           {extras}
         </div>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter">
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter">
           {tabs.map((tab) => {
             const on = filter === tab.key;
             return (
@@ -207,7 +207,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 type="button"
                 onClick={() => setFilter(tab.key)}
                 aria-pressed={on}
-                className={`inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+                className={`inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
                   on ? "border-accent/40 bg-accent-soft font-semibold text-accent" : "border-line font-medium text-ink-soft hover:bg-wash"
                 }`}
               >
