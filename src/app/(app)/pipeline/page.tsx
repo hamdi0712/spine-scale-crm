@@ -19,6 +19,8 @@ import FacebookEmailButton, { FacebookEmailProgress } from "@/components/Faceboo
 import DropdownMenu from "@/components/DropdownMenu";
 import { facebookEmailLeads } from "@/lib/facebookEmailRun";
 import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
+import OwnerFindButton, { OwnerFindProgress } from "@/components/OwnerFindButton";
+import { ownerJobEstimate } from "@/lib/actions/jobs";
 import { fmtCredits } from "@/lib/emailCheck";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
 
@@ -218,10 +220,11 @@ export default async function PipelinePage({
 // Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
 // it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
 async function EmailPipeline({ tab }: { tab?: string }) {
-  const [{ rows, counters, starters, unchecked, check }, facebookLeads, pipelineSettings] = await Promise.all([
+  const [{ rows, counters, starters, unchecked, check }, facebookLeads, pipelineSettings, owners] = await Promise.all([
     loadEmailView(),
     facebookEmailLeads(),
     loadPipelineSettings(),
+    ownerJobEstimate(),
   ]);
 
   const ready = rows.filter((r) => r.status === "ready").length;
@@ -244,6 +247,7 @@ async function EmailPipeline({ tab }: { tab?: string }) {
           <DropdownMenu label="Find emails" badge={unchecked + (pipelineSettings.facebookEmails.enabled ? facebookLeads.length : 0)}>
             <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} menu />
             <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} menu />
+            <OwnerFindButton estimate={owners} />
           </DropdownMenu>
           <Link href="/discovery/import/clinic" className="btn-primary justify-center">
             Find clinics
@@ -286,6 +290,7 @@ async function EmailPipeline({ tab }: { tab?: string }) {
       {starters.length > 0 && <StarterCopyBanner remaining={starters} className="mt-6" />}
       <EmailCheckProgress className="mt-6" />
       <FacebookEmailProgress className="mt-6" />
+      <OwnerFindProgress className="mt-6" />
 
       <div className="mt-8 wide:mt-4">
         {rows.length === 0 ? (

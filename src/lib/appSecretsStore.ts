@@ -24,7 +24,7 @@ import {
   maskSecret,
 } from "@/lib/appSecrets";
 
-type SecretRow = { deepseekApiKey: string | null; apifyApiToken: string | null; instantlyApiKey: string | null };
+type SecretRow = { deepseekApiKey: string | null; apifyApiToken: string | null; instantlyApiKey: string | null; hunterApiKey: string | null };
 
 // A missing row is the normal state of a fresh install, so it reads as two
 // nulls rather than as an error, and every caller below lands on the .env
@@ -32,12 +32,13 @@ type SecretRow = { deepseekApiKey: string | null; apifyApiToken: string | null; 
 async function loadRow(): Promise<SecretRow> {
   const row = await prisma.appSecrets.findUnique({
     where: { id: APP_SECRETS_ID },
-    select: { deepseekApiKey: true, apifyApiToken: true, instantlyApiKey: true },
+    select: { deepseekApiKey: true, apifyApiToken: true, instantlyApiKey: true, hunterApiKey: true },
   });
   return {
     deepseekApiKey: row?.deepseekApiKey ?? null,
     apifyApiToken: row?.apifyApiToken ?? null,
     instantlyApiKey: row?.instantlyApiKey ?? null,
+    hunterApiKey: row?.hunterApiKey ?? null,
   };
 }
 
@@ -67,6 +68,10 @@ export function getApifyApiToken(): Promise<string | null> {
 
 export function getInstantlyApiKey(): Promise<string | null> {
   return getSecret("instantlyApiKey");
+}
+
+export function getHunterApiKey(): Promise<string | null> {
+  return getSecret("hunterApiKey");
 }
 
 // What the Settings page renders. Never the values — the masked form, and which

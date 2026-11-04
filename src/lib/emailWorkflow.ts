@@ -40,6 +40,8 @@ export interface EmailSettingsValues {
   // Instantly email checks: this month's credit budget, and one check's cost.
   checkCreditBudget: number;
   creditsPerCheck: number;
+  // Hunter, for owner emails: this month's credit budget.
+  hunterCreditBudget: number;
 }
 
 // Starter copy: something that reads as an email, so the workflow can be
@@ -88,6 +90,7 @@ export const DEFAULT_EMAIL_SETTINGS: EmailSettingsValues = {
   dailyLimit: DEFAULT_DAILY_LIMIT,
   checkCreditBudget: 150,
   creditsPerCheck: 1,
+  hunterCreditBudget: 50,
 };
 
 export const STARTER_COPY_BANNER = "Starter copy — edit your templates in Settings → Email before sending.";
@@ -155,6 +158,7 @@ export function readEmailSettings(row: Record<string, unknown> | null | undefine
       const n = Number(r.creditsPerCheck);
       return Number.isFinite(n) && n > 0 ? Math.min(100, n) : 1;
     })(),
+    hunterCreditBudget: int(r.hunterCreditBudget, 50, 0, 1_000_000),
   };
 }
 
@@ -172,6 +176,7 @@ export function emailSettingsRow(s: EmailSettingsValues) {
     dailyLimit: s.dailyLimit,
     checkCreditBudget: s.checkCreditBudget,
     creditsPerCheck: s.creditsPerCheck,
+    hunterCreditBudget: s.hunterCreditBudget,
   };
 }
 
@@ -211,10 +216,14 @@ export function emailGreeting(lead: EmailLeadInput, version: EmailVersion): stri
   return addressIsPlaceholder(s) ? "Hi there," : `Hi ${s.address},`;
 }
 
-// Who the front desk is asked to pass it to.
+// What {contact} reads when the lead names nobody — never a blank.
+export const CONTACT_FALLBACK = "the doctor or owner";
+
+// Who the front desk is asked to pass it to: the contact by name ("Dr. Lee"),
+// or, with no usable contact name, the doctor or owner.
 function contactFor(lead: EmailLeadInput): string {
   const s = salutation(lead.contactName, lead.contactTitle, lead.websiteNotes);
-  if (addressIsPlaceholder(s)) return "the owner";
+  if (addressIsPlaceholder(s)) return CONTACT_FALLBACK;
   return s.honorific ? s.address : (lead.contactName ?? "").trim() || s.address;
 }
 

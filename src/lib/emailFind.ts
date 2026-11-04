@@ -38,7 +38,7 @@ export const EMAIL_STATUS_LABELS: Record<EmailStatus | "unchecked", string> = {
   unchecked: "Not checked",
 };
 
-export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "maps_contacts", "facebook_page", "imported", "manual"] as const;
+export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "maps_contacts", "facebook_page", "hunter", "pattern_guess", "imported", "manual"] as const;
 export type EmailSource = (typeof EMAIL_SOURCES)[number];
 export const EMAIL_SOURCE_LABELS: Record<EmailSource, string> = {
   site_crawl: "Site crawl",
@@ -46,6 +46,8 @@ export const EMAIL_SOURCE_LABELS: Record<EmailSource, string> = {
   name_pattern: "Name pattern",
   maps_contacts: "Maps contacts",
   facebook_page: "Facebook page",
+  hunter: "Hunter",
+  pattern_guess: "Pattern guess",
   imported: "Imported",
   manual: "Entered by hand",
 };
@@ -214,6 +216,12 @@ const MAILBOX_PROVIDERS = new Set([
   "protonmail.com",
   "proton.me",
 ]);
+
+// Whether a domain is a mailbox provider — Gmail, Yahoo, AOL, Outlook,
+// iCloud and the rest above — rather than a clinic's own.
+export function isMailboxProvider(domain: string | null | undefined): boolean {
+  return MAILBOX_PROVIDERS.has((domain ?? "").trim().toLowerCase());
+}
 
 function domainOf(address: string): string {
   return address.slice(address.indexOf("@") + 1);

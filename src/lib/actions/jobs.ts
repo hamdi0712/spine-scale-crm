@@ -37,6 +37,8 @@ import { checkLeadEmail, checkReadiness, creditsUsedThisMonth, uncheckedEmailLea
 import { fmtCredits } from "@/lib/emailCheck";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { facebookEmailLeads, findBackupEmail } from "@/lib/facebookEmailRun";
+import { findOwner, findOwnerEmail, findOwnerLeads, ownerBudget, ownerReadiness, hunterCreditsUsedThisMonth, OwnerEmailOutcome } from "@/lib/ownerFindRun";
+import { HUNTER_CREDITS_PER_LEAD_MAX, INSTANTLY_CHECKS_PER_LEAD_MAX } from "@/lib/ownerFind";
 
 // ─── Re-crawl website ──────────────────────────────────────────────────────
 
@@ -254,6 +256,7 @@ export async function startQueueJob(channel: unknown, selectedIds: string[] | nu
     // run is over (one may have been running while they turned up).
     finish: async () => {
       await autoCheckEmails();
+      await autoFindOwners();
       return null;
     },
   });
@@ -431,6 +434,132 @@ export async function autoFindBackupEmail(leadId: string): Promise<void> {
   } catch {
     // Nobody is waiting on it; the bulk action can try the lead again.
   }
+  await autoFindOwners();
+}
+
+// ─── Find owners ───────────────────────────────────────────────────────────
+
+// The owner's name (NPI Registry + the stored crawl, free) and then, for a
+// confirmed owner on the clinic's own domain, their address (Hunter, then
+// the pattern or the guesses, each checked with Instantly). The page shows
+// the worst-case estimate and asks before this is pressed; a job whose worst
+// case would go past either monthly budget is refused (auto trims to what
+// fits). leadIds: one lead (the lead page's button) or a pick just made.
+export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: boolean } = {}): Promise<LaunchResult> {
+  const only = Array.isArray(args?.leadIds) ? new Set(args.leadIds.filter((x) => typeof x === "string")) : null;
+  const all = await findOwnerLeads({ onlyNew: args?.auto === true && !only });
+  const rows = only ? all.filter((r) => only.has(r.id)) : all;
+  if (rows.length === 0) return { ok: false, error: "No email lead is waiting on its owner — every one has been looked up, or already has the owner's email." };
+  const ready = await ownerReadiness(rows.length);
+  if (!ready.hasHunterKey) return { ok: false, error: "No Hunter API key — add one under Settings → API Keys." };
+  if (!ready.hasInstantlyKey) return { ok: false, error: "No Instantly API key — every address found is checked through it. Add one under Settings → API Keys." };
+  let items = rows;
+  if (!ready.fits) {
+    if (!args?.auto) {
+      const parts = [
+        !ready.hunter.fits ? `up to ${ready.hunter.needed} Hunter credits and ${fmtCredits(ready.hunter.left)} are left of this month's ${ready.hunter.budget}` : null,
+        !ready.instantly.fits ? `up to ${fmtCredits(ready.instantly.needed)} Instantly credits and ${fmtCredits(ready.instantly.left)} are left of this month's ${ready.instantly.budget}` : null,
+      ].filter(Boolean);
+      return {
+        ok: false,
+        error: `That could need ${parts.join(", and ")} — ${ready.affordable} lead${ready.affordable === 1 ? "" : "s"} would fit. Raise the budget in Settings → Email, or run fewer.`,
+      };
+    }
+    if (ready.affordable === 0) return { ok: false, error: "This month's Hunter or Instantly budget is used up." };
+    items = rows.slice(0, ready.affordable);
+  }
+
+  const budget = await ownerBudget();
+  const tally = { confirmed: 0, pick: 0, found: 0, valid: 0, risky: 0, invalid: 0 };
+  const emailLine = (e: OwnerEmailOutcome | null): string | null => {
+    if (!e) return null;
+    if (e.kind === "found") return e.detail;
+    if (e.kind === "skipped" && /already|No confirmed/i.test(e.detail)) return null;
+    return e.detail;
+  };
+  return launchJob({
+    kind: "find-owners",
+    source: "find-owners",
+    verb: "Finding owners",
+    href: "/pipeline",
+    items: items.map((r) => ({ id: r.id, name: r.clinicName })),
+    work: async (item) => {
+      const name = await findOwner(item.id);
+      if (name.kind === "failed") return { outcome: "error", detail: name.detail };
+      if (name.kind === "confirmed" && name.source !== "manual" && !/earlier/.test(name.detail)) tally.confirmed++;
+      if (name.kind === "pick") tally.pick++;
+      if (name.kind !== "confirmed") return { outcome: "warn", detail: name.detail };
+
+      const e = await findOwnerEmail(item.id, budget);
+      if (e.kind === "found") {
+        tally.found++;
+        if (e.status === "valid") tally.valid++;
+        else if (e.status === "risky") tally.risky++;
+      }
+      if (e.kind === "invalid") {
+        tally.found++;
+        tally.invalid++;
+      }
+      const line = [name.detail, emailLine(e)].filter(Boolean).join(" · ");
+      if (e.kind === "failed") return { outcome: "error", detail: line, result: { stop: e.stop === true } };
+      return { outcome: e.kind === "found" && e.status === "valid" ? "ok" : "warn", detail: line, result: { budget: e.kind === "skipped" && e.budget === true } };
+    },
+    halt: (results) => {
+      const last = results[results.length - 1] as { result?: { stop?: boolean; budget?: boolean }; detail: string } | undefined;
+      if (last?.result?.stop) return `Stopped: ${last.detail}`;
+      if (last?.result?.budget) return "Stopped: this month's budget ran out.";
+      return null;
+    },
+    finish: async ({ status, halted }) => {
+      const settings = await loadEmailSettings();
+      const hunterUsed = await hunterCreditsUsedThisMonth();
+      const owners = `${tally.confirmed} owner${tally.confirmed === 1 ? "" : "s"} confirmed${tally.pick > 0 ? ` (${tally.pick} to pick by hand)` : ""}`;
+      const emails = `${tally.found} owner email${tally.found === 1 ? "" : "s"} found — ${tally.valid} valid, ${tally.risky} risky, ${tally.invalid} invalid`;
+      const credits = `${fmtCredits(budget.hunterSpent)} Hunter credits (${fmtCredits(hunterUsed)} of ${settings.hunterCreditBudget} this month) · ${fmtCredits(budget.instantlySpent)} Instantly credits`;
+      const trimmed = items.length < rows.length ? ` ${rows.length - items.length} left for later — the budget would not cover them.` : "";
+      const head = halted ? `${halted.replace(/\.?$/, ".")} ` : status === "stopped" ? "Stopped. " : "";
+      return `${head}${owners} · ${emails} · ${credits}.${trimmed}`;
+    },
+  });
+}
+
+// Newly promoted email leads, looked up on their own while there are keys
+// and budget left — as many as fit. Quiet, like autoCheckEmails.
+export async function autoFindOwners(): Promise<void> {
+  try {
+    const pending = await findOwnerLeads({ onlyNew: true });
+    if (pending.length === 0) return;
+    const ready = await ownerReadiness(1);
+    if (!ready.hasHunterKey || !ready.hasInstantlyKey || ready.affordable === 0) return;
+    await startOwnerJob({ auto: true });
+  } catch {
+    // Nobody is waiting on it; Find owners can run it by hand.
+  }
+}
+
+// What Find owners would cost at most, for the confirm.
+export async function ownerJobEstimate(): Promise<{
+  count: number;
+  hunterMax: number;
+  instantlyMax: number;
+  hunterLeft: number;
+  instantlyLeft: number;
+  fits: boolean;
+  affordable: number;
+  hasKeys: boolean;
+}> {
+  const rows = await findOwnerLeads();
+  const r = await ownerReadiness(rows.length);
+  return {
+    count: rows.length,
+    hunterMax: rows.length * HUNTER_CREDITS_PER_LEAD_MAX,
+    instantlyMax: rows.length * INSTANTLY_CHECKS_PER_LEAD_MAX * r.perCheck,
+    hunterLeft: r.hunter.left,
+    instantlyLeft: r.instantly.left,
+    fits: r.fits,
+    affordable: r.affordable,
+    hasKeys: r.hasHunterKey && r.hasInstantlyKey,
+  };
 }
 
 // ─── Stop and dismiss ──────────────────────────────────────────────────────

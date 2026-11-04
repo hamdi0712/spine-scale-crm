@@ -14,7 +14,7 @@
 
 export const APP_SECRETS_ID = "singleton";
 
-export const SECRET_KEYS = ["deepseekApiKey", "apifyApiToken", "instantlyApiKey"] as const;
+export const SECRET_KEYS = ["deepseekApiKey", "apifyApiToken", "instantlyApiKey", "hunterApiKey"] as const;
 
 export type SecretKey = (typeof SECRET_KEYS)[number];
 
@@ -49,6 +49,13 @@ export const SECRET_META: Record<SecretKey, SecretMeta> = {
     envVar: "INSTANTLY_API_KEY",
     help: "Checks email addresses (email verification only — nothing is sent through Instantly). Needs the email_verifications scope.",
     placeholder: "Instantly API v2 key",
+  },
+  hunterApiKey: {
+    key: "hunterApiKey",
+    label: "Hunter API key",
+    envVar: "HUNTER_API_KEY",
+    help: "Finds the owner's email (Email Finder) and the clinic's email pattern (Domain Search) for Find owners. Spends Hunter credits within the budget in Settings → Email.",
+    placeholder: "Hunter API key",
   },
 };
 
