@@ -8,7 +8,6 @@ import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
 import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
 import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge";
-import { fmtDate } from "@/lib/format";
 import EmailSendButtons from "@/components/EmailSendButtons";
 import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
 import { useJobRun } from "@/components/JobProgress";
@@ -39,7 +38,6 @@ export interface EmailLeadRow {
   inbox: string | null;
   inboxSentToday: number;
   inboxLimit: number;
-  createdAt: string;
 }
 
 const VIEW_KEY = "pipeline-email-view";
@@ -349,7 +347,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               ) : row.toSend ? (
                 <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
               ) : (
-                <span className="num text-[11px] text-muted" title={row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}>{fmtDate(row.createdAt)}</span>
+                <span className="truncate text-[11px] text-muted">{row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}</span>
               )}
             </div>
           </li>
@@ -550,7 +548,7 @@ function SelectionBar({
   const n = rows.length;
   const btn = "btn !h-8 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden">
+    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden wide:pl-[15px]">
       <label className="flex items-center gap-2 text-[13px] text-ink-soft">
         <input type="checkbox" checked={allPicked} onChange={(e) => onPickAll(e.target.checked)} disabled={shownCount === 0} className="h-4 w-4 accent-accent" />
         Select all

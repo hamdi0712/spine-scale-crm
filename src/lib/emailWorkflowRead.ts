@@ -140,7 +140,6 @@ export async function loadEmailView(now = new Date()) {
       inbox: state.inbox ? state.inbox.address : null,
       inboxSentToday: counter?.sent ?? 0,
       inboxLimit: counter?.limit ?? 0,
-      createdAt: l.createdAt.toISOString(),
     };
   });
   const check = await checkInfo(now);
