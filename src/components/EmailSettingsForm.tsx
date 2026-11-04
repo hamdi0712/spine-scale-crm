@@ -15,6 +15,7 @@ import {
   startersRemaining,
 } from "@/lib/emailWorkflow";
 import { fmtCredits } from "@/lib/emailCheck";
+import RecleanOwners from "@/components/RecleanOwners";
 
 type InboxDraft = { id: string | null; address: string; displayName: string; dailyLimit: number };
 
@@ -262,8 +263,9 @@ export default function EmailSettingsForm({
         <div>
           <p className="text-sm font-medium">Owner emails (Hunter)</p>
           <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
-            Find owners asks Hunter&apos;s Email Finder for a confirmed owner&apos;s address, then Domain Search for the
-            clinic&apos;s email pattern — about a credit each, nothing when Hunter finds nothing. A run that could go past
+            Find owners asks Hunter&apos;s Email Finder for a confirmed owner&apos;s address — about a credit, nothing when
+            Hunter finds nothing. With guessing on, a miss also costs a Domain Search for the clinic&apos;s email pattern
+            and up to three Instantly checks on built addresses. A run that could go past
             this month&apos;s budget is refused; newly promoted email leads are looked up on their own while budget is left.
             50 is Hunter&apos;s free tier.
           </p>
@@ -275,6 +277,17 @@ export default function EmailSettingsForm({
           <span className="field-label">Monthly Hunter credit budget</span>
           <input type="number" min={0} className="field num" value={v.hunterCreditBudget} onChange={(e) => set("hunterCreditBudget", Number(e.target.value))} />
         </label>
+        <label className="flex items-start gap-2">
+          <input type="checkbox" className="mt-1" checked={v.guessOwnerPatterns} onChange={(e) => set("guessOwnerPatterns", e.target.checked)} />
+          <span>
+            <span className="text-sm">Guess owner emails from patterns</span>
+            <span className="mt-1 block text-xs text-muted">
+              Off: only the address Hunter&apos;s Email Finder returns. On: when it misses, build one from the clinic&apos;s
+              pattern or try drlast@, first@, drfirst@ — each checked with Instantly.
+            </span>
+          </span>
+        </label>
+        <RecleanOwners />
       </div>
 
       <div className="flex items-center gap-3">

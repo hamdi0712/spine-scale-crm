@@ -42,6 +42,8 @@ export interface EmailSettingsValues {
   creditsPerCheck: number;
   // Hunter, for owner emails: this month's credit budget.
   hunterCreditBudget: number;
+  // Find owners may build or guess the owner's address when Hunter misses.
+  guessOwnerPatterns: boolean;
 }
 
 // Starter copy: something that reads as an email, so the workflow can be
@@ -91,6 +93,7 @@ export const DEFAULT_EMAIL_SETTINGS: EmailSettingsValues = {
   checkCreditBudget: 150,
   creditsPerCheck: 1,
   hunterCreditBudget: 50,
+  guessOwnerPatterns: false,
 };
 
 export const STARTER_COPY_BANNER = "Starter copy — edit your templates in Settings → Email before sending.";
@@ -159,6 +162,7 @@ export function readEmailSettings(row: Record<string, unknown> | null | undefine
       return Number.isFinite(n) && n > 0 ? Math.min(100, n) : 1;
     })(),
     hunterCreditBudget: int(r.hunterCreditBudget, 50, 0, 1_000_000),
+    guessOwnerPatterns: r.guessOwnerPatterns === true,
   };
 }
 
@@ -177,6 +181,7 @@ export function emailSettingsRow(s: EmailSettingsValues) {
     checkCreditBudget: s.checkCreditBudget,
     creditsPerCheck: s.creditsPerCheck,
     hunterCreditBudget: s.hunterCreditBudget,
+    guessOwnerPatterns: s.guessOwnerPatterns,
   };
 }
 

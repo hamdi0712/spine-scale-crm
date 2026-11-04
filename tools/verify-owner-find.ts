@@ -11,10 +11,12 @@
 //
 // The cases: an NPI match that agrees with the site (and a Hunter Email
 // Finder hit); an NPI official who is an office manager (and a Hunter miss
-// found by the guesses); a name mismatch (a pick); a Gmail-only clinic
+// found by the guesses, with guessing switched on); a name mismatch (a pick); a Gmail-only clinic
 // (skipped, nothing spent); a catch-all domain (kept as a risky alternate);
 // and the budget refusal. Then the front-desk email naming the doctor, the
 // Risky chip's rule, and the automatic run on a newly promoted lead.
+// Then the doctor-name cleanup, guessing off (Hunter only, no Instantly on a
+// miss), the owner/front-desk labels, and the free re-clean.
 
 import http from "node:http";
 import Module from "node:module";
@@ -180,7 +182,8 @@ async function main(): Promise<void> {
   const { prisma } = await import("../src/lib/prisma");
   const { startOwnerJob, autoFindOwners, ownerJobEstimate } = await import("../src/lib/actions/jobs");
   const { pickOwner, findOwnerLeads } = await import("../src/lib/ownerFindRun");
-  const { parseAlternates } = await import("../src/lib/emailFind");
+  const { parseAlternates, classifyAddress, readDecisionMakerName } = await import("../src/lib/emailFind");
+  const { recleanEmailLeads } = await import("../src/lib/ownerReclean");
   const { hasRiskyEmail, siteDoctorNames, stateFromLocation, isDecisionMakerTitle, ownerPanelProps } = await import("../src/lib/ownerFind");
   const { DEFAULT_EMAIL_SETTINGS, renderEmail } = await import("../src/lib/emailWorkflow");
   const { loadEmailSettings, saveEmailSettingsRow } = await import("../src/lib/emailSettingsStore");
@@ -192,7 +195,9 @@ async function main(): Promise<void> {
     await prisma.emailCheck.deleteMany({});
   };
   await clean();
-  await saveEmailSettingsRow({ ...DEFAULT_EMAIL_SETTINGS });
+  // Sections 1–7 run with pattern guessing on; 9 turns it off (the default).
+  check("pattern guessing is off by default", DEFAULT_EMAIL_SETTINGS.guessOwnerPatterns === false);
+  await saveEmailSettingsRow({ ...DEFAULT_EMAIL_SETTINGS, guessOwnerPatterns: true });
 
   const seed = (name: string, data: Record<string, unknown>) =>
     prisma.lead.create({ data: { clinicName: name, channel: "email", stage: "NEW", leadSource: TAG, ...data } });
@@ -341,6 +346,86 @@ async function main(): Promise<void> {
   const mx = await reload(mismatch.id);
   check("the new lead was looked up on its own", f.ownerCheckedAt !== null && f.ownerStatus === "not_found", String(f.ownerStatus));
   check("the auto run only takes leads never looked up (the picked one waits for its own run)", mx.ownerEmailAt === null);
+
+  console.log("\n8. Doctor names off the site, cleaned and merged");
+  const plasker = siteDoctorNames(
+    "Dr. Jacob Plasker Testimonials | Dr. Jacob Plasker Dr. Plasker Conditions We Treat. Dr. Jacob. Ask Dr. Plasker's team. Dr. Ste",
+    null,
+  );
+  check("the Plasker variants are one doctor, Dr. Jacob Plasker", plasker.join(",") === "Dr. Jacob Plasker", plasker.join(", "));
+  const zilliox = siteDoctorNames("Dr. John Zilliox. Dr. Zilliox Pursuing State licensure…", null);
+  check("Dr. John Zilliox / Dr. Zilliox Pursuing State → Dr. John Zilliox", zilliox.join(",") === "Dr. John Zilliox", zilliox.join(", "));
+  const fake = siteDoctorNames("Our Dr. Physical Therapists help. Dr. Iguess so.", null);
+  check("“Dr. Physical Therapists” and “Dr. Iguess” are not doctors", fake.length === 0, fake.join(", "));
+  const pend = siteDoctorNames("Dr. Mike Pendolino Dr", null);
+  check("“Dr. Mike Pendolino Dr” → Dr. Mike Pendolino", pend.join(",") === "Dr. Mike Pendolino", pend.join(", "));
+  const several = siteDoctorNames("Dr. Ann Lee Testimonials. Dr. Bob Kim Conditions. Dr. Lee and Dr. Kim.", null);
+  check("several real doctors stay several", several.length === 2 && several.includes("Dr. Ann Lee") && several.includes("Dr. Bob Kim"), several.join(", "));
+
+  console.log("\n9. Guessing off: Hunter's Email Finder only");
+  await saveEmailSettingsRow({ ...(await loadEmailSettings()), guessOwnerPatterns: false });
+  const est2 = await ownerJobEstimate();
+  check("the estimate drops to one Hunter credit and one check a lead", est2.hunterMax === est2.count && est2.instantlyMax === est2.count, JSON.stringify(est2));
+  const miss = await seed("Missing Spine", {
+    location: "Denver, CO", websiteUrl: "https://managerchiro.test", websiteNotes: "x",
+    email: "info@managerchiro.test", emailType: "generic", emailSource: "site_crawl", emailStatus: "valid",
+    contactName: "Dr. Sam Ray", ownerStatus: "confirmed", ownerSource: "site", ownerCheckedAt: new Date(),
+  });
+  const hunterBefore = hunterCalls.length;
+  const instantlyBefore = instantlyCalls.length;
+  const t2 = new Date();
+  await startOwnerJob({ leadIds: [miss.id] });
+  await waitFor("find-owners", t2);
+  const ms = await reload(miss.id);
+  const newHunter = hunterCalls.slice(hunterBefore);
+  check("Hunter's Email Finder asked once, no Domain Search", newHunter.length === 1 && newHunter[0].startsWith("finder:"), newHunter.join(" | "));
+  check("a Hunter miss makes no Instantly calls", instantlyCalls.length === instantlyBefore, instantlyCalls.slice(instantlyBefore).join(", "));
+  check("nothing guessed or saved; the lead is marked looked-for", ms.email === "info@managerchiro.test" && ms.ownerEmailAt !== null && !parseAlternates(ms.emailAlternates).some((x) => x.source === "pattern_guess"));
+
+  console.log("\n10. Owner or front desk, by the address");
+  const asOwner = (a: string, n: string | null) => classifyAddress(a, n ? readDecisionMakerName(n) : null) === "owner";
+  check("drhishon@yahoo.com → owner", asOwner("drhishon@yahoo.com", null));
+  check("kfwdc@icloud.com → owner (Kyle F. Worell + DC)", asOwner("kfwdc@icloud.com", "Kyle F. Worell"));
+  check("drottomeyer@, drdave@, drdom214@, drjkennis@, backpaindoc@, njatlasdr@ → owner",
+    ["drottomeyer@a.test", "drdave@a.test", "drdom214@a.test", "drjkennis@a.test", "backpaindoc@a.test", "njatlasdr@a.test"].every((x) => asOwner(x, null)));
+  check("teamnadimi@gmail.com → generic, even with the owner's name", !asOwner("teamnadimi@gmail.com", "Dr. Sam Nadimi"));
+  check("info@, office@, frontdesk@, numeroffchiro@ → generic",
+    !asOwner("info@a.test", "Dr. Sam Info") && !asOwner("office@a.test", null) && !asOwner("frontdesk@a.test", null) && !asOwner("numeroffchiro@gmail.com", "Dr. Mark Numeroff"));
+
+  console.log("\n11. Re-clean: free, fixes names, confirms one-doctor picks, relabels");
+  const pick = await seed("Plasker Pick", {
+    websiteUrl: "https://plasker.test", ownerStatus: "pick", ownerCheckedAt: new Date(),
+    websiteNotes: "Dr. Jacob Plasker Testimonials Dr. Jacob Plasker Dr. Plasker Conditions We treat. Dr. Jacob. Dr. Plasker's. Dr. Ste",
+    ownerSiteNames: JSON.stringify(["Dr. Jacob Plasker Testimonials", "Dr. Plasker Conditions We", "Dr. Ste"]),
+    email: "drjacob@plasker.test", emailType: "generic", emailSource: "site_crawl", emailStatus: "risky",
+  });
+  const realPick = await seed("Two Doctors", {
+    websiteUrl: "https://two.test", ownerStatus: "pick", ownerCheckedAt: new Date(),
+    websiteNotes: "Dr. Ann Lee and Dr. Bob Kim.", ownerSiteNames: JSON.stringify(["Dr. Ann Lee", "Dr. Bob Kim"]),
+  });
+  const renamed = await seed("Zilliox Chiro", {
+    websiteUrl: "https://zil.test", ownerStatus: "confirmed", ownerSource: "site", ownerCheckedAt: new Date(),
+    websiteNotes: "Dr. John Zilliox. Dr. Zilliox Pursuing State", contactName: "Dr. Zilliox Pursuing State",
+  });
+  const byHand = await seed("Hand Label", {
+    websiteUrl: "https://hand.test", email: "drhand@hand.test", emailType: "generic", emailTypeByHand: true, emailSource: "site_crawl", emailStatus: "valid",
+  });
+  const typed = await seed("Typed Address", {
+    websiteUrl: "https://typed.test", email: "drtyped@typed.test", emailType: "generic", emailSource: "manual", emailStatus: "valid",
+  });
+  const hc = hunterCalls.length, ic = instantlyCalls.length, nc = npiCalls.length;
+  const rc = await recleanEmailLeads();
+  console.log(`    ${rc.changes.map((c) => `${c.clinicName}: ${c.what}`).join("\n    ")}`);
+  check("no NPI, Hunter or Instantly calls", hunterCalls.length === hc && instantlyCalls.length === ic && npiCalls.length === nc);
+  const pk = await reload(pick.id);
+  check("the Plasker pick is confirmed as Dr. Jacob Plasker", pk.ownerStatus === "confirmed" && pk.ownerSource === "site" && pk.contactName === "Dr. Jacob Plasker", `${pk.ownerStatus} ${pk.contactName}`);
+  check("its drjacob@ address relabelled owner, status kept", pk.emailType === "owner" && pk.emailStatus === "risky");
+  const rp = await reload(realPick.id);
+  check("two real doctors still ask to pick", rp.ownerStatus === "pick" && rp.contactName === null);
+  const zl = await reload(renamed.id);
+  check("“Dr. Zilliox Pursuing State” renamed Dr. John Zilliox", zl.contactName === "Dr. John Zilliox", String(zl.contactName));
+  check("a label set by hand is left alone", (await reload(byHand.id)).emailType === "generic");
+  check("an address typed by hand is left alone", (await reload(typed.id)).emailType === "generic");
 
   await prisma.lead.deleteMany({ where: { leadSource: TAG } });
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);

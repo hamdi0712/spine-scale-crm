@@ -4,8 +4,10 @@
 // The rules are src/lib/ownerFind.ts.
 //
 //   findOwner       the name: NPI Registry + the stored crawl. Free.
-//   findOwnerEmail  the address: Hunter, then the pattern or the guesses,
-//                   each checked with Instantly before anything is saved.
+//   findOwnerEmail  the address: Hunter's Email Finder, then — only with
+//                   Settings → Email's "Guess owner emails from patterns" on —
+//                   the pattern or the guesses, each checked with Instantly
+//                   before anything is saved.
 //                   Spends from a budget the caller hands in, and stops
 //                   the moment either runs out.
 //
@@ -16,8 +18,7 @@ import { prisma } from "@/lib/prisma";
 import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
 import { clinicDomain, isMailboxProvider, parseAlternates, readDecisionMakerName } from "@/lib/emailFind";
 import {
-  HUNTER_CREDITS_PER_LEAD_MAX,
-  INSTANTLY_CHECKS_PER_LEAD_MAX,
+  ownerCostPerLead,
   NpiMatch,
   OwnerEmailCandidate,
   OwnerSource,
@@ -54,13 +55,14 @@ export async function ownerReadiness(n: number, now = new Date()) {
     getHunterApiKey(),
     loadEmailSettings(),
     hunterCreditsUsedThisMonth(now),
-    checkReadiness(n * INSTANTLY_CHECKS_PER_LEAD_MAX, now),
+    loadEmailSettings().then((s) => checkReadiness(n * ownerCostPerLead(s.guessOwnerPatterns).instantly, now)),
   ]);
+  const cost = ownerCostPerLead(settings.guessOwnerPatterns);
   const hunterLeft = Math.max(0, settings.hunterCreditBudget - hunterUsed);
-  const hunterNeeded = n * HUNTER_CREDITS_PER_LEAD_MAX;
-  const perLeadInstantly = INSTANTLY_CHECKS_PER_LEAD_MAX * settings.creditsPerCheck;
+  const hunterNeeded = n * cost.hunter;
+  const perLeadInstantly = cost.instantly * settings.creditsPerCheck;
   const affordable = Math.min(
-    Math.floor(hunterLeft / HUNTER_CREDITS_PER_LEAD_MAX + 1e-9),
+    Math.floor(hunterLeft / cost.hunter + 1e-9),
     Math.floor(instantly.left / perLeadInstantly + 1e-9),
   );
   return {
@@ -69,6 +71,7 @@ export async function ownerReadiness(n: number, now = new Date()) {
     hunter: { used: hunterUsed, budget: settings.hunterCreditBudget, left: hunterLeft, needed: hunterNeeded, fits: hunterNeeded <= hunterLeft },
     instantly: { used: instantly.used, budget: settings.checkCreditBudget, left: instantly.left, needed: instantly.needed, fits: instantly.fits },
     perCheck: settings.creditsPerCheck,
+    guess: settings.guessOwnerPatterns,
     fits: hunterNeeded <= hunterLeft && instantly.fits,
     affordable: Math.max(0, affordable),
   };
@@ -80,13 +83,15 @@ export interface OwnerBudget {
   hunterLeft: number;
   instantlyLeft: number;
   perCheck: number;
+  // Settings → Email's "Guess owner emails from patterns".
+  guess: boolean;
   hunterSpent: number;
   instantlySpent: number;
 }
 
 export async function ownerBudget(): Promise<OwnerBudget> {
   const r = await ownerReadiness(0);
-  return { hunterLeft: r.hunter.left, instantlyLeft: r.instantly.left, perCheck: r.perCheck, hunterSpent: 0, instantlySpent: 0 };
+  return { hunterLeft: r.hunter.left, instantlyLeft: r.instantly.left, perCheck: r.perCheck, guess: r.guess, hunterSpent: 0, instantlySpent: 0 };
 }
 
 // ─── Which leads ───────────────────────────────────────────────────────────
@@ -298,7 +303,12 @@ export async function findOwnerEmail(leadId: string, budget: OwnerBudget): Promi
     }
   }
 
-  // ─── The pattern, or the guesses ─────────────────────────────────────────
+  // ─── The pattern, or the guesses — only when switched on ─────────────────
+  if (!budget.guess) {
+    await recordTried(leadId, tried);
+    if (tried.length > 0) return { kind: "invalid", detail: `${tried[0].address} (Hunter) — invalid; guessing is off` };
+    return { kind: "none", detail: person.first ? "Hunter's Email Finder has no address for the owner; guessing is off." : "Only the owner's last name is known, and guessing is off." };
+  }
   if (budget.hunterLeft < 1) return outOfBudget("Hunter");
   const d = await searchDomain(domain);
   if (!d.ok) return { kind: "failed", detail: d.error, stop: d.code === "auth" || d.code === "no_key" || d.code === "quota" };
@@ -358,7 +368,7 @@ async function recordTried(leadId: string, tried: OwnerEmailCandidate[]): Promis
 
 // The owner's address is the main email now: an unsent draft written for the
 // front desk is rebuilt as the owner-direct version.
-async function rebuildDraft(leadId: string): Promise<void> {
+export async function rebuildDraft(leadId: string): Promise<void> {
   const lead = await prisma.lead.findUnique({ where: { id: leadId }, include: { emailSends: { select: { id: true } } } });
   if (!lead || !lead.emailOpener || lead.emailSends.length > 0) return;
   const settings = await loadEmailSettings();

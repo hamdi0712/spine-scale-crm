@@ -284,6 +284,9 @@ model Lead {
   //                   address found, including an imported one that came back
   //                   invalid
   emailType       String?
+  // The operator set emailType themselves (the lead form, or setLeadEmail):
+  // automatic re-labelling leaves it alone.
+  emailTypeByHand Boolean   @default(false)
   emailStatus     String?
   emailSource     String?
   emailCheckedAt  DateTime?
@@ -687,6 +690,10 @@ model EmailSettings {
   // Hunter (owner emails): the monthly credit budget an owner-finding job may
   // not go past. 50 is Hunter's free tier.
   hunterCreditBudget       Int    @default(50)
+  // Find owners: after Hunter's Email Finder misses, build the owner's address
+  // from Hunter's pattern or guess drlast@/first@/drfirst@, each checked with
+  // Instantly. Off: Hunter's Email Finder only.
+  guessOwnerPatterns       Boolean @default(false)
 
   updatedAt DateTime @updatedAt
 }
