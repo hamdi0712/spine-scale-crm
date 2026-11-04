@@ -954,6 +954,44 @@ none — an existing email is never replaced:
    existing email lead with no address and an unread page, with a cost
    estimate first, in the shared job runner.
 
+**Find owners** (`src/lib/ownerFind.ts`, `src/lib/ownerFindRun.ts`) — so the
+email reaches the owner rather than the front desk. On the Email pipeline's
+*Find emails* menu, with a worst-case credit estimate first, in the shared job
+runner; it also runs on its own on newly promoted email leads, within budget.
+
+1. **The owner's name, free.** The clinic is looked up in the public CMS NPI
+   Registry (organization records, by name and the state in its location) and
+   a record counts only when its phone matches, or its name is close and its
+   town is the lead's. The NPI number and the authorized official's name and
+   title are saved; an office or billing title (office manager, administrator,
+   billing…) is flagged *Not a decision-maker*. The name is checked against
+   the doctors the stored crawl names: the same person → **confirmed**; the
+   site names nobody → confirmed from NPI; they differ → both shown on the
+   lead page to pick. With no NPI decision-maker, the site's doctor is
+   confirmed only when it names exactly one; several → pick. A confirmed owner
+   becomes the lead's contact, so the front-desk email asks for them by name
+   ("Could you pass this to Dr. Lee?" — the template's `{contact}`).
+2. **The owner's email** — only for a confirmed owner, on the clinic's own
+   domain (Gmail, Yahoo, AOL, Outlook, iCloud and the like are skipped), with
+   no owner address yet. Hunter's Email Finder first; failing that, Domain
+   Search's email pattern, built into the owner's address; with no pattern,
+   `drlast@`, `first@`, `drfirst@` in that order. Every address is checked
+   through Instantly before it is saved, stopping at the first valid one. A
+   found address becomes the main email (source *Hunter* or *Pattern guess*)
+   and the front desk moves to the alternates; one typed in by hand stays.
+3. **Catch-all = risky, not deleted.** When Instantly says the domain accepts
+   every address, the address is kept as *risky*. A guessed or Hunter-inferred
+   one on such a domain is never the main email — it is kept as a risky
+   alternate; only an address Hunter saw on the web can be. The *Risky* chip
+   on the Email pipeline lists every lead with a risky address.
+
+The Hunter API key is under Settings → API Keys (or `HUNTER_API_KEY`), and the
+monthly Hunter credit budget (default 50, the free tier) under Settings →
+Email beside Instantly's. A run whose worst case — two Hunter credits and four
+Instantly checks a lead — would pass either budget is refused; each Hunter
+call is logged with the credits Hunter reports (`HunterCall`). Test against
+mocks with `tools/verify-owner-find.ts`.
+
 **Contact form.** An email lead's page has, beside *Visit website* and *View
 Facebook page*: **Contact form** — the clinic's own contact page, picked from
 the stored `websiteLinks` (same domain; link text or path saying contact,

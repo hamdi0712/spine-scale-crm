@@ -88,6 +88,8 @@ import { MENU_ROW, MENU_ROW_DANGER } from "@/lib/menuItem";
 import IcpScorecardV2 from "@/components/IcpScorecardV2";
 import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
+import OwnerPanel from "@/components/OwnerPanel";
+import { ownerPanelProps } from "@/lib/ownerFind";
 
 export const dynamic = "force-dynamic";
 
@@ -167,6 +169,7 @@ export default async function LeadDetailPage({
   // The email panel's props, worked out once: the header's status pill reads
   // them too.
   const emailProps = lead.channel === "email" ? await emailPanelProps(lead) : null;
+  const ownerProps = lead.channel === "email" ? ownerPanelProps(lead) : null;
 
   // The side column's timeline: what happened to the lead (the activity feed)
   // and what was written on it (notes), newest first.
@@ -448,6 +451,7 @@ export default async function LeadDetailPage({
               >
                 The message
               </SectionTitle>
+              {ownerProps && <OwnerPanel {...ownerProps} />}
               <EmailPanel {...emailProps} statusInTitle />
             </section>
           ) : (

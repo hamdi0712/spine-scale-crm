@@ -18,6 +18,9 @@ export interface EmailLeadRow {
   email: string | null;
   // "Owner · Valid", "Front desk · Not checked". Null without an address.
   emailDetail: string | null;
+  // An address on the lead (the email or an alternate) is risky: its domain
+  // accepts every address, so it can't be confirmed.
+  risky: boolean;
   icpTier: IcpTier | null;
   icpVerdict: string | null;
   icpScore: string | null;
@@ -42,15 +45,15 @@ const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C:
 // work is. "Needs work" is everything waiting on the operator before it can be
 // sent; "Done" is everything the sequence has finished with, one way or
 // another. Due today cuts across them (every lead in it is In sequence).
-type Filter = "all" | "email" | "ready" | "due" | "work" | "sequence" | "done";
+type Filter = "all" | "email" | "risky" | "ready" | "due" | "work" | "sequence" | "done";
 
-const FILTERS: Filter[] = ["all", "email", "ready", "due", "work", "sequence", "done"];
+const FILTERS: Filter[] = ["all", "email", "risky", "ready", "due", "work", "sequence", "done"];
 
 function readFilter(v: unknown): Filter | null {
   return (FILTERS as unknown[]).includes(v) ? (v as Filter) : null;
 }
 
-const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email">, EmailLeadStatus[]> = {
+const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "risky">, EmailLeadStatus[]> = {
   ready: ["ready"],
   work: ["needs_opener", "check_email", "check_contact", "no_email"],
   sequence: ["in_sequence"],
@@ -62,6 +65,7 @@ function matches(row: EmailLeadRow, filter: Filter): boolean {
   if (filter === "due") return row.followUpDueToday;
   // Every lead with an address, whatever it is waiting on.
   if (filter === "email") return row.email !== null;
+  if (filter === "risky") return row.risky;
   return FILTER_STATUSES[filter].includes(row.status);
 }
 
@@ -101,6 +105,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         [
           ["all", "All"],
           ["email", "Has email"],
+          ["risky", "Risky"],
           ["ready", "Ready"],
           ["due", "Due today"],
           ["work", "Needs work"],

@@ -35,6 +35,7 @@ import { getInstantlyApiKey } from "@/lib/appSecretsStore";
 import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import type { EmailPanelProps } from "@/components/EmailPanel";
 import { pickContactFormLink } from "@/lib/contactForm";
+import { hasRiskyEmail } from "@/lib/ownerFind";
 
 function fmtDayMonth(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -127,6 +128,7 @@ export async function loadEmailView(now = new Date()) {
       location: l.location,
       email: (l.email ?? "").trim() || null,
       emailDetail: emailDetailLine(l),
+      risky: hasRiskyEmail(l),
       icpTier: leadTier(l),
       icpVerdict: leadVerdictBadge(l),
       icpScore: s ? `${s.total}/${s.max}` : null,

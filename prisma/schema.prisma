@@ -293,6 +293,28 @@ model Lead {
   // page is paid for once and the bulk action leaves it alone after that.
   facebookEmailAt DateTime?
 
+  // Owner-finding (src/lib/ownerFind.ts, src/lib/ownerFindRun.ts): who owns
+  // the clinic, from the public CMS NPI Registry and the doctors the stored
+  // crawl names, and then the owner's own address.
+  //   npiNumber / npiOfficialName / npiOfficialTitle  the organization record
+  //                   matched by name and state and confirmed by phone or
+  //                   town, and its authorized official as filed
+  //   ownerStatus     confirmed | pick | not_found — null is not looked up.
+  //                   confirmed puts the owner in contactName.
+  //   ownerSource     npi_site | npi | site | manual — what confirmed it
+  //   ownerSiteNames  JSON [name] — the doctors the site names, for a pick
+  //   ownerCheckedAt  when the name step last ran
+  //   ownerEmailAt    when the email step (Hunter, then the patterns) last
+  //                   finished on this lead, found or not — it is paid for once
+  npiNumber        String?
+  npiOfficialName  String?
+  npiOfficialTitle String?
+  ownerStatus      String?
+  ownerSource      String?
+  ownerSiteNames   String?
+  ownerCheckedAt   DateTime?
+  ownerEmailAt     DateTime?
+
   // Which channel the lead is worked on: email | linkedin | call, constrained
   // by LEAD_CHANNELS in src/lib/emailChannel.ts. Every lead that existed
   // before the column is linkedin; a Clinic-first lead is promoted as email.
@@ -585,6 +607,23 @@ model EmailCheck {
   @@index([email])
 }
 
+// One call to Hunter's API (Email Finder or Domain Search) and the credits it
+// cost, from the X-Credits-Used header. The monthly Hunter budget is the sum
+// of creditsUsed since the 1st.
+model HunterCall {
+  id          String   @id @default(cuid())
+  leadId      String?
+  endpoint    String // email-finder | domain-search
+  domain      String
+  // What it answered: the address (Email Finder) or the pattern (Domain
+  // Search), null for nothing.
+  result      String?
+  creditsUsed Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 // A Gmail inbox cold email is sent from, by hand. Each has its own daily
 // limit, and the display name {sender} is signed with (Settings' "Your name"
 // where it has none).
@@ -645,6 +684,9 @@ model EmailSettings {
   // credits_used Instantly reports on each check.
   checkCreditBudget        Int    @default(150)
   creditsPerCheck          Float  @default(1)
+  // Hunter (owner emails): the monthly credit budget an owner-finding job may
+  // not go past. 50 is Hunter's free tier.
+  hunterCreditBudget       Int    @default(50)
 
   updatedAt DateTime @updatedAt
 }
@@ -1306,6 +1348,7 @@ model AppSecrets {
   deepseekApiKey   String?
   apifyApiToken    String?
   instantlyApiKey  String?
+  hunterApiKey     String?
 
   updatedAt DateTime @updatedAt
 }

@@ -23,11 +23,13 @@ export default function EmailSettingsForm({
   inboxes: initialInboxes,
   starters,
   creditsUsed,
+  hunterUsed,
 }: {
   initial: EmailSettingsValues;
   inboxes: SendingInboxView[];
   starters: string[];
   creditsUsed: number;
+  hunterUsed: number;
 }) {
   const router = useRouter();
   const [v, setV] = useState<EmailSettingsValues>(initial);
@@ -160,6 +162,11 @@ export default function EmailSettingsForm({
         <label className="block">
           <span className="field-label">{label("Front-desk email", isStarter("Front-desk email"))}</span>
           <textarea className="field !min-h-[360px]" value={v.frontDeskTemplate} onChange={(e) => set("frontDeskTemplate", e.target.value)} />
+          {!v.frontDeskTemplate.includes("{contact}") && (
+            <span className="mt-1 block text-xs text-warn">
+              No {"{contact}"} in it — the front desk won&apos;t be asked to pass it to the owner by name (&ldquo;Dr. Lee&rdquo;, once Find owners confirms them).
+            </span>
+          )}
         </label>
         <label className="block">
           <span className="field-label">{label("Opt-out line", isStarter("Opt-out line"))}</span>
@@ -249,6 +256,25 @@ export default function EmailSettingsForm({
             <span className="mt-1 block text-xs text-muted">Corrected from what Instantly reports after each check.</span>
           </label>
         </div>
+      </div>
+
+      <div className="card space-y-4 p-6">
+        <div>
+          <p className="text-sm font-medium">Owner emails (Hunter)</p>
+          <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
+            Find owners asks Hunter&apos;s Email Finder for a confirmed owner&apos;s address, then Domain Search for the
+            clinic&apos;s email pattern — about a credit each, nothing when Hunter finds nothing. A run that could go past
+            this month&apos;s budget is refused; newly promoted email leads are looked up on their own while budget is left.
+            50 is Hunter&apos;s free tier.
+          </p>
+        </div>
+        <p className={`num text-sm ${hunterUsed > v.hunterCreditBudget ? "text-bad" : ""}`}>
+          {fmtCredits(hunterUsed)} of {v.hunterCreditBudget} Hunter credits used this month
+        </p>
+        <label className="block max-w-xs">
+          <span className="field-label">Monthly Hunter credit budget</span>
+          <input type="number" min={0} className="field num" value={v.hunterCreditBudget} onChange={(e) => set("hunterCreditBudget", Number(e.target.value))} />
+        </label>
       </div>
 
       <div className="flex items-center gap-3">

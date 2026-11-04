@@ -13,7 +13,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
-import { EmailCandidate, parseAlternates, readEmailSource } from "@/lib/emailFind";
+import { EmailCandidate, EmailStatus, parseAlternates, readEmailSource } from "@/lib/emailFind";
 import { budgetFor, mapVerification, monthStart } from "@/lib/emailCheck";
 import { verifyEmail, InstantlyErrorCode } from "@/lib/instantly";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
@@ -45,20 +45,10 @@ export async function checkLeadEmail(leadId: string, opts: { force?: boolean } =
   if (email === "") return { kind: "skipped", detail: "No email to check." };
   if (lead.emailStatus !== null && !opts.force) return { kind: "skipped", detail: `Already checked (${lead.emailStatus}) — use Check again.` };
 
-  const r = await verifyEmail(email);
-  if (!r.ok) return { kind: "failed", detail: r.error, code: r.code };
-
-  const status = mapVerification(r);
+  const checked = await checkAddress(leadId, email);
+  if (!checked.ok) return { kind: "failed", detail: checked.error, code: checked.code };
+  const { status, rawStatus } = checked;
   const now = new Date();
-  const settings = await loadEmailSettings();
-  const credits = r.creditsUsed ?? settings.creditsPerCheck;
-  await prisma.emailCheck.create({
-    data: { leadId, email, rawStatus: r.verificationStatus, catchAll: r.catchAll === null ? null : String(r.catchAll), status, creditsUsed: credits },
-  });
-  // The cost per check, learnt from what Instantly reports.
-  if (r.creditsUsed !== null && r.creditsUsed > 0 && r.creditsUsed !== settings.creditsPerCheck) {
-    await saveEmailSettingsRow({ ...settings, creditsPerCheck: r.creditsUsed });
-  }
 
   // The address may have changed while the check ran; the result is about
   // the address that was checked, so it only lands if that is still the one.
@@ -85,8 +75,31 @@ export async function checkLeadEmail(leadId: string, opts: { force?: boolean } =
     return { kind: "checked", status, email, detail: `${email} is invalid — moved to alternates; back to No email.` };
   }
   await prisma.lead.update({ where: { id: leadId }, data: { emailStatus: status, emailCheckedAt: now } });
-  const note = status === "invalid" ? " (entered by hand, so it stays)" : r.verificationStatus === "pending" ? " (still pending at Instantly)" : "";
+  const note = status === "invalid" ? " (entered by hand, so it stays)" : rawStatus === "pending" ? " (still pending at Instantly)" : "";
   return { kind: "checked", status, email, detail: `${email}: ${status}${note}` };
+}
+
+// One address through Instantly, logged with what it cost (EmailCheck) — the
+// check every address gets, whether or not it is the lead's email yet. The
+// owner finder checks its guesses with this before saving any of them.
+export async function checkAddress(
+  leadId: string | null,
+  emailIn: string,
+): Promise<{ ok: true; status: EmailStatus; rawStatus: string; catchAll: boolean | "pending" | null; credits: number } | { ok: false; error: string; code: InstantlyErrorCode }> {
+  const email = emailIn.trim().toLowerCase();
+  const r = await verifyEmail(email);
+  if (!r.ok) return r;
+  const status = mapVerification(r);
+  const settings = await loadEmailSettings();
+  const credits = r.creditsUsed ?? settings.creditsPerCheck;
+  await prisma.emailCheck.create({
+    data: { leadId, email, rawStatus: r.verificationStatus, catchAll: r.catchAll === null ? null : String(r.catchAll), status, creditsUsed: credits },
+  });
+  // The cost per check, learnt from what Instantly reports.
+  if (r.creditsUsed !== null && r.creditsUsed > 0 && r.creditsUsed !== settings.creditsPerCheck) {
+    await saveEmailSettingsRow({ ...settings, creditsPerCheck: r.creditsUsed });
+  }
+  return { ok: true, status, rawStatus: r.verificationStatus, catchAll: r.catchAll, credits };
 }
 
 // Whether checks can run at all, and how many of n fit this month's budget.
