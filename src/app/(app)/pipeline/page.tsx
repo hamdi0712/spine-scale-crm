@@ -4,15 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { PIPELINE_DEFAULT_WHERE, PIPELINE_SCORING_REJECTED_WHERE } from "@/lib/liveLeadWhere";
 import { leadScore, leadTier, leadVerdictBadge } from "@/lib/leadScore";
 import { FIRST_MESSAGE_MECHANISMS } from "@/lib/outreachSequence";
-import { openerComparison } from "@/lib/outreachSequenceRead";
 import { setMessageMechanism } from "@/lib/actions/outreachSequence";
 import KanbanBoard, { KanbanLead } from "@/components/KanbanBoard";
 import LeadTable from "@/components/LeadTable";
-import { RecrawlOldLeads } from "@/components/LeadRecrawl";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { stepCostPerCandidate } from "@/lib/pipelineSettings";
 import MechanismPicker from "@/components/MechanismPicker";
-import OpenerScoreboard from "@/components/OpenerScoreboard";
 import { cookies } from "next/headers";
 import ChannelToggle from "@/components/ChannelToggle";
 import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
@@ -81,14 +78,6 @@ export default async function PipelinePage({
     },
   });
 
-  const comparison = openerComparison(
-    firstMessages.map((m) => ({
-      messageMechanism: m.messageMechanism,
-      sentAt: m.sentAt,
-      repliedAt: m.lead.repliedAt,
-    })),
-  );
-
   // The backfill list: sent, and carrying nothing this build recognises. Read
   // off the same rows rather than as a second query, because "untagged" has to
   // mean the same thing here as it does in the count beside the tab.
@@ -123,18 +112,18 @@ export default async function PipelinePage({
   }));
 
   return (
-    <div>
+    <div className="wide-format">
       <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="display text-[32px] font-semibold">Pipeline</h1>
             <ChannelToggle channel="linkedin" />
           </div>
-          <p className="helper-text mt-1.5 text-sm text-muted">
+          <p className="helper-text page-sub mt-1.5 text-sm text-muted">
             Clinics in play — every one of them scored before it got here
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 wide:[&_.segment-item]:!h-7 wide:[&_.segment-item]:!text-[13px]">
           {/* Table first, because table is what loads. A toggle whose second
               item is the default reads as though the first one were. */}
           <div className="segment">
@@ -213,18 +202,13 @@ export default async function PipelinePage({
         </div>
       )}
 
-      <OpenerScoreboard comparison={comparison} />
-
-      <div className="mt-8">
+      <div className="mt-8 wide:mt-4">
         {view === "board" ? (
           <KanbanBoard leads={serialized} />
         ) : view === "untagged" ? (
           <UntaggedFirstMessages rows={untagged} />
         ) : (
-          <>
-            {!scoringRejected && <RecrawlOldLeads costPerClinic={recrawlCost} />}
-            <LeadTable leads={serialized} recrawlCostPerClinic={recrawlCost} />
-          </>
+          <LeadTable leads={serialized} recrawlCostPerClinic={recrawlCost} />
         )}
       </div>
     </div>

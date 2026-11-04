@@ -8,6 +8,9 @@ import { fmtDate } from "@/lib/format";
 import { IcpScoreBadge } from "@/components/Badge";
 import Icon from "@/components/Icons";
 import OutreachList from "@/components/OutreachList";
+import ChannelToggle from "@/components/ChannelToggle";
+import { cookies } from "next/headers";
+import { OUTREACH_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +31,10 @@ export const dynamic = "force-dynamic";
 const OUTREACH_TIERS: IcpTier[] = ["A", "B"];
 
 export default async function OutreachQueuePage() {
+  // Email or LinkedIn, one at a time, remembered per browser like Pipeline.
+  const channel = readPipelineChannel(cookies().get(OUTREACH_CHANNEL_COOKIE)?.value);
   const leads = await prisma.lead.findMany({
-    where: OUTREACH_QUEUE_WHERE,
+    where: { ...OUTREACH_QUEUE_WHERE, channel },
     orderBy: { createdAt: "desc" },
   });
 
@@ -58,9 +63,12 @@ export default async function OutreachQueuePage() {
     <div className="wide-format">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
-          <h1 className="display text-[32px] font-semibold">Outreach Queue</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="display text-[32px] font-semibold">Outreach Queue</h1>
+            <ChannelToggle channel={channel} cookie={OUTREACH_CHANNEL_COOKIE} label="Outreach Queue channel" />
+          </div>
           <p className="helper-text page-sub mt-1.5 text-sm text-muted">
-            Qualified leads nobody has written to yet — A and B tier, still at
+            Qualified {channel === "email" ? "email" : "LinkedIn"} leads nobody has written to yet — A and B tier, still at
             New
           </p>
         </div>
