@@ -66,7 +66,7 @@ async function main(): Promise<void> {
       city: "Austin",
       state: "Texas",
       phone: "(512) 555-0100",
-      emails: ["info@austinspine.com", "support@wix.com", "hello@pixelwebdesigns.com", "logo@2x.png", "drsmith@austinspine.com"],
+      emails: ["info@austinspine.com", "support@wix.com", "hello@pixelwebdesigns.com", "logo@2x.png", "jsmith@austinspine.com"],
     },
     {
       title: `${TAG} — Vendor Only Chiropractic`,
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
   check("status null: not checked", austin.emailStatus === null && EMAIL_STATUS_LABELS[readEmailStatus(austin.emailStatus) ?? "unchecked"] === "Not checked");
   check(
     "the other clinic address is the only alternate",
-    austinAlts.length === 1 && austinAlts[0].address === "drsmith@austinspine.com" && austinAlts[0].status === null && austinAlts[0].source === "maps_contacts",
+    austinAlts.length === 1 && austinAlts[0].address === "jsmith@austinspine.com" && austinAlts[0].status === null && austinAlts[0].source === "maps_contacts",
     austin.emailAlternates ?? "null",
   );
   const all = [austin.email, ...austinAlts.map((a) => a.address)].join(" ");
@@ -159,7 +159,7 @@ async function main(): Promise<void> {
   const lead = await prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
   const leadAlts = parseAlternates(lead.emailAlternates);
   check("lead is on the email channel", lead.channel === "email", lead.channel);
-  check("the owner's address becomes the main email once a person is named", lead.email === "drsmith@austinspine.com" && lead.emailType === "owner", `${lead.email} ${lead.emailType}`);
+  check("the owner's address becomes the main email once a person is named", lead.email === "jsmith@austinspine.com" && lead.emailType === "owner", `${lead.email} ${lead.emailType}`);
   check(
     "the front desk becomes the alternate",
     leadAlts.length === 1 && leadAlts[0].address === "info@austinspine.com" && leadAlts[0].type === "generic",

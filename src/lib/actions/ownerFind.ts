@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { pickOwner } from "@/lib/ownerFindRun";
 import { startOwnerJob } from "@/lib/actions/jobs";
 import { LaunchResult } from "@/lib/jobRunner";
+import { RecleanResult, recleanEmailLeads } from "@/lib/ownerReclean";
 
 export async function pickLeadOwner(leadId: string, name: string): Promise<{ ok: true; job: LaunchResult } | { ok: false; error: string }> {
   if (typeof leadId !== "string" || typeof name !== "string") return { ok: false, error: "Pick one of the names shown." };
@@ -24,4 +25,16 @@ export async function pickLeadOwner(leadId: string, name: string): Promise<{ ok:
 export async function findLeadOwner(leadId: string): Promise<LaunchResult> {
   if (typeof leadId !== "string") return { ok: false, error: "No lead." };
   return startOwnerJob({ leadIds: [leadId] });
+}
+
+// Settings → Email's "Re-clean owner names & labels": free, no API calls.
+export async function recleanOwners(): Promise<{ ok: true; result: RecleanResult } | { ok: false; error: string }> {
+  try {
+    const result = await recleanEmailLeads();
+    revalidatePath("/pipeline");
+    revalidatePath("/email");
+    return { ok: true, result };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "The re-clean failed." };
+  }
 }

@@ -599,6 +599,24 @@ export default async function LeadDetailPage({
                   className="field"
                 />
               </div>
+              <div className="col-span-2 sm:col-span-1">
+                <label className="field-label" htmlFor="emailType">
+                  Reaches
+                </label>
+                <select
+                  id="emailType"
+                  name="emailType"
+                  defaultValue={lead.emailType === "owner" || lead.emailType === "generic" ? lead.emailType : ""}
+                  className="field"
+                  title={lead.emailTypeByHand ? "Set by hand — automatic re-labelling leaves it alone" : undefined}
+                >
+                  <option value="" disabled>
+                    —
+                  </option>
+                  <option value="owner">Owner{lead.emailTypeByHand && lead.emailType === "owner" ? " (by hand)" : ""}</option>
+                  <option value="generic">Front desk{lead.emailTypeByHand && lead.emailType === "generic" ? " (by hand)" : ""}</option>
+                </select>
+              </div>
               <div className="col-span-2 -mt-2 empty:hidden sm:col-span-6">
                 <EmailFacts lead={lead} />
               </div>

@@ -38,7 +38,7 @@ import { fmtCredits } from "@/lib/emailCheck";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { facebookEmailLeads, findBackupEmail } from "@/lib/facebookEmailRun";
 import { findOwner, findOwnerEmail, findOwnerLeads, ownerBudget, ownerReadiness, hunterCreditsUsedThisMonth, OwnerEmailOutcome } from "@/lib/ownerFindRun";
-import { HUNTER_CREDITS_PER_LEAD_MAX, INSTANTLY_CHECKS_PER_LEAD_MAX } from "@/lib/ownerFind";
+import { ownerCostPerLead } from "@/lib/ownerFind";
 
 // ─── Re-crawl website ──────────────────────────────────────────────────────
 
@@ -554,8 +554,8 @@ export async function ownerJobEstimate(): Promise<{
   const r = await ownerReadiness(rows.length);
   return {
     count: rows.length,
-    hunterMax: rows.length * HUNTER_CREDITS_PER_LEAD_MAX,
-    instantlyMax: rows.length * INSTANTLY_CHECKS_PER_LEAD_MAX * r.perCheck,
+    hunterMax: r.hunter.needed,
+    instantlyMax: rows.length * ownerCostPerLead(r.guess).instantly * r.perCheck,
     hunterLeft: r.hunter.left,
     instantlyLeft: r.instantly.left,
     fits: r.fits,

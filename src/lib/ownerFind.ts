@@ -17,10 +17,11 @@
 //      nobody anywhere                                 → not_found
 //
 // 2. The owner's email, only for a confirmed owner on a clinic-owned domain
-//    with no owner address yet. Hunter's Email Finder first; failing that,
-//    Domain Search's pattern; failing a pattern, three guesses — drlast@,
-//    first@, drfirst@ — each checked with Instantly, stopping at the first
-//    valid one.
+//    with no owner address yet. Hunter's Email Finder. Only with Settings →
+//    Email's "Guess owner emails from patterns" on (off by default): failing
+//    that, Domain Search's pattern; failing a pattern, three guesses —
+//    drlast@, first@, drfirst@ — each checked with Instantly, stopping at the
+//    first valid one.
 //
 // 3. Where a found address goes. Valid → the main email, the front desk to
 //    the alternates. On a catch-all domain (Instantly: risky) only an address
@@ -59,9 +60,13 @@ export function readOwnerSource(v: unknown): OwnerSource | null {
 
 // Worst case per lead, for the estimate: Email Finder and Domain Search (a
 // credit each), and four Instantly checks (Hunter's address, then three
-// guesses — a pattern means one guess, not three).
+// guesses — a pattern means one guess, not three). With guessing off, Email
+// Finder and one check of what it returns.
 export const HUNTER_CREDITS_PER_LEAD_MAX = 2;
 export const INSTANTLY_CHECKS_PER_LEAD_MAX = 4;
+export function ownerCostPerLead(guess: boolean): { hunter: number; instantly: number } {
+  return guess ? { hunter: HUNTER_CREDITS_PER_LEAD_MAX, instantly: INSTANTLY_CHECKS_PER_LEAD_MAX } : { hunter: 1, instantly: 1 };
+}
 export const DEFAULT_HUNTER_CREDIT_BUDGET = 50;
 
 // ─── Reading the lead ──────────────────────────────────────────────────────
@@ -211,6 +216,67 @@ export function officialName(org: NpiOrganization): string | null {
 const NOT_NAME_WORDS = new Set(["the", "our", "your", "meet", "visit", "call", "ask", "contact", "about", "is", "and", "office", "clinic", "team", "who", "will", "can", "has", "was", "today", "now"]);
 const NAME = "[A-Z][a-z'’]+(?:-[A-Z][a-z'’]+)?";
 
+// Words a page puts after a doctor's name — menu items, headings, the start
+// of the next sentence — and words that are never a name. A name is cut at
+// the first of these ("Dr. Jacob Plasker Testimonials" → "Dr. Jacob
+// Plasker"), and one that starts with one is no name at all ("Dr. Physical
+// Therapists").
+const PAGE_WORDS = new Set([
+  // the title again, credentials
+  "dr", "doctor", "doctors", "dc", "md", "do", "dpt", "phd", "chiropractor", "chiropractors", "chiropractic", "physician", "physicians",
+  // menu and page words
+  "home", "about", "contact", "testimonials", "testimonial", "reviews", "review", "conditions", "condition", "services", "service",
+  "treatments", "treatment", "treated", "treats", "blog", "news", "faq", "faqs", "new", "patients", "patient", "forms", "form", "resources", "pricing",
+  "insurance", "appointment", "appointments", "schedule", "book", "booking", "request", "online", "learn", "more", "read", "click", "here",
+  "menu", "back", "next", "previous", "page", "staff", "team", "meet", "bio", "bios", "profile", "location", "locations", "directions",
+  "hours", "careers", "privacy", "policy", "terms", "gallery", "videos", "video", "specials", "offer", "offers", "events", "shop", "store",
+  "welcome", "office", "clinic", "center", "centre", "practice", "group", "associates", "institute", "family", "wellness", "health",
+  "spine", "spinal", "back", "neck", "pain", "disc", "decompression", "rehab", "rehabilitation", "massage", "therapy", "therapies",
+  "therapist", "therapists", "physical", "sports", "injury", "injuries", "auto", "accident", "care", "medical", "medicine", "nutrition",
+  "acupuncture", "adjustment", "adjustments", "technique", "techniques", "exam", "consultation", "free", "call", "today", "now",
+  // sentence words
+  "we", "us", "our", "you", "your", "he", "she", "they", "his", "her", "their", "i", "it", "is", "was", "are", "has", "have", "had",
+  "will", "can", "and", "or", "the", "a", "an", "of", "in", "on", "at", "to", "for", "with", "by", "from", "who", "what", "when",
+  "where", "why", "how", "this", "that", "these", "those", "also", "has", "been", "said", "says", "says", "graduated", "received",
+  "pursuing", "pursued", "attended", "earned", "joined", "founded", "opened", "began", "started", "practices", "practicing",
+  "specializes", "specializing", "provides", "offers", "helps", "believes", "loves", "enjoys", "lives", "grew", "born", "raised",
+  "state", "university", "college", "school", "program", "degree", "license", "licensed", "certified", "board", "member",
+  "owner", "founder", "director", "president", "lead", "chief", "senior", "associate", "assistant", "manager",
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "yes", "no", "not", "all", "any", "every",
+  "iguess", "ithink", "iam", "ive", "im", "okay", "ok", "thanks", "thank", "please",
+]);
+
+function isPageWord(w: string): boolean {
+  return PAGE_WORDS.has(w.toLowerCase().replace(/[^a-z]/g, ""));
+}
+
+// One doctor's name as the page wrote it, cleaned: possessives dropped
+// ("Plasker's"), cut at the first page word, at most three words. Null when
+// nothing of a name is left, or what is left is a fragment ("Ste").
+export function cleanDoctorName(raw: string): string | null {
+  const words = cleanName(raw.replace(/^(?:dr\.?|doctor)\s+/i, ""))
+    .split(" ")
+    .map((w) => w.replace(/'s$/i, "").replace(/'$/, ""))
+    .filter((w) => w !== "");
+  const kept: string[] = [];
+  for (const w of words) {
+    if (isPageWord(w)) break;
+    kept.push(w);
+  }
+  const name = kept.slice(0, 3);
+  // A trailing initial is the start of something else: "Dr. Ann Lee M".
+  while (name.length > 0 && /^[A-Z]\.?$/.test(name[name.length - 1])) name.pop();
+  if (name.length === 0) return null;
+  if (!name.every((w) => /^[A-Z](?:[a-z'-]+|\.)$/.test(w))) return null;
+  const last = name[name.length - 1];
+  // A real first or last name: 3 letters at least on its own (Lee, Ng is
+  // read off a full name), and with a vowel.
+  if (name.length === 1 && last.replace(/[^a-z]/gi, "").length < 4) return null;
+  if (!/[aeiouy]/i.test(last)) return null;
+  if (name.length > 1 && last.replace(/[^a-z]/gi, "").length < 2) return null;
+  return `Dr. ${name.join(" ")}`;
+}
+
 function cleanName(raw: string): string {
   return raw.replace(/’/g, "'").replace(/\s+/g, " ").trim();
 }
@@ -222,36 +288,58 @@ function cleanName(raw: string): string {
 export function siteDoctorNames(websiteNotes: string | null | undefined, websiteLinks: string | null | undefined): string[] {
   const text = websiteNotes ?? "";
   const found: string[] = [];
-  const titled = new RegExp(`\\b(?:Dr\\.?|Doctor)\\s+(${NAME}(?:\\s+[A-Z]\\.)?(?:\\s+${NAME}){0,2})`, "g");
+  const titled = new RegExp(`\\b(?:Dr\\.?|Doctor)\\s+(${NAME}(?:\\s+[A-Z]\\.)?(?:\\s+${NAME}){0,3})`, "g");
   for (const m of Array.from(text.matchAll(titled))) {
-    const words = cleanName(m[1]).split(" ").filter((w) => !NOT_NAME_WORDS.has(w.toLowerCase()));
-    // A name runs until the first word that is not one: "Dr. Lee Offers" stops at Lee.
-    if (words.length === 0) continue;
-    const name = words.slice(0, 3).join(" ");
-    if (words.length === 1 || looksLikePersonName(name)) found.push(`Dr. ${name}`);
+    const name = cleanDoctorName(m[1]);
+    if (name && (name.split(" ").length === 2 || looksLikePersonName(name.slice(4)))) found.push(name);
   }
   const credentialed = new RegExp(`\\b(${NAME}(?:\\s+[A-Z]\\.)?\\s+${NAME}),?\\s+(?:D\\.\\s?C\\.|DC|M\\.\\s?D\\.|MD|D\\.\\s?O\\.|DO|DPT)(?![A-Za-z])`, "g");
   for (const m of Array.from(text.matchAll(credentialed))) {
-    const name = cleanName(m[1]);
-    if (looksLikePersonName(name) && !NOT_NAME_WORDS.has(name.split(" ")[0].toLowerCase())) found.push(`Dr. ${name}`);
+    const raw = cleanName(m[1]);
+    if (NOT_NAME_WORDS.has(raw.split(" ")[0].toLowerCase())) continue;
+    const name = cleanDoctorName(raw);
+    // Both words must survive: "Meet Lee, DC" is not a name.
+    if (name && name.split(" ").length === raw.split(" ").length + 1 && looksLikePersonName(name.slice(4))) found.push(name);
   }
   for (const link of parseLinks(websiteLinks)) {
     const n = providerNameFromLink(link);
-    if (n) found.push(n.startsWith("Dr. ") ? n : `Dr. ${n}`);
+    const name = n ? cleanDoctorName(n) : null;
+    if (name && name.split(" ").length >= 3) found.push(name);
   }
   return foldNames(found);
 }
 
-// One entry per person: same surname and the first names do not disagree.
-// The fuller spelling is kept.
-function foldNames(names: string[]): string[] {
+// One entry per person, the fullest spelling kept: the same surname with the
+// first names agreeing where both have one ("Dr. Plasker" and "Dr. Jacob
+// Plasker"), and a lone word that is a fuller name's first or last name
+// ("Dr. Jacob"). Two different first names on one surname stay two doctors.
+export function foldNames(names: string[]): string[] {
   const out: string[] = [];
-  for (const n of names) {
+  const byLength = [...names].sort((a, b) => b.split(" ").length - a.split(" ").length || b.length - a.length);
+  for (const n of byLength) {
+    const words = n.replace(/^Dr\.\s+/, "").split(" ");
+    if (words.length === 1) {
+      const w = words[0].toLowerCase();
+      const fuller = out.some((o) => {
+        const ow = o.replace(/^Dr\.\s+/, "").toLowerCase().split(" ");
+        return ow.length > 1 && (ow[0] === w || ow[ow.length - 1] === w);
+      });
+      if (fuller || out.some((o) => o.toLowerCase() === n.toLowerCase())) continue;
+      out.push(n);
+      continue;
+    }
     const i = out.findIndex((o) => samePerson(o, n));
     if (i === -1) out.push(n);
     else if (n.length > out[i].length) out[i] = n;
   }
-  return out;
+  // The page's order, not the sort's.
+  return out.sort((a, b) => firstIndex(names, a) - firstIndex(names, b));
+}
+
+function firstIndex(names: string[], kept: string): number {
+  const last = kept.split(" ").pop()!.toLowerCase();
+  const i = names.findIndex((n) => n.toLowerCase().endsWith(last));
+  return i === -1 ? names.indexOf(kept) : i;
 }
 
 // Same surname, and the first names agree where both have one (an initial
@@ -280,8 +368,13 @@ export interface OwnerDecision {
 }
 
 export function decideOwner(match: NpiMatch | null, siteNames: string[]): OwnerDecision {
-  const official = match ? officialName(match.org) : null;
-  const title = match?.org.official.title ?? null;
+  return decideOwnerFrom(match ? officialName(match.org) : null, match?.org.official.title ?? null, match !== null, siteNames);
+}
+
+// The same decision from what a lead already stores (npiOfficialName and
+// npiOfficialTitle): the re-clean runs it with no registry call.
+export function decideOwnerFrom(official: string | null, title: string | null, matched: boolean, siteNames: string[]): OwnerDecision {
+  const match = matched;
   const dm = official ? isDecisionMakerTitle(title) : null;
   const base = { official, officialIsDecisionMaker: dm };
   const titled = official ? `${official}${title ? ` (${title})` : ""}` : null;

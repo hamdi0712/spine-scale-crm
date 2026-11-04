@@ -433,6 +433,8 @@ async function planChange(name: McpWriteToolName, lead: LeadForWrite, args: Reco
             data: {
               email,
               emailType,
+              // The operator's own label: automatic re-labelling leaves it.
+              emailTypeByHand: true,
               emailSource,
               // A changed address loses the verdict on the old one, as the lead form does.
               ...(same ? {} : { emailStatus: null, emailCheckedAt: null }),

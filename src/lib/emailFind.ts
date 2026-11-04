@@ -301,21 +301,57 @@ const GENERIC_LOCALS = [
   "welcome", "clinic", "practice", "manager", "officemanager", "careers", "jobs", "hr", "general",
 ];
 
-export function classifyAddress(address: string, person: DecisionMakerName | null): "owner" | "generic" {
-  const local = address.slice(0, address.indexOf("@"));
-  if (GENERIC_LOCALS.includes(local)) return "generic";
-  if (!person) return "generic";
-  const letters = slug(local);
-  // dr.janet@, drjanet@ — the title in front of the name.
-  const bare = /^dr[a-z]{3,}/.test(letters) ? letters.slice(2) : letters;
-  const { first, last } = person;
-  if (last && last.length >= 3 && letters.includes(last)) return "owner";
-  if (first && first.length >= 3 && (letters.startsWith(first) || bare.startsWith(first))) return "owner";
-  // jsmith@, j.smith@
-  if (first && last && letters === `${first[0]}${last}`) return "owner";
-  return "generic";
+// A practice's inbox even when it carries a name: teamnadimi@,
+// numeroffchiro@, officestaff@.
+const PRACTICE_PREFIXES = ["team", "staff", "office", "info", "frontdesk", "reception", "contact", "hello", "admin", "billing", "appointments", "schedule", "patients"];
+const PRACTICE_WORDS = ["chiro", "clinic", "wellness", "spine", "health", "therapy", "rehab", "center", "centre", "medical", "physio", "massage", "practice", "family", "sports", "injury", "office", "posture", "align", "adjust"];
+// The initials of the whole name as written — "Kyle F. Worell, DC" → kfw —
+// for kfwdc@.
+function initialsOf(name: string): string {
+  return name
+    .replace(/,.*$/, "")
+    .split(/\s+/)
+    .map((w) => w.replace(/[^A-Za-z]/g, ""))
+    .filter((w) => w !== "" && !/^(dr|doctor|mr|mrs|ms|dc|md|do|dpt|phd|jr|sr|ii|iii)$/i.test(w))
+    .map((w) => w[0].toLowerCase())
+    .join("");
 }
 
+// Who reads an address: the owner (a doctor's own inbox — drdave@,
+// backpaindoc@, the owner's name or initials) or the front desk (generic).
+// A practice's inbox is generic even with a name in it (teamnadimi@,
+// numeroffchiro@, a practice-named Gmail like atlaschiropractic@).
+export function classifyAddress(address: string, person: DecisionMakerName | null): "owner" | "generic" {
+  const local = address.slice(0, address.indexOf("@")).toLowerCase();
+  if (GENERIC_LOCALS.includes(local)) return "generic";
+  const letters = slug(local);
+  if (letters === "") return "generic";
+  if (PRACTICE_PREFIXES.some((p) => letters.startsWith(p))) return "generic";
+  if (PRACTICE_WORDS.some((w) => letters.includes(w))) return "generic";
+
+  // The doctor's own: dr + a name (drdave@, drdom214@, drjkennis@), "doc"
+  // anywhere (backpaindoc@), dr at the end or as its own part (njatlasdr@,
+  // jane.dr@).
+  if (/^dr[a-z]{3,}/.test(letters)) return "owner";
+  if (letters.includes("doc")) return "owner";
+  if (letters.length >= 5 && letters.endsWith("dr")) return "owner";
+  if (local.split(/[^a-z0-9]+/).includes("dr")) return "owner";
+
+  if (person) {
+    const bare = /^dr[a-z]{3,}/.test(letters) ? letters.slice(2) : letters;
+    const { first, last } = person;
+    if (last && last.length >= 3 && letters.includes(last)) return "owner";
+    if (first && first.length >= 3 && (letters.startsWith(first) || bare.startsWith(first))) return "owner";
+    // jsmith@, j.smith@
+    if (first && last && letters === `${first[0]}${last}`) return "owner";
+    // kfwdc@, kwdc@: the initials and DC.
+    const initials = initialsOf(person.name);
+    const short = first && last ? `${first[0]}${last[0]}` : "";
+    if (/^[a-z]{2,4}dc\d*$/.test(letters) && [initials, short].includes(letters.replace(/dc$/, ""))) return "owner";
+  }
+
+  return "generic";
+}
 
 // ─── Addresses off the Maps search ─────────────────────────────────────────
 

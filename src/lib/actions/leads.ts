@@ -104,7 +104,7 @@ export async function updateLead(id: string, formData: FormData) {
   // nothing, the same as before.
   const current = await prisma.lead.findUnique({
     where: { id },
-    select: { stage: true, email: true, emailSource: true, channel: true },
+    select: { stage: true, email: true, emailSource: true, emailType: true, channel: true },
   });
   if (!current) return;
 
@@ -113,6 +113,11 @@ export async function updateLead(id: string, formData: FormData) {
   // the old one; an unchanged one keeps its source and its verdict.
   const fields = leadFields(formData);
   const email = emailSourceAfterFormSave(current, fields.email);
+  // Who reads the address, picked in the form: a change marks the label as
+  // the operator's, and automatic re-labelling leaves it alone from then on.
+  const typeRaw = formData.get("emailType");
+  const typeIn = typeRaw === "owner" || typeRaw === "generic" ? typeRaw : null;
+  const typeChanged = typeRaw !== null && typeIn !== null && typeIn !== current.emailType && (fields.email ?? "") !== "";
   await prisma.lead.update({
     where: { id },
     data: {
@@ -121,6 +126,7 @@ export async function updateLead(id: string, formData: FormData) {
       ...(email.changed
         ? { emailSource: email.emailSource, emailType: null, emailStatus: null, emailCheckedAt: null }
         : {}),
+      ...(typeChanged ? { emailType: typeIn, emailTypeByHand: true } : {}),
     },
   });
   revalidatePath("/pipeline");
