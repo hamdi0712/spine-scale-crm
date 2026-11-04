@@ -398,12 +398,14 @@ export async function autoCheckEmails(): Promise<void> {
 // the website first (free), then the page. Every new address is checked
 // through Instantly when the run is over. The page shows the estimate and asks
 // before this is pressed.
-export async function startFacebookEmailJob(): Promise<LaunchResult> {
+export async function startFacebookEmailJob(args: { leadIds?: string[] | null } = {}): Promise<LaunchResult> {
   const settings = await loadPipelineSettings();
   if (!settings.facebookEmails.enabled) {
     return { ok: false, error: "Facebook page emails is turned off. Turn it on under Settings → Pipeline, where its actor is set too." };
   }
-  const rows = await facebookEmailLeads();
+  // leadIds: a pick made on the Email pipeline; the rest stay for later.
+  const only = Array.isArray(args?.leadIds) ? new Set(args.leadIds.filter((x) => typeof x === "string")) : null;
+  const rows = (await facebookEmailLeads()).filter((r) => !only || only.has(r.id));
   if (rows.length === 0) return { ok: false, error: "No email lead without an address has an unread Facebook page." };
   let found = 0;
   return launchJob({
