@@ -330,7 +330,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 />
               )}
             </div>
-            <div className="space-y-0.5 text-[12.5px]">
+            <div className="space-y-0.5 pl-[26px] text-[12.5px]">
               <p className="flex min-w-0 items-center gap-2 text-ink-soft">
                 <IconMapPin size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.location ?? "—"}</span>
@@ -340,7 +340,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <span className="truncate">{row.email ?? "No email yet"}</span>
               </p>
             </div>
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pl-[26px] pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]">
               <EmailStatusBadge status={row.status} />
               {row.sendBlocked && !row.toSend ? (
                 <span className="truncate text-xs text-bad" title={row.sendBlocked}>Can&apos;t send yet</span>
@@ -548,7 +548,7 @@ function SelectionBar({
   const n = rows.length;
   const btn = "btn !h-8 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden wide:pl-[15px]">
+    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden">
       <label className="flex items-center gap-2 text-[13px] text-ink-soft">
         <input type="checkbox" checked={allPicked} onChange={(e) => onPickAll(e.target.checked)} disabled={shownCount === 0} className="h-4 w-4 accent-accent" />
         Select all
