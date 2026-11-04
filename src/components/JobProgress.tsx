@@ -233,7 +233,7 @@ export function JobProgressPanel({
 
   return (
     <section
-      className={`card px-5 py-4 max-md:px-4 ${className}`}
+      className={`card px-5 py-4 max-md:px-4 wide:px-4 wide:py-3 wide:[&>*+*]:!mt-2 wide:[&_.text-xs]:!text-[11px] ${className}`}
       aria-label={`${title} progress`}
     >
       {/* Headline: what it is doing now, or how it ended. */}
@@ -242,7 +242,7 @@ export function JobProgressPanel({
           {live ? (
             <p
               key={job.current ?? "between"}
-              className="job-fade-in truncate text-sm text-ink-soft"
+              className="job-fade-in truncate text-sm text-ink-soft wide:text-[13px]"
               aria-live="polite"
             >
               {job.stopRequested ? "Stopping after " : `${job.verb} `}
@@ -255,7 +255,7 @@ export function JobProgressPanel({
         {live ? (
           <button
             type="button"
-            className="btn shrink-0 gap-1.5 px-3 py-1 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+            className="btn shrink-0 gap-1.5 px-3 py-1 text-xs wide:!h-7 wide:!px-2.5 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={stopping || job.stopRequested}
             onClick={async () => {
               setStopping(true);
@@ -286,11 +286,11 @@ export function JobProgressPanel({
 
       {/* The counter and the bar. */}
       <div className="mt-3 flex items-baseline gap-2">
-        <span className="num text-2xl font-semibold tabular-nums text-ink" aria-hidden>
+        <span className="num text-2xl font-semibold tabular-nums text-ink wide:text-lg" aria-hidden>
           {shownDone}
           <span className="font-normal text-muted"> of {job.total}</span>
         </span>
-        <span className="num text-sm tabular-nums text-muted" aria-hidden>
+        <span className="num text-sm tabular-nums text-muted wide:text-xs" aria-hidden>
           {pct}%
         </span>
         <span className="sr-only">
@@ -331,7 +331,7 @@ export function JobProgressPanel({
 
       {/* The last few items, newest first. */}
       {job.recent.length > 0 && (
-        <ul className="mt-3 space-y-1 border-t border-line/60 pt-3" aria-label="Recent items">
+        <ul className="mt-3 space-y-1 border-t border-line/60 pt-3 wide:pt-2" aria-label="Recent items">
           {job.recent.map((item) => (
             <ActivityRow key={item.seq} item={item} />
           ))}
