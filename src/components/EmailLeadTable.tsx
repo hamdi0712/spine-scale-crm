@@ -7,7 +7,8 @@ import { IconChevronRight, IconLayoutGrid, IconList, IconMail, IconMapPin, IconS
 import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
 import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
-import { EmailStatusBadge, IcpTierChip } from "@/components/Badge";
+import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge";
+import { fmtDate } from "@/lib/format";
 import EmailSendButtons from "@/components/EmailSendButtons";
 import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
 import { useJobRun } from "@/components/JobProgress";
@@ -38,6 +39,7 @@ export interface EmailLeadRow {
   inbox: string | null;
   inboxSentToday: number;
   inboxLimit: number;
+  createdAt: string;
 }
 
 const VIEW_KEY = "pipeline-email-view";
@@ -320,10 +322,14 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <p className="mt-0.5 truncate text-[11px] text-muted">{row.contactName ?? "No contact yet"}</p>
               </div>
               </div>
-              {row.icpTier || row.icpVerdict ? (
+              {row.icpVerdict ? (
                 <IcpTierChip tier={row.icpTier} verdict={row.icpVerdict} score={row.icpScore} />
               ) : (
-                <span className="text-xs text-muted">Not scored</span>
+                <IcpScoreBadge
+                  tier={row.icpTier}
+                  total={row.icpScore ? Number(row.icpScore.split("/")[0]) : null}
+                  max={row.icpScore ? Number(row.icpScore.split("/")[1]) : 100}
+                />
               )}
             </div>
             <div className="space-y-0.5 text-[12.5px]">
@@ -343,7 +349,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               ) : row.toSend ? (
                 <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
               ) : (
-                <span className="truncate text-[11px] text-muted">{row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}</span>
+                <span className="num text-[11px] text-muted" title={row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}>{fmtDate(row.createdAt)}</span>
               )}
             </div>
           </li>
