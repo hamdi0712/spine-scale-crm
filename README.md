@@ -970,7 +970,9 @@ runner; it also runs on its own on newly promoted email leads, within budget.
    lead page to pick. With no NPI decision-maker, the site's doctor is
    confirmed only when it names exactly one; several → pick. A confirmed owner
    becomes the lead's contact, so the front-desk email asks for them by name
-   ("Could you pass this to Dr. Lee?" — the template's `{contact}`).
+   (the template's `{contact}` — "This is probably a question for Dr. Lee";
+   with no contact name on the lead it reads "the doctor or owner", never a
+   blank).
 2. **The owner's email** — only for a confirmed owner, on the clinic's own
    domain (Gmail, Yahoo, AOL, Outlook, iCloud and the like are skipped), with
    no owner address yet. Hunter's Email Finder first; failing that, Domain

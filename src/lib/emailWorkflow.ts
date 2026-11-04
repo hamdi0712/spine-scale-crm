@@ -216,10 +216,14 @@ export function emailGreeting(lead: EmailLeadInput, version: EmailVersion): stri
   return addressIsPlaceholder(s) ? "Hi there," : `Hi ${s.address},`;
 }
 
-// Who the front desk is asked to pass it to.
+// What {contact} reads when the lead names nobody — never a blank.
+export const CONTACT_FALLBACK = "the doctor or owner";
+
+// Who the front desk is asked to pass it to: the contact by name ("Dr. Lee"),
+// or, with no usable contact name, the doctor or owner.
 function contactFor(lead: EmailLeadInput): string {
   const s = salutation(lead.contactName, lead.contactTitle, lead.websiteNotes);
-  if (addressIsPlaceholder(s)) return "the owner";
+  if (addressIsPlaceholder(s)) return CONTACT_FALLBACK;
   return s.honorific ? s.address : (lead.contactName ?? "").trim() || s.address;
 }
 

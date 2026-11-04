@@ -314,7 +314,21 @@ async function main(): Promise<void> {
   const fd = renderEmail(DEFAULT_EMAIL_SETTINGS, { clinicName: c.clinicName, contactName: c.contactName, contactTitle: c.contactTitle, websiteNotes: c.websiteNotes }, "front_desk", "Saw your decompression page.");
   check("“Could you pass this to Dr. Ross?”", /pass this to Dr\. Ross\?/.test(fd.body), fd.body.split("\n").find((l) => l.includes("pass")) ?? "");
   const before = renderEmail(DEFAULT_EMAIL_SETTINGS, { clinicName: "X", contactName: null, contactTitle: null, websiteNotes: null }, "front_desk", "o");
-  check("(without an owner it says “the owner”)", /pass this to the owner\?/.test(before.body));
+  check("(without a contact name it says “the doctor or owner”, never a blank)", /pass this to the doctor or owner\?/.test(before.body), before.body.split("\n").find((l) => l.includes("pass")) ?? "");
+  const saved = renderEmail(
+    { ...DEFAULT_EMAIL_SETTINGS, frontDeskTemplate: "{greeting}\n\n{opener}\n\nThis is probably a question for {contact}. Would you mind passing it along?" },
+    { clinicName: "X", contactName: null, contactTitle: null, websiteNotes: null },
+    "front_desk",
+    "o",
+  );
+  check("the saved template's line, with no contact: “…a question for the doctor or owner.”", saved.body.includes("This is probably a question for the doctor or owner. Would you mind"));
+  const named = renderEmail(
+    { ...DEFAULT_EMAIL_SETTINGS, frontDeskTemplate: "{greeting}\n\n{opener}\n\nThis is probably a question for {contact}. Would you mind passing it along?" },
+    { clinicName: c.clinicName, contactName: c.contactName, contactTitle: c.contactTitle, websiteNotes: c.websiteNotes },
+    "front_desk",
+    "o",
+  );
+  check("…and with a confirmed owner: “…a question for Dr. Ross.”", named.body.includes("This is probably a question for Dr. Ross. Would you mind"));
 
   console.log("\n7. Not run twice; the automatic run on a new lead");
   const left = (await findOwnerLeads()).filter((l) => mine.includes(l.id)).map((l) => l.clinicName);
