@@ -7,8 +7,10 @@ import { IconChevronRight, IconLayoutGrid, IconList, IconMail, IconMapPin, IconS
 import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
 import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
-import { EmailStatusBadge, IcpTierChip } from "@/components/Badge";
+import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge";
 import EmailSendButtons from "@/components/EmailSendButtons";
+import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
+import { useJobRun } from "@/components/JobProgress";
 
 export interface EmailLeadRow {
   id: string;
@@ -45,15 +47,15 @@ const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C:
 // work is. "Needs work" is everything waiting on the operator before it can be
 // sent; "Done" is everything the sequence has finished with, one way or
 // another. Due today cuts across them (every lead in it is In sequence).
-type Filter = "all" | "email" | "risky" | "ready" | "due" | "work" | "sequence" | "done";
+type Filter = "all" | "email" | "noemail" | "risky" | "ready" | "due" | "work" | "sequence" | "done";
 
-const FILTERS: Filter[] = ["all", "email", "risky", "ready", "due", "work", "sequence", "done"];
+const FILTERS: Filter[] = ["all", "email", "noemail", "risky", "ready", "due", "work", "sequence", "done"];
 
 function readFilter(v: unknown): Filter | null {
   return (FILTERS as unknown[]).includes(v) ? (v as Filter) : null;
 }
 
-const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "risky">, EmailLeadStatus[]> = {
+const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "noemail" | "risky">, EmailLeadStatus[]> = {
   ready: ["ready"],
   work: ["needs_opener", "check_email", "check_contact", "no_email"],
   sequence: ["in_sequence"],
@@ -65,6 +67,7 @@ function matches(row: EmailLeadRow, filter: Filter): boolean {
   if (filter === "due") return row.followUpDueToday;
   // Every lead with an address, whatever it is waiting on.
   if (filter === "email") return row.email !== null;
+  if (filter === "noemail") return row.email === null;
   if (filter === "risky") return row.risky;
   return FILTER_STATUSES[filter].includes(row.status);
 }
@@ -86,6 +89,17 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   const [tiers, setTiers] = useState<Set<string>>(new Set());
   const [inbox, setInbox] = useState("");
   const [sort, setSort] = useState<"updated" | "score" | "name">("updated");
+  // The pick for the bulk actions, as on Discovery: tick cards or rows, or
+  // Select all for everything the filters show.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  function toggle(id: string, on: boolean) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
   useEffect(() => {
     try {
       if (localStorage.getItem(VIEW_KEY) === "table") setView("table");
@@ -105,6 +119,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         [
           ["all", "All"],
           ["email", "Has email"],
+          ["noemail", "No email"],
           ["risky", "Risky"],
           ["ready", "Ready"],
           ["due", "Due today"],
@@ -134,6 +149,18 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           : 0,
     );
   const cards = view === "cards";
+  const allPicked = shown.length > 0 && shown.every((r) => picked.has(r.id));
+  function pickAll(on: boolean) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      for (const r of shown) {
+        if (on) next.add(r.id);
+        else next.delete(r.id);
+      }
+      return next;
+    });
+  }
+  const pickedRows = rows.filter((r) => picked.has(r.id));
   const extras = (
     <>
           <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field !h-8 w-auto text-[13px]">
@@ -224,6 +251,14 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         </div>
       </div>
 
+      <SelectionBar
+        rows={pickedRows}
+        allPicked={allPicked}
+        shownCount={shown.length}
+        onPickAll={pickAll}
+        onClear={() => setPicked(new Set())}
+      />
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 wide:hidden">
         <div className="m-pill-row flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
           {tabs.map((tab) => {
@@ -267,22 +302,35 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
               router.push(`/pipeline/${row.id}`);
             }}
-            className="card card-sheen group flex cursor-pointer flex-col gap-2 p-3.5 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-card-hover"
+            className={`card card-sheen group flex cursor-pointer flex-col gap-2 p-3.5 ${picked.has(row.id) ? "border-accent/40 bg-accent/5" : ""} transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-card-hover`}
           >
             <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={picked.has(row.id)}
+                onChange={(e) => toggle(row.id, e.target.checked)}
+                aria-label={`Select ${row.clinicName}`}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+              />
               <div className="min-w-0">
                 <Link href={`/pipeline/${row.id}`} className="block truncate text-sm font-semibold text-ink">
                   {row.clinicName}
                 </Link>
                 <p className="mt-0.5 truncate text-[11px] text-muted">{row.contactName ?? "No contact yet"}</p>
               </div>
-              {row.icpTier || row.icpVerdict ? (
+              </div>
+              {row.icpVerdict ? (
                 <IcpTierChip tier={row.icpTier} verdict={row.icpVerdict} score={row.icpScore} />
               ) : (
-                <span className="text-xs text-muted">Not scored</span>
+                <IcpScoreBadge
+                  tier={row.icpTier}
+                  total={row.icpScore ? Number(row.icpScore.split("/")[0]) : null}
+                  max={row.icpScore ? Number(row.icpScore.split("/")[1]) : 100}
+                />
               )}
             </div>
-            <div className="space-y-0.5 text-[12.5px]">
+            <div className="space-y-0.5 pl-[26px] text-[12.5px]">
               <p className="flex min-w-0 items-center gap-2 text-ink-soft">
                 <IconMapPin size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.location ?? "—"}</span>
@@ -292,7 +340,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <span className="truncate">{row.email ?? "No email yet"}</span>
               </p>
             </div>
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]">
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pl-[26px] pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]">
               <EmailStatusBadge status={row.status} />
               {row.sendBlocked && !row.toSend ? (
                 <span className="truncate text-xs text-bad" title={row.sendBlocked}>Can&apos;t send yet</span>
@@ -349,6 +397,9 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         <table className="w-full wide:[&_.td]:text-[13px] wide:[&_.td]:py-2.5 wide:[&_.th]:py-2 wide:[&_.th]:text-[11px]">
           <thead>
             <tr>
+              <th className="th w-10 pr-0">
+                <input type="checkbox" checked={allPicked} onChange={(e) => pickAll(e.target.checked)} aria-label="Select all" className="h-4 w-4 accent-accent" />
+              </th>
               <th className="th">Clinic</th>
               <th className="th">Email</th>
               <th className="th">Tier</th>
@@ -370,6 +421,15 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 }}
                 className="group cursor-pointer transition-colors hover:bg-wash/70"
               >
+                <td className="td w-10 pr-0">
+                  <input
+                    type="checkbox"
+                    checked={picked.has(row.id)}
+                    onChange={(e) => toggle(row.id, e.target.checked)}
+                    aria-label={`Select ${row.clinicName}`}
+                    className="h-4 w-4 accent-accent"
+                  />
+                </td>
                 <td className="td">
                   <Link
                     href={`/pipeline/${row.id}`}
@@ -432,7 +492,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             ))}
             {shown.length === 0 && (
               <tr>
-                <td className="td text-muted" colSpan={6}>
+                <td className="td text-muted" colSpan={7}>
                   {q ? "No clinic matches that search." : "Nothing here right now."}
                 </td>
               </tr>
@@ -440,6 +500,115 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// The pick's bar: Select all, how many are ticked, and the email-finding runs
+// for just those leads. Each run takes only the picked leads it applies to
+// (Check: ones with an address; Facebook and owners: their own waiting lists)
+// and says so when none of them qualify.
+function SelectionBar({
+  rows,
+  allPicked,
+  shownCount,
+  onPickAll,
+  onClear,
+}: {
+  rows: EmailLeadRow[];
+  allPicked: boolean;
+  shownCount: number;
+  onPickAll: (on: boolean) => void;
+  onClear: () => void;
+}) {
+  const check = useJobRun("email-check");
+  const facebook = useJobRun("facebook-emails");
+  const owners = useJobRun("find-owners");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const ids = rows.map((r) => r.id);
+  const withEmail = rows.filter((r) => r.email !== null).length;
+  const noEmail = rows.length - withEmail;
+
+  async function run(
+    key: string,
+    ask: string,
+    start: () => Promise<{ ok: true; id: string } | { ok: false; error: string }>,
+    track: (id: string) => void,
+  ) {
+    if (!confirm(ask)) return;
+    setError(null);
+    setBusy(key);
+    const r = await start().catch(() => ({ ok: false as const, error: "The run could not be started." }));
+    setBusy(null);
+    if (!r.ok) setError(r.error);
+    else track(r.id);
+  }
+
+  const n = rows.length;
+  const btn = "btn !h-8 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden">
+      <label className="flex items-center gap-2 text-[13px] text-ink-soft">
+        <input type="checkbox" checked={allPicked} onChange={(e) => onPickAll(e.target.checked)} disabled={shownCount === 0} className="h-4 w-4 accent-accent" />
+        Select all
+      </label>
+      {n > 0 && (
+        <>
+          <span className="num ml-1 text-[13px] font-medium text-ink">{n} selected</span>
+          <button
+            type="button"
+            className={btn}
+            disabled={owners.running || busy !== null}
+            onClick={() =>
+              void run(
+                "owners",
+                `Find the owner for the ${n} selected lead${n === 1 ? "" : "s"}?\n\nNames come from the NPI Registry and the clinic's site (free); emails for confirmed owners use Hunter and Instantly credits. Leads that already have their owner are skipped.`,
+                () => startOwnerJob({ leadIds: ids }),
+                owners.track,
+              )
+            }
+          >
+            {busy === "owners" || owners.running ? "Finding owners…" : "Find owners"}
+          </button>
+          <button
+            type="button"
+            className={btn}
+            disabled={withEmail === 0 || check.running || busy !== null}
+            title={withEmail === 0 ? "None of the selected leads has an address" : undefined}
+            onClick={() =>
+              void run(
+                "check",
+                `Check the ${withEmail} selected address${withEmail === 1 ? "" : "es"} through Instantly? Each check uses Instantly credits.`,
+                () => startEmailCheckJob({ leadIds: ids, force: true }),
+                check.track,
+              )
+            }
+          >
+            {busy === "check" || check.running ? "Checking…" : `Check emails${withEmail > 0 ? ` (${withEmail})` : ""}`}
+          </button>
+          <button
+            type="button"
+            className={btn}
+            disabled={noEmail === 0 || facebook.running || busy !== null}
+            title={noEmail === 0 ? "Every selected lead already has an address" : undefined}
+            onClick={() =>
+              void run(
+                "facebook",
+                `Look for an email on the website and Facebook page of the ${noEmail} selected lead${noEmail === 1 ? "" : "s"} with no address?`,
+                () => startFacebookEmailJob({ leadIds: ids }),
+                facebook.track,
+              )
+            }
+          >
+            {busy === "facebook" || facebook.running ? "Reading…" : `Find on Facebook${noEmail > 0 ? ` (${noEmail})` : ""}`}
+          </button>
+          <button type="button" onClick={onClear} className="text-[13px] font-medium text-muted hover:text-ink">
+            Clear
+          </button>
+        </>
+      )}
+      {error && <p className="basis-full text-xs text-bad">{error}</p>}
     </div>
   );
 }
