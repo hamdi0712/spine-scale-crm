@@ -46,12 +46,12 @@ export async function assignInboxes(leadIds: string[], inboxes?: SendingInboxVie
 }
 
 // Emails each inbox has marked sent today.
-export async function sentTodayByInbox(now = new Date()): Promise<Record<string, number>> {
+export async function sentTodayByInbox(now = new Date(), opts: { risky?: boolean } = {}): Promise<Record<string, number>> {
   const start = new Date(now);
   start.setHours(0, 0, 0, 0);
   const rows = await prisma.emailSend.groupBy({
     by: ["inboxId"],
-    where: { sentAt: { gte: start }, inboxId: { not: null } },
+    where: { sentAt: { gte: start }, inboxId: { not: null }, ...(opts.risky ? { risky: true } : {}) },
     _count: { _all: true },
   });
   return Object.fromEntries(rows.map((r) => [r.inboxId as string, r._count._all]));

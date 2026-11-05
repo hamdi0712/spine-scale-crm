@@ -445,7 +445,7 @@ export function guessAddresses(person: DecisionMakerName, domain: string): strin
 
 // ─── Where the found address goes ──────────────────────────────────────────
 
-export type OwnerEmailSource = Extract<EmailSource, "hunter" | "pattern_guess">;
+export type OwnerEmailSource = Extract<EmailSource, "hunter" | "hunter_inferred" | "pattern_guess">;
 
 export interface OwnerEmailCandidate {
   address: string;

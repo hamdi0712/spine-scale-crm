@@ -220,7 +220,7 @@ function parsePickNames(raw: string | null): string[] {
 // ─── 2. The address ────────────────────────────────────────────────────────
 
 export type OwnerEmailOutcome =
-  | { kind: "found"; email: string; status: string; source: "hunter" | "pattern_guess"; placed: "main" | "alternate"; detail: string }
+  | { kind: "found"; email: string; status: string; source: "hunter" | "hunter_inferred" | "pattern_guess"; placed: "main" | "alternate"; detail: string }
   // Tried, and every address came back invalid (kept as invalid alternates).
   | { kind: "invalid"; detail: string }
   | { kind: "none"; detail: string }
@@ -297,7 +297,7 @@ export async function findOwnerEmail(leadId: string, budget: OwnerBudget): Promi
       const c = await instantly(f.email);
       if (c === null) return outOfBudget("Instantly");
       if (!c.ok) return { kind: "failed", detail: c.error, stop: c.code === "auth" || c.code === "plan" || c.code === "no_key" };
-      const candidate: OwnerEmailCandidate = { address: f.email, status: c.status, source: "hunter", found: f.provenance === "found" };
+      const candidate: OwnerEmailCandidate = { address: f.email, status: c.status, source: f.provenance === "found" ? "hunter" : "hunter_inferred", found: f.provenance === "found" };
       if (c.status !== "invalid") return save(leadId, candidate, [], `Hunter (${f.provenance})`);
       tried.push(candidate);
     }

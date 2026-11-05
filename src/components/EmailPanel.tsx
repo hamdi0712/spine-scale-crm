@@ -19,6 +19,9 @@ import {
   setLeadInbox,
   setEmailVersion,
   unapproveEmail,
+  acceptRiskyEmail,
+  revokeRiskyEmail,
+  keepFlaggedRiskyEmail,
 } from "@/lib/actions/emailWorkflow";
 import {
   EMAIL_REPLY_TYPES,
@@ -27,6 +30,7 @@ import {
   EMAIL_VERSION_LABELS,
   EmailToSend,
   EmailVersion,
+  RISKY_EXPLANATION,
   SUPPRESSION_REASON_LABELS,
   SuppressionReason,
 } from "@/lib/emailWorkflow";
@@ -54,6 +58,18 @@ export interface EmailPanelProps {
   inboxLocked: boolean;
   inboxSentToday: number;
   inboxLimit: number;
+  // Sends to accepted risky addresses from that inbox today, and the limit.
+  inboxRiskySentToday: number;
+  riskyLimit: number;
+  // A risky (catch-all) address: whether it may be accepted (found, not
+  // guessed), whether it is, and whether a bounce on its domain flagged it.
+  risky: {
+    isRisky: boolean;
+    canAccept: boolean;
+    accepted: boolean;
+    inSequence: boolean;
+    flagged: { at: string; reason: string | null } | null;
+  };
   // The latest send, when it may be undone: no reply, bounce or unsubscribe
   // since. Null hides "Undo mark sent".
   undo: { sendId: string; label: string } | null;
@@ -155,7 +171,53 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
           {p.email ? <span className="break-all font-medium">{p.email}</span> : <span className="text-muted">no address yet</span>}
           {p.emailDetail && <span className="text-xs text-muted"> · {p.emailDetail}</span>}
         </p>
-        {p.email && !closed && (
+        {p.email && !closed && p.risky.isRisky && (
+          <div className="mt-2 space-y-1.5">
+            <p className="text-xs text-muted">
+              <span className="mr-1.5 rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn">Risky</span>
+              {RISKY_EXPLANATION}
+            </p>
+            {p.risky.accepted ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted">Accepted by you{p.risky.inSequence ? "" : " — counts as checked for Ready"}.</span>
+                <button
+                  type="button"
+                  className="btn h-8 px-2.5 text-xs"
+                  disabled={pending}
+                  onClick={() => {
+                    const ask = p.risky.inSequence
+                      ? "Revoke accept? Its follow-ups pause until it is accepted again."
+                      : "Revoke accept? The lead goes back out of Ready.";
+                    if (!confirm(ask)) return;
+                    run(() => revokeRiskyEmail(p.leadId));
+                  }}
+                >
+                  Revoke accept
+                </button>
+              </div>
+            ) : p.risky.canAccept ? (
+              <button type="button" className="btn h-8 px-2.5 text-xs" disabled={pending} onClick={() => run(() => acceptRiskyEmail(p.leadId))}>
+                Accept risky
+              </button>
+            ) : (
+              <p className="text-xs text-muted">This address was guessed, inferred or imported rather than found, so it can’t be accepted.</p>
+            )}
+            {p.risky.flagged && (
+              <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-3 py-2">
+                <p className="text-xs font-medium text-warn">Review before sending</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {p.risky.flagged.reason ?? "Another accepted risky address on this domain bounced."} Not Ready, and follow-ups are paused, until you keep or revoke it.
+                </p>
+                <div className="mt-1.5 flex gap-2">
+                  <button type="button" className="btn h-8 px-2.5 text-xs" disabled={pending} onClick={() => run(() => keepFlaggedRiskyEmail(p.leadId))}>
+                    Reviewed – keep
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        {p.email && !closed && !p.risky.isRisky && (
           <div className="mt-1.5">
             <EmailCheckButton
               label={p.check.checked ? "Check again" : "Check email"}
@@ -328,7 +390,7 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
             </div>
           )}
           <div className="mt-2.5">
-            <EmailSendButtons leadId={p.leadId} toSend={p.toSend} inboxSentToday={p.inboxSentToday} inboxLimit={p.inboxLimit} />
+            <EmailSendButtons leadId={p.leadId} toSend={p.toSend} inboxSentToday={p.inboxSentToday} inboxLimit={p.inboxLimit} inboxRiskySentToday={p.inboxRiskySentToday} riskyLimit={p.riskyLimit} />
           </div>
         </div>
       )}

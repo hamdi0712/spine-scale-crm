@@ -256,6 +256,13 @@ export default function EmailSettingsForm({
             <input type="number" min={0.01} step={0.01} className="field num" value={v.creditsPerCheck} onChange={(e) => set("creditsPerCheck", Number(e.target.value))} />
             <span className="mt-1 block text-xs text-muted">Corrected from what Instantly reports after each check.</span>
           </label>
+          <label className="block">
+            <span className="field-label">Risky sends per inbox per day</span>
+            <input type="number" min={0} max={500} className="field num" value={v.riskyDailyLimit} onChange={(e) => set("riskyDailyLimit", Number(e.target.value))} />
+            <span className="mt-1 block text-xs text-muted">
+              Emails to risky (catch-all) addresses you accepted. Going over asks first on Mark sent; it doesn&apos;t block.
+            </span>
+          </label>
         </div>
       </div>
 

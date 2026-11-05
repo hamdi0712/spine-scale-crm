@@ -49,6 +49,9 @@ import {
   sendBlocker,
   undoSendBlocker,
   unfilledPlaceholders,
+  canAcceptRisky,
+  riskyAccepted,
+  emailDomain,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
 import { findSuppression, suppressLead, suppressedMessage } from "@/lib/suppression";
@@ -385,14 +388,15 @@ export async function markEmailSent(
   const subject = typeof sent.subject === "string" ? sent.subject.slice(0, 300) : "";
   const body = typeof sent.body === "string" ? sent.body.slice(0, 8000) : "";
 
+  const risky = riskyAccepted(lead);
   await prisma.$transaction([
     prisma.emailSend.create({
-      data: { leadId, step: next.step, toEmail: (lead.email ?? "").trim(), inboxId: inbox.id, fromEmail: inbox.address, subject, body, sentAt: now },
+      data: { leadId, step: next.step, toEmail: (lead.email ?? "").trim(), inboxId: inbox.id, fromEmail: inbox.address, subject, body, sentAt: now, risky },
     }),
     prisma.activityLog.create({
       data: {
         kind: "EMAIL_MARKED_SENT",
-        summary: `${emailStepLabel(next.step)} marked sent to ${lead.clinicName} from ${inbox.address}`,
+        summary: `${emailStepLabel(next.step)} marked sent to ${lead.clinicName} from ${inbox.address}${risky ? " (risky address)" : ""}`,
         leadId,
       },
     }),
@@ -468,8 +472,75 @@ export async function markEmailReplied(leadId: string, reply: { text: string; ty
   return { ok: true };
 }
 
+// ─── Risky (catch-all) addresses ───────────────────────────────────────────
+
+// "Accept risky": the operator takes on an address Instantly cannot confirm
+// because the clinic's server accepts everything. Only an address that was
+// actually found (see canAcceptRisky); logged in the activity feed.
+export async function acceptRiskyEmail(leadId: string): Promise<Result> {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  if (lead.emailStatus !== "risky") return { ok: false, error: "The address is not risky — reload the page." };
+  if (!canAcceptRisky(lead)) return { ok: false, error: "This address was guessed or imported, not found — it cannot be accepted." };
+  if (riskyAccepted(lead)) return { ok: true };
+  const email = (lead.email ?? "").trim().toLowerCase();
+  await prisma.$transaction([
+    prisma.lead.update({
+      where: { id: leadId },
+      data: { emailRiskyAcceptedAt: new Date(), emailRiskyAcceptedEmail: email, emailRiskyFlaggedAt: null, emailRiskyFlagReason: null },
+    }),
+    prisma.activityLog.create({
+      data: { kind: "EMAIL_RISKY_ACCEPTED", summary: `Accepted risky address ${email} for ${lead.clinicName} (catch-all domain)`, leadId },
+    }),
+  ]);
+  revalidate(leadId);
+  revalidateFeed();
+  return { ok: true };
+}
+
+// "Revoke accept": takes the acceptance back. Before Email 1 the lead leaves
+// Ready; mid-sequence its follow-ups pause. Logged.
+export async function revokeRiskyEmail(leadId: string): Promise<Result> {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  if (!lead.emailRiskyAcceptedAt) return { ok: true };
+  const email = lead.emailRiskyAcceptedEmail ?? (lead.email ?? "").trim().toLowerCase();
+  await prisma.$transaction([
+    prisma.lead.update({
+      where: { id: leadId },
+      data: { emailRiskyAcceptedAt: null, emailRiskyAcceptedEmail: null, emailRiskyFlaggedAt: null, emailRiskyFlagReason: null },
+    }),
+    prisma.activityLog.create({
+      data: { kind: "EMAIL_RISKY_REVOKED", summary: `Revoked acceptance of risky address ${email} for ${lead.clinicName}`, leadId },
+    }),
+  ]);
+  revalidate(leadId);
+  revalidateFeed();
+  return { ok: true };
+}
+
+// "Reviewed – keep": clears the flag a bounce on the same domain set; the
+// acceptance stands, and the lead is Ready (or its follow-ups resume). Logged.
+export async function keepFlaggedRiskyEmail(leadId: string): Promise<Result> {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  if (!lead.emailRiskyFlaggedAt) return { ok: true };
+  await prisma.$transaction([
+    prisma.lead.update({ where: { id: leadId }, data: { emailRiskyFlaggedAt: null, emailRiskyFlagReason: null } }),
+    prisma.activityLog.create({
+      data: { kind: "EMAIL_RISKY_REVIEWED", summary: `Reviewed risky address ${(lead.email ?? "").trim()} for ${lead.clinicName} — kept`, leadId },
+    }),
+  ]);
+  revalidate(leadId);
+  revalidateFeed();
+  return { ok: true };
+}
+
 // A bounce is about the address, not the clinic: it moves to the alternates
 // as invalid and the lead goes back to No email. The clinic is not suppressed.
+// When the address was a risky one accepted by hand, the domain's catch-all
+// is proven to lie: every other accepted risky lead on it is flagged for
+// review — out of Ready, follow-ups paused — until kept or revoked.
 export async function markEmailBounced(leadId: string): Promise<Result> {
   const lead = await prisma.lead.findUnique({ where: { id: leadId } });
   if (!lead) return { ok: false, error: "That lead no longer exists." };
@@ -493,14 +564,39 @@ export async function markEmailBounced(leadId: string): Promise<Result> {
       emailSource: null,
       emailCheckedAt: new Date(),
       emailAlternates: JSON.stringify(alternates),
+      emailRiskyAcceptedAt: null,
+      emailRiskyAcceptedEmail: null,
+      emailRiskyFlaggedAt: null,
+      emailRiskyFlagReason: null,
     },
   });
+  const wasAcceptedRisky = riskyAccepted(lead);
+  await prisma.activityLog.create({
+    data: { kind: "EMAIL_BOUNCED", summary: `${address} bounced for ${lead.clinicName}${wasAcceptedRisky ? " (accepted risky address)" : ""}`, leadId },
+  });
+  const domain = emailDomain(address);
+  if (wasAcceptedRisky && domain) {
+    const reason = `${address} (${lead.clinicName}) bounced on the same catch-all domain`;
+    const others = await prisma.lead.findMany({
+      where: { id: { not: leadId }, emailStatus: "risky", emailRiskyAcceptedAt: { not: null }, email: { endsWith: `@${domain}` } },
+    });
+    const now = new Date();
+    for (const o of others.filter((o) => riskyAccepted(o) && emailDomain(o.email) === domain)) {
+      await prisma.$transaction([
+        prisma.lead.update({ where: { id: o.id }, data: { emailRiskyFlaggedAt: now, emailRiskyFlagReason: reason } }),
+        prisma.activityLog.create({
+          data: { kind: "EMAIL_RISKY_FLAGGED", summary: `Flagged ${(o.email ?? "").trim()} (${o.clinicName}) for review: ${reason}`, leadId: o.id },
+        }),
+      ]);
+      revalidate(o.id);
+    }
+  }
   // The send it bounced on: the latest one, which is the one that went to
   // this address. Counted by the dashboard's bounce rate.
   const last = await prisma.emailSend.findFirst({ where: { leadId, bouncedAt: null }, orderBy: { step: "desc" }, select: { id: true } });
   if (last) await prisma.emailSend.update({ where: { id: last.id }, data: { bouncedAt: new Date() } });
   revalidate(leadId);
-  revalidatePath("/");
+  revalidateFeed();
   return { ok: true };
 }
 
