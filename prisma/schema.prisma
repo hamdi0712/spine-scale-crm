@@ -287,6 +287,10 @@ model Lead {
   // The operator set emailType themselves (the lead form, or setLeadEmail):
   // automatic re-labelling leaves it alone.
   emailTypeByHand Boolean   @default(false)
+  // The contact name was set by hand — typed in the lead form, picked as the
+  // owner, or set at the operator's request through the assistant. The
+  // re-clean never clears or renames one.
+  contactNameByHand Boolean @default(false)
   emailStatus     String?
   emailSource     String?
   emailCheckedAt  DateTime?

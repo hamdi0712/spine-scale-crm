@@ -250,6 +250,22 @@ function isPageWord(w: string): boolean {
   return PAGE_WORDS.has(w.toLowerCase().replace(/[^a-z]/g, ""));
 }
 
+// A contact name that is not a person's name, whatever set it: it starts
+// with a page or filler word ("Dr. Iguess", "Dr. Physical Therapists",
+// "Welcome Team"), or a word in it is not shaped like a name (digits,
+// symbols, no vowel). Deliberately looser than cleanDoctorName, so a real
+// name it would not build — "Dr. Lee", "Dr. Sean McDonald", "JANE DOE" — is
+// never cleared.
+export function contactNameFailsRules(raw: string | null | undefined): boolean {
+  const words = cleanName((raw ?? "").replace(/^(?:dr\.?|doctor)\s+/i, ""))
+    .split(" ")
+    .map((w) => w.replace(/[,]$/, "").replace(/'s$/i, ""))
+    .filter((w) => w !== "");
+  if (words.length === 0) return true;
+  if (isPageWord(words[0])) return true;
+  return words.some((w) => !/^[A-Za-z][A-Za-z'.-]*$/.test(w) || (w.replace(/[^a-z]/gi, "").length > 1 && !/[aeiouy]/i.test(w) && !/^[A-Z]{2,3}$/.test(w) && !/^Ng$/i.test(w)));
+}
+
 // One doctor's name as the page wrote it, cleaned: possessives dropped
 // ("Plasker's"), cut at the first page word, at most three words. Null when
 // nothing of a name is left, or what is left is a fragment ("Ste").

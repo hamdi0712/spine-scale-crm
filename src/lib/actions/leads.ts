@@ -85,7 +85,7 @@ export async function createLead(formData: FormData) {
   const fields = leadFields(formData);
   // Typed in here, so it is the operator's own (manual).
   const lead = await prisma.lead.create({
-    data: { ...fields, emailSource: fields.email === null ? null : "manual" },
+    data: { ...fields, emailSource: fields.email === null ? null : "manual", contactNameByHand: fields.contactName !== null },
   });
   revalidatePath("/pipeline");
   redirect(`/pipeline/${lead.id}`);
@@ -104,7 +104,7 @@ export async function updateLead(id: string, formData: FormData) {
   // nothing, the same as before.
   const current = await prisma.lead.findUnique({
     where: { id },
-    select: { stage: true, email: true, emailSource: true, emailType: true, channel: true },
+    select: { stage: true, email: true, emailSource: true, emailType: true, channel: true, contactName: true },
   });
   if (!current) return;
 
@@ -123,6 +123,8 @@ export async function updateLead(id: string, formData: FormData) {
     data: {
       ...fields,
       ...stageChangePatch(str(formData, "stage"), current.stage),
+      // A name changed here is the operator's own: the re-clean leaves it be.
+      ...(fields.contactName !== current.contactName ? { contactNameByHand: fields.contactName !== null } : {}),
       ...(email.changed
         ? { emailSource: email.emailSource, emailType: null, emailStatus: null, emailCheckedAt: null }
         : {}),

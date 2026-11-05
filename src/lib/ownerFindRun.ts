@@ -205,6 +205,7 @@ export async function pickOwner(leadId: string, name: string): Promise<{ ok: tru
   if (!choices.has(chosen)) return { ok: false, error: "Pick one of the names shown." };
   await prisma.lead.update({ where: { id: leadId }, data: { ownerStatus: "confirmed", ownerSource: "manual", ownerCheckedAt: new Date() } });
   await setOwnerAsContact(leadId, chosen, null);
+  await prisma.lead.update({ where: { id: leadId }, data: { contactNameByHand: true } });
   return { ok: true };
 }
 
@@ -373,5 +374,7 @@ export async function rebuildDraft(leadId: string): Promise<void> {
   if (!lead || !lead.emailOpener || lead.emailSends.length > 0) return;
   const settings = await loadEmailSettings();
   const email = renderEmail(settings, lead, defaultEmailVersion(lead), lead.emailOpener);
+  // Unchanged copy keeps its approval.
+  if (email.subject === lead.emailSubject && email.body === lead.emailBody) return;
   await prisma.lead.update({ where: { id: leadId }, data: { emailSubject: email.subject, emailBody: email.body, emailApprovedAt: null } });
 }

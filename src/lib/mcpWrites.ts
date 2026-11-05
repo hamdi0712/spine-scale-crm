@@ -456,7 +456,7 @@ async function planChange(name: McpWriteToolName, lead: LeadForWrite, args: Reco
       return {
         ok: true,
         apply: async () => {
-          await prisma.lead.update({ where: { id: lead.id }, data: { contactName } });
+          await prisma.lead.update({ where: { id: lead.id }, data: { contactName, contactNameByHand: true } });
           return {};
         },
         summary: (b) => `Set ${lead.clinicName}'s contact from ${show(b.contactName)} to “${contactName}”`,
