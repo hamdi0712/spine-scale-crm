@@ -33,7 +33,6 @@ import {
   emailReplyRate,
   emailReplySubtitle,
   emailsSentSubtitle,
-  emailsSentValue,
 } from "@/lib/funnel";
 import { cookies } from "next/headers";
 import ChannelToggle from "@/components/ChannelToggle";
@@ -261,12 +260,13 @@ export default async function DashboardPage() {
           href: "/pipeline?channel=email&tab=all",
         },
         {
-          label: "Emails sent today",
-          shortLabel: "Emails today",
-          value: emailsSentValue(email.sent),
+          label: "Emails sent",
+          shortLabel: "Emails sent",
+          // Every email ever sent; today's count against the limit under it.
+          value: String(email.sentAllTime),
           icon: "messages",
-          delta: emailsSentSubtitle(email.sent, email.inboxes),
-          shortDelta: email.inboxes === 0 ? "No inbox yet" : "Across inboxes",
+          delta: email.inboxes === 0 ? "No sending inbox yet" : `${email.sent.sent} today · ${emailsSentSubtitle(email.sent, email.inboxes)}`,
+          shortDelta: email.inboxes === 0 ? "No inbox yet" : `${email.sent.sent} today`,
           tone: email.sent.sent > email.sent.limit ? "alert" : email.sent.sent > 0 ? "up" : "flat",
           href: "/pipeline?channel=email&tab=sequence",
         },
@@ -609,7 +609,7 @@ export default async function DashboardPage() {
 
 // The Email view's four numbers. Only read when the Email view is showing.
 async function loadEmailCards(now: Date, monthStart: Date, nextMonthStart: Date) {
-  const [inboxes, sentToday, firstSends, booked] = await Promise.all([
+  const [inboxes, sentToday, firstSends, booked, sentAllTime] = await Promise.all([
     loadInboxes(),
     sentTodayByInbox(now),
     // Email 1 in the last 30 days: the cohort the reply and bounce rates are
@@ -628,9 +628,11 @@ async function loadEmailCards(now: Date, monthStart: Date, nextMonthStart: Date)
         stageChangedAt: { gte: monthStart, lt: nextMonthStart },
       },
     }),
+    prisma.emailSend.count(),
   ]);
   return {
     inboxes: inboxes.length,
+    sentAllTime,
     sent: {
       sent: Object.values(sentToday).reduce((a, b) => a + b, 0),
       limit: inboxes.reduce((a, i) => a + i.dailyLimit, 0),

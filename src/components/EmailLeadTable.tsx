@@ -92,6 +92,12 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   // The pick for the bulk actions, as on Discovery: tick cards or rows, or
   // Select all for everything the filters show.
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // The tick boxes only show in select mode; leaving it drops the pick.
+  const [selecting, setSelecting] = useState(false);
+  function setSelectMode(on: boolean) {
+    setSelecting(on);
+    if (!on) setPicked(new Set());
+  }
   function toggle(id: string, on: boolean) {
     setPicked((prev) => {
       const next = new Set(prev);
@@ -257,6 +263,8 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         shownCount={shown.length}
         onPickAll={pickAll}
         onClear={() => setPicked(new Set())}
+        selecting={selecting}
+        onSelectMode={setSelectMode}
       />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 wide:hidden">
@@ -306,13 +314,15 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
-              <input
-                type="checkbox"
-                checked={picked.has(row.id)}
-                onChange={(e) => toggle(row.id, e.target.checked)}
-                aria-label={`Select ${row.clinicName}`}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
-              />
+              {selecting && (
+                <input
+                  type="checkbox"
+                  checked={picked.has(row.id)}
+                  onChange={(e) => toggle(row.id, e.target.checked)}
+                  aria-label={`Select ${row.clinicName}`}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                />
+              )}
               <div className="min-w-0">
                 <Link href={`/pipeline/${row.id}`} className="block truncate text-sm font-semibold text-ink">
                   {row.clinicName}
@@ -330,7 +340,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 />
               )}
             </div>
-            <div className="space-y-0.5 pl-[26px] text-[12.5px]">
+            <div className={`space-y-0.5 ${selecting ? "pl-[26px]" : ""} text-[12.5px]`}>
               <p className="flex min-w-0 items-center gap-2 text-ink-soft">
                 <IconMapPin size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.location ?? "—"}</span>
@@ -340,7 +350,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <span className="truncate">{row.email ?? "No email yet"}</span>
               </p>
             </div>
-            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pl-[26px] pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]">
+            <div className={`mt-auto flex flex-wrap items-center justify-between gap-2 ${selecting ? "pl-[26px]" : ""} pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]`}>
               <EmailStatusBadge status={row.status} />
               {row.sendBlocked && !row.toSend ? (
                 <span className="truncate text-xs text-bad" title={row.sendBlocked}>Can&apos;t send yet</span>
@@ -397,9 +407,11 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         <table className="w-full wide:[&_.td]:text-[13px] wide:[&_.td]:py-2.5 wide:[&_.th]:py-2 wide:[&_.th]:text-[11px]">
           <thead>
             <tr>
-              <th className="th w-10 pr-0">
-                <input type="checkbox" checked={allPicked} onChange={(e) => pickAll(e.target.checked)} aria-label="Select all" className="h-4 w-4 accent-accent" />
-              </th>
+              {selecting && (
+                <th className="th w-10 pr-0">
+                  <input type="checkbox" checked={allPicked} onChange={(e) => pickAll(e.target.checked)} aria-label="Select all" className="h-4 w-4 accent-accent" />
+                </th>
+              )}
               <th className="th">Clinic</th>
               <th className="th">Email</th>
               <th className="th">Tier</th>
@@ -421,15 +433,17 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 }}
                 className="group cursor-pointer transition-colors hover:bg-wash/70"
               >
-                <td className="td w-10 pr-0">
-                  <input
-                    type="checkbox"
-                    checked={picked.has(row.id)}
-                    onChange={(e) => toggle(row.id, e.target.checked)}
-                    aria-label={`Select ${row.clinicName}`}
-                    className="h-4 w-4 accent-accent"
-                  />
-                </td>
+                {selecting && (
+                  <td className="td w-10 pr-0">
+                    <input
+                      type="checkbox"
+                      checked={picked.has(row.id)}
+                      onChange={(e) => toggle(row.id, e.target.checked)}
+                      aria-label={`Select ${row.clinicName}`}
+                      className="h-4 w-4 accent-accent"
+                    />
+                  </td>
+                )}
                 <td className="td">
                   <Link
                     href={`/pipeline/${row.id}`}
@@ -492,7 +506,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             ))}
             {shown.length === 0 && (
               <tr>
-                <td className="td text-muted" colSpan={7}>
+                <td className="td text-muted" colSpan={selecting ? 7 : 6}>
                   {q ? "No clinic matches that search." : "Nothing here right now."}
                 </td>
               </tr>
@@ -514,12 +528,16 @@ function SelectionBar({
   shownCount,
   onPickAll,
   onClear,
+  selecting,
+  onSelectMode,
 }: {
   rows: EmailLeadRow[];
   allPicked: boolean;
   shownCount: number;
   onPickAll: (on: boolean) => void;
   onClear: () => void;
+  selecting: boolean;
+  onSelectMode: (on: boolean) => void;
 }) {
   const check = useJobRun("email-check");
   const facebook = useJobRun("facebook-emails");
@@ -547,8 +565,20 @@ function SelectionBar({
 
   const n = rows.length;
   const btn = "btn !h-8 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
+  if (!selecting) {
+    return (
+      <div className="mb-3 flex items-center max-md:hidden">
+        <button type="button" onClick={() => onSelectMode(true)} className={btn} disabled={shownCount === 0}>
+          Select
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden">
+      <button type="button" onClick={() => onSelectMode(false)} className={btn}>
+        Done
+      </button>
       <label className="flex items-center gap-2 text-[13px] text-ink-soft">
         <input type="checkbox" checked={allPicked} onChange={(e) => onPickAll(e.target.checked)} disabled={shownCount === 0} className="h-4 w-4 accent-accent" />
         Select all
