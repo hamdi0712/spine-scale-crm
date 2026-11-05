@@ -8,7 +8,7 @@ import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
 import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
 import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge";
-import EmailSendButtons from "@/components/EmailSendButtons";
+import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
 import { useJobRun } from "@/components/JobProgress";
 
@@ -38,6 +38,12 @@ export interface EmailLeadRow {
   inbox: string | null;
   inboxSentToday: number;
   inboxLimit: number;
+  inboxRiskySentToday: number;
+  riskyLimit: number;
+  // The main address is risky and accepted by hand; flagged for review after
+  // a bounce on its domain.
+  riskyAccepted: boolean;
+  riskyFlagged: boolean;
 }
 
 const VIEW_KEY = "pipeline-email-view";
@@ -348,6 +354,8 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               <p className={`flex min-w-0 items-center gap-2 ${row.email ? "text-ink-soft" : "text-muted"}`} title={row.emailDetail ?? undefined}>
                 <IconMail size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.email ?? "No email yet"}</span>
+                {row.riskyAccepted && <RiskyTag />}
+                {row.riskyFlagged && <span className="text-[11px] font-medium text-warn">Review</span>}
               </p>
             </div>
             <div className={`mt-auto flex flex-wrap items-center justify-between gap-2 ${selecting ? "pl-[26px]" : ""} pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]`}>
@@ -355,7 +363,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               {row.sendBlocked && !row.toSend ? (
                 <span className="truncate text-xs text-bad" title={row.sendBlocked}>Can&apos;t send yet</span>
               ) : row.toSend ? (
-                <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
+                <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} inboxRiskySentToday={row.inboxRiskySentToday} riskyLimit={row.riskyLimit} compact />
               ) : (
                 <span className="truncate text-[11px] text-muted">{row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]}</span>
               )}
@@ -383,6 +391,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               </div>
               <p className={`mt-1 truncate text-sm ${row.email ? "text-ink/80" : "text-muted"}`}>
                 {row.email ?? "No email yet"}
+                {row.riskyAccepted && <> <RiskyTag /></>}
               </p>
               <p className="mt-2 text-xs font-medium text-accent">
                 {row.followUpDueToday ? "Send the follow-up" : EMAIL_LEAD_NEXT[row.status]} →
@@ -390,7 +399,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             </Link>
             {row.toSend && (
               <div className="mt-2 px-1">
-                <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
+                <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} inboxRiskySentToday={row.inboxRiskySentToday} riskyLimit={row.riskyLimit} compact />
               </div>
             )}
           </li>
@@ -458,7 +467,10 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <td className="td">
                   {row.email ? (
                     <>
-                      <div className="break-all text-sm text-ink">{row.email}</div>
+                      <div className="break-all text-sm text-ink">
+                        {row.email}
+                        {row.riskyAccepted && <> <RiskyTag /></>}
+                      </div>
                       {row.emailDetail && (
                         <div className="mt-0.5 text-xs text-muted">{row.emailDetail}</div>
                       )}
@@ -484,7 +496,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                     <span className="text-xs text-bad">{row.sendBlocked}</span>
                   ) : row.toSend ? (
                     <div className="flex justify-end">
-                      <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} compact />
+                      <EmailSendButtons leadId={row.id} toSend={row.toSend} inboxSentToday={row.inboxSentToday} inboxLimit={row.inboxLimit} inboxRiskySentToday={row.inboxRiskySentToday} riskyLimit={row.riskyLimit} compact />
                     </div>
                   ) : (
                     <Link href={`/pipeline/${row.id}`} className="btn h-8 whitespace-nowrap px-3 text-xs">

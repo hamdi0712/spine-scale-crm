@@ -17,6 +17,8 @@ export default function EmailSendButtons({
   toSend,
   inboxSentToday,
   inboxLimit,
+  inboxRiskySentToday = 0,
+  riskyLimit = 0,
   compact = false,
 }: {
   leadId: string;
@@ -24,6 +26,10 @@ export default function EmailSendButtons({
   // What the sending inbox has sent today, and its own limit.
   inboxSentToday: number;
   inboxLimit: number;
+  // Sends to accepted risky addresses from that inbox today, and the
+  // per-inbox risky limit (Settings → Email). Over it asks too.
+  inboxRiskySentToday?: number;
+  riskyLimit?: number;
   compact?: boolean;
 }) {
   const router = useRouter();
@@ -53,6 +59,18 @@ export default function EmailSendButtons({
     ) {
       return;
     }
+    if (
+      toSend.risky &&
+      inboxRiskySentToday >= riskyLimit &&
+      !confirm(
+        confirmText(
+          `That will be ${inboxRiskySentToday + 1} risky sends today from ${toSend.from}, over the risky limit of ${riskyLimit}. Mark it sent anyway?`,
+          `${inboxShort(toSend.from)} over its risky limit: ${inboxRiskySentToday + 1} of ${riskyLimit} today. Mark sent?`,
+        ),
+      )
+    ) {
+      return;
+    }
     setError(null);
     start(async () => {
       const r = await markEmailSent(leadId, { step: toSend.step, subject: toSend.subject, body: toSend.body, inboxId: toSend.inboxId });
@@ -74,6 +92,7 @@ export default function EmailSendButtons({
         >
           Open in Gmail
         </a>
+        {toSend.risky && <RiskyTag />}
         <button type="button" onClick={() => void copy()} className={btn}>
           {copied ? "Copied" : "Copy email"}
         </button>
@@ -83,5 +102,17 @@ export default function EmailSendButtons({
       </div>
       {error && <p className="mt-1.5 text-xs text-bad">{error}</p>}
     </div>
+  );
+}
+
+// The small tag on an accepted risky (catch-all) address.
+export function RiskyTag() {
+  return (
+    <span
+      className="rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-medium text-warn"
+      title="Risky address accepted by you: the clinic’s server accepts every address, so it can’t be confirmed."
+    >
+      Risky
+    </span>
   );
 }

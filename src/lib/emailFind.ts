@@ -38,7 +38,7 @@ export const EMAIL_STATUS_LABELS: Record<EmailStatus | "unchecked", string> = {
   unchecked: "Not checked",
 };
 
-export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "maps_contacts", "facebook_page", "hunter", "pattern_guess", "imported", "manual"] as const;
+export const EMAIL_SOURCES = ["site_crawl", "extractor", "name_pattern", "maps_contacts", "facebook_page", "hunter", "hunter_inferred", "pattern_guess", "imported", "manual"] as const;
 export type EmailSource = (typeof EMAIL_SOURCES)[number];
 export const EMAIL_SOURCE_LABELS: Record<EmailSource, string> = {
   site_crawl: "Site crawl",
@@ -47,6 +47,7 @@ export const EMAIL_SOURCE_LABELS: Record<EmailSource, string> = {
   maps_contacts: "Maps contacts",
   facebook_page: "Facebook page",
   hunter: "Hunter",
+  hunter_inferred: "Hunter (inferred)",
   pattern_guess: "Pattern guess",
   imported: "Imported",
   manual: "Entered by hand",

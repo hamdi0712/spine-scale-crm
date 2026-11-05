@@ -36,7 +36,7 @@ export default function RecleanOwners() {
         <div className="space-y-2">
           <p className="text-sm">
             {result.scanned} email lead{result.scanned === 1 ? "" : "s"} read · {result.confirmed} owner{result.confirmed === 1 ? "" : "s"} confirmed ·{" "}
-            {result.renamed} name{result.renamed === 1 ? "" : "s"} fixed · {result.relabelled} relabelled
+            {result.renamed} name{result.renamed === 1 ? "" : "s"} fixed · {result.cleared} cleared (not a name) · {result.relabelled} relabelled
           </p>
           {result.changes.length === 0 ? (
             <p className="text-sm text-muted">Nothing needed changing.</p>

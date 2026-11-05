@@ -10,13 +10,17 @@
 //      whose name was page words ("Dr. Plasker Conditions We") gets the
 //      clean one. An owner picked by hand is never touched, and nothing is
 //      re-decided on a lead whose emails have gone out.
+//   1b. Any contact name that is not a name at all ("Dr. Iguess") is
+//      cleared, wherever it came from — the scorecard, Maps, an import, the
+//      owner finder — on every lead, any channel, sent or not. Only a name
+//      set by hand (contactNameByHand, or an owner picked by hand) is kept.
 //   2. The main address and the alternates are labelled owner or front desk
 //      again (src/lib/emailFind.ts, classifyAddress). The check status is
 //      kept. A label set by hand, or an address typed by hand, is left alone.
 
 import { prisma } from "@/lib/prisma";
 import { classifyAddress, parseAlternates, readDecisionMakerName } from "@/lib/emailFind";
-import { cleanDoctorName, decideOwnerFrom, parseOwnerChoices, readOwnerSource, siteDoctorNames } from "@/lib/ownerFind";
+import { cleanDoctorName, contactNameFailsRules, decideOwnerFrom, parseOwnerChoices, readOwnerSource, siteDoctorNames } from "@/lib/ownerFind";
 import { rebuildDraft, setOwnerAsContact } from "@/lib/ownerFindRun";
 
 export interface RecleanChange {
@@ -29,25 +33,48 @@ export interface RecleanResult {
   scanned: number;
   confirmed: number;
   renamed: number;
+  cleared: number;
   relabelled: number;
   changes: RecleanChange[];
 }
 
 export async function recleanEmailLeads(): Promise<RecleanResult> {
   const leads = await prisma.lead.findMany({
-    where: { channel: "email" },
     include: { emailSends: { select: { id: true } } },
     orderBy: { clinicName: "asc" },
   });
-  const out: RecleanResult = { scanned: leads.length, confirmed: 0, renamed: 0, relabelled: 0, changes: [] };
+  const out: RecleanResult = { scanned: 0, confirmed: 0, renamed: 0, cleared: 0, relabelled: 0, changes: [] };
   const note = (lead: { id: string; clinicName: string }, what: string) => out.changes.push({ leadId: lead.id, clinicName: lead.clinicName, what });
 
   for (const lead of leads) {
     let contactName = lead.contactName;
     const sent = lead.emailSends.length > 0;
+    const manual = readOwnerSource(lead.ownerSource) === "manual" || lead.contactNameByHand;
+
+    // ─── 1b. Not a name at all, on any lead ─────────────────────────────
+    // Before the owner steps: a name that is page words is cleared whatever
+    // set it. Why "Dr. Iguess" survived before: it came from somewhere other
+    // than a site-confirmed owner (Maps contacts, the scorecard), so only the
+    // trailing-page-words rename looked at it, and that one renames to a
+    // cleaner name and never clears one with nothing of a name left.
+    if (!manual && contactName && contactNameFailsRules(contactName)) {
+      const ownerWasThis = lead.ownerStatus === "confirmed";
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { contactName: null, contactConfirmedAt: null, ...(ownerWasThis ? { ownerStatus: null, ownerSource: null } : {}) },
+      });
+      await prisma.activityLog.create({
+        data: { kind: "CONTACT_NAME_CLEARED", summary: `Cleared contact "${contactName}" on ${lead.clinicName} — not a name`, leadId: lead.id },
+      });
+      if (!sent) await rebuildDraft(lead.id);
+      note(lead, `Cleared "${contactName}" — not a name`);
+      out.cleared++;
+      contactName = null;
+    }
+    if (lead.channel !== "email") continue;
+    out.scanned++;
 
     // ─── 1. The owner's name ────────────────────────────────────────────
-    const manual = readOwnerSource(lead.ownerSource) === "manual";
     if (!manual && !sent && lead.ownerCheckedAt) {
       const siteNames = siteDoctorNames(lead.websiteNotes, lead.websiteLinks);
       const d = decideOwnerFrom(lead.npiOfficialName, lead.npiOfficialTitle, lead.npiNumber !== null, siteNames);

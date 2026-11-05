@@ -287,6 +287,10 @@ model Lead {
   // The operator set emailType themselves (the lead form, or setLeadEmail):
   // automatic re-labelling leaves it alone.
   emailTypeByHand Boolean   @default(false)
+  // The contact name was set by hand — typed in the lead form, picked as the
+  // owner, or set at the operator's request through the assistant. The
+  // re-clean never clears or renames one.
+  contactNameByHand Boolean @default(false)
   emailStatus     String?
   emailSource     String?
   emailCheckedAt  DateTime?
@@ -548,6 +552,16 @@ model Lead {
   suppressedAt         DateTime?
   suppressedReason     String?
 
+  // A risky (catch-all) address accepted by hand: when, and which address —
+  // the acceptance holds only while the lead's email is still that address.
+  // Flagged: another accepted risky address on the same domain bounced, so
+  // this one waits for "Reviewed – keep" (or a revoke) — not Ready, and its
+  // follow-ups paused.
+  emailRiskyAcceptedAt    DateTime?
+  emailRiskyAcceptedEmail String?
+  emailRiskyFlaggedAt     DateTime?
+  emailRiskyFlagReason    String?
+
   // The Gmail inbox this lead is emailed from. Assigned when the lead first
   // becomes Ready, alternating between inboxes; changeable until Email 1 is
   // sent, and fixed after, so the follow-ups stay in the same thread.
@@ -585,6 +599,8 @@ model EmailSend {
   // latest). The dashboard's bounce rate is these over the last 30 days'
   // Email 1 sends. Null for every send marked before the column existed.
   bouncedAt DateTime?
+  // Sent to an accepted risky address. Counted against the risky daily limit.
+  risky     Boolean   @default(false)
 
   @@unique([leadId, step])
   @@index([sentAt])
@@ -694,6 +710,8 @@ model EmailSettings {
   // from Hunter's pattern or guess drlast@/first@/drfirst@, each checked with
   // Instantly. Off: Hunter's Email Finder only.
   guessOwnerPatterns       Boolean @default(false)
+  // Sends to accepted risky addresses, per inbox per day, before Mark sent asks.
+  riskyDailyLimit          Int     @default(3)
 
   updatedAt DateTime @updatedAt
 }

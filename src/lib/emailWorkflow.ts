@@ -44,6 +44,8 @@ export interface EmailSettingsValues {
   hunterCreditBudget: number;
   // Find owners may build or guess the owner's address when Hunter misses.
   guessOwnerPatterns: boolean;
+  // Sends to accepted risky addresses, per inbox per day, before Mark sent asks.
+  riskyDailyLimit: number;
 }
 
 // Starter copy: something that reads as an email, so the workflow can be
@@ -76,6 +78,7 @@ export const STARTER_SIGN_OFF = "{sender}";
 
 export const DEFAULT_FOLLOW_UP_DELAY_DAYS = 3;
 export const DEFAULT_DAILY_LIMIT = 10;
+export const DEFAULT_RISKY_DAILY_LIMIT = 3;
 export const MAX_FOLLOW_UPS = 5;
 export const MAX_TEMPLATE_CHARS = 4000;
 
@@ -94,6 +97,7 @@ export const DEFAULT_EMAIL_SETTINGS: EmailSettingsValues = {
   creditsPerCheck: 1,
   hunterCreditBudget: 50,
   guessOwnerPatterns: false,
+  riskyDailyLimit: DEFAULT_RISKY_DAILY_LIMIT,
 };
 
 export const STARTER_COPY_BANNER = "Starter copy — edit your templates in Settings → Email before sending.";
@@ -163,6 +167,7 @@ export function readEmailSettings(row: Record<string, unknown> | null | undefine
     })(),
     hunterCreditBudget: int(r.hunterCreditBudget, 50, 0, 1_000_000),
     guessOwnerPatterns: r.guessOwnerPatterns === true,
+    riskyDailyLimit: int(r.riskyDailyLimit, DEFAULT_RISKY_DAILY_LIMIT, 0, 500),
   };
 }
 
@@ -182,6 +187,7 @@ export function emailSettingsRow(s: EmailSettingsValues) {
     creditsPerCheck: s.creditsPerCheck,
     hunterCreditBudget: s.hunterCreditBudget,
     guessOwnerPatterns: s.guessOwnerPatterns,
+    riskyDailyLimit: s.riskyDailyLimit,
   };
 }
 
@@ -378,6 +384,52 @@ export interface EmailWorkflowLead {
   contactName: string | null;
   icpBreakdown: string | null;
   contactConfirmedAt: Date | null;
+  emailSource: string | null;
+  emailRiskyAcceptedAt: Date | null;
+  emailRiskyAcceptedEmail: string | null;
+  emailRiskyFlaggedAt: Date | null;
+}
+
+// ─── Risky (catch-all) addresses, accepted by hand ─────────────────────────
+//
+// Instantly calls an address on a catch-all domain risky: the server accepts
+// every address, so the mailbox cannot be confirmed, and checking again never
+// changes that. One that was actually found — on Maps, the clinic's site or
+// Facebook, by Hunter as "found", or typed in by hand — may be accepted by
+// hand and then counts like a valid one. A guessed, inferred or imported one
+// never may.
+
+export const RISKY_ACCEPTABLE_SOURCES = ["maps_contacts", "site_crawl", "extractor", "facebook_page", "hunter", "manual"] as const;
+export const RISKY_EXPLANATION = "This clinic’s server accepts every address, so it can’t be confirmed.";
+
+const normEmail = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();
+
+// Whether "Accept risky" may be offered on this lead's address.
+export function canAcceptRisky(lead: Pick<EmailWorkflowLead, "email" | "emailStatus" | "emailSource">): boolean {
+  return (
+    normEmail(lead.email) !== "" &&
+    lead.emailStatus === "risky" &&
+    (RISKY_ACCEPTABLE_SOURCES as readonly string[]).includes(lead.emailSource ?? "")
+  );
+}
+
+// Accepted, and still about the address the lead has now: a changed address
+// is a new question, so an old acceptance never carries over.
+export function riskyAccepted(
+  lead: Pick<EmailWorkflowLead, "email" | "emailStatus" | "emailSource" | "emailRiskyAcceptedAt" | "emailRiskyAcceptedEmail">,
+): boolean {
+  return !!lead.emailRiskyAcceptedAt && canAcceptRisky(lead) && normEmail(lead.emailRiskyAcceptedEmail) === normEmail(lead.email);
+}
+
+// The address may be emailed: checked valid, or risky and accepted.
+export function emailUsable(lead: EmailWorkflowLead): boolean {
+  return lead.emailStatus === "valid" || riskyAccepted(lead);
+}
+
+export function emailDomain(email: string | null | undefined): string | null {
+  const e = normEmail(email);
+  const at = e.lastIndexOf("@");
+  return at > 0 && at < e.length - 1 ? e.slice(at + 1) : null;
 }
 
 export interface EmailSendView {
@@ -410,7 +462,8 @@ export function isDueBy(dueAt: Date, now: Date): boolean {
 export type EmailWorkflowStatus = EmailLeadStatus;
 
 // Where a lead stands, by the first rule that applies. Ready only once every
-// condition holds — A or B tier, the address checked valid, the email
+// condition holds — A or B tier, the address checked valid (or risky and
+// accepted by hand, and not flagged for review after a bounce), the email
 // approved, the contact confirmed — and never for a lead that is suppressed,
 // flagged by new scoring, disqualified, or already in sequence.
 export function emailWorkflowStatus(
@@ -422,7 +475,7 @@ export function emailWorkflowStatus(
   if (lead.emailRepliedAt) return "replied";
   if ((lead.email ?? "").trim() === "") return "no_email";
   if (sends.length > 0) return "in_sequence";
-  if (lead.emailStatus !== "valid") return "check_email";
+  if (!emailUsable(lead) || lead.emailRiskyFlaggedAt) return "check_email";
   if (contactCheck(lead).state === "mismatch") return "check_contact";
   if (!lead.emailApprovedAt) return "needs_opener";
   if (lead.scoringRejectedAt || (tier !== "A" && tier !== "B")) return "not_ab";
@@ -442,13 +495,23 @@ export function sendBlocker(
   const status = emailWorkflowStatus(lead, tier, sends);
   if (status === "ready") return { step: 0 };
   if (status === "in_sequence") {
+    if (lead.emailRiskyFlaggedAt) return { blocked: RISKY_FLAGGED_BLOCKER };
+    if (lead.emailStatus === "risky" && !riskyAccepted(lead)) return { blocked: "The risky address is no longer accepted — follow-ups are paused." };
     const next = nextFollowUp(sends, settings);
     if (!next) return { blocked: "Every follow-up has been sent." };
     if (!isDueBy(next.dueAt, now)) return { blocked: `Follow-up ${next.n} is not due until ${next.dueAt.toDateString()}.` };
     return { step: next.n };
   }
+  if (status === "check_email") {
+    if (lead.emailRiskyFlaggedAt) return { blocked: RISKY_FLAGGED_BLOCKER };
+    if (lead.emailStatus === "risky") {
+      return { blocked: canAcceptRisky(lead) ? "The address is risky — accept it first." : "The address is risky and was guessed, not found — it cannot be accepted." };
+    }
+  }
   return { blocked: EMAIL_STATUS_BLOCKERS[status] };
 }
+
+const RISKY_FLAGGED_BLOCKER = "Another accepted risky address on this domain bounced — review it (Reviewed – keep, or Revoke accept) first.";
 
 export function emailStepLabel(step: number): string {
   return step === 0 ? "Email 1" : `Follow-up ${step}`;
@@ -531,6 +594,9 @@ export interface EmailToSend {
   from: string;
   subject: string;
   body: string;
+  // Going to a risky address accepted by hand: tagged, and counted against
+  // the risky daily limit.
+  risky: boolean;
 }
 
 export interface EmailSendRecord extends EmailSendView {
@@ -557,7 +623,7 @@ export function emailToSend(
   const sender = senderFor(inbox, settings);
   if (sender === "") return { blocked: `Nobody to sign it as: give ${inbox.address} a display name, or set Your name, in Settings → Email.` };
   const to = (lead.email ?? "").trim();
-  const from = { inboxId: inbox.id, from: inbox.address };
+  const from = { inboxId: inbox.id, from: inbox.address, risky: riskyAccepted(lead) };
   if (next.step === 0) {
     if (!lead.emailSubject || !lead.emailBody) return null;
     return { step: 0, label: "Email 1", to, ...from, subject: lead.emailSubject, body: fillSender(lead.emailBody, sender) };

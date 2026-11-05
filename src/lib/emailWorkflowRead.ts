@@ -27,6 +27,8 @@ import {
   senderFor,
   emailStepLabel,
   undoSendBlocker,
+  canAcceptRisky,
+  riskyAccepted,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { autoCheckEmails } from "@/lib/actions/jobs";
@@ -95,11 +97,22 @@ export interface InboxCounter {
   short: string;
   sent: number;
   limit: number;
+  // Sends to accepted risky addresses today, and the per-inbox risky limit.
+  riskySent: number;
+  riskyLimit: number;
 }
 
-async function inboxCounters(inboxes: SendingInboxView[], now: Date): Promise<InboxCounter[]> {
-  const sent = await sentTodayByInbox(now);
-  return inboxes.map((i) => ({ id: i.id, address: i.address, short: inboxShort(i.address), sent: sent[i.id] ?? 0, limit: i.dailyLimit }));
+async function inboxCounters(inboxes: SendingInboxView[], now: Date, riskyLimit: number): Promise<InboxCounter[]> {
+  const [sent, risky] = await Promise.all([sentTodayByInbox(now), sentTodayByInbox(now, { risky: true })]);
+  return inboxes.map((i) => ({
+    id: i.id,
+    address: i.address,
+    short: inboxShort(i.address),
+    sent: sent[i.id] ?? 0,
+    limit: i.dailyLimit,
+    riskySent: risky[i.id] ?? 0,
+    riskyLimit,
+  }));
 }
 
 export async function loadEmailView(now = new Date()) {
@@ -116,7 +129,7 @@ export async function loadEmailView(now = new Date()) {
   // Newly promoted email leads arrive with an address nobody has checked;
   // they are checked on their own from here, budget allowing.
   void autoCheckEmails();
-  const counters = await inboxCounters(inboxes, now);
+  const counters = await inboxCounters(inboxes, now, settings.riskyDailyLimit);
   const rows = leads.map((l) => {
     const s = leadScore(l);
     const state = emailLeadState(l, settings, now, inboxes);
@@ -140,6 +153,10 @@ export async function loadEmailView(now = new Date()) {
       inbox: state.inbox ? state.inbox.address : null,
       inboxSentToday: counter?.sent ?? 0,
       inboxLimit: counter?.limit ?? 0,
+      inboxRiskySentToday: counter?.riskySent ?? 0,
+      riskyLimit: settings.riskyDailyLimit,
+      riskyAccepted: riskyAccepted(l),
+      riskyFlagged: l.emailRiskyFlaggedAt !== null,
     };
   });
   const check = await checkInfo(now);
@@ -164,7 +181,7 @@ function undoProp(lead: LeadWithSends): EmailPanelProps["undo"] {
 export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Promise<EmailPanelProps> {
   const [settings, inboxes] = await Promise.all([loadEmailSettings(), loadInboxes()]);
   await assignReady([lead], inboxes);
-  const counters = await inboxCounters(inboxes, now);
+  const counters = await inboxCounters(inboxes, now, settings.riskyDailyLimit);
   const state = emailLeadState(lead, settings, now, inboxes);
   const counter = counters.find((c) => c.id === state.inbox?.id) ?? null;
   const check = contactCheck(lead);
@@ -182,6 +199,16 @@ export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Pr
     inboxLocked: lead.emailSends.length > 0,
     inboxSentToday: counter?.sent ?? 0,
     inboxLimit: counter?.limit ?? 0,
+    inboxRiskySentToday: counter?.riskySent ?? 0,
+    riskyLimit: settings.riskyDailyLimit,
+    risky: {
+      isRisky: (lead.email ?? "").trim() !== "" && lead.emailStatus === "risky",
+      canAccept: canAcceptRisky(lead),
+      accepted: riskyAccepted(lead),
+      // Already emailed: revoking pauses its follow-ups rather than leaving Ready.
+      inSequence: lead.emailSends.length > 0,
+      flagged: lead.emailRiskyFlaggedAt ? { at: lead.emailRiskyFlaggedAt.toISOString(), reason: lead.emailRiskyFlagReason } : null,
+    },
     check: { ...(await checkInfo(now)), checked: lead.emailStatus !== null },
     email: (lead.email ?? "").trim() || null,
     emailDetail: emailDetailLine(lead),
