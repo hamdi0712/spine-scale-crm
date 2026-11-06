@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { IconBrandLinkedin, IconMail, IconPhone } from "@tabler/icons-react";
-import { PIPELINE_CHANNEL_COOKIE, PipelineChannel } from "@/lib/emailChannel";
+import { PIPELINE_CHANNEL_COOKIE, PipelinePageChannel } from "@/lib/emailChannel";
 
 // The channel toggle beside the Pipeline and Discovery titles: Email,
-// LinkedIn, and Call greyed out until it is built. Each page remembers its
+// LinkedIn, and Call — the Call list, on the Pipeline page only (callEnabled);
+// elsewhere Call stays greyed out. Each page remembers its
 // own choice, in its own cookie.
 //
 // The choice goes in a cookie rather than localStorage so the server reads it
@@ -16,10 +17,12 @@ export default function ChannelToggle({
   channel,
   cookie = PIPELINE_CHANNEL_COOKIE,
   label = "Pipeline channel",
+  callEnabled = false,
 }: {
-  channel: PipelineChannel;
+  channel: PipelinePageChannel;
   cookie?: string;
   label?: string;
+  callEnabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -28,7 +31,7 @@ export default function ChannelToggle({
   // on a phone too. Outside the segment, which clips on a phone.
   const [tip, setTip] = useState(false);
 
-  function choose(next: PipelineChannel) {
+  function choose(next: PipelinePageChannel) {
     if (next === shown) return;
     setShown(next);
     document.cookie = `${cookie}=${next}; path=/; max-age=31536000; samesite=lax`;
@@ -69,26 +72,39 @@ export default function ChannelToggle({
         >
           <IconBrandLinkedin size={18} stroke={1.75} aria-hidden />
         </button>
-        <button
-          type="button"
-          aria-disabled
-          aria-label="Call — coming in December"
-          onMouseEnter={() => setTip(true)}
-          onMouseLeave={() => setTip(false)}
-          onFocus={() => setTip(true)}
-          onBlur={() => setTip(false)}
-          onClick={() => setTip((t) => !t)}
-          className="segment-item cursor-not-allowed px-2.5 opacity-40 hover:text-muted"
-        >
-          <IconPhone size={18} stroke={1.75} aria-hidden />
-        </button>
+        {callEnabled ? (
+          <button
+            type="button"
+            onClick={() => choose("call")}
+            aria-pressed={shown === "call"}
+            aria-label="Call list"
+            title="Call list"
+            className={item(shown === "call")}
+          >
+            <IconPhone size={18} stroke={1.75} aria-hidden />
+          </button>
+        ) : (
+          <button
+            type="button"
+            aria-disabled
+            aria-label="Call — on the Pipeline page"
+            onMouseEnter={() => setTip(true)}
+            onMouseLeave={() => setTip(false)}
+            onFocus={() => setTip(true)}
+            onBlur={() => setTip(false)}
+            onClick={() => setTip((t) => !t)}
+            className="segment-item cursor-not-allowed px-2.5 opacity-40 hover:text-muted"
+          >
+            <IconPhone size={18} stroke={1.75} aria-hidden />
+          </button>
+        )}
       </div>
-      {tip && (
+      {tip && !callEnabled && (
         <span
           role="tooltip"
           className="absolute right-0 top-full z-30 mt-1.5 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-medium text-surface shadow-card-hover"
         >
-          Coming in December
+          The Call list is on the Pipeline page
         </span>
       )}
     </div>

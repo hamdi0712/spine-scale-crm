@@ -13,14 +13,16 @@ import MechanismPicker from "@/components/MechanismPicker";
 import { cookies } from "next/headers";
 import ChannelToggle from "@/components/ChannelToggle";
 import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
-import { PIPELINE_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
+import { PIPELINE_CHANNEL_COOKIE, readPipelinePageChannel } from "@/lib/emailChannel";
 import { loadEmailView } from "@/lib/emailWorkflowRead";
 import FacebookEmailButton, { FacebookEmailProgress } from "@/components/FacebookEmailButton";
 import DropdownMenu from "@/components/DropdownMenu";
 import { facebookEmailLeads } from "@/lib/facebookEmailRun";
 import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
-import OwnerFindButton, { OwnerFindProgress } from "@/components/OwnerFindButton";
-import { ownerJobEstimate } from "@/lib/actions/jobs";
+import { OwnerFindProgress } from "@/components/OwnerFindButton";
+import { emailPipelineIds } from "@/lib/emailBucketsRead";
+import CallList from "@/components/CallList";
+import { loadCallList } from "@/lib/emailBucketsRead";
 import { fmtCredits } from "@/lib/emailCheck";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
 
@@ -34,8 +36,9 @@ export default async function PipelinePage({
   // Which channel the page shows: the one a link names (?channel=, from a
   // Dashboard card), else Email unless this browser last chose LinkedIn
   // (src/components/ChannelToggle.tsx).
-  const channel = readPipelineChannel(searchParams.channel ?? cookies().get(PIPELINE_CHANNEL_COOKIE)?.value);
+  const channel = readPipelinePageChannel(searchParams.channel ?? cookies().get(PIPELINE_CHANNEL_COOKIE)?.value);
   if (channel === "email") return <EmailPipeline tab={searchParams.tab} />;
+  if (channel === "call") return <CallPipeline />;
 
   // The table is what loads. It is the view that answers the questions asked
   // most often of a pipeline — who is where, what is scored, what is due — and
@@ -117,7 +120,7 @@ export default async function PipelinePage({
         <div>
           <div className="flex items-center gap-3">
             <h1 className="display text-[32px] font-semibold">Pipeline</h1>
-            <ChannelToggle channel="linkedin" />
+            <ChannelToggle channel="linkedin" callEnabled />
           </div>
           <p className="helper-text page-sub mt-1.5 text-sm text-muted">
             Clinics in play — every one of them scored before it got here
@@ -220,12 +223,16 @@ export default async function PipelinePage({
 // Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
 // it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
 async function EmailPipeline({ tab }: { tab?: string }) {
-  const [{ rows, counters, starters, unchecked, check }, facebookLeads, pipelineSettings, owners] = await Promise.all([
+  const [view, facebookLeads, pipelineSettings, inPipeline] = await Promise.all([
     loadEmailView(),
     facebookEmailLeads(),
     loadPipelineSettings(),
-    ownerJobEstimate(),
+    emailPipelineIds(),
   ]);
+  const { counters, starters, unchecked, check } = view;
+  // Only leads with a confirmed owner and a valid or risky address (or already
+  // written to) — the rest wait in the Email queue (src/lib/emailBuckets.ts).
+  const rows = view.rows.filter((r) => inPipeline.has(r.id));
 
   // Lost leads count in neither card: they are hidden from the Email view
   // unless its Lost filter is picked.
@@ -240,17 +247,17 @@ async function EmailPipeline({ tab }: { tab?: string }) {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="display text-[32px] font-semibold wide:text-2xl">Pipeline</h1>
-            <ChannelToggle channel="email" />
+            <ChannelToggle channel="email" callEnabled />
           </div>
           <p className="helper-text mt-1.5 text-sm text-muted wide:mt-1 wide:text-xs">
-            Clinics worked by email, sent by hand from Gmail — what each one needs next
+            Email leads with a confirmed owner and a usable address — the rest wait in the{" "}
+            <Link href="/outreach" className="underline">Email queue</Link>
           </p>
         </div>
         <div className="flex items-center gap-2 max-md:[&>*]:flex-1 wide:[&_.btn-primary]:!h-8 wide:[&_.btn-primary]:!px-3.5 wide:[&_.btn-primary]:!text-[13px] wide:[&_.btn]:!h-8 wide:[&_.btn]:!px-3 wide:[&_.btn]:!text-[13px]">
           <DropdownMenu label="Find emails" badge={unchecked + (pipelineSettings.facebookEmails.enabled ? facebookLeads.length : 0)}>
             <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} menu />
             <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} menu />
-            <OwnerFindButton estimate={owners} />
           </DropdownMenu>
           <Link href="/discovery/import/clinic" className="btn-primary justify-center">
             Find clinics
@@ -311,6 +318,23 @@ async function EmailPipeline({ tab }: { tab?: string }) {
           <EmailLeadTable rows={rows} initialTab={tab} />
         )}
       </div>
+    </div>
+  );
+}
+
+// The Call list: a plain list to work down, not a dialer.
+async function CallPipeline() {
+  const rows = await loadCallList();
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <h1 className="display text-[32px] font-semibold wide:text-2xl">Call list</h1>
+        <ChannelToggle channel="call" callEnabled />
+      </div>
+      <p className="helper-text mt-1.5 text-sm text-muted">
+        Warm leads first, then contact forms gone unanswered, then clinics with no email and no form
+      </p>
+      <CallList rows={rows} />
     </div>
   );
 }

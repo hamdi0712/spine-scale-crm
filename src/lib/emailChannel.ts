@@ -42,6 +42,12 @@ export function readPipelineChannel(v: unknown): PipelineChannel {
   return v === "linkedin" ? "linkedin" : DEFAULT_PIPELINE_CHANNEL;
 }
 
+// The Pipeline page alone also shows Call: the Call list.
+export type PipelinePageChannel = PipelineChannel | "call";
+export function readPipelinePageChannel(v: unknown): PipelinePageChannel {
+  return v === "call" ? "call" : readPipelineChannel(v);
+}
+
 // Discovery is split the same way and read with readPipelineChannel, but its
 // toggle is remembered separately from Pipeline's.
 export const DISCOVERY_CHANNEL_COOKIE = "discovery-channel";

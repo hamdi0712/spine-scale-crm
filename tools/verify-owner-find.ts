@@ -337,7 +337,11 @@ async function main(): Promise<void> {
 
   console.log("\n7. Not run twice; the automatic run on a new lead");
   const left = (await findOwnerLeads()).filter((l) => mine.includes(l.id)).map((l) => l.clinicName);
-  check("only the just-picked lead is still waiting", left.join(",") === "Mismatch Wellness", left.join(","));
+  // The just-picked lead has a valid front-desk address, so it is in the
+  // Email pipeline now and the bulk run leaves it; a run for it by name
+  // still covers it.
+  check("no lead is still waiting in the queue", left.join(",") === "", left.join(","));
+  check("…the just-picked one is still covered by name", (await findOwnerLeads({ includePipeline: true })).some((l) => l.clinicName === "Mismatch Wellness"));
   const fresh = await seed("Newly Promoted Spine", { location: "Austin, TX", websiteUrl: "https://newly.test", email: "hi@newly.test", emailType: "generic", emailStatus: "valid" });
   const t1 = new Date();
   await autoFindOwners();

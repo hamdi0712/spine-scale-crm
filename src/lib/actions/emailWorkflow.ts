@@ -63,6 +63,7 @@ type Result = { ok: true } | { ok: false; error: string };
 
 function revalidate(leadId: string): void {
   revalidatePath("/pipeline");
+  revalidatePath("/outreach");
   revalidatePath(`/pipeline/${leadId}`);
 }
 
