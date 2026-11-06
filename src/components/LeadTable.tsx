@@ -17,6 +17,7 @@ import { IcpTierChip, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 import { useLeadRecrawl } from "@/components/LeadRecrawl";
 import { confirmText } from "@/lib/displayMode";
+import { LostTag, isLost } from "@/components/LostLeads";
 
 type SortKey =
   | "clinicName"
@@ -29,9 +30,12 @@ type SortKey =
 export default function LeadTable({
   leads,
   recrawlCostPerClinic = 0,
+  initialStage,
 }: {
   leads: KanbanLead[];
   recrawlCostPerClinic?: number;
+  // A stage a link opened the table on (?stage=, e.g. the board's "show").
+  initialStage?: string;
 }) {
   const recrawl = useLeadRecrawl(recrawlCostPerClinic);
   const [query, setQuery] = useState("");
@@ -39,7 +43,11 @@ export default function LeadTable({
   // something to do about, which is every stage except the holding one. No
   // Contact is one press away in the same select — kept out of the default
   // view, not out of the table.
-  const [stageFilter, setStageFilter] = useState<string>("ACTIVE");
+  // Lost is out of "Active stages" too: it is hidden by default and shown
+  // with its own option. "All stages" still means every stage, Lost included.
+  const [stageFilter, setStageFilter] = useState<string>(
+    initialStage && (LEAD_STAGES as readonly string[]).includes(initialStage) ? initialStage : "ACTIVE",
+  );
   const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
@@ -53,9 +61,12 @@ export default function LeadTable({
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = leads.filter((l) => {
+      // A search by clinic name always reaches a Lost lead, whatever the
+      // stage filter says, so one can be found and reopened.
+      const lostByName = q !== "" && isLost(l.stage) && l.clinicName.toLowerCase().includes(q);
       if (stageFilter === "ACTIVE") {
-        if (!(ACTIVE_LEAD_STAGES as string[]).includes(l.stage)) return false;
-      } else if (stageFilter !== "ALL" && l.stage !== stageFilter) {
+        if (!lostByName && (isLost(l.stage) || !(ACTIVE_LEAD_STAGES as string[]).includes(l.stage))) return false;
+      } else if (stageFilter !== "ALL" && l.stage !== stageFilter && !lostByName) {
         return false;
       }
       if (tierFilter === "UNSCORED" && l.icpTier != null) return false;
@@ -96,6 +107,9 @@ export default function LeadTable({
       return cmp * sortDir;
     });
   }, [leads, query, stageFilter, tierFilter, sortKey, sortDir]);
+
+  const lostCount = leads.filter((l) => isLost(l.stage)).length;
+  const tagLost = stageFilter !== "LOST";
 
   // Only what is on screen. A row filtered out of view is not a row somebody
   // chose, and a delete that reached beyond the list they were looking at
@@ -207,7 +221,9 @@ export default function LeadTable({
         >
           <option value="ACTIVE">Active stages</option>
           <option value="ALL">All stages</option>
-          {LEAD_STAGES.map((s) => (
+          {/* Lost leads are hidden by default; this is how they are shown. */}
+          <option value="LOST">Show Lost leads ({lostCount})</option>
+          {LEAD_STAGES.filter((s) => s !== "LOST").map((s) => (
             <option key={s} value={s}>
               {LEAD_STAGE_LABELS[s]}
             </option>
@@ -344,6 +360,7 @@ export default function LeadTable({
                   className="block text-[15px] font-medium leading-snug text-ink"
                 >
                   {lead.clinicName}
+                  {tagLost && isLost(lead.stage) && <LostTag />}
                 </Link>
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-muted">
                   <span className="truncate">{lead.contactName ?? "No contact yet"}</span>
@@ -415,6 +432,7 @@ export default function LeadTable({
                   >
                     {lead.clinicName}
                   </Link>
+                  {tagLost && isLost(lead.stage) && <LostTag />}
                 </td>
                 <td className="td text-muted">
                   <span className="inline-flex items-center gap-1.5">

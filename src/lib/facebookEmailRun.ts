@@ -19,7 +19,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { runApifySync } from "@/lib/apify";
-import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
+import { PIPELINE_DEFAULT_WHERE, FIND_EMAILS_WHERE } from "@/lib/liveLeadWhere";
 import { backupEmailFields, pickFacebookEmails, pickSiteCrawlEmails } from "@/lib/emailFind";
 import { PipelineSettings } from "@/lib/pipelineSettings";
 
@@ -112,7 +112,7 @@ export async function findBackupEmail(leadId: string, settings: PipelineSettings
 export async function facebookEmailLeads(): Promise<{ id: string; clinicName: string }[]> {
   return prisma.lead.findMany({
     where: {
-      ...PIPELINE_DEFAULT_WHERE,
+      ...FIND_EMAILS_WHERE,
       channel: "email",
       suppressedAt: null,
       facebookEmailAt: null,

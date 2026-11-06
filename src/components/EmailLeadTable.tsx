@@ -11,6 +11,7 @@ import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge
 import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
 import { useJobRun } from "@/components/JobProgress";
+import { LostTag, isLost } from "@/components/LostLeads";
 
 export interface EmailLeadRow {
   id: string;
@@ -44,6 +45,9 @@ export interface EmailLeadRow {
   // a bounce on its domain.
   riskyAccepted: boolean;
   riskyFlagged: boolean;
+  // The lead's pipeline stage. Lost leads are hidden unless the Lost chip is
+  // picked (or a search by clinic name finds one).
+  stage: string;
 }
 
 const VIEW_KEY = "pipeline-email-view";
@@ -53,22 +57,26 @@ const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C:
 // work is. "Needs work" is everything waiting on the operator before it can be
 // sent; "Done" is everything the sequence has finished with, one way or
 // another. Due today cuts across them (every lead in it is In sequence).
-type Filter = "all" | "email" | "noemail" | "risky" | "ready" | "due" | "work" | "sequence" | "done";
+type Filter = "all" | "email" | "noemail" | "risky" | "ready" | "due" | "work" | "sequence" | "done" | "lost";
 
-const FILTERS: Filter[] = ["all", "email", "noemail", "risky", "ready", "due", "work", "sequence", "done"];
+const FILTERS: Filter[] = ["all", "email", "noemail", "risky", "ready", "due", "work", "sequence", "done", "lost"];
 
 function readFilter(v: unknown): Filter | null {
   return (FILTERS as unknown[]).includes(v) ? (v as Filter) : null;
 }
 
-const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "noemail" | "risky">, EmailLeadStatus[]> = {
+const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "noemail" | "risky" | "lost">, EmailLeadStatus[]> = {
   ready: ["ready"],
   work: ["needs_opener", "check_email", "check_contact", "no_email"],
   sequence: ["in_sequence"],
   done: ["replied", "stopped", "not_ab"],
 };
 
+// Lost leads are in the Lost chip and no other: every other chip, and its
+// count, leaves them out.
 function matches(row: EmailLeadRow, filter: Filter): boolean {
+  if (filter === "lost") return isLost(row.stage);
+  if (isLost(row.stage)) return false;
   if (filter === "all") return true;
   if (filter === "due") return row.followUpDueToday;
   // Every lead with an address, whatever it is waiting on.
@@ -85,7 +93,7 @@ function matches(row: EmailLeadRow, filter: Filter): boolean {
 // initialTab: the tab a link opened the page on (?tab=, from a Dashboard card).
 export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRow[]; initialTab?: string }) {
   const router = useRouter();
-  const due = rows.filter((r) => r.followUpDueToday).length;
+  const due = rows.filter((r) => r.followUpDueToday && !isLost(r.stage)).length;
   const [filter, setFilter] = useState<Filter>(readFilter(initialTab) ?? (due > 0 ? "due" : "all"));
   const [query, setQuery] = useState("");
   // The big monitor's extras: cards or the table, a tier and an inbox filter,
@@ -138,6 +146,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           ["work", "Needs work"],
           ["sequence", "In sequence"],
           ["done", "Done"],
+          ["lost", "Lost"],
         ] as [Filter, string][]
       ).map(([key, label]) => ({ key, label, count: rows.filter((r) => matches(r, key)).length })),
     [rows],
@@ -147,7 +156,8 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   const shown = rows
     .filter(
       (r) =>
-        matches(r, filter) &&
+        // A search by clinic name finds a Lost lead from any chip.
+        (matches(r, filter) || (q !== "" && isLost(r.stage) && r.clinicName.toLowerCase().includes(q))) &&
         (tiers.size === 0 || (r.icpTier !== null && tiers.has(r.icpTier))) &&
         (inbox === "" || r.inbox === inbox) &&
         (q === "" ||
@@ -161,6 +171,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           : 0,
     );
   const cards = view === "cards";
+  const tagLost = filter !== "lost";
   const allPicked = shown.length > 0 && shown.every((r) => picked.has(r.id));
   function pickAll(on: boolean) {
     setPicked((prev) => {
@@ -293,6 +304,19 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             );
           })}
         </div>
+        <div className="flex w-full items-center gap-2 md:w-auto">
+        {/* Below the big monitor, Select sits here beside the search rather
+            than on a row of its own. */}
+        {!selecting && (
+          <button
+            type="button"
+            onClick={() => setSelectMode(true)}
+            disabled={shown.length === 0}
+            className="btn !h-9 !px-3 text-sm max-md:hidden disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Select
+          </button>
+        )}
         <label className="relative flex w-full items-center md:w-60">
           <span className="sr-only">Search clinics</span>
           <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
@@ -304,6 +328,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             className="field h-9 w-full pl-9 text-sm"
           />
         </label>
+        </div>
       </div>
 
       {/* The big monitor's cards: three across, a clinic each. The whole card
@@ -332,6 +357,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               <div className="min-w-0">
                 <Link href={`/pipeline/${row.id}`} className="block truncate text-sm font-semibold text-ink">
                   {row.clinicName}
+                  {tagLost && isLost(row.stage) && <LostTag />}
                 </Link>
                 <p className="mt-0.5 truncate text-[11px] text-muted">{row.contactName ?? "No contact yet"}</p>
               </div>
@@ -386,6 +412,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               <div className="flex items-start justify-between gap-3">
                 <span className="min-w-0 text-[15px] font-medium leading-snug text-ink">
                   {row.clinicName}
+                  {tagLost && isLost(row.stage) && <LostTag />}
                 </span>
                 <EmailStatusBadge status={row.status} />
               </div>
@@ -460,6 +487,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                   >
                     {row.clinicName}
                   </Link>
+                  {tagLost && isLost(row.stage) && <LostTag />}
                   <div className="mt-0.5 text-xs text-muted">
                     {[row.contactName ?? "No contact yet", row.location].filter(Boolean).join(" · ")}
                   </div>
@@ -579,7 +607,7 @@ function SelectionBar({
   const btn = "btn !h-8 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
   if (!selecting) {
     return (
-      <div className="mb-3 flex items-center max-md:hidden">
+      <div className="mb-3 hidden items-center wide:flex">
         <button type="button" onClick={() => onSelectMode(true)} className={btn} disabled={shownCount === 0}>
           Select
         </button>
@@ -587,7 +615,7 @@ function SelectionBar({
     );
   }
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden">
+    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-2.5 wide:mb-3 wide:border-0 wide:px-0 wide:py-0">
       <button type="button" onClick={() => onSelectMode(false)} className={btn}>
         Done
       </button>

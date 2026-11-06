@@ -327,7 +327,7 @@ export async function startEmailCheckJob(args: { leadIds?: string[] | null; forc
   const force = args?.force === true;
   const rows = leadIds
     ? await prisma.lead.findMany({
-        where: { id: { in: leadIds }, email: { not: null }, NOT: { email: "" }, ...(force ? {} : { emailStatus: null }) },
+        where: { id: { in: leadIds }, stage: { not: "LOST" }, email: { not: null }, NOT: { email: "" }, ...(force ? {} : { emailStatus: null }) },
         select: { id: true, clinicName: true },
       })
     : await uncheckedEmailLeads();

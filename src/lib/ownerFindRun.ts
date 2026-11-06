@@ -15,7 +15,7 @@
 // looked up again, and a main email typed by hand stays the main email.
 
 import { prisma } from "@/lib/prisma";
-import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
+import { PIPELINE_DEFAULT_WHERE, FIND_EMAILS_WHERE } from "@/lib/liveLeadWhere";
 import { clinicDomain, isMailboxProvider, parseAlternates, readDecisionMakerName } from "@/lib/emailFind";
 import {
   ownerCostPerLead,
@@ -97,7 +97,7 @@ export async function ownerBudget(): Promise<OwnerBudget> {
 // ─── Which leads ───────────────────────────────────────────────────────────
 
 const OWNER_LEAD_WHERE = {
-  ...PIPELINE_DEFAULT_WHERE,
+  ...FIND_EMAILS_WHERE,
   channel: "email",
   suppressedAt: null,
   emailUnsubscribedAt: null,

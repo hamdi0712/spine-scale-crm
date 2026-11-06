@@ -31,3 +31,8 @@ export const OUTREACH_QUEUE_WHERE = {
 // Pipeline: the default view, and the filter that finds the flagged ones.
 export const PIPELINE_DEFAULT_WHERE = { archived: false, ...NOT_SCORING_REJECTED };
 export const PIPELINE_SCORING_REJECTED_WHERE = { archived: false, scoringRejectedAt: { not: null } };
+
+// Find emails (email check, Facebook, Find owners): Lost leads are left out so
+// no credits are spent on clinics already given up on. Reopening one (moving
+// it to another stage) brings it back into these jobs.
+export const FIND_EMAILS_WHERE = { ...PIPELINE_DEFAULT_WHERE, stage: { not: "LOST" } } as const;

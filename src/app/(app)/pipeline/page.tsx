@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 export default async function PipelinePage({
   searchParams,
 }: {
-  searchParams: { view?: string; scoring?: string; channel?: string; tab?: string };
+  searchParams: { view?: string; scoring?: string; channel?: string; tab?: string; stage?: string };
 }) {
   // Which channel the page shows: the one a link names (?channel=, from a
   // Dashboard card), else Email unless this browser last chose LinkedIn
@@ -208,7 +208,7 @@ export default async function PipelinePage({
         ) : view === "untagged" ? (
           <UntaggedFirstMessages rows={untagged} />
         ) : (
-          <LeadTable leads={serialized} recrawlCostPerClinic={recrawlCost} />
+          <LeadTable key={searchParams.stage ?? ""} leads={serialized} recrawlCostPerClinic={recrawlCost} initialStage={searchParams.stage} />
         )}
       </div>
     </div>
@@ -227,8 +227,11 @@ async function EmailPipeline({ tab }: { tab?: string }) {
     ownerJobEstimate(),
   ]);
 
-  const ready = rows.filter((r) => r.status === "ready").length;
-  const due = rows.filter((r) => r.followUpDueToday).length;
+  // Lost leads count in neither card: they are hidden from the Email view
+  // unless its Lost filter is picked.
+  const live = rows.filter((r) => r.stage !== "LOST");
+  const ready = live.filter((r) => r.status === "ready").length;
+  const due = live.filter((r) => r.followUpDueToday).length;
   const overBudget = check.used > check.budget;
 
   return (
