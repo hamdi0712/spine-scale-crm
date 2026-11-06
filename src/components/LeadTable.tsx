@@ -18,6 +18,7 @@ import { KanbanLead } from "@/components/KanbanBoard";
 import { useLeadRecrawl } from "@/components/LeadRecrawl";
 import { confirmText } from "@/lib/displayMode";
 import { LostTag, isLost } from "@/components/LostLeads";
+import { PIPELINE_LINKEDIN_STAGE_COOKIE, recalledPipelineFilter, rememberPipelineFilter } from "@/lib/emailChannel";
 
 type SortKey =
   | "clinicName"
@@ -46,8 +47,12 @@ export default function LeadTable({
   // Lost is out of "Active stages" too: it is hidden by default and shown
   // with its own option. "All stages" still means every stage, Lost included.
   const [stageFilter, setStageFilter] = useState<string>(
-    initialStage && (LEAD_STAGES as readonly string[]).includes(initialStage) ? initialStage : "ACTIVE",
+    initialStage && (initialStage === "ALL" || (LEAD_STAGES as readonly string[]).includes(initialStage)) ? initialStage : "ACTIVE",
   );
+  useEffect(() => {
+    const s = recalledPipelineFilter(PIPELINE_LINKEDIN_STAGE_COOKIE, "stage");
+    if (s && (s === "ACTIVE" || s === "ALL" || (LEAD_STAGES as readonly string[]).includes(s))) setStageFilter(s);
+  }, []);
   const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
@@ -216,7 +221,11 @@ export default function LeadTable({
         <div className="contents m-pill-row max-md:items-center max-md:gap-2">
         <select
           value={stageFilter}
-          onChange={(e) => setStageFilter(e.target.value)}
+          onChange={(e) => {
+            setStageFilter(e.target.value);
+            // Remembered so coming back from a lead's page keeps the filter.
+            rememberPipelineFilter(PIPELINE_LINKEDIN_STAGE_COOKIE, e.target.value);
+          }}
           className="field m-pill w-auto"
         >
           <option value="ACTIVE">Active stages</option>
