@@ -507,10 +507,19 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                     <>
                       <div className="break-all text-sm text-ink">
                         {row.email}
-                        {row.riskyAccepted && <> <RiskyTag /></>}
                       </div>
+                      {/* "Front desk · Risky": the check result carries the
+                          yellow Risky highlight here, so the address itself
+                          needs no second tag. */}
                       {row.emailDetail && (
-                        <div className="mt-0.5 text-xs text-muted">{row.emailDetail}</div>
+                        <div className="mt-0.5 text-xs text-muted">
+                          {row.emailDetail.split(" · ").map((part, i) => (
+                            <span key={i}>
+                              {i > 0 && " · "}
+                              {part === "Risky" ? <RiskyTag /> : part}
+                            </span>
+                          ))}
+                        </div>
                       )}
                       {row.inbox && <div className="mt-0.5 text-xs text-muted">from {inboxShort(row.inbox)}</div>}
                     </>
