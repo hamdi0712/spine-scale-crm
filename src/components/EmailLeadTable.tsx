@@ -305,6 +305,19 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             );
           })}
         </div>
+        <div className="flex w-full items-center gap-2 md:w-auto">
+        {/* Below the big monitor, Select sits here beside the search rather
+            than on a row of its own. */}
+        {!selecting && (
+          <button
+            type="button"
+            onClick={() => setSelectMode(true)}
+            disabled={shown.length === 0}
+            className="btn !h-9 !px-3 text-sm max-md:hidden disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Select
+          </button>
+        )}
         <label className="relative flex w-full items-center md:w-60">
           <span className="sr-only">Search clinics</span>
           <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
@@ -316,6 +329,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             className="field h-9 w-full pl-9 text-sm"
           />
         </label>
+        </div>
       </div>
 
       <LostHiddenLine count={lostHidden} onShow={() => setFilter("lost")} className="mb-3 md:mb-0 md:px-4 md:pt-2.5 wide:mb-3 wide:px-0 wide:pt-0" />
@@ -596,7 +610,7 @@ function SelectionBar({
   const btn = "btn !h-8 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
   if (!selecting) {
     return (
-      <div className="mb-3 flex items-center max-md:hidden">
+      <div className="mb-3 hidden items-center wide:flex">
         <button type="button" onClick={() => onSelectMode(true)} className={btn} disabled={shownCount === 0}>
           Select
         </button>
@@ -604,7 +618,7 @@ function SelectionBar({
     );
   }
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden">
+    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-2.5 wide:mb-3 wide:border-0 wide:px-0 wide:py-0">
       <button type="button" onClick={() => onSelectMode(false)} className={btn}>
         Done
       </button>
