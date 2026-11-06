@@ -12,6 +12,7 @@ import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
 import { useJobRun } from "@/components/JobProgress";
 import { LostTag, isLost } from "@/components/LostLeads";
+import { PIPELINE_EMAIL_TAB_COOKIE, recalledPipelineFilter, rememberPipelineFilter } from "@/lib/emailChannel";
 
 export interface EmailLeadRow {
   id: string;
@@ -95,6 +96,15 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   const router = useRouter();
   const due = rows.filter((r) => r.followUpDueToday && !isLost(r.stage)).length;
   const [filter, setFilter] = useState<Filter>(readFilter(initialTab) ?? (due > 0 ? "due" : "all"));
+  // Remembered so coming back from a lead's page lands on the same chip.
+  useEffect(() => {
+    const f = readFilter(recalledPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, "tab"));
+    if (f) setFilter(f);
+  }, []);
+  function pickFilter(f: Filter) {
+    setFilter(f);
+    rememberPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, f);
+  }
   const [query, setQuery] = useState("");
   // The big monitor's extras: cards or the table, a tier and an inbox filter,
   // and a sort. Below the wide breakpoint none of these are shown and the
@@ -260,7 +270,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setFilter(tab.key)}
+                onClick={() => pickFilter(tab.key)}
                 aria-pressed={on}
                 className={`inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
                   on ? "border-accent/40 bg-accent-soft font-semibold text-accent" : "border-line font-medium text-ink-soft hover:bg-wash"
@@ -292,7 +302,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               <button
                 key={tab.key}
                 type="button"
-                onClick={() => setFilter(tab.key)}
+                onClick={() => pickFilter(tab.key)}
                 aria-pressed={on}
                 className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
                   on ? "bg-accent-soft font-semibold text-accent" : "text-muted hover:bg-wash hover:text-ink"

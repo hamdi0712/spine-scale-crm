@@ -38,6 +38,34 @@ export type PipelineChannel = (typeof PIPELINE_VIEWABLE_CHANNELS)[number];
 export const DEFAULT_PIPELINE_CHANNEL: PipelineChannel = "email";
 export const PIPELINE_CHANNEL_COOKIE = "pipeline-channel";
 
+// The filter last picked on each Pipeline view — the Email chip and the
+// LinkedIn stage dropdown — so leaving for a lead's page and coming back
+// (its ← Pipeline link, or the browser's back) lands on the same filter.
+// Session cookies: they last until the browser is closed. Read on the
+// server so the page opens on the filter with no flash.
+export const PIPELINE_EMAIL_TAB_COOKIE = "pipeline-email-tab";
+export const PIPELINE_LINKEDIN_STAGE_COOKIE = "pipeline-linkedin-stage";
+
+// The remembered filter, read in the browser. The server reads the same
+// cookie, but a page the app router already has cached is shown without
+// asking it again, so the tables also restore it themselves on mount — unless
+// the URL names a filter of its own (?tab= / ?stage=), which wins.
+export function recalledPipelineFilter(name: string, urlParam: string): string | null {
+  try {
+    if (new URLSearchParams(window.location.search).has(urlParam)) return null;
+    const hit = document.cookie.split("; ").find((c) => c.startsWith(`${name}=`));
+    return hit ? decodeURIComponent(hit.slice(name.length + 1)) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberPipelineFilter(name: string, value: string) {
+  try {
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; SameSite=Lax`;
+  } catch {}
+}
+
 export function readPipelineChannel(v: unknown): PipelineChannel {
   return v === "linkedin" ? "linkedin" : DEFAULT_PIPELINE_CHANNEL;
 }

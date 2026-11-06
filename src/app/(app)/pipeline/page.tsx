@@ -13,7 +13,7 @@ import MechanismPicker from "@/components/MechanismPicker";
 import { cookies } from "next/headers";
 import ChannelToggle from "@/components/ChannelToggle";
 import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
-import { PIPELINE_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
+import { PIPELINE_CHANNEL_COOKIE, PIPELINE_EMAIL_TAB_COOKIE, PIPELINE_LINKEDIN_STAGE_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 import { loadEmailView } from "@/lib/emailWorkflowRead";
 import FacebookEmailButton, { FacebookEmailProgress } from "@/components/FacebookEmailButton";
 import DropdownMenu from "@/components/DropdownMenu";
@@ -35,7 +35,7 @@ export default async function PipelinePage({
   // Dashboard card), else Email unless this browser last chose LinkedIn
   // (src/components/ChannelToggle.tsx).
   const channel = readPipelineChannel(searchParams.channel ?? cookies().get(PIPELINE_CHANNEL_COOKIE)?.value);
-  if (channel === "email") return <EmailPipeline tab={searchParams.tab} />;
+  if (channel === "email") return <EmailPipeline tab={searchParams.tab ?? cookies().get(PIPELINE_EMAIL_TAB_COOKIE)?.value} />;
 
   // The table is what loads. It is the view that answers the questions asked
   // most often of a pipeline — who is where, what is scored, what is due — and
@@ -208,7 +208,7 @@ export default async function PipelinePage({
         ) : view === "untagged" ? (
           <UntaggedFirstMessages rows={untagged} />
         ) : (
-          <LeadTable key={searchParams.stage ?? ""} leads={serialized} recrawlCostPerClinic={recrawlCost} initialStage={searchParams.stage} />
+          <LeadTable key={searchParams.stage ?? ""} leads={serialized} recrawlCostPerClinic={recrawlCost} initialStage={searchParams.stage ?? cookies().get(PIPELINE_LINKEDIN_STAGE_COOKIE)?.value} />
         )}
       </div>
     </div>
