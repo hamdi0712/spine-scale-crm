@@ -157,6 +157,7 @@ export async function loadEmailView(now = new Date()) {
       riskyLimit: settings.riskyDailyLimit,
       riskyAccepted: riskyAccepted(l),
       riskyFlagged: l.emailRiskyFlaggedAt !== null,
+      stage: l.stage,
     };
   });
   const check = await checkInfo(now);
@@ -166,7 +167,7 @@ export async function loadEmailView(now = new Date()) {
     counters,
     check,
     starters: startersRemaining(settings),
-    unchecked: leads.filter((l) => (l.email ?? "").trim() !== "" && l.emailStatus === null).length,
+    unchecked: leads.filter((l) => l.stage !== "LOST" && (l.email ?? "").trim() !== "" && l.emailStatus === null).length,
   };
 }
 

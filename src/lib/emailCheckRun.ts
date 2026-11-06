@@ -12,7 +12,7 @@
 //   check in Settings is corrected from credits_used.
 
 import { prisma } from "@/lib/prisma";
-import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
+import { PIPELINE_DEFAULT_WHERE, FIND_EMAILS_WHERE } from "@/lib/liveLeadWhere";
 import { EmailCandidate, EmailStatus, parseAlternates, readEmailSource } from "@/lib/emailFind";
 import { budgetFor, mapVerification, monthStart } from "@/lib/emailCheck";
 import { verifyEmail, InstantlyErrorCode } from "@/lib/instantly";
@@ -27,7 +27,7 @@ export async function creditsUsedThisMonth(now = new Date()): Promise<number> {
 // Email-channel leads whose current address has never been checked.
 export async function uncheckedEmailLeads(): Promise<{ id: string; clinicName: string }[]> {
   return prisma.lead.findMany({
-    where: { ...PIPELINE_DEFAULT_WHERE, channel: "email", email: { not: null }, NOT: { email: "" }, emailStatus: null, suppressedAt: null },
+    where: { ...FIND_EMAILS_WHERE, channel: "email", email: { not: null }, NOT: { email: "" }, emailStatus: null, suppressedAt: null },
     select: { id: true, clinicName: true },
     orderBy: { updatedAt: "asc" },
   });

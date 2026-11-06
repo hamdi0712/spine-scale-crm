@@ -17,6 +17,7 @@ import { IcpTierChip, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 import { useLeadRecrawl } from "@/components/LeadRecrawl";
 import { confirmText } from "@/lib/displayMode";
+import { LostHiddenLine, LostTag, isLost } from "@/components/LostLeads";
 
 type SortKey =
   | "clinicName"
@@ -29,9 +30,12 @@ type SortKey =
 export default function LeadTable({
   leads,
   recrawlCostPerClinic = 0,
+  initialStage,
 }: {
   leads: KanbanLead[];
   recrawlCostPerClinic?: number;
+  // A stage a link opened the table on (?stage=, e.g. the board's "show").
+  initialStage?: string;
 }) {
   const recrawl = useLeadRecrawl(recrawlCostPerClinic);
   const [query, setQuery] = useState("");
@@ -39,7 +43,11 @@ export default function LeadTable({
   // something to do about, which is every stage except the holding one. No
   // Contact is one press away in the same select — kept out of the default
   // view, not out of the table.
-  const [stageFilter, setStageFilter] = useState<string>("ACTIVE");
+  // Lost is out of "Active stages" too: it is hidden by default and shown
+  // with its own option. "All stages" still means every stage, Lost included.
+  const [stageFilter, setStageFilter] = useState<string>(
+    initialStage && (LEAD_STAGES as readonly string[]).includes(initialStage) ? initialStage : "ACTIVE",
+  );
   const [tierFilter, setTierFilter] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
@@ -53,9 +61,12 @@ export default function LeadTable({
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = leads.filter((l) => {
+      // A search by clinic name always reaches a Lost lead, whatever the
+      // stage filter says, so one can be found and reopened.
+      const lostByName = q !== "" && isLost(l.stage) && l.clinicName.toLowerCase().includes(q);
       if (stageFilter === "ACTIVE") {
-        if (!(ACTIVE_LEAD_STAGES as string[]).includes(l.stage)) return false;
-      } else if (stageFilter !== "ALL" && l.stage !== stageFilter) {
+        if (!lostByName && (isLost(l.stage) || !(ACTIVE_LEAD_STAGES as string[]).includes(l.stage))) return false;
+      } else if (stageFilter !== "ALL" && l.stage !== stageFilter && !lostByName) {
         return false;
       }
       if (tierFilter === "UNSCORED" && l.icpTier != null) return false;
@@ -96,6 +107,13 @@ export default function LeadTable({
       return cmp * sortDir;
     });
   }, [leads, query, stageFilter, tierFilter, sortKey, sortDir]);
+
+  // Lost leads the stage filter is keeping out of view right now.
+  const lostHidden =
+    stageFilter === "LOST" || stageFilter === "ALL"
+      ? 0
+      : leads.filter((l) => isLost(l.stage)).length - rows.filter((l) => isLost(l.stage)).length;
+  const tagLost = stageFilter !== "LOST";
 
   // Only what is on screen. A row filtered out of view is not a row somebody
   // chose, and a delete that reached beyond the list they were looking at
@@ -250,6 +268,7 @@ export default function LeadTable({
         </span>
         </div>
       </div>
+      <LostHiddenLine count={lostHidden} onShow={() => setStageFilter("LOST")} className="-mt-2 mb-3" />
       {/* Rides the top of the viewport while a long list scrolls under it, so
           the actions stay with the selection instead of with the header row
           that made it. Nothing renders at all until something is chosen. */}
@@ -344,6 +363,7 @@ export default function LeadTable({
                   className="block text-[15px] font-medium leading-snug text-ink"
                 >
                   {lead.clinicName}
+                  {tagLost && isLost(lead.stage) && <LostTag />}
                 </Link>
                 <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-sm text-muted">
                   <span className="truncate">{lead.contactName ?? "No contact yet"}</span>
@@ -415,6 +435,7 @@ export default function LeadTable({
                   >
                     {lead.clinicName}
                   </Link>
+                  {tagLost && isLost(lead.stage) && <LostTag />}
                 </td>
                 <td className="td text-muted">
                   <span className="inline-flex items-center gap-1.5">
