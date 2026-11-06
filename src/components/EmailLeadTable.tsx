@@ -11,7 +11,7 @@ import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge
 import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
 import { useJobRun } from "@/components/JobProgress";
-import { LostHiddenLine, LostTag, isLost } from "@/components/LostLeads";
+import { LostTag, isLost } from "@/components/LostLeads";
 
 export interface EmailLeadRow {
   id: string;
@@ -172,7 +172,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
     );
   const cards = view === "cards";
   const tagLost = filter !== "lost";
-  const lostHidden = filter === "lost" ? 0 : rows.filter((r) => isLost(r.stage)).length - shown.filter((r) => isLost(r.stage)).length;
   const allPicked = shown.length > 0 && shown.every((r) => picked.has(r.id));
   function pickAll(on: boolean) {
     setPicked((prev) => {
@@ -331,8 +330,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         </label>
         </div>
       </div>
-
-      <LostHiddenLine count={lostHidden} onShow={() => setFilter("lost")} className="mb-3 md:mb-0 md:px-4 md:pt-2.5 wide:mb-3 wide:px-0 wide:pt-0" />
 
       {/* The big monitor's cards: three across, a clinic each. The whole card
           opens the lead; its send buttons do their own thing. */}

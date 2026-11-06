@@ -8,7 +8,6 @@ import { moveLeadStage } from "@/lib/actions/leads";
 import { IcpTier } from "@/lib/icp";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import { IcpTierChip } from "@/components/Badge";
-import { LostHiddenLine } from "@/components/LostLeads";
 
 export interface KanbanLead {
   id: string;
@@ -50,15 +49,15 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
   // is where a stage is changed by dragging. So it appears with its first
   // card and goes away with its last. It reads `moved` through stageOf like
   // the columns do, so a card dropped into it brings the column with it.
-  // Lost has no column: Lost leads are hidden from the board, and the line
-  // above it opens the table on the Lost filter. A card can still be moved to
+  // Lost has no column: Lost leads are hidden from the board; the table's
+  // stage dropdown has "Show Lost leads". A card can still be moved to
   // Lost from its stage menu, and then drops out of view.
   const columns = LEAD_STAGES.filter(
     (stage) =>
       stage !== "LOST" &&
       (stage !== "NO_CONTACT" || leads.some((l) => stageOf(l) === "NO_CONTACT")),
   );
-  const lostHidden = leads.filter((l) => stageOf(l) === "LOST").length;
+
 
   function handleDrop(stage: LeadStage) {
     if (!dragId) return;
@@ -80,7 +79,6 @@ export default function KanbanBoard({ leads }: { leads: KanbanLead[] }) {
 
   return (
     <>
-    <LostHiddenLine count={lostHidden} href="/pipeline?stage=LOST" className="-mt-4 mb-3" />
     {/* On a phone each column is a full-width panel and the row snaps from one
     // stage to the next, so a stage is read a screen at a time. */}
     <div className="flex gap-4 overflow-x-auto pb-1 max-md:-mx-4 max-md:snap-x max-md:snap-mandatory max-md:gap-3 max-md:scroll-px-4 max-md:px-4 max-md:scrollbar-none">

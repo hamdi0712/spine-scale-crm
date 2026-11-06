@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 // Every colour in the app is a semantic token, and every token resolves to a
 // CSS custom property holding a bare `R G B` triple. Two things fall out of
@@ -23,12 +24,6 @@ const config: Config = {
   future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
-      // A big desktop monitor (a 22" at 1920, say). Pages that opt in run edge
-      // to edge from here up; below it — a 13" laptop included — every page is
-      // exactly the layout it always was.
-      screens: {
-        wide: "1600px",
-      },
       colors: {
         bg: c("bg"),
         panel: c("panel"),
@@ -99,6 +94,18 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `wide:` — the big-monitor layout. From 1600px up on every page that
+    // opts in; on the Pipeline pages (marked .pipeline-scope by AppShell) from
+    // 1280px, so a 13" MacBook gets it there and nowhere else. Both branches
+    // carry an extra selector so a wide: class still beats md:/lg: ones, as
+    // it did when it was the last screen.
+    plugin(({ addVariant }) => {
+      addVariant("wide", [
+        "@media (min-width: 1600px) { :root & }",
+        "@media (min-width: 1280px) { .pipeline-scope & }",
+      ]);
+    }),
+  ],
 };
 export default config;

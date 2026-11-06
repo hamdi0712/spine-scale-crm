@@ -17,7 +17,7 @@ import { IcpTierChip, StageBadge } from "@/components/Badge";
 import { KanbanLead } from "@/components/KanbanBoard";
 import { useLeadRecrawl } from "@/components/LeadRecrawl";
 import { confirmText } from "@/lib/displayMode";
-import { LostHiddenLine, LostTag, isLost } from "@/components/LostLeads";
+import { LostTag, isLost } from "@/components/LostLeads";
 
 type SortKey =
   | "clinicName"
@@ -108,11 +108,7 @@ export default function LeadTable({
     });
   }, [leads, query, stageFilter, tierFilter, sortKey, sortDir]);
 
-  // Lost leads the stage filter is keeping out of view right now.
-  const lostHidden =
-    stageFilter === "LOST" || stageFilter === "ALL"
-      ? 0
-      : leads.filter((l) => isLost(l.stage)).length - rows.filter((l) => isLost(l.stage)).length;
+  const lostCount = leads.filter((l) => isLost(l.stage)).length;
   const tagLost = stageFilter !== "LOST";
 
   // Only what is on screen. A row filtered out of view is not a row somebody
@@ -225,7 +221,9 @@ export default function LeadTable({
         >
           <option value="ACTIVE">Active stages</option>
           <option value="ALL">All stages</option>
-          {LEAD_STAGES.map((s) => (
+          {/* Lost leads are hidden by default; this is how they are shown. */}
+          <option value="LOST">Show Lost leads ({lostCount})</option>
+          {LEAD_STAGES.filter((s) => s !== "LOST").map((s) => (
             <option key={s} value={s}>
               {LEAD_STAGE_LABELS[s]}
             </option>
@@ -268,7 +266,6 @@ export default function LeadTable({
         </span>
         </div>
       </div>
-      <LostHiddenLine count={lostHidden} onShow={() => setStageFilter("LOST")} className="-mt-2 mb-3" />
       {/* Rides the top of the viewport while a long list scrolls under it, so
           the actions stay with the selection instead of with the header row
           that made it. Nothing renders at all until something is chosen. */}
