@@ -23,7 +23,7 @@ export interface OwnerEstimate {
   hasKeys: boolean;
 }
 
-export default function OwnerFindButton({ estimate }: { estimate: OwnerEstimate }) {
+export default function OwnerFindButton({ estimate, plain = false }: { estimate: OwnerEstimate; plain?: boolean }) {
   const { running, track } = useJobRun("find-owners");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -49,6 +49,18 @@ export default function OwnerFindButton({ estimate }: { estimate: OwnerEstimate 
     setStarting(false);
     if (!r.ok) setError(r.error);
     else track(r.id);
+  }
+
+  if (plain) {
+    return (
+      <div className="flex flex-col items-end">
+        <button type="button" onClick={() => void run()} disabled={running || starting || e.count === 0} className="btn-primary" title={e.hasKeys ? "Owner's name from NPI, then their email via Hunter" : "Needs Hunter and Instantly keys — Settings → API Keys"}>
+          {running || starting ? "Finding owners…" : "Find owners"}
+          {e.count > 0 && <span className="num ml-1.5 opacity-80">{e.count}</span>}
+        </button>
+        {error && <p className="mt-1 max-w-xs text-right text-xs text-bad">{error}</p>}
+      </div>
+    );
   }
 
   return (

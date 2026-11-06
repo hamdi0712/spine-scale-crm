@@ -40,6 +40,7 @@ import { monthStart } from "@/lib/emailCheck";
 import { getHunterApiKey } from "@/lib/appSecretsStore";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { defaultEmailVersion, renderEmail } from "@/lib/emailWorkflow";
+import { hasUsableEmail } from "@/lib/emailBuckets";
 
 // ─── Credits ───────────────────────────────────────────────────────────────
 
@@ -107,13 +108,19 @@ const OWNER_LEAD_WHERE = {
 // Email leads Find owners would work on: no owner address yet, the email
 // step not run, and either the name not looked up or the owner confirmed.
 // (A lead waiting on a pick is left until it is picked.)
-export async function findOwnerLeads(opts: { onlyNew?: boolean } = {}): Promise<{ id: string; clinicName: string }[]> {
+export async function findOwnerLeads(opts: { onlyNew?: boolean; includePipeline?: boolean } = {}): Promise<{ id: string; clinicName: string }[]> {
   const rows = await prisma.lead.findMany({
     where: opts.onlyNew ? { ...OWNER_LEAD_WHERE, ownerCheckedAt: null } : { ...OWNER_LEAD_WHERE, OR: [{ ownerCheckedAt: null }, { ownerStatus: "confirmed" }] },
-    select: { id: true, clinicName: true, email: true, emailType: true, emailAlternates: true },
+    select: { id: true, clinicName: true, email: true, emailType: true, emailAlternates: true, emailStatus: true, ownerStatus: true },
     orderBy: { updatedAt: "asc" },
   });
-  return rows.filter((r) => !hasOwnerEmail(r)).map((r) => ({ id: r.id, clinicName: r.clinicName }));
+  // Only the Email queue: a confirmed owner with a valid or risky address is
+  // in the Email pipeline already (src/lib/emailBuckets.ts). A run for named
+  // leads (a hand pick, a lead's own button) still looks for the owner's own
+  // address on those.
+  return rows
+    .filter((r) => opts.includePipeline || !(r.ownerStatus === "confirmed" && hasUsableEmail(r)))
+    .filter((r) => !hasOwnerEmail(r)).map((r) => ({ id: r.id, clinicName: r.clinicName }));
 }
 
 // ─── 1. The name ───────────────────────────────────────────────────────────
@@ -197,13 +204,16 @@ export async function setOwnerAsContact(leadId: string, name: string, title: str
 }
 
 // A pick between the names shown: the chosen one becomes the confirmed owner.
+// The lead goes back to "not looked up yet" (both markers cleared), so if the
+// automatic lookup that follows does not finish, the next Find owners run
+// covers it. The hand-picked owner is kept: findOwner never replaces one.
 export async function pickOwner(leadId: string, name: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { ownerSiteNames: true, npiOfficialName: true } });
   if (!lead) return { ok: false, error: "That lead no longer exists." };
   const choices = new Set([...parsePickNames(lead.ownerSiteNames), ...(lead.npiOfficialName ? [lead.npiOfficialName] : [])]);
   const chosen = name.trim();
   if (!choices.has(chosen)) return { ok: false, error: "Pick one of the names shown." };
-  await prisma.lead.update({ where: { id: leadId }, data: { ownerStatus: "confirmed", ownerSource: "manual", ownerCheckedAt: new Date() } });
+  await prisma.lead.update({ where: { id: leadId }, data: { ownerStatus: "confirmed", ownerSource: "manual", ownerCheckedAt: null, ownerEmailAt: null } });
   await setOwnerAsContact(leadId, chosen, null);
   await prisma.lead.update({ where: { id: leadId }, data: { contactNameByHand: true } });
   return { ok: true };

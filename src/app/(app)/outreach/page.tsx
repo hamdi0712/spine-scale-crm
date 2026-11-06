@@ -11,6 +11,11 @@ import OutreachList from "@/components/OutreachList";
 import ChannelToggle from "@/components/ChannelToggle";
 import { cookies } from "next/headers";
 import { OUTREACH_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
+import { loadEmailQueue } from "@/lib/emailBucketsRead";
+import { ownerJobEstimate } from "@/lib/actions/jobs";
+import OwnerFindButton, { OwnerFindProgress } from "@/components/OwnerFindButton";
+import FindLeadOwnerButton from "@/components/FindLeadOwnerButton";
+import ContactFormButtons from "@/components/ContactFormButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +38,8 @@ const OUTREACH_TIERS: IcpTier[] = ["A", "B"];
 export default async function OutreachQueuePage() {
   // Email or LinkedIn, one at a time, remembered per browser like Pipeline.
   const channel = readPipelineChannel(cookies().get(OUTREACH_CHANNEL_COOKIE)?.value);
+  // Email has its own queue: leads not ready for the Email pipeline yet.
+  if (channel === "email") return <EmailQueue />;
   const leads = await prisma.lead.findMany({
     where: { ...OUTREACH_QUEUE_WHERE, channel },
     orderBy: { createdAt: "desc" },
@@ -68,7 +75,7 @@ export default async function OutreachQueuePage() {
             <ChannelToggle channel={channel} cookie={OUTREACH_CHANNEL_COOKIE} label="Outreach Queue channel" />
           </div>
           <p className="helper-text page-sub mt-1.5 text-sm text-muted">
-            Qualified {channel === "email" ? "email" : "LinkedIn"} leads nobody has written to yet — A and B tier, still at
+            Qualified LinkedIn leads nobody has written to yet — A and B tier, still at
             New
           </p>
         </div>
@@ -94,6 +101,100 @@ export default async function OutreachQueuePage() {
       ) : (
         <OutreachList rows={rows} />
       )}
+    </div>
+  );
+}
+
+// The Email queue: email leads not ready to write to — no confirmed owner, or
+// no valid or risky address. Find owners works on all of them. Below it, the
+// Contact form list: Find owners found nothing, but the clinic has a form.
+// Once a lead has a confirmed owner and a usable address it moves to the
+// Email pipeline; with nothing at all it goes to the Call list
+// (src/lib/emailBuckets.ts).
+async function EmailQueue() {
+  const [{ queue, forms }, owners] = await Promise.all([loadEmailQueue(), ownerJobEstimate()]);
+  return (
+    <div className="wide-format">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <h1 className="display text-[32px] font-semibold">Email queue</h1>
+            <ChannelToggle channel="email" cookie={OUTREACH_CHANNEL_COOKIE} label="Outreach Queue channel" />
+          </div>
+          <p className="helper-text page-sub mt-1.5 text-sm text-muted">
+            Email leads without a confirmed owner or a usable address yet — they move to the{" "}
+            <Link href="/pipeline" className="underline">Email pipeline</Link> once they have both
+          </p>
+        </div>
+        <PageActions className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
+          <span className="num text-xs text-muted">
+            {queue.length} in the queue
+          </span>
+          <OwnerFindButton estimate={owners} plain />
+        </PageActions>
+      </div>
+
+      <OwnerFindProgress className="mt-6" />
+
+      {queue.length === 0 ? (
+        <div className="card mt-8 px-6 py-10 text-center">
+          <p className="text-sm font-medium">The queue is empty</p>
+          <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
+            Every email lead has an owner and an address, or has gone to the Contact form list or the Call list.
+          </p>
+        </div>
+      ) : (
+        <ul className="card mt-6 divide-y divide-line">
+          {queue.map((l) => (
+            <li key={l.id} className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <Link href={`/pipeline/${l.id}`} className="text-sm font-medium hover:underline">
+                  {l.clinicName}
+                </Link>
+                {l.icpTier && <span className="num ml-2 text-xs text-muted">{l.icpTier}</span>}
+                <p className="truncate text-xs text-muted">
+                  {[l.contactName, l.email ? `${l.email} · ${l.emailDetail}` : null, l.location].filter(Boolean).join(" · ") || "Nothing yet"}
+                </p>
+                <p className="text-xs font-medium text-warn">{l.reason}</p>
+              </div>
+              {l.canFind ? (
+                <FindLeadOwnerButton leadId={l.id} />
+              ) : (
+                <Link href={`/pipeline/${l.id}`} className="btn h-8 px-3 text-sm">
+                  Open lead
+                </Link>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold">
+          Contact form <span className="num ml-1 text-muted">{forms.length}</span>
+        </h2>
+        <p className="helper-text mt-0.5 text-xs text-muted">
+          Find owners found no usable email, but the clinic has a contact form. Once marked sent, a lead leaves this list;
+          three days on with no reply it shows on the Call list.
+        </p>
+        {forms.length === 0 ? (
+          <p className="mt-2 text-xs text-muted">Nothing here.</p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-4">
+            {forms.map((f) => (
+              <div key={f.id}>
+                <Link href={`/pipeline/${f.id}`} className="text-sm font-medium hover:underline">
+                  {f.clinicName}
+                </Link>
+                {f.location && <span className="ml-2 text-xs text-muted">{f.location}</span>}
+                <div className="mt-1.5">
+                  <ContactFormButtons {...f.form} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

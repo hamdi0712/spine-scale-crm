@@ -449,7 +449,7 @@ export async function autoFindBackupEmail(leadId: string): Promise<void> {
 // fits). leadIds: one lead (the lead page's button) or a pick just made.
 export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: boolean } = {}): Promise<LaunchResult> {
   const only = Array.isArray(args?.leadIds) ? new Set(args.leadIds.filter((x) => typeof x === "string")) : null;
-  const all = await findOwnerLeads({ onlyNew: args?.auto === true && !only });
+  const all = await findOwnerLeads({ onlyNew: args?.auto === true && !only, includePipeline: only !== null });
   const rows = only ? all.filter((r) => only.has(r.id)) : all;
   if (rows.length === 0) return { ok: false, error: "No email lead is waiting on its owner — every one has been looked up, or already has the owner's email." };
   const ready = await ownerReadiness(rows.length);
