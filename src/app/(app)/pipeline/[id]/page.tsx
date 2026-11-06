@@ -212,7 +212,9 @@ export default async function LeadDetailPage({
           <UnflagLeadButton leadId={lead.id} />
         </div>
       )}
-      <Link href="/pipeline" className="text-sm text-muted hover:text-ink">
+      {/* Back to this lead's own channel; the filter last picked there is
+          restored from its cookie (src/lib/emailChannel.ts). */}
+      <Link href={`/pipeline?channel=${lead.channel === "email" ? "email" : "linkedin"}`} className="text-sm text-muted hover:text-ink">
         ← Pipeline{lead.channel === "email" ? " · Email" : ""}
       </Link>
 
