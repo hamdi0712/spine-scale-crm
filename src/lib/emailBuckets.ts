@@ -9,6 +9,7 @@
 // Pure.
 
 import { pickContactFormLink } from "@/lib/contactForm";
+import { ownerEmailBlocker } from "@/lib/ownerFind";
 
 export type EmailBucket = "hidden" | "queue" | "pipeline" | "contact_form" | "form_sent" | "call";
 
@@ -29,6 +30,41 @@ export interface EmailBucketLead {
   emailApprovedAt: Date | null;
   contactNameByHand: boolean;
   contactConfirmedAt: Date | null;
+  // What the owner-type address rule and Find owners' email step read.
+  emailType: string | null;
+  emailRiskyAcceptedAt: Date | null;
+  emailRiskyAcceptedEmail: string | null;
+  emailAlternates: string | null;
+  ownerSource: string | null;
+  websiteUrl: string | null;
+  contactName: string | null;
+}
+
+// An owner-type address that checked valid, or a risky one accepted by hand
+// (while it is still the lead's address). Enough for the Email pipeline on its
+// own: Find owners has nothing left to do, and a missing or unconfirmed contact
+// shows there as Check contact.
+export function usableOwnerAddress(
+  lead: Pick<EmailBucketLead, "email" | "emailType" | "emailStatus" | "emailRiskyAcceptedAt" | "emailRiskyAcceptedEmail">,
+): boolean {
+  const email = (lead.email ?? "").trim().toLowerCase();
+  if (email === "" || lead.emailType !== "owner") return false;
+  if (lead.emailStatus === "valid") return true;
+  return lead.emailStatus === "risky" && lead.emailRiskyAcceptedAt !== null && (lead.emailRiskyAcceptedEmail ?? "").trim().toLowerCase() === email;
+}
+
+// Whether "Find this owner's email" would do nothing on this lead, run with
+// force: the name step is a no-op only for an owner picked by hand, and the
+// email step is blocked (src/lib/ownerFind.ts, the same rule it runs).
+export function ownerRunWouldDoNothing(lead: EmailBucketLead): boolean {
+  const nameStepNoop = lead.ownerStatus === "confirmed" && lead.ownerSource === "manual";
+  return nameStepNoop && ownerEmailBlocker({ ...lead, channel: "email", ownerEmailAt: null }) !== null;
+}
+
+// The queue row's button: shown only when the run would do something. A pick
+// waits on a person, not a run.
+export function queueCanFind(lead: EmailBucketLead): boolean {
+  return lead.ownerStatus !== "pick" && !ownerRunWouldDoNothing(lead);
 }
 
 // Who the email goes to is settled: Find owners confirmed the owner, the
@@ -60,7 +96,8 @@ export function nothingFound(lead: EmailBucketLead): boolean {
   if (hasUsableEmail(lead)) return false;
   const hasAddress = (lead.email ?? "").trim() !== "";
   if (hasAddress && lead.emailStatus === null) return false;
-  return lead.ownerEmailAt !== null || lead.ownerStatus === "not_found";
+  // A run of Find owners could add nothing: the same as having run.
+  return lead.ownerEmailAt !== null || lead.ownerStatus === "not_found" || ownerRunWouldDoNothing(lead);
 }
 
 // The two contact-form buckets, which live in the Email pipeline with a status
@@ -84,7 +121,7 @@ export function emailBucket(lead: EmailBucketLead, x: EmailBucketExtras): EmailB
   if (lead.stage === "LOST") return "hidden";
   // Already written to, answered or stopped: the pipeline keeps its history.
   if (x.sendCount > 0 || lead.emailRepliedAt || lead.suppressedAt) return "pipeline";
-  if (hasUsableEmail(lead) && recipientSettled(lead)) return "pipeline";
+  if (hasUsableEmail(lead) && (recipientSettled(lead) || usableOwnerAddress(lead))) return "pipeline";
   if (nothingFound(lead)) {
     if (x.formSentAt) return "form_sent";
     if (x.contactFormUrl) return "contact_form";

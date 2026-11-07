@@ -449,10 +449,20 @@ export async function autoFindBackupEmail(leadId: string): Promise<void> {
 // the worst-case estimate and asks before this is pressed; a job whose worst
 // case would go past either monthly budget is refused (auto trims to what
 // fits). leadIds: one lead (the lead page's button) or a pick just made.
-export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: boolean } = {}): Promise<LaunchResult> {
+// force: "Find this owner's email" on one lead — the name and the email step
+// both run again, whatever was looked up before.
+export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: boolean; force?: boolean } = {}): Promise<LaunchResult> {
   const only = Array.isArray(args?.leadIds) ? new Set(args.leadIds.filter((x) => typeof x === "string")) : null;
-  const all = await findOwnerLeads({ onlyNew: args?.auto === true && !only, includePipeline: only !== null });
-  const rows = only ? all.filter((r) => only.has(r.id)) : all;
+  const force = args?.force === true && only !== null;
+  const rows = force
+    ? await prisma.lead.findMany({
+        where: { id: { in: Array.from(only!) }, channel: "email", suppressedAt: null, emailUnsubscribedAt: null },
+        select: { id: true, clinicName: true },
+      })
+    : await (async () => {
+        const all = await findOwnerLeads({ onlyNew: args?.auto === true && !only, includePipeline: only !== null });
+        return only ? all.filter((r) => only.has(r.id)) : all;
+      })();
   if (rows.length === 0) return { ok: false, error: "No email lead is waiting on its owner — every one has been looked up, or already has the owner's email." };
   const ready = await ownerReadiness(rows.length);
   if (!ready.hasHunterKey) return { ok: false, error: "No Hunter API key — add one under Settings → API Keys." };
@@ -488,7 +498,8 @@ export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: bo
     href: "/pipeline",
     items: items.map((r) => ({ id: r.id, name: r.clinicName })),
     work: async (item) => {
-      const name = await findOwner(item.id);
+      if (force) await prisma.lead.update({ where: { id: item.id }, data: { ownerEmailAt: null } });
+      const name = await findOwner(item.id, { force });
       if (name.kind === "failed") return { outcome: "error", detail: name.detail };
       if (name.kind === "confirmed" && name.source !== "manual" && !/earlier/.test(name.detail)) tally.confirmed++;
       if (name.kind === "pick") tally.pick++;

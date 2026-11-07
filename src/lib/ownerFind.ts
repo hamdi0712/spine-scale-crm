@@ -28,7 +28,7 @@
 //    Hunter saw on the web becomes the main email; an inferred or guessed one
 //    is kept as a risky alternate, since nothing can confirm it.
 
-import { DecisionMakerName, EmailCandidate, EmailSource, EmailStatus, parseAlternates, readDecisionMakerName, readEmailSource } from "@/lib/emailFind";
+import { DecisionMakerName, EmailCandidate, EmailSource, EmailStatus, clinicDomain, isMailboxProvider, parseAlternates, readDecisionMakerName, readEmailSource } from "@/lib/emailFind";
 import { looksLikePersonName } from "@/lib/decisionMaker";
 import { parseLinks, providerNameFromLink } from "@/lib/websiteCrawl";
 import type { NpiOrganization } from "@/lib/npiRegistry";
@@ -518,8 +518,10 @@ export function withOwnerEmail(
 
 // Whether the lead already has the owner's address — as its email, or as an
 // alternate nobody has found invalid.
-export function hasOwnerEmail(lead: { email: string | null; emailType: string | null; emailAlternates: string | null }): boolean {
-  if ((lead.email ?? "").trim() !== "" && lead.emailType === "owner") return true;
+// An invalid owner address is not the owner's email: the lookup may still find
+// the real one.
+export function hasOwnerEmail(lead: { email: string | null; emailType: string | null; emailStatus?: string | null; emailAlternates: string | null }): boolean {
+  if ((lead.email ?? "").trim() !== "" && lead.emailType === "owner" && lead.emailStatus !== "invalid") return true;
   return parseAlternates(lead.emailAlternates).some((a) => a.type === "owner" && a.status !== "invalid");
 }
 
@@ -575,4 +577,34 @@ export function ownerPanelProps(lead: {
     checkedAt: lead.ownerCheckedAt ? lead.ownerCheckedAt.toISOString() : null,
     emailNote,
   };
+}
+
+// ─── The email step ────────────────────────────────────────────────────────
+
+// Why a lead is not looked up, or null when it may be.
+export function ownerEmailBlocker(lead: {
+  channel: string;
+  ownerStatus: string | null;
+  ownerEmailAt: Date | null;
+  websiteUrl: string | null;
+  email: string | null;
+  emailType: string | null;
+  emailStatus: string | null;
+  emailAlternates: string | null;
+  contactName: string | null;
+}): string | null {
+  if (lead.channel !== "email") return "Not an email lead.";
+  if (lead.ownerStatus !== "confirmed") return "No confirmed owner.";
+  if (hasOwnerEmail(lead)) return "Already has the owner's email.";
+  if (lead.ownerEmailAt) return "The owner's email was looked for already.";
+  const domain = clinicDomain(lead.websiteUrl);
+  if (!domain) return "No website domain to look on.";
+  if (isMailboxProvider(domain)) return `The site is on ${domain} — the owner's address can't be guessed.`;
+  const known = [(lead.email ?? "").trim().toLowerCase(), ...parseAlternates(lead.emailAlternates).map((a) => a.address)].filter((a) => a !== "");
+  if (known.length > 0 && known.every((a) => isMailboxProvider(a.slice(a.indexOf("@") + 1)))) {
+    return "Only Gmail/Yahoo/AOL/Outlook/iCloud-style addresses — the owner's can't be guessed.";
+  }
+  const person = readDecisionMakerName(lead.contactName);
+  if (!person?.last) return "The owner's name is too short to build an address from.";
+  return null;
 }
