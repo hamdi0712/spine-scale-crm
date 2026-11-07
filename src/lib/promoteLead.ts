@@ -125,6 +125,7 @@ export async function promoteWithin(
         // clinic and re-gathering it on the lead would spend four actor runs
         // to arrive at the same four values.
         metaAdsSignal: candidate.metaAdsSignal,
+        facebookPageId: candidate.facebookPageId,
         reviewCount: candidate.reviewCount,
         websiteNotes: candidate.websiteNotes,
         websiteLinks: candidate.websiteLinks,

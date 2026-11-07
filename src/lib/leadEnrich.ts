@@ -70,6 +70,7 @@ export const ENRICH_FIELD_KEYS = [
   "websiteUrl",
   "facebookUrl",
   "metaAdsSignal",
+  "facebookPageId",
   "reviewCount",
   "websiteNotes",
   "websiteLinks",
@@ -82,6 +83,7 @@ export const ENRICH_FIELD_LABELS: Record<EnrichFieldKey, string> = {
   websiteUrl: "Website URL",
   facebookUrl: "Facebook URL",
   metaAdsSignal: "Meta ads signal",
+  facebookPageId: "Facebook page ID",
   reviewCount: "Review count",
   websiteNotes: "Website notes",
   websiteLinks: "Website links",
@@ -97,6 +99,7 @@ export type EnrichUpdate = Partial<{
   websiteUrl: string;
   facebookUrl: string;
   metaAdsSignal: string;
+  facebookPageId: string;
   reviewCount: number;
   websiteNotes: string;
   // JSON [{ text, url, page }] — see src/lib/websiteCrawl.ts.
@@ -293,7 +296,7 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     // than a formality. A clinic running more than fifty ads at once is not a
     // clinic whose ad count needs another decimal place.
     maxItems: FACEBOOK_ADS_CAP,
-    writes: ["metaAdsSignal"],
+    writes: ["metaAdsSignal", "facebookPageId"],
     identifies: false,
     identityFields: [],
     buildInput: (inputs) => ({
@@ -307,7 +310,11 @@ export const ENRICH_ACTORS: EnrichActor[] = [
     }),
     read: (table) => {
       const signal = adsSignal(table, FACEBOOK_ADS_CAP);
-      return signal === null ? {} : { metaAdsSignal: signal };
+      const pageId = adsPageId(table);
+      return {
+        ...(signal === null ? {} : { metaAdsSignal: signal }),
+        ...(pageId === null ? {} : { facebookPageId: pageId }),
+      };
     },
   },
   {
@@ -707,6 +714,16 @@ export function fillableWebsiteUrl(
 // a blank, because "advertises, but not right now" and "has never advertised"
 // are different clinics — the scorecard's Budget Signal category scores them
 // one point apart.
+// The page the ads belong to, as the actor reports it on every ad row. The
+// first numeric one wins: the run was for one page, so they all agree.
+function adsPageId(table: EnrichTable): string | null {
+  for (let i = 0; i < table.rows.length; i++) {
+    const id = cell(table, i, ["pageID", "pageId", "page_id"]).trim();
+    if (/^\d{5,25}$/.test(id)) return id;
+  }
+  return null;
+}
+
 function adsSignal(table: EnrichTable, cap: number): string | null {
   const total = table.rows.length;
   if (total === 0) return null;
@@ -1056,6 +1073,10 @@ export function sanitizeEnrichUpdate(update: EnrichUpdate): EnrichUpdate {
   if (typeof update.metaAdsSignal === "string") {
     const v = update.metaAdsSignal.trim().slice(0, SIGNAL_MAX_CHARS);
     if (v !== "") out.metaAdsSignal = v;
+  }
+  if (typeof update.facebookPageId === "string") {
+    const v = update.facebookPageId.trim();
+    if (/^\d{5,25}$/.test(v)) out.facebookPageId = v;
   }
   if (typeof update.websiteNotes === "string") {
     const v = update.websiteNotes.trim().slice(0, WEBSITE_NOTES_MAX_CHARS);

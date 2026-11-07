@@ -1,3 +1,4 @@
+import { metaAdLibraryLink } from "@/lib/metaAdLibrary";
 import PageActions from "@/components/PageActions";
 import UnflagLeadButton from "@/components/UnflagLeadButton";
 import Link from "next/link";
@@ -396,6 +397,21 @@ export default async function LeadDetailPage({
                   Facebook
                 </a>
               )}
+              {(() => {
+                const ads = metaAdLibraryLink(lead);
+                return (
+                  <a
+                    href={ads.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={ads.exact ? "This clinic's Facebook page in the Meta Ad Library" : "No Facebook page ID yet: searches the Meta Ad Library by clinic name"}
+                    className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#1877F2]/35 bg-[#1877F2]/10 px-3 text-sm font-medium text-[#1462D4] transition-colors hover:bg-[#1877F2]/15 dark:text-[#8DB8FF]"
+                  >
+                    <IconSpeakerphone size={16} stroke={2} aria-hidden className="text-[#1877F2] dark:text-[#4C8DFF]" />
+                    {ads.label}
+                  </a>
+                );
+              })()}
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.clinicName, lead.location].filter(Boolean).join(" "))}`}
                 target="_blank"
