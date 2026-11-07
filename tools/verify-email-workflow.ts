@@ -293,6 +293,13 @@ async function main(): Promise<void> {
   check("an invalid address leaves the lead at No email", (await state(bad.id)).status === "no_email");
   check("risky is not valid: still Check email", (await state(thin.id)).status === "check_email");
 
+  console.log("\nA front desk with a blank contact while the scorecard names someone");
+  const stockton = await seed("Stockton Spine Center", { contactName: null, email: "stocktonspine@gmail.com", emailType: "generic", emailStatus: "valid", icpBreakdown: card(name("Stockton Spine Center"), "Dr. Dinh Le") });
+  check("not Check contact (the email asks for “the doctor”)", (await state(stockton.id)).status !== "check_contact", (await state(stockton.id)).status);
+  const ownerBlank = await seed("Owner Blank Clinic", { contactName: null, email: "backpaindoc@ownerblank.test", emailType: "owner", emailStatus: "valid", icpBreakdown: card(name("Owner Blank Clinic"), "Dr. Ann Bee") });
+  check("an owner address with a blank contact still is", (await state(ownerBlank.id)).status === "check_contact");
+  await prisma.lead.deleteMany({ where: { id: { in: [stockton.id, ownerBlank.id] } } });
+
   console.log("\nApproving, the contact check, and the Ready rule");
   check("checked but not approved: Needs opener", (await state(owner.id)).status === "needs_opener");
   check("{sender} stays in the draft, to be signed from the sending inbox", (ownerLead.emailBody ?? "").includes("{sender}") &&

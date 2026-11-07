@@ -40,6 +40,9 @@ export function parseContactName(raw: string | null | undefined): ParsedContact 
 
 const slug = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/[^a-z]/g, "");
 
+// Clinic-name words too common to say an inbox is the clinic's own.
+const CLINIC_GENERIC = new Set(["chiropractic", "chiropractor", "spine", "spinal", "center", "centre", "clinic", "health", "wellness", "physical", "therapy", "medical", "family", "sports", "care", "rehab", "pain", "relief", "back", "neck", "disc", "with", "group", "associates"]);
+
 // Words an inbox is named for rather than a person.
 const ROLE_LOCAL = /^(info|office|frontdesk|front|desk|admin|contact|hello|hi|appointments?|appts?|schedul\w*|booking|book|reception|team|staff|mail|email|inquir\w*|enquir\w*|support|care|patients?|newpatients?|billing|manager|marketing|clinic|chiro\w*|spine|wellness|health|dr|doctor)$/;
 
@@ -66,17 +69,31 @@ function localPart(email: string | null): string {
 // Whether an owner address's local part clearly names somebody other than
 // the contact: drottomeyer@ for David Hadden. Shared inboxes, and local parts
 // too short to read a name from, never count.
-export function emailNamesSomeoneElse(lead: Pick<ContactLead, "email" | "emailType" | "contactName">): boolean {
+export function emailNamesSomeoneElse(lead: Pick<ContactLead, "email" | "emailType" | "contactName"> & { clinicName?: string }): boolean {
   if (lead.emailType !== "owner") return false;
   const p = parseContactName(lead.contactName);
   if (!p) return false;
   const local = localPart(lead.email).replace(/[^a-z]/g, "");
-  const bare = local.replace(/^(dr|doctor)/, "");
+  // drdave@, kfwdc@, backpaindoc@: titles and credentials at either end.
+  const bare = local.replace(/^(dr|doctor)/, "").replace(/(dc|dr|md|doc|chiro)$/, "");
   if (bare.length < 4 || ROLE_LOCAL.test(bare) || ROLE_LOCAL.test(local)) return false;
   const first = slug(p.first);
   const last = slug(p.last);
   if (last.length >= 3 && local.includes(last)) return false;
   if (first.length >= 3 && local.includes(first)) return false;
+  // A short form of the first name: drdave@ for David.
+  if (first.length >= 4 && local.includes(first.slice(0, 3))) return false;
+  // Initials, middle initial included: kfwdc@ for Kyle F. Worell.
+  const initials = (lead.contactName ?? "")
+    .split(/[\s,]+/)
+    .filter((t) => !HONORIFIC.test(t) && !SUFFIX.test(t) && /[A-Za-z]/.test(t))
+    .map((t) => t.replace(/[^A-Za-z]/g, "")[0]?.toLowerCase() ?? "")
+    .join("");
+  if (initials.length >= 2 && bare.startsWith(initials)) return false;
+  // A word of the clinic's own name: njatlasdr@ at Atlas Chiropractic is the
+  // clinic's inbox, not somebody else's.
+  const clinicWords = (lead.clinicName ?? "").toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 4 && !CLINIC_GENERIC.has(w));
+  if (clinicWords.some((w) => local.includes(w))) return false;
   // dhadden@, davidh@, dh@ style: an initial against the other name.
   if (first && last && (bare === first[0] + last || bare === first + last[0] || bare.startsWith(first[0] + last.slice(0, 4)))) return false;
   if (!first && last && bare.startsWith(last.slice(0, 4))) return false;
@@ -122,7 +139,7 @@ export function validateContact(lead: ContactLead): ContactValidation {
   }
   // Runs whatever confirmed the name: an NPI-confirmed Hadden is still not
   // drottomeyer@. Fixed by changing the contact or the address.
-  if (emailNamesSomeoneElse(lead)) {
+  if (emailNamesSomeoneElse({ ...lead, clinicName: lead.clinicName })) {
     issues.push(`The owner address ${localPart(lead.email)}@ looks like someone other than ${(lead.contactName ?? "").trim()}.`);
     lastName = null;
   }
