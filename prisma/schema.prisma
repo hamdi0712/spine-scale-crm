@@ -161,6 +161,9 @@ model DiscoveryCandidate {
   // snapshot of what a scrape saw at one moment, which is why enrichedAt
   // exists: the scoring below is only ever as good as its date.
   metaAdsSignal String?
+  // Numeric Facebook page ID the Ads Library actor reported (pageID), so the
+  // lead page can open that exact page's ads in the Meta Ad Library.
+  facebookPageId String?
   reviewCount   Int?
   websiteNotes  String?
   // Every link on the crawled pages — nav, header, footer, buttons, body — as
@@ -401,6 +404,9 @@ model Lead {
   // running 4mo" is the useful shape, and no schema of ours would survive the
   // next actor's idea of how to report it.
   metaAdsSignal String?
+  // Numeric Facebook page ID the Ads Library actor reported (pageID), so the
+  // lead page can open that exact page's ads in the Meta Ad Library.
+  facebookPageId String?
   reviewCount   Int?
   websiteNotes  String? // crawled copy, as long as the actor returned it
   websiteLinks  String? // JSON [{ text, url, page }] — every link on the crawled pages
