@@ -361,9 +361,9 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
           },
           emailWorkflowStatus: {
             type: "string",
-            enum: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "not_ab", "ready", "contact_form", "form_sent", "in_sequence", "replied", "stopped", "no_email"],
+            enum: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "check_clinic_name", "not_ab", "ready", "contact_form", "form_sent", "in_sequence", "replied", "stopped", "no_email"],
             description:
-              "Where the lead stands in the Email workflow, as the Email view shows it: no_email (No email), check_email, check_contact, needs_opener (Needs opener), needs_manual_opener (Needs manual opener: no cited evidence, write it by hand), not_ab, ready (Ready), contact_form (Contact form: no usable email, send the clinic's contact form), form_sent (Form sent), in_sequence (In sequence), replied, stopped (suppressed or unsubscribed). Omit for any.",
+              "Where the lead stands in the Email workflow, as the Email view shows it: no_email (No email), check_email, check_contact (the reason is in emailWorkflowReasons), check_clinic_name (the short clinic name the front-desk greeting uses needs editing), needs_opener (Needs opener), needs_manual_opener (Needs manual opener: no cited evidence, write it by hand), not_ab, ready (Ready), contact_form (Contact form: no usable email, send the clinic's contact form), form_sent (Form sent), in_sequence (In sequence), replied, stopped (suppressed or unsubscribed). Omit for any.",
           },
           offset: {
             type: "number",
@@ -427,9 +427,9 @@ export const COPILOT_TOOLS: DeepSeekTool[] = [
           },
           emailWorkflowStatus: {
             type: "string",
-            enum: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "not_ab", "ready", "contact_form", "form_sent", "in_sequence", "replied", "stopped", "no_email"],
+            enum: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "check_clinic_name", "not_ab", "ready", "contact_form", "form_sent", "in_sequence", "replied", "stopped", "no_email"],
             description:
-              "Where the lead stands in the Email workflow, as the Email view shows it: no_email (No email), check_email, check_contact, needs_opener (Needs opener), needs_manual_opener (Needs manual opener: no cited evidence, write it by hand), not_ab, ready (Ready), contact_form (Contact form: no usable email, send the clinic's contact form), form_sent (Form sent), in_sequence (In sequence), replied, stopped (suppressed or unsubscribed). Omit for any.",
+              "Where the lead stands in the Email workflow, as the Email view shows it: no_email (No email), check_email, check_contact (the reason is in emailWorkflowReasons), check_clinic_name (the short clinic name the front-desk greeting uses needs editing), needs_opener (Needs opener), needs_manual_opener (Needs manual opener: no cited evidence, write it by hand), not_ab, ready (Ready), contact_form (Contact form: no usable email, send the clinic's contact form), form_sent (Form sent), in_sequence (In sequence), replied, stopped (suppressed or unsubscribed). Omit for any.",
           },
           connectionStatus: {
             type: "string",

@@ -12,7 +12,7 @@ import {
   validateContact,
   ContactLead,
 } from "../src/lib/emailRules";
-import { DEFAULT_EMAIL_SETTINGS, nextFollowUp } from "../src/lib/emailWorkflow";
+import { DEFAULT_EMAIL_SETTINGS, emailStatusReasons, emailWorkflowStatus, nextFollowUp } from "../src/lib/emailWorkflow";
 
 let failures = 0;
 function check(label: string, passed: boolean, detail = ""): void {
@@ -60,6 +60,32 @@ check("…and even when kept by hand", v({ contactName: "David Hadden", email: "
 check("dhadden@ / drhadden@ / david@ are his", ["dhadden@x.com", "drhadden@x.com", "david@x.com"].every((e) => v({ contactName: "David Hadden", email: e, emailType: "owner" }).issues.length === 0));
 check("info@ on an owner-type address is not a mismatch", v({ contactName: "David Hadden", email: "info@x.com", emailType: "owner" }).issues.length === 0);
 check("a generic address is never checked for a mismatch", v({ contactName: "David Hadden", email: "drottomeyer@x.com", emailType: "generic" }).issues.length === 0);
+
+console.log("\nOwner addresses that are the contact's own");
+const own = (contactName: string, email: string, clinicName = "X") => v({ contactName, email, emailType: "owner", clinicName }).issues.length === 0;
+check("Synergy Wellness: Dr. David Kulla, drdave@ (short first name)", own("Dr. David Kulla", "drdave@synergywellnessny.com"));
+check("Kyle F. Worell: kfwdc@ (initials + DC)", own("Dr. Kyle F. Worell", "kfwdc@icloud.com"));
+check("Atlas Chiropractic of Park Ridge: njatlasdr@ (the clinic's name)", own("Dr. Gary V. Golembiewski", "njatlasdr@gmail.com", "Atlas Chiropractic of Park Ridge"));
+check("David Hadden with drottomeyer@ is still flagged", !own("David Hadden", "drottomeyer@frontierhealthcenter.com", "Spinal Decompression Plus"));
+
+console.log("\nCheck contact vs Check clinic name (workflow status)");
+const scorecard = JSON.stringify({ model: "v2" });
+const wl = (patch: Record<string, unknown>) => ({
+  clinicName: "Stockton Spine Center", shortClinicName: null, contactName: null, contactTitle: null, websiteNotes: null,
+  email: "stocktonspine@gmail.com", emailType: "generic", icpBreakdown: scorecard, npiOfficialName: null, ownerStatus: null, ownerSource: null,
+  contactNameByHand: false, contactConfirmedAt: null, emailVersion: null, emailOpener: null, openerAngle: null, emailStatus: "valid",
+  emailApprovedAt: null, emailRepliedAt: null, emailUnsubscribedAt: null, suppressedAt: null, scoringRejectedAt: null, emailSource: "maps_contacts",
+  emailRiskyAcceptedAt: null, emailRiskyAcceptedEmail: null, emailRiskyFlaggedAt: null, ...patch,
+});
+check("front desk, blank contact → not Check contact", emailWorkflowStatus(wl({}) as never, "A", []) === "needs_opener", emailWorkflowStatus(wl({}) as never, "A", []));
+check("front desk, unclear short name → Check clinic name, with the reason",
+  emailWorkflowStatus(wl({ clinicName: "Chiropractic Center" }) as never, "A", []) === "check_clinic_name" && /short clinic name/.test(emailStatusReasons(wl({ clinicName: "Chiropractic Center" }) as never)[0] ?? ""));
+check("…an edited short name clears it", emailWorkflowStatus(wl({ clinicName: "Chiropractic Center", shortClinicName: "Main St Chiropractic" }) as never, "A", []) === "needs_opener");
+check("owner address, blank contact → Check contact, with the reason",
+  emailWorkflowStatus(wl({ emailType: "owner", email: "backpaindoc@gmail.com" }) as never, "A", []) === "check_contact" &&
+    /No contact name/.test(emailStatusReasons(wl({ emailType: "owner", email: "backpaindoc@gmail.com" }) as never).join(" ")));
+check("a name set by hand (lead form or the Claude connector) settles it",
+  emailWorkflowStatus(wl({ emailType: "owner", email: "drdave@synergywellnessny.com", contactName: "Dr. David Kulla", contactNameByHand: true, clinicName: "Synergy Wellness" }) as never, "A", []) === "needs_opener");
 
 console.log("\nThe opener screen");
 const src = "Decompression: \"We offer spinal decompression on the DRX9000 and the X3-Laser.\" (Clinic website)";

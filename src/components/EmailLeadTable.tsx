@@ -72,7 +72,7 @@ function readFilter(v: unknown): Filter | null {
 const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "noemail" | "risky" | "lost">, EmailLeadStatus[]> = {
   ready: ["ready"],
   form: ["contact_form", "form_sent"],
-  work: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "no_email"],
+  work: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "check_clinic_name", "no_email"],
   sequence: ["in_sequence"],
   done: ["replied", "stopped", "not_ab"],
 };

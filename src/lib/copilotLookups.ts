@@ -42,7 +42,7 @@ import {
 } from "@/lib/emailChannel";
 import { EMAIL_STATUSES, EMAIL_SOURCE_LABELS, EMAIL_TYPE_LABELS, EmailSource, EmailType } from "@/lib/emailFind";
 import type { Lead } from "@prisma/client";
-import { emailWorkflowStatus, SUPPRESSION_REASON_LABELS, SuppressionReason } from "@/lib/emailWorkflow";
+import { emailStatusReasons, emailWorkflowStatus, SUPPRESSION_REASON_LABELS, SuppressionReason } from "@/lib/emailWorkflow";
 import { formBucketOf } from "@/lib/emailBuckets";
 import {
   MESSAGE_MECHANISMS,
@@ -422,6 +422,8 @@ function emailFields(lead: EmailReadLead) {
     assignedInbox: lead.sendingInbox?.address ?? null,
     emailWorkflowStatus: workflow,
     emailWorkflowStatusLabel: EMAIL_LEAD_STATUS_LABELS[workflow],
+    // Why it is at Check contact or Check clinic name; empty otherwise.
+    emailWorkflowReasons: workflow === "check_contact" || workflow === "check_clinic_name" ? emailStatusReasons(lead) : [],
     suppressed: lead.suppressedAt !== null,
     suppressedReason: lead.suppressedAt
       ? (SUPPRESSION_REASON_LABELS[lead.suppressedReason as SuppressionReason] ?? lead.suppressedReason)

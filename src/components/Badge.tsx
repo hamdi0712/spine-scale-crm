@@ -157,6 +157,7 @@ const EMAIL_LEAD_TONES: Record<EmailLeadStatus, Tone> = {
   form_sent: "blue",
   check_email: "amber",
   check_contact: "amber",
+  check_clinic_name: "amber",
   not_ab: "neutral",
   ready: "teal",
   in_sequence: "blue",

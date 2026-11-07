@@ -126,6 +126,12 @@ async function main(): Promise<void> {
   check("a bad filter value is answered, not ignored", /not a channel/.test((await call("getPipelineLeads", { channel: "fax" })).text));
   const detail = (await call("getLeadDetail", { id: emailLead.id })).data;
   check("getLeadDetail has the emailChannel block", (detail.emailChannel as Row)?.emailWorkflowStatus === "needs_opener");
+  const noContact = await prisma.lead.create({ data: { clinicName: "Blank Owner Spine", channel: "email", email: "backpaindoc@blankowner.test", emailType: "owner", emailStatus: "valid" } });
+  const ncDetail = (await call("getLeadDetail", { id: noContact.id })).data.emailChannel as Row;
+  check("the connector says why a lead is at Check contact",
+    ncDetail?.emailWorkflowStatus === "check_contact" && Array.isArray(ncDetail.emailWorkflowReasons) && /No contact name/.test(String((ncDetail.emailWorkflowReasons as string[])[0])),
+    JSON.stringify(ncDetail?.emailWorkflowReasons));
+  await prisma.lead.delete({ where: { id: noContact.id } });
 
   console.log("\n2. The tool list");
   const tools = (await client.listTools()).tools;

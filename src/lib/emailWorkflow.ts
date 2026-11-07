@@ -387,13 +387,43 @@ export type ContactCheck =
 // surname, or by first name where a surname is missing on one side), or a
 // scorecard that names nobody, is confirmed as it stands. A pick by hand
 // (contactConfirmedAt) settles a disagreement.
+// The front-desk greeting needs the short clinic name, and the cleaned one may
+// not read as the clinic: edit it on the lead.
+export function clinicNameNeedsCheck(lead: EmailLeadInput & { emailVersion?: string | null }): boolean {
+  if (defaultEmailVersion({ emailType: lead.emailType ?? null, emailVersion: lead.emailVersion ?? null }) !== "front_desk") return false;
+  return shortClinicFor({ clinicName: lead.clinicName, shortClinicName: lead.shortClinicName ?? null }).flagged;
+}
+
+// Why a lead is at Check contact or Check clinic name, in words — the lead
+// page and the Claude connector show the same.
+export function emailStatusReasons(lead: EmailWorkflowLead): string[] {
+  const out: string[] = [];
+  const check = contactCheck(lead);
+  if (check.state === "mismatch") {
+    out.push(`The scorecard names ${check.scorecardName} as the decision-maker; the contact is ${check.contactName ?? "blank"}.`);
+  }
+  out.push(...contactValidation(lead).issues);
+  if (out.length === 0 && clinicNameNeedsCheck(lead)) {
+    out.push(`The short clinic name “${shortClinicFor({ clinicName: lead.clinicName, shortClinicName: lead.shortClinicName ?? null }).name}” may not read as the clinic — edit it on the lead.`);
+  }
+  return out;
+}
+
 export function contactCheck(lead: {
   contactName: string | null;
   icpBreakdown: string | null;
   contactConfirmedAt: Date | null;
+  contactNameByHand?: boolean;
+  emailType?: string | null;
 }): ContactCheck {
   const cited = scorecardDecisionMaker(lead.icpBreakdown);
-  if (!cited || lead.contactConfirmedAt) return { state: "confirmed", scorecardName: cited };
+  // Settled: kept by hand, or set by hand (the lead form, a pick, or the
+  // Claude connector).
+  if (!cited || lead.contactConfirmedAt || lead.contactNameByHand) return { state: "confirmed", scorecardName: cited };
+  // No contact on a front-desk address disagrees with nobody: the email asks
+  // for "the doctor". (On an owner address a blank contact is flagged by
+  // contact validation instead.)
+  if ((lead.contactName ?? "").trim() === "" && lead.emailType !== "owner") return { state: "confirmed", scorecardName: cited };
   const a = readDecisionMakerName(lead.contactName);
   const b = readDecisionMakerName(cited);
   if (!b) return { state: "confirmed", scorecardName: cited };
@@ -436,6 +466,7 @@ export function suppressionKeys(lead: { email: string | null; websiteUrl: string
 // ─── Status, Ready, and follow-ups ─────────────────────────────────────────
 
 export interface EmailWorkflowLead extends EmailLeadInput {
+  emailVersion?: string | null;
   emailOpener: string | null;
   openerAngle: string | null;
   email: string | null;
@@ -546,6 +577,7 @@ export function emailWorkflowStatus(
   if (sends.length > 0) return "in_sequence";
   if (!emailUsable(lead) || lead.emailRiskyFlaggedAt) return "check_email";
   if (contactCheck(lead).state === "mismatch" || contactValidation(lead).issues.length > 0) return "check_contact";
+  if (clinicNameNeedsCheck(lead)) return "check_clinic_name";
   if (!lead.emailApprovedAt) {
     return lead.openerAngle === "manual" && !(lead.emailOpener ?? "").trim() ? "needs_manual_opener" : "needs_opener";
   }
@@ -614,6 +646,7 @@ const EMAIL_STATUS_BLOCKERS: Record<EmailWorkflowStatus, string> = {
   in_sequence: "",
   check_email: "The address has not been checked valid.",
   check_contact: "The contact needs a check — see the reasons on the lead.",
+  check_clinic_name: "The short clinic name needs a check — edit it on the lead.",
   needs_opener: "The email has not been approved.",
   needs_manual_opener: "No cited evidence to open with — write the opener by hand.",
   not_ab: "Only A and B tier leads are sent to.",
