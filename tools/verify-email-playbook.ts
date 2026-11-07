@@ -44,7 +44,8 @@ const base: ContactLead = {
   contactConfirmedAt: null,
 };
 const v = (patch: Partial<ContactLead>) => validateContact({ ...base, ...patch });
-check("blank contact → flagged", v({}).issues.length === 1);
+check("blank contact on a front-desk address → fine", v({}).issues.length === 0);
+check("blank contact on an owner address → flagged", v({ emailType: "owner", email: "owner@x.com" }).issues.length === 1);
 check("…and {contactOrDoctor} is “the doctor”", contactOrDoctor(v({})) === "the doctor");
 check("Dr. Megan (one name, nothing confirms it) → flagged", v({ contactName: "Dr. Megan" }).issues.length === 1);
 check("Dr. Oswald, confirmed by the NPI owner → OK, Dr. Oswald",

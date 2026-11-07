@@ -110,8 +110,10 @@ export function validateContact(lead: ContactLead): ContactValidation {
   const p = parseContactName(lead.contactName);
   let lastName: string | null = null;
   if (!p) {
-    // A blank contact kept by hand falls back to "Hi there," / "the doctor".
-    if (!lead.contactConfirmedAt) issues.push("No contact name.");
+    // Only an owner-type address needs a name. A front desk is greeted as
+    // "Hi {short name} team," and asked for "the doctor"; a blank contact
+    // kept by hand falls back the same way.
+    if (lead.emailType === "owner" && !lead.contactConfirmedAt) issues.push("No contact name on an owner address.");
   } else if (p.singleToken) {
     if (surnameConfirmed(lead, p.last ?? "")) lastName = p.last;
     else issues.push(`“${(lead.contactName ?? "").trim()}” has one name only — can’t tell if “${p.last}” is the surname.`);
