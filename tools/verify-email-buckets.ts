@@ -32,7 +32,8 @@ const TAG = "verify-email-buckets";
 
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
-  const { loadEmailQueue, loadCallList, emailPipelineIds } = await import("../src/lib/emailBucketsRead");
+  const { loadEmailQueue, loadCallList, emailPipelineIds, deadQueueLeads } = await import("../src/lib/emailBucketsRead");
+  const { findLeadOwner } = await import("../src/lib/actions/ownerFind");
   const { loadEmailView, loadLeadEmailState } = await import("../src/lib/emailWorkflowRead");
   const { pickOwner, findOwnerLeads } = await import("../src/lib/ownerFindRun");
   const { logCall } = await import("../src/lib/actions/callList");
@@ -45,6 +46,7 @@ async function main() {
 
   const noOwner = await make("No Owner Clinic");
   const pick = await make("Pick Clinic", {
+    websiteUrl: "https://pick.example",
     ownerStatus: "pick",
     ownerSiteNames: JSON.stringify(["Dr. Jane Roe", "Dr. Sam Poe"]),
     ownerCheckedAt: new Date(),
@@ -72,6 +74,17 @@ async function main() {
     emailRepliedAt: new Date(), emailReplyType: "interested",
   });
   const lost = await make("Lost Clinic", { stage: "LOST" });
+  // Center for Spinal Correction: a valid owner-type address, Find owners never run, no contact name.
+  const csc = await make("Center for Spinal Correction", { email: "drdom214@aol.com", emailType: "owner", emailStatus: "valid", emailSource: "maps_contacts" });
+  const riskyOwnerAccepted = await make("Risky Owner Accepted Clinic", {
+    email: "drkay@riskyowner.example", emailType: "owner", emailStatus: "risky", emailSource: "site_crawl",
+    emailRiskyAcceptedAt: new Date(), emailRiskyAcceptedEmail: "drkay@riskyowner.example", contactName: "Dr. Kay Moss",
+  });
+  const riskyOwnerNot = await make("Risky Owner Not Accepted Clinic", { email: "drlee@riskyowner2.example", emailType: "owner", emailStatus: "risky", emailSource: "site_crawl" });
+  // An owner picked by hand, no website to look on: Find owners could add nothing.
+  const deadEnd = await make("Dead End Clinic", { ownerStatus: "confirmed", ownerSource: "manual", contactName: "Dr. Kai Lum" });
+  // Looked up already, owner not found earlier — the lead's own button still runs.
+  const lookedUp = await make("Looked Up Clinic", { ownerStatus: "pick", ownerCheckedAt: new Date(), ownerEmailAt: new Date(), ownerSiteNames: JSON.stringify(["Dr. A B"]) });
   // A form link, but the email lookup hasn't run yet: still the queue.
   const formNotLooked = await make("Form Not Looked Up Clinic", {
     ownerStatus: "confirmed", contactName: "Dr. Di Eck", websiteUrl: "https://form.example", websiteLinks: FORM_LINKS,
@@ -119,6 +132,18 @@ async function main() {
   check("contact set by hand + usable address → pipeline only", pipe.has(byHand.id) && only(byHand.id));
   check("usable address but nothing settled → queue only", inQueue(unsettled.id) && only(unsettled.id));
   check("approved but the address is invalid → queue only", inQueue(approvedNoEmail.id) && only(approvedNoEmail.id));
+
+  console.log("Owner-type addresses and the queue button");
+  check("Center for Spinal Correction (valid owner address, Find owners never run) → pipeline, not the queue", pipe.has(csc.id) && !inQueue(csc.id) && only(csc.id));
+  check("…shown there as Check contact (no contact name)", statusOf(csc.id) === "check_contact", String(statusOf(csc.id)));
+  check("an accepted risky owner address → pipeline", pipe.has(riskyOwnerAccepted.id) && !inQueue(riskyOwnerAccepted.id));
+  check("a risky owner address not accepted → queue, with a button that runs", inQueue(riskyOwnerNot.id) && queue.find((q) => q.id === riskyOwnerNot.id)?.canFind === true);
+  check("an owner picked by hand with nowhere to look → not the queue (Call list)", !inQueue(deadEnd.id) && callOf(deadEnd.id)?.section === "last_resort");
+  const dead = await deadQueueLeads();
+  check("no queue lead has a button that would do nothing, or no way forward", dead.length === 0, dead.map((d) => `${d.clinicName}: ${d.why}`).join("; "));
+  const forced = await findLeadOwner(lookedUp.id);
+  check("'Find this owner's email' runs even on a lead looked up before (here it stops only at the missing API key)",
+    !forced.ok && /API key/.test(forced.error) && !/waiting on its owner/.test(forced.error), forced.ok ? "started" : forced.error);
 
   console.log("Hand pick");
   const r = await pickOwner(pick.id, "Dr. Jane Roe");

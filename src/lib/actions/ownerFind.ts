@@ -24,7 +24,8 @@ export async function pickLeadOwner(leadId: string, name: string): Promise<{ ok:
 
 export async function findLeadOwner(leadId: string): Promise<LaunchResult> {
   if (typeof leadId !== "string") return { ok: false, error: "No lead." };
-  return startOwnerJob({ leadIds: [leadId] });
+  // Always a fresh run on this lead, even if it was looked up before.
+  return startOwnerJob({ leadIds: [leadId], force: true });
 }
 
 // Settings → Email's "Re-clean owner names & labels": free, no API calls.

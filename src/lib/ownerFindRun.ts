@@ -41,6 +41,8 @@ import { getHunterApiKey } from "@/lib/appSecretsStore";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { defaultEmailVersion, renderEmail } from "@/lib/emailWorkflow";
 import { hasUsableEmail } from "@/lib/emailBuckets";
+import { ownerEmailBlocker } from "@/lib/ownerFind";
+export { ownerEmailBlocker } from "@/lib/ownerFind";
 
 // ─── Credits ───────────────────────────────────────────────────────────────
 
@@ -239,35 +241,10 @@ export type OwnerEmailOutcome =
   | { kind: "failed"; detail: string; stop?: boolean };
 
 // Reasons a lead's email step can never run, whatever is retried: marked
-// done (ownerEmailAt) so the lead stops counting toward Find owners.
+// done (ownerEmailAt) so the lead stops counting toward Find owners. The rule
+// itself (ownerEmailBlocker) is in src/lib/ownerFind.ts, which the queue reads
+// too.
 const PERMANENT = /domain|can't be guessed|too short/;
-
-// Why a lead is not looked up, or null when it may be.
-export function ownerEmailBlocker(lead: {
-  channel: string;
-  ownerStatus: string | null;
-  ownerEmailAt: Date | null;
-  websiteUrl: string | null;
-  email: string | null;
-  emailType: string | null;
-  emailAlternates: string | null;
-  contactName: string | null;
-}): string | null {
-  if (lead.channel !== "email") return "Not an email lead.";
-  if (lead.ownerStatus !== "confirmed") return "No confirmed owner.";
-  if (hasOwnerEmail(lead)) return "Already has the owner's email.";
-  if (lead.ownerEmailAt) return "The owner's email was looked for already.";
-  const domain = clinicDomain(lead.websiteUrl);
-  if (!domain) return "No website domain to look on.";
-  if (isMailboxProvider(domain)) return `The site is on ${domain} — the owner's address can't be guessed.`;
-  const known = [(lead.email ?? "").trim().toLowerCase(), ...parseAlternates(lead.emailAlternates).map((a) => a.address)].filter((a) => a !== "");
-  if (known.length > 0 && known.every((a) => isMailboxProvider(a.slice(a.indexOf("@") + 1)))) {
-    return "Only Gmail/Yahoo/AOL/Outlook/iCloud-style addresses — the owner's can't be guessed.";
-  }
-  const person = readDecisionMakerName(lead.contactName);
-  if (!person?.last) return "The owner's name is too short to build an address from.";
-  return null;
-}
 
 async function logHunter(leadId: string, endpoint: string, domain: string, result: string | null, credits: number, budget: OwnerBudget) {
   await prisma.hunterCall.create({ data: { leadId, endpoint, domain, result, creditsUsed: credits } });

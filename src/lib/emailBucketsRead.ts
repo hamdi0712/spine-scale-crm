@@ -6,7 +6,7 @@ import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
 import { pickContactFormLink } from "@/lib/contactForm";
 import { leadTier } from "@/lib/leadScore";
 import { emailDetailLine } from "@/lib/emailChannel";
-import { CallSection, EmailBucketExtras, callSection, emailBucket, inEmailPipeline, queueReason } from "@/lib/emailBuckets";
+import { CallSection, EmailBucketExtras, callSection, emailBucket, inEmailPipeline, ownerRunWouldDoNothing, queueCanFind, queueReason } from "@/lib/emailBuckets";
 
 export const CALL_KINDS = ["CALL_NO_ANSWER", "CALL_TALKED", "CALL_NOT_INTERESTED"] as const;
 export type CallKind = (typeof CALL_KINDS)[number];
@@ -77,7 +77,7 @@ export async function loadEmailQueue() {
       icpTier: leadTier(l),
       reason: queueReason(l),
       // The per-lead button: only when Find owners would do something.
-      canFind: l.ownerStatus !== "pick" && l.ownerEmailAt === null,
+      canFind: queueCanFind(l),
     }));
   return { queue };
 }
@@ -116,4 +116,24 @@ export async function loadCallList(now = new Date()): Promise<CallRow[]> {
     });
   }
   return rows;
+}
+
+// Queue leads nothing would move: the button shown but the run would do
+// nothing, or no button and not waiting on a person (an owner to pick, an
+// address to check). Should always be empty; tools/list-dead-queue-buttons.ts
+// and the verify script read it.
+export async function deadQueueLeads(): Promise<{ id: string; clinicName: string; why: string }[]> {
+  const leads = await prisma.lead.findMany({
+    where: { ...PIPELINE_DEFAULT_WHERE, channel: "email", stage: { not: "LOST" } },
+    include: { _count: { select: { emailSends: true } } },
+  });
+  const extras = await bucketExtras(leads);
+  return leads.flatMap((l) => {
+    if (emailBucket(l, extras.get(l.id)!) !== "queue") return [];
+    const canFind = queueCanFind(l);
+    if (canFind && ownerRunWouldDoNothing(l)) return [{ id: l.id, clinicName: l.clinicName, why: "button shown, but the run would do nothing" }];
+    const waitsOnPerson = l.ownerStatus === "pick" || ((l.email ?? "").trim() !== "" && l.emailStatus === null);
+    if (!canFind && !waitsOnPerson) return [{ id: l.id, clinicName: l.clinicName, why: `no button and nothing to do (${queueReason(l)})` }];
+    return [];
+  });
 }
