@@ -53,6 +53,17 @@ async function main() {
     ownerStatus: "confirmed", contactName: "Dr. Bo Cho", ownerCheckedAt: new Date(), ownerEmailAt: new Date(),
     websiteUrl: "https://form.example", websiteLinks: FORM_LINKS,
   });
+  // Spinal Decompression Plus: owner address from Maps contacts, Find owners
+  // never confirmed anyone, the contact settled by hand, the email approved
+  // (Ready). It belongs in the pipeline, and only there.
+  const sdp = await make("Spinal Decompression Plus", {
+    ownerStatus: null, contactName: "Dr. James Ottomeyer", email: "drottomeyer@frontierhealthcenter.example", emailType: "owner",
+    emailStatus: "valid", emailSource: "maps_contacts", contactConfirmedAt: new Date(), emailApprovedAt: new Date(),
+  });
+  const approvedOnly = await make("Approved Only Clinic", { contactName: "Dr. Ed Fox", email: "ed@approved.example", emailStatus: "valid", emailApprovedAt: new Date() });
+  const byHand = await make("By Hand Clinic", { contactName: "Dr. Flo Gee", contactNameByHand: true, email: "flo@byhand.example", emailStatus: "valid" });
+  const unsettled = await make("Unsettled Clinic", { contactName: "Dr. Gus Hay", email: "gus@unsettled.example", emailStatus: "valid" });
+  const approvedNoEmail = await make("Approved Invalid Clinic", { contactName: "Dr. Hal Ivy", email: "hal@invalid.example", emailStatus: "invalid", emailApprovedAt: new Date() });
   const nothing = await make("Nothing Clinic", { ownerStatus: "not_found", ownerCheckedAt: new Date() });
   const replied = await make("Replied Clinic", {
     ownerStatus: "confirmed", contactName: "Dr. Cy Dee", email: "cy@replied.example", emailStatus: "valid",
@@ -72,6 +83,14 @@ async function main() {
   check("nothing at all → Call list (Last resort)", callOf(nothing.id)?.section === "last_resort" && !inQueue(nothing.id));
   check("a replied lead shows under Warm calls", callOf(replied.id)?.section === "warm");
   check("a Lost lead is hidden everywhere", !inQueue(lost.id) && !forms.some((f) => f.id === lost.id) && !callOf(lost.id));
+
+  console.log("Who the email goes to, settled");
+  const only = (id: string) => [inQueue(id), pipe.has(id), forms.some((f) => f.id === id), !!callOf(id)].filter(Boolean).length === 1;
+  check("Spinal Decompression Plus (Ready, owner never confirmed, contact kept by hand) → pipeline only", pipe.has(sdp.id) && !inQueue(sdp.id) && only(sdp.id));
+  check("approved email + usable address → pipeline only", pipe.has(approvedOnly.id) && only(approvedOnly.id));
+  check("contact set by hand + usable address → pipeline only", pipe.has(byHand.id) && only(byHand.id));
+  check("usable address but nothing settled → queue only", inQueue(unsettled.id) && only(unsettled.id));
+  check("approved but the address is invalid → queue only", inQueue(approvedNoEmail.id) && only(approvedNoEmail.id));
 
   console.log("Hand pick");
   const r = await pickOwner(pick.id, "Dr. Jane Roe");

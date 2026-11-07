@@ -1,5 +1,6 @@
 // Where an email-channel lead lives: the Email queue (not ready yet), the
-// Email pipeline (confirmed owner and a usable address), the Contact form list
+// Email pipeline (a usable address, and who it goes to settled: owner confirmed,
+// email approved, or contact set or kept by hand), the Contact form list
 // (nothing found, but the clinic has a form), the Call list (nothing found and
 // no form), or waiting on a contact form already sent. Lost leads are hidden.
 //
@@ -21,6 +22,19 @@ export interface EmailBucketLead {
   ownerEmailAt: Date | null;
   emailRepliedAt: Date | null;
   suppressedAt: Date | null;
+  // A person decided who the email goes to: the email approved, or the
+  // contact set or kept by hand.
+  emailApprovedAt: Date | null;
+  contactNameByHand: boolean;
+  contactConfirmedAt: Date | null;
+}
+
+// Who the email goes to is settled: Find owners confirmed the owner, the
+// email was approved, or the contact was set or kept by hand.
+export function recipientSettled(
+  lead: Pick<EmailBucketLead, "ownerStatus" | "emailApprovedAt" | "contactNameByHand" | "contactConfirmedAt">,
+): boolean {
+  return lead.ownerStatus === "confirmed" || lead.emailApprovedAt !== null || lead.contactNameByHand || lead.contactConfirmedAt !== null;
 }
 
 export interface EmailBucketExtras {
@@ -49,7 +63,7 @@ export function emailBucket(lead: EmailBucketLead, x: EmailBucketExtras): EmailB
   if (lead.stage === "LOST") return "hidden";
   // Already written to, answered or stopped: the pipeline keeps its history.
   if (x.sendCount > 0 || lead.emailRepliedAt || lead.suppressedAt) return "pipeline";
-  if (lead.ownerStatus === "confirmed" && hasUsableEmail(lead)) return "pipeline";
+  if (hasUsableEmail(lead) && recipientSettled(lead)) return "pipeline";
   if (nothingFound(lead)) {
     if (x.formSentAt) return "form_sent";
     if (x.contactFormUrl) return "contact_form";
