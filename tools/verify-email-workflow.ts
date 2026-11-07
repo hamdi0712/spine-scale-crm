@@ -56,6 +56,8 @@ async function main(): Promise<void> {
   await prisma.emailSend.deleteMany();
   await prisma.suppression.deleteMany();
   await prisma.emailSettings.deleteMany();
+  const migrationSql = (await import("node:fs")).readFileSync(path.join(__dirname, "../prisma/migrations/20261107120000_email_playbook/migration.sql"), "utf8");
+  const playbookUpdate = migrationSql.slice(migrationSql.indexOf("UPDATE"));
   // Two sending inboxes, 1 a day each so going over is easy to see.
   await prisma.lead.updateMany({ data: { sendingInboxId: null } });
   await prisma.sendingInbox.deleteMany();
@@ -139,80 +141,85 @@ async function main(): Promise<void> {
 
   // Your name, for {sender}: until it is set, an email cannot be approved.
   const reload = (id: string) => prisma.lead.findUniqueOrThrow({ where: { id }, include: { emailSends: { orderBy: { step: "asc" } } } });
+  check("with no settings row, every template is starter copy, so the banner shows", wf.startersRemaining(await loadEmailSettings()).length === 8);
+  // The playbook copy, as the new migration writes it, over a starter row.
+  await prisma.emailSettings.create({ data: { id: wf.EMAIL_SETTINGS_ID, ...wf.emailSettingsRow(wf.DEFAULT_EMAIL_SETTINGS) } });
+  await prisma.$executeRawUnsafe(playbookUpdate);
   const settings = await loadEmailSettings();
   const state = (id: string, now = new Date()) => loadLeadEmailState(id, now);
 
-  console.log("\nStarter copy");
-  check("every template starts as starter copy, so the banner shows", wf.startersRemaining(settings).length === 8, wf.startersRemaining(settings).join(", "));
+  console.log("\nThe playbook copy, as the migration writes it");
+  check("subjects, as given", settings.subjectTemplate === "new patient booking" && settings.frontDeskSubjectTemplate === "question for the doctor");
+  check("owner body, as given", settings.ownerBodyTemplate === "{greeting}\n\n{opener}\n\nI wrote down a few things I’d change on the new patient side. Already on top of it, or want me to send them?");
+  check("front-desk body uses {contactOrDoctor}, not {contact}",
+    settings.frontDeskTemplate === "{greeting}\n\n{opener}\n\nThis one’s probably for {contactOrDoctor}. I wrote down a few things I’d change on the new patient side. Want me to send them over?");
+  check("follow-up 1 is a new angle, follow-up 2 the last",
+    settings.followUpTemplates.length === 2 && settings.followUpTemplates[0].startsWith("One other thing I’d check:") && settings.followUpTemplates[1].endsWith("I’ll send over what I’d change.\n\nThanks either way."));
+  check("delays per follow-up: 3 days, then 5 (day 3 and day 8)", JSON.stringify(settings.followUpDelaysDays) === "[3,5]");
 
   console.log("\nDrafting the opener");
+  const deskOpener = "Your site asks new patients to call to book. Anyone looking after hours has to wait until the office opens.";
   stub.setReplies({
-    // First answer invents a stat; the second is clean.
+    // First answer invents a stat; the second is clean and names the DRX9000 from the cited quote.
     [name("Owner Spine")]: [
-      { opener: "Most clinics your size lose 30% of decompression leads.", basis: "cited", ...note },
-      { opener: "I noticed Owner Spine (email verify) runs spinal decompression on the DRX9000 alongside laser therapy.", basis: "cited", ...note },
+      { opener: "Most clinics your size lose 30% of decompression leads.", angle: "program_gap", ...note },
+      { opener: "Your decompression page names the DRX9000, and booking is by phone only. Anyone ready to start has to call during office hours.", angle: "program_gap", ...note },
     ],
-    // First answer states a gap as a fact; the second asks about it.
+    // First answer asks a question (the template carries the ask); the second does not.
     [name("Front Desk Clinic")]: [
-      { opener: "I didn't see a way to book online on your site.", basis: "gap", ...note },
-      { opener: "I couldn't tell from the site how a new patient books outside office hours, is that by phone?", basis: "gap", ...note },
+      { opener: "Your site asks new patients to call. Is that the only way to book?", angle: "booking_friction", ...note },
+      { opener: deskOpener, angle: "booking_friction", ...note },
     ],
-    [name("Mismatch Clinic")]: { opener: "I noticed the clinic offers spinal decompression alongside laser therapy.", basis: "cited", ...note },
-    [name("Disqualified Clinic")]: { opener: "I noticed the clinic offers spinal decompression alongside laser therapy.", basis: "cited", ...note },
-    // Nothing to observe: the curiosity fallback.
-    [name("Thin Clinic")]: [
-      { opener: null, basis: null, ...note },
-      { detail: "both spinal decompression and laser therapy under one roof", painSignal: null, ...note },
-    ],
+    [name("Mismatch Clinic")]: { opener: "Your site asks new patients to call to book. Anyone ready to start has to reach the front desk first.", angle: "booking_friction", ...note },
+    [name("Disqualified Clinic")]: { opener: "Your site asks new patients to call to book. Anyone ready to start has to reach the front desk first.", angle: "booking_friction", ...note },
   });
   const o1 = await act.generateEmailOpener(owner.id);
   let ownerLead = await reload(owner.id);
   check("a made-up stat is rejected and asked for again", o1.ok && !/30%|most clinics/i.test(ownerLead.emailOpener ?? ""), ownerLead.emailOpener ?? JSON.stringify(o1));
-  check("and the redraft naming the DRX9000 from their site is kept", (ownerLead.emailOpener ?? "").includes("DRX9000"));
-  check("owner email → owner-direct version, greeted by salutation()", ownerLead.emailVersion === "owner" && (ownerLead.emailBody ?? "").startsWith("Hi Dr. Smith,"), ownerLead.emailBody?.split("\n")[0]);
+  check("and the redraft naming the DRX9000 from the cited evidence is kept, with its angle", (ownerLead.emailOpener ?? "").includes("DRX9000") && ownerLead.openerAngle === "program_gap");
+  check("owner email → owner-direct version, greeted Hi Dr. Lastname", ownerLead.emailVersion === "owner" && (ownerLead.emailBody ?? "").startsWith("Hi Dr. Smith,"), ownerLead.emailBody?.split("\n")[0]);
   check("the email is subject, greeting, opener, body, opt-out and sign-off",
-    ownerLead.emailSubject === `Quick question about ${name("Owner Spine")}` &&
+    ownerLead.emailSubject === "new patient booking" &&
       (ownerLead.emailBody ?? "").includes(ownerLead.emailOpener ?? "@@") &&
-      (ownerLead.emailBody ?? "").trim().endsWith(`${wf.STARTER_OPT_OUT}\n\n${wf.STARTER_SIGN_OFF}`));
+      (ownerLead.emailBody ?? "").includes("Already on top of it, or want me to send them?") &&
+      (ownerLead.emailBody ?? "").trim().endsWith(`${settings.optOutLine}\n\n${settings.signOff}`));
   const o2 = await act.generateEmailOpener(desk.id);
   const deskLead = await reload(desk.id);
-  check("a gap stated as fact is rejected; the question is kept", o2.ok && (deskLead.emailOpener ?? "").endsWith("?"), deskLead.emailOpener ?? JSON.stringify(o2));
-  check("front-desk email → front-desk version, greeting the team and naming the contact",
+  check("an opener with a question mark is rejected; the plain one is kept", o2.ok && deskLead.emailOpener === deskOpener, deskLead.emailOpener ?? JSON.stringify(o2));
+  check("front-desk email → greeting the team by short name, asking for Dr. Lastname",
     deskLead.emailVersion === "front_desk" &&
       (deskLead.emailBody ?? "").startsWith(`Hi ${name("Front Desk Clinic")} team,`) &&
-      (deskLead.emailBody ?? "").includes("pass this to Dr. Lee") &&
+      (deskLead.emailBody ?? "").includes("This one’s probably for Dr. Lee.") &&
       (deskLead.emailBody ?? "").includes("{sender}"),
-    deskLead.emailBody?.split("\n").slice(0, 3).join(" / "));
-  check("the gate itself: a gap as a statement fails, as a question passes",
-    (await import("../src/lib/outreachSequence")).gapAsStatementReason("Your site has no online booking.", "gap") !== null &&
-      (await import("../src/lib/outreachSequence")).gapAsStatementReason("I couldn't find online booking, is that by phone?", "gap") === null);
+    deskLead.emailBody?.split("\n").slice(0, 5).join(" / "));
   const o3 = await act.generateEmailOpener(thin.id);
   const thinLead = await reload(thin.id);
-  check("thin evidence falls back to the curiosity question", o3.ok && thinLead.emailOpenerMechanism === "curiosity_process" &&
-    (thinLead.emailOpener ?? "").includes("both spinal decompression and laser therapy under one roof"), thinLead.emailOpener ?? JSON.stringify(o3));
-  check("the note says this was not a fallback", !(thinLead.emailOpenerNote ?? "").startsWith("Fell back"));
+  check("no cited evidence → no filler opener: Needs manual opener", o3.ok && o3.manual && thinLead.openerAngle === "manual" && thinLead.emailOpener === null && thinLead.emailBody === null,
+    JSON.stringify(o3));
 
   await act.generateEmailOpener(mismatch.id);
   await act.generateEmailOpener(dq.id);
 
-  // Both tries fail the check: the curiosity opener, not nothing.
-  const stubborn = await seed("Stubborn Clinic", { contactName: "Dr. Lou Hart", email: "lou@stubborn.test", emailType: "owner" });
-  const ownerReply = { opener: "I noticed Owner Spine (email verify) runs spinal decompression on the DRX9000 alongside laser therapy.", basis: "cited", ...note };
+  // Both tries fail the screen: manual, not a curiosity question.
+  const stubborn = await seed("Stubborn Clinic", { contactName: "Dr. Lou Hart", email: "lou@stubborn.test", emailType: "owner", icpBreakdown: card(name("Stubborn Clinic"), "Dr. Lou Hart") });
+  const ownerReply = { opener: "Your decompression page names the DRX9000, and booking is by phone only. Anyone ready to start has to call during office hours.", angle: "program_gap", ...note };
   stub.setReplies({
     [name("Owner Spine")]: ownerReply,
     [name("Stubborn Clinic")]: [
-      { opener: "Most clinics lose 30% of decompression leads.", basis: "cited", ...note },
-      { opener: "That's a $500 a month leak on the DRX9000.", basis: "cited", ...note },
-      { detail: "both spinal decompression and laser therapy under one roof", painSignal: null, ...note },
+      { opener: "Most clinics lose 30% of decompression leads.", angle: "program_gap", ...note },
+      { opener: "I noticed you have great reviews.", angle: "review_signal", ...note },
     ],
   });
   const o4 = await act.generateEmailOpener(stubborn.id);
   const stubbornLead = await reload(stubborn.id);
-  check("both tries rejected → falls back to curiosity instead of saving nothing",
-    o4.ok && stubbornLead.emailOpenerMechanism === "curiosity_process" && (stubbornLead.emailOpener ?? "").includes("under one roof"),
-    stubbornLead.emailOpener ?? JSON.stringify(o4));
-  check("and says it fell back, and why", o4.ok && !!o4.fellBack && (stubbornLead.emailOpenerNote ?? "").startsWith("Fell back to curiosity: the observation opener was rejected twice (it uses "),
-    stubbornLead.emailOpenerNote ?? "");
+  check("both tries rejected → Needs manual opener, saying why",
+    o4.ok && o4.manual && stubbornLead.openerAngle === "manual" && (stubbornLead.emailOpenerNote ?? "").startsWith("No usable opener: rejected twice ("),
+    stubbornLead.emailOpenerNote ?? JSON.stringify(o4));
+  check("its status is Needs manual opener once the address is fine",
+    wf.emailWorkflowStatus({ ...stubbornLead, emailStatus: "valid" }, "A", []) === "needs_manual_opener");
+  const manual = await act.saveManualOpener(stubborn.id, "Your booking page only takes requests by form. Anyone ready to start waits to hear back.");
+  const manualLead = await reload(stubborn.id);
+  check("a hand-written opener builds the email; the angle stays manual", manual.ok && manualLead.openerAngle === "manual" && (manualLead.emailBody ?? "").includes("waits to hear back"));
 
   // The same rule on LinkedIn Step 2: every variant rejected twice → curiosity.
   const liLead = await seed("Stubborn LinkedIn Clinic", { channel: "linkedin", contactName: "Dr. Ana Bell", connectionAcceptedAt: new Date() });
@@ -303,11 +310,18 @@ async function main(): Promise<void> {
   check("contact mismatch: flagged, Ready blocked", (await state(mismatch.id)).status === "check_contact");
   check("and Mark sent refuses it", !(await act.markEmailSent(mismatch.id, { step: 0, subject: "s", body: "b" })).ok);
   await act.resolveContact(mismatch.id, "scorecard");
-  const mm = await reload(mismatch.id);
-  check("picking the scorecard's person sets the contact and rebuilds the greeting",
-    mm.contactName === "Dr. Jane Doe" && (mm.emailBody ?? "").startsWith("Hi Dr. Doe,") && mm.emailApprovedAt === null, mm.emailBody?.split("\n")[0]);
+  let mm = await reload(mismatch.id);
+  check("picking the scorecard's person sets the contact, but mark@ names someone else: still Check contact",
+    mm.contactName === "Dr. Jane Doe" && mm.emailApprovedAt === null && (await state(mismatch.id)).status === "check_contact" && (mm.emailBody ?? "").startsWith("Hi there,"),
+    mm.emailBody?.split("\n")[0]);
+  await prisma.lead.update({ where: { id: mismatch.id }, data: { email: "drdoe@mismatch.test" } });
+  await act.setEmailVersion(mismatch.id, "owner");
+  mm = await reload(mismatch.id);
+  check("with the owner's own address the greeting is rebuilt", (mm.emailBody ?? "").startsWith("Hi Dr. Doe,"), mm.emailBody?.split("\n")[0]);
   await act.approveEmail(mismatch.id);
   check("then Ready once approved again", (await state(mismatch.id)).status === "ready");
+  // No cited evidence on this one: its opener is written by hand.
+  await act.saveManualOpener(dq.id, "Your site asks new patients to call to book. Anyone ready to start has to reach the front desk first.");
   await act.approveEmail(dq.id);
   check("disqualified: never Ready, however complete", (await state(dq.id)).status === "not_ab");
   check("and Mark sent refuses it", !(await act.markEmailSent(dq.id, { step: 0, subject: "s", body: "b" })).ok);
@@ -322,7 +336,7 @@ async function main(): Promise<void> {
     unsigned.toSend === null && /Nobody to sign it as/.test(unsigned.sendBlocked ?? ""), unsigned.sendBlocked ?? "");
   // hamdi@ signs as its display name; team@ has none and falls back to Your name.
   await prisma.sendingInbox.update({ where: { id: hamdi.id }, data: { displayName: "Hamdi" } });
-  await prisma.emailSettings.create({ data: { id: wf.EMAIL_SETTINGS_ID, ...wf.emailSettingsRow({ ...settings, senderName: "Alex" }) } });
+  await prisma.emailSettings.update({ where: { id: wf.EMAIL_SETTINGS_ID }, data: { senderName: "Alex" } });
   const send0 = (await state(owner.id)).toSend!;
   const deskSend0 = (await state(desk.id)).toSend!;
   check("{sender} is the sending inbox's display name", send0.from === "hamdi@spinescale.co" && send0.body.includes("\nHamdi") && !send0.body.includes("{sender}"));
@@ -406,9 +420,11 @@ async function main(): Promise<void> {
       (await prisma.emailSend.count({ where: { leadId: owner.id } })) === 1, undo1.ok ? "" : undo1.error);
   check("and the undo is logged", (await prisma.activityLog.count({ where: { leadId: owner.id, summary: { startsWith: "Undid Follow-up 1 marked sent" } } })) === 1);
   await act.markEmailSent(owner.id, { step: 1, subject: f1.subject, body: f1.body, inboxId: f1.inboxId });
-  await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 1 }, data: { sentAt: new Date(now.getTime() - 3 * DAY) } });
+  await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 1 }, data: { sentAt: new Date(now.getTime() - 4 * DAY) } });
+  check("follow-up 2 is not due four days after follow-up 1", (await state(owner.id)).toSend === null);
+  await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 1 }, data: { sentAt: new Date(now.getTime() - 5 * DAY) } });
   const f2 = (await state(owner.id)).toSend!;
-  check("follow-up 2 comes due after it", f2?.step === 2);
+  check("follow-up 2 comes due five days after follow-up 1", f2?.step === 2);
   await act.markEmailSent(owner.id, { step: 2, subject: f2.subject, body: f2.body, inboxId: f2.inboxId });
   check("follow-up 2 from hamdi@ too", f2.from === "hamdi@spinescale.co" && (await prisma.emailSend.findFirstOrThrow({ where: { leadId: owner.id, step: 2 } })).fromEmail === "hamdi@spinescale.co");
   await prisma.emailSend.updateMany({ where: { leadId: owner.id, step: 2 }, data: { sentAt: new Date(now.getTime() - 30 * DAY) } });
@@ -420,7 +436,7 @@ async function main(): Promise<void> {
   const mmAfter = await reload(mismatch.id);
   check("Bounced: the address moves to alternates as invalid and the lead goes back to No email",
     bounced.ok && mmAfter.email === null && (await state(mismatch.id)).status === "no_email" &&
-      (await import("../src/lib/emailFind")).parseAlternates(mmAfter.emailAlternates).some((a) => a.address === "mark@mismatch.test" && a.status === "invalid"));
+      (await import("../src/lib/emailFind")).parseAlternates(mmAfter.emailAlternates).some((a) => a.address === "drdoe@mismatch.test" && a.status === "invalid"));
   check("and the clinic is not suppressed", mmAfter.suppressedAt === null && (await prisma.suppression.count()) === 0);
 
   const replied = await act.markEmailReplied(desk.id, { text: "Thanks, but we're all set.", type: "not_interested" });
@@ -512,20 +528,20 @@ async function main(): Promise<void> {
   check("two follow-ups, three days apart (day 3, then day 6)", final.followUpTemplates.length === 2 && final.followUpDelayDays === 3 &&
     final.followUpTemplates[1].endsWith("I’ll pick it up.\n\nThanks either way."));
   check("the sender name and daily limit were left as they were", final.senderName === "" && final.dailyLimit === 10);
+  await prisma.$executeRawUnsafe(playbookUpdate);
+  const playbook = await loadEmailSettings();
+  check("the playbook migration keeps the opt-out line and the sign-off", playbook.optOutLine === final.optOutLine && playbook.signOff === final.signOff);
 
-  console.log("\nThe opener: preferred evidence and no bridging");
+  console.log("\nThe opener prompt");
   const os = await import("../src/lib/outreachSequence");
   const prompt = os.buildEmailOpenerPrompt(
     { evidence: { clinicName: "X", websiteNotes: "n", metaAdsSignal: null, reviewCount: null }, contactName: null, contactTitle: null, loomUrl: null, replyText: null, priorMessages: [] },
-    { cited: [], gaps: [] },
+    { cited: [], gaps: ["online booking: not found"] },
   ).user;
-  check("the prompt puts ads, free consult offers, booking and contact options first, equipment and reviews last",
-    /1\. Active Meta ads/.test(prompt) && /2\. A free consultation/.test(prompt) && /3\. The booking flow/.test(prompt) && /4\. The contact options/.test(prompt) &&
-      /Equipment and the review count come last/.test(prompt));
-  check("and forbids bridging assumptions", /THE OPENER STOPS AT THE OBSERVATION/.test(prompt));
-  check("a bridging assumption is rejected", os.assumptionReason("I saw you're running Meta ads, which probably means a lot of after-hours inquiries.") !== null &&
-    os.assumptionReason("I imagine the front desk is stretched with the free consult offer.") !== null);
-  check("a plain observation passes", os.assumptionReason("I saw Lakeside Spine & Disc Center is running Meta ads for a free decompression consultation.") === null);
+  check("the prompt ranks ads → booking friction → program gap → review signal",
+    /1\. ads_landing/.test(prompt) && /2\. booking_friction/.test(prompt) && /3\. program_gap/.test(prompt) && /4\. review_signal/.test(prompt));
+  check("no question, 'your', no clinic name, manual when nothing cited", /No question mark anywhere/.test(prompt) && /\"your\"/.test(prompt) && /angle \"manual\"/.test(prompt));
+  check("gaps (not found) are not given to the model", !prompt.includes("online booking: not found"));
 
   console.log("\nBoth emails, assembled for a seeded lead");
   const lake = await prisma.lead.create({
@@ -539,31 +555,35 @@ async function main(): Promise<void> {
       websiteNotes: "Lakeside Spine & Disc Center. Book your free decompression consultation online or call us. Text us anytime.",
       metaAdsSignal: "Active ads: 3 running, promoting a free consultation",
       reviewCount: 64,
+      icpBreakdown: card(name("Lakeside Spine & Disc Center"), "Dr. Maria Lopez"),
     },
   });
   stub.setReplies({
     [name("Lakeside Spine & Disc Center")]: [
-      { opener: "I saw Lakeside Spine & Disc Center is running Meta ads for a free consultation, which probably brings in a lot of after-hours inquiries.", basis: "cited", ...note },
-      { opener: "I saw Lakeside Spine & Disc Center is running Meta ads for a free decompression consultation.", basis: "cited", ...note },
+      { opener: "I saw Lakeside Spine & Disc Center (email verify) is running Meta ads for a free consultation.", angle: "ads_landing", ...note },
+      { opener: "Your Meta ad for a free consultation sends people to your homepage rather than a booking page. Anyone ready to book has to go looking for how to do it.", angle: "ads_landing", ...note },
     ],
   });
   const lakeOpener = await act.generateEmailOpener(lake.id);
   const lakeLead = await reload(lake.id);
-  check("the bridging opener was rejected, the plain one kept", lakeOpener.ok && !/probably/.test(lakeLead.emailOpener ?? "") && /Meta ads/.test(lakeLead.emailOpener ?? ""), lakeLead.emailOpener ?? JSON.stringify(lakeOpener));
+  check("the 'I saw' + clinic-name opener was rejected, the 'your' one kept", lakeOpener.ok && (lakeLead.emailOpener ?? "").startsWith("Your Meta ad") && lakeLead.openerAngle === "ads_landing", lakeLead.emailOpener ?? JSON.stringify(lakeOpener));
   const ownerEmail = { subject: lakeLead.emailSubject!, body: lakeLead.emailBody! };
   await act.setEmailVersion(lake.id, "front_desk");
   const deskVersion = await reload(lake.id);
   const deskEmail = { subject: deskVersion.emailSubject!, body: deskVersion.emailBody! };
+  const rules = await import("../src/lib/emailRules");
   check("owner email: its subject, greeted by name, opt-out, then the sign-off",
-    ownerEmail.subject === "quick question about new patient follow-up" && ownerEmail.body.startsWith("Hi Dr. Lopez,\n\nI saw ") &&
-      ownerEmail.body.includes("at Lakeside Spine & Disc Center (email verify) right now.") &&
-      ownerEmail.body.endsWith(`${final.optOutLine}\n\n{sender}\nSpine Scale\nOne Archers’ Place, East Tower\nTaft Avenue corner Castro Street, Malate\nManila 1004, Philippines`));
-  check("front-desk email: its subject, greeting the team",
-    deskEmail.subject === "question for the doctor" && deskEmail.body.startsWith(`Hi ${name("Lakeside Spine & Disc Center")} team,\n\nI saw `) &&
-      deskEmail.body.includes("Would you mind passing it along?"));
-  const fu = (n: number) => wf.renderFollowUp(final, lakeLead, "owner", n, ownerEmail.subject)!;
-  check("follow-ups reply in thread, greeted, with the opt-out and sign-off", fu(1).subject === "Re: quick question about new patient follow-up" &&
-    fu(1).body.startsWith("Hi Dr. Lopez,\n\nJust bumping") && fu(2).body.includes("Thanks either way.\n\nIf this isn’t relevant"));
+    ownerEmail.subject === "new patient booking" && ownerEmail.body.startsWith("Hi Dr. Lopez,\n\nYour Meta ad") &&
+      ownerEmail.body.endsWith(`${playbook.optOutLine}\n\n{sender}\nSpine Scale\nOne Archers’ Place, East Tower\nTaft Avenue corner Castro Street, Malate\nManila 1004, Philippines`));
+  check("front-desk email: its subject, greeting the team by short name, asking for Dr. Lopez",
+    deskEmail.subject === "question for the doctor" &&
+      deskEmail.body.startsWith(`Hi ${rules.cleanClinicName(name("Lakeside Spine & Disc Center")).name} team,\n\nYour Meta ad`) &&
+      deskEmail.body.includes("This one’s probably for Dr. Lopez."));
+  const pre = (e: { subject: string; body: string }) => rules.preSendCheck(e.subject, e.body, { optOutLine: playbook.optOutLine, clinicName: lakeLead.clinicName });
+  check("both pass the pre-send check", pre(ownerEmail).length === 0 && pre(deskEmail).length === 0, [...pre(ownerEmail), ...pre(deskEmail)].join(" "));
+  const fu = (n: number) => wf.renderFollowUp(playbook, lakeLead, "owner", n, ownerEmail.subject)!;
+  check("follow-ups reply in thread, greeted, with the opt-out and sign-off", fu(1).subject === "Re: new patient booking" &&
+    fu(1).body.startsWith("Hi Dr. Lopez,\n\nOne other thing I’d check:") && fu(2).body.includes("Thanks either way.\n\nIf this isn’t relevant"));
   for (const [label, e] of [["OWNER", ownerEmail], ["FRONT DESK", deskEmail], ["FOLLOW-UP 1", fu(1)], ["FOLLOW-UP 2", fu(2)]] as const) {
     console.log(`\n  ── ${label} ──\n  Subject: ${e.subject}\n\n${e.body.split("\n").map((l) => `  ${l}`).join("\n")}`);
   }

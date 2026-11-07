@@ -152,6 +152,7 @@ export function StageBadge({ stage }: { stage: string }) {
 // about the record rather than faults.
 const EMAIL_LEAD_TONES: Record<EmailLeadStatus, Tone> = {
   needs_opener: "indigo",
+  needs_manual_opener: "amber",
   check_email: "amber",
   check_contact: "amber",
   not_ab: "neutral",

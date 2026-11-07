@@ -16,6 +16,9 @@ import {
 } from "@/lib/emailWorkflow";
 import { fmtCredits } from "@/lib/emailCheck";
 import RecleanOwners from "@/components/RecleanOwners";
+import RerunOpenersButton from "@/components/RerunOpenersButton";
+import { inboxNameMismatch } from "@/lib/emailRules";
+import type { RerunEstimate } from "@/lib/openerRerun";
 
 type InboxDraft = { id: string | null; address: string; displayName: string; dailyLimit: number };
 
@@ -25,12 +28,14 @@ export default function EmailSettingsForm({
   starters,
   creditsUsed,
   hunterUsed,
+  rerun,
 }: {
   initial: EmailSettingsValues;
   inboxes: SendingInboxView[];
   starters: string[];
   creditsUsed: number;
   hunterUsed: number;
+  rerun: RerunEstimate;
 }) {
   const router = useRouter();
   const [v, setV] = useState<EmailSettingsValues>(initial);
@@ -99,6 +104,11 @@ export default function EmailSettingsForm({
                 placeholder={v.senderName || "Your name"}
                 onChange={(e) => setInbox(i, { displayName: e.target.value })}
               />
+              {inboxNameMismatch(inbox.address, inbox.displayName) && (
+                <span className="mt-1 block text-xs text-warn">
+                  “{inbox.address.split("@")[0]}@” doesn&apos;t match “{inbox.displayName.trim()}” — recipients see both.
+                </span>
+              )}
             </label>
             <label className="block">
               <span className="field-label">Per day</span>
@@ -135,10 +145,14 @@ export default function EmailSettingsForm({
         <div>
           <p className="text-sm font-medium">Email 1</p>
           <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
-            Placeholders: <code>{"{greeting}"}</code> “Hi Dr. Chen,” to the owner or “Hi {"{clinic}"} team,” to a
-            front desk (added at the top of a template without it), <code>{"{opener}"}</code> the drafted opener,{" "}
-            <code>{"{clinic}"}</code> the clinic&apos;s name, <code>{"{contact}"}</code> who the front desk is asked to
-            pass it to, <code>{"{sender}"}</code> your name below. Every email ends with the opt-out line, then the
+            Placeholders: <code>{"{greeting}"}</code> “Hi Dr. Lastname,” to the owner (only with a valid surname,
+            otherwise “Hi there,”) or “Hi {"{shortClinic}"} team,” to a front desk, <code>{"{opener}"}</code> the
+            drafted opener, <code>{"{contactOrDoctor}"}</code> “Dr. Lastname” when the contact passes validation,
+            otherwise “the doctor”, <code>{"{shortClinic}"}</code> the short clinic name,{" "}
+            <code>{"{clinic}"}</code> the full name, <code>{"{contact}"}</code> the contact as written,{" "}
+            <code>{"{sender}"}</code> your name below. Email 1 must pass the pre-send check before it can be approved:
+            80 words at most, exactly one question mark, nothing unfilled, no banned phrases, the full clinic name
+            once at most, and no colon, quotes or “Re:” in the subject. Every email ends with the opt-out line, then the
             sign-off.
           </p>
         </div>
@@ -163,9 +177,9 @@ export default function EmailSettingsForm({
         <label className="block">
           <span className="field-label">{label("Front-desk email", isStarter("Front-desk email"))}</span>
           <textarea className="field !min-h-[360px]" value={v.frontDeskTemplate} onChange={(e) => set("frontDeskTemplate", e.target.value)} />
-          {!v.frontDeskTemplate.includes("{contact}") && (
+          {!v.frontDeskTemplate.includes("{contact}") && !v.frontDeskTemplate.includes("{contactOrDoctor}") && (
             <span className="mt-1 block text-xs text-warn">
-              No {"{contact}"} in it — the front desk won&apos;t be asked to pass it to the owner by name (&ldquo;Dr. Lee&rdquo;, once Find owners confirms them).
+              No {"{contactOrDoctor}"} in it — the front desk won&apos;t be asked to pass it to the owner by name.
             </span>
           )}
         </label>
@@ -187,7 +201,7 @@ export default function EmailSettingsForm({
         <div>
           <p className="text-sm font-medium">Follow-ups</p>
           <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
-            Sent in order, in reply to Email 1, each one once the wait below has passed since the last email. The
+            Sent in order, in reply to Email 1, each one once its wait has passed since the email before it. The
             sequence stops after the last one, or as soon as they reply.
           </p>
         </div>
@@ -208,6 +222,21 @@ export default function EmailSettingsForm({
               value={t}
               onChange={(e) => set("followUpTemplates", v.followUpTemplates.map((x, j) => (j === i ? e.target.value : x)))}
             />
+            <span className="mt-2 flex items-center gap-2 text-xs text-muted">
+              <input
+                type="number"
+                min={1}
+                max={60}
+                className="field num !w-20"
+                value={v.followUpDelaysDays[i] ?? v.followUpDelayDays}
+                onChange={(e) => {
+                  const next = v.followUpTemplates.map((_, j) => v.followUpDelaysDays[j] ?? v.followUpDelayDays);
+                  next[i] = Number(e.target.value);
+                  set("followUpDelaysDays", next);
+                }}
+              />
+              days after {i === 0 ? "Email 1" : `Follow-up ${i}`}
+            </span>
           </label>
         ))}
         {v.followUpTemplates.length < MAX_FOLLOW_UPS && (
@@ -219,20 +248,9 @@ export default function EmailSettingsForm({
             Add a follow-up
           </button>
         )}
-        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-          <label className="block">
-            <span className="field-label">Days before each follow-up</span>
-            <input
-              type="number"
-              min={1}
-              max={60}
-              className="field num"
-              value={v.followUpDelayDays}
-              onChange={(e) => set("followUpDelayDays", Number(e.target.value))}
-            />
-          </label>
-        </div>
       </div>
+
+      <RerunOpenersButton estimate={rerun} />
 
       <div className="card space-y-4 p-6">
         <div>

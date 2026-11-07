@@ -18,6 +18,7 @@ import { leadBreakdownV2 } from "@/lib/leadScore";
 import { ScorecardEvidence } from "@/lib/outreachSequence";
 import { IcpTier } from "@/lib/icp";
 import { addressIsPlaceholder, salutation } from "@/lib/outreachSequence";
+import { ContactValidation, contactOrDoctor, preSendCheck, shortClinicFor, validateContact } from "@/lib/emailRules";
 
 // ─── Settings ──────────────────────────────────────────────────────────────
 
@@ -35,7 +36,11 @@ export interface EmailSettingsValues {
   // signature carries.
   signOff: string;
   senderName: string;
+  // The fallback delay; followUpDelaysDays holds one per follow-up.
   followUpDelayDays: number;
+  // Days before each follow-up, counted from the email before it: [3, 5] is
+  // day 3 and day 8.
+  followUpDelaysDays: number[];
   dailyLimit: number;
   // Instantly email checks: this month's credit budget, and one check's cost.
   checkCreditBudget: number;
@@ -92,6 +97,7 @@ export const DEFAULT_EMAIL_SETTINGS: EmailSettingsValues = {
   signOff: STARTER_SIGN_OFF,
   senderName: "",
   followUpDelayDays: DEFAULT_FOLLOW_UP_DELAY_DAYS,
+  followUpDelaysDays: [],
   dailyLimit: DEFAULT_DAILY_LIMIT,
   checkCreditBudget: 150,
   creditsPerCheck: 1,
@@ -147,6 +153,26 @@ export function readFollowUpTemplates(raw: unknown): string[] {
 
 // The stored row, or anything else, as settings the workflow can run on. A
 // missing row is the defaults; a blank template is its starter copy.
+// The per-follow-up delays, from JSON or an array. A missing or bad entry is
+// the shared fallback.
+export function readDelays(raw: unknown, fallback: number): number[] {
+  let list: unknown = raw;
+  if (typeof raw === "string") {
+    try {
+      list = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, MAX_FOLLOW_UPS).map((v) => int(v, fallback, 1, 60));
+}
+
+// Days before follow-up n (1-based), counted from the email before it.
+export function followUpDelay(settings: Pick<EmailSettingsValues, "followUpDelayDays" | "followUpDelaysDays">, n: number): number {
+  return settings.followUpDelaysDays[n - 1] ?? settings.followUpDelayDays;
+}
+
 export function readEmailSettings(row: Record<string, unknown> | null | undefined): EmailSettingsValues {
   const r = row ?? {};
   return {
@@ -159,6 +185,7 @@ export function readEmailSettings(row: Record<string, unknown> | null | undefine
     signOff: text(r.signOff, STARTER_SIGN_OFF),
     senderName: typeof r.senderName === "string" ? r.senderName.trim().slice(0, 200) : "",
     followUpDelayDays: int(r.followUpDelayDays, DEFAULT_FOLLOW_UP_DELAY_DAYS, 1, 60),
+    followUpDelaysDays: readDelays(r.followUpDelaysDays, int(r.followUpDelayDays, DEFAULT_FOLLOW_UP_DELAY_DAYS, 1, 60)),
     dailyLimit: int(r.dailyLimit, DEFAULT_DAILY_LIMIT, 1, 500),
     checkCreditBudget: int(r.checkCreditBudget, 150, 0, 1_000_000),
     creditsPerCheck: (() => {
@@ -182,6 +209,7 @@ export function emailSettingsRow(s: EmailSettingsValues) {
     signOff: s.signOff,
     senderName: s.senderName,
     followUpDelayDays: s.followUpDelayDays,
+    followUpDelaysDays: JSON.stringify(s.followUpDelaysDays),
     dailyLimit: s.dailyLimit,
     checkCreditBudget: s.checkCreditBudget,
     creditsPerCheck: s.creditsPerCheck,
@@ -206,7 +234,7 @@ export function readEmailVersion(v: unknown): EmailVersion | null {
 
 // The version an address calls for: the owner's own inbox gets the
 // owner-direct email, anything else is a front desk.
-export function defaultEmailVersion(lead: { emailType: string | null; emailVersion?: string | null }): EmailVersion {
+export function defaultEmailVersion(lead: { emailType?: string | null; emailVersion?: string | null }): EmailVersion {
   return readEmailVersion(lead.emailVersion) ?? (lead.emailType === "owner" ? "owner" : "front_desk");
 }
 
@@ -215,16 +243,42 @@ export interface EmailLeadInput {
   contactName: string | null;
   contactTitle: string | null;
   websiteNotes: string | null;
+  // What contact validation and the short clinic name read. Optional so a
+  // fixture can leave them out; every lead row carries them.
+  shortClinicName?: string | null;
+  email?: string | null;
+  emailType?: string | null;
+  icpBreakdown?: string | null;
+  npiOfficialName?: string | null;
+  ownerStatus?: string | null;
+  ownerSource?: string | null;
+  contactNameByHand?: boolean;
+  contactConfirmedAt?: Date | null;
 }
 
-// "Hi Dr. Chen," to the owner, by salutation(), the same decision the
-// LinkedIn sequence makes. "Hi there," where the record has no name to use —
-// a placeholder never goes into an email. The front desk is greeted as the
-// clinic's team.
+// Whether the contact can be addressed by name, and why not.
+export function contactValidation(lead: EmailLeadInput): ContactValidation {
+  return validateContact({
+    clinicName: lead.clinicName,
+    contactName: lead.contactName,
+    email: lead.email ?? null,
+    emailType: lead.emailType ?? null,
+    scorecardName: scorecardDecisionMaker(lead.icpBreakdown ?? null),
+    npiOfficialName: lead.npiOfficialName ?? null,
+    ownerStatus: lead.ownerStatus ?? null,
+    ownerSource: lead.ownerSource ?? null,
+    contactNameByHand: lead.contactNameByHand ?? false,
+    contactConfirmedAt: lead.contactConfirmedAt ?? null,
+  });
+}
+
+// Front desk: "Hi {short clinic name} team,". Owner: "Hi Dr. Lastname," only
+// when the contact passes validation (src/lib/emailRules.ts), otherwise
+// "Hi there,".
 export function emailGreeting(lead: EmailLeadInput, version: EmailVersion): string {
-  if (version === "front_desk") return `Hi ${lead.clinicName.trim()} team,`;
-  const s = salutation(lead.contactName, lead.contactTitle, lead.websiteNotes);
-  return addressIsPlaceholder(s) ? "Hi there," : `Hi ${s.address},`;
+  if (version === "front_desk") return `Hi ${shortClinicFor({ clinicName: lead.clinicName, shortClinicName: lead.shortClinicName ?? null }).name} team,`;
+  const v = contactValidation(lead);
+  return v.lastName ? `Hi Dr. ${v.lastName},` : "Hi there,";
 }
 
 // What {contact} reads when the lead names nobody — never a blank.
@@ -290,6 +344,8 @@ export function renderEmail(
     clinic: lead.clinicName.trim(),
     opener: opener.trim(),
     contact: contactFor(lead),
+    contactOrDoctor: contactOrDoctor(contactValidation(lead)),
+    shortClinic: shortClinicFor({ clinicName: lead.clinicName, shortClinicName: lead.shortClinicName ?? null }).name,
   };
   const template = version === "owner" ? settings.ownerBodyTemplate : settings.frontDeskTemplate;
   const subject = version === "owner" ? settings.subjectTemplate : settings.frontDeskSubjectTemplate;
@@ -309,7 +365,13 @@ export function renderFollowUp(
 ): { subject: string; body: string } | null {
   const template = settings.followUpTemplates[n - 1];
   if (template === undefined) return null;
-  const values = { clinic: lead.clinicName.trim(), opener: "", contact: contactFor(lead) };
+  const values = {
+    clinic: lead.clinicName.trim(),
+    opener: "",
+    contact: contactFor(lead),
+    contactOrDoctor: contactOrDoctor(contactValidation(lead)),
+    shortClinic: shortClinicFor({ clinicName: lead.clinicName, shortClinicName: lead.shortClinicName ?? null }).name,
+  };
   const subject = /^re:/i.test(firstSubject.trim()) ? firstSubject.trim() : `Re: ${firstSubject.trim()}`;
   return { subject, body: assemble(emailGreeting(lead, version), template, values, settings) };
 }
@@ -373,7 +435,9 @@ export function suppressionKeys(lead: { email: string | null; websiteUrl: string
 
 // ─── Status, Ready, and follow-ups ─────────────────────────────────────────
 
-export interface EmailWorkflowLead {
+export interface EmailWorkflowLead extends EmailLeadInput {
+  emailOpener: string | null;
+  openerAngle: string | null;
   email: string | null;
   emailStatus: string | null;
   emailApprovedAt: Date | null;
@@ -442,13 +506,13 @@ export interface EmailSendView {
 // the last template.
 export function nextFollowUp(
   sends: EmailSendView[],
-  settings: Pick<EmailSettingsValues, "followUpDelayDays" | "followUpTemplates">,
+  settings: Pick<EmailSettingsValues, "followUpDelayDays" | "followUpDelaysDays" | "followUpTemplates">,
 ): { n: number; dueAt: Date } | null {
   if (sends.length === 0) return null;
   const last = sends.reduce((a, b) => (b.step > a.step ? b : a));
   const n = last.step + 1;
   if (n > settings.followUpTemplates.length) return null;
-  return { n, dueAt: new Date(last.sentAt.getTime() + settings.followUpDelayDays * 86_400_000) };
+  return { n, dueAt: new Date(last.sentAt.getTime() + followUpDelay(settings, n) * 86_400_000) };
 }
 
 // Due today or earlier, counted in whole calendar days in the server's zone,
@@ -476,8 +540,10 @@ export function emailWorkflowStatus(
   if ((lead.email ?? "").trim() === "") return "no_email";
   if (sends.length > 0) return "in_sequence";
   if (!emailUsable(lead) || lead.emailRiskyFlaggedAt) return "check_email";
-  if (contactCheck(lead).state === "mismatch") return "check_contact";
-  if (!lead.emailApprovedAt) return "needs_opener";
+  if (contactCheck(lead).state === "mismatch" || contactValidation(lead).issues.length > 0) return "check_contact";
+  if (!lead.emailApprovedAt) {
+    return lead.openerAngle === "manual" && !(lead.emailOpener ?? "").trim() ? "needs_manual_opener" : "needs_opener";
+  }
   if (lead.scoringRejectedAt || (tier !== "A" && tier !== "B")) return "not_ab";
   return "ready";
 }
@@ -489,7 +555,7 @@ export function sendBlocker(
   lead: EmailWorkflowLead,
   tier: IcpTier | null,
   sends: EmailSendView[],
-  settings: Pick<EmailSettingsValues, "followUpDelayDays" | "followUpTemplates">,
+  settings: Pick<EmailSettingsValues, "followUpDelayDays" | "followUpDelaysDays" | "followUpTemplates">,
   now: Date,
 ): { step: number } | { blocked: string } {
   const status = emailWorkflowStatus(lead, tier, sends);
@@ -542,8 +608,9 @@ const EMAIL_STATUS_BLOCKERS: Record<EmailWorkflowStatus, string> = {
   no_email: "There is no email address.",
   in_sequence: "",
   check_email: "The address has not been checked valid.",
-  check_contact: "The contact disagrees with the scorecard's decision-maker — pick one first.",
+  check_contact: "The contact needs a check — see the reasons on the lead.",
   needs_opener: "The email has not been approved.",
+  needs_manual_opener: "No cited evidence to open with — write the opener by hand.",
   not_ab: "Only A and B tier leads are sent to.",
   ready: "",
 };
@@ -610,7 +677,7 @@ export interface EmailSendRecord extends EmailSendView {
 // yet (no inbox, or nobody to sign it as).
 export function emailToSend(
   lead: EmailWorkflowLead &
-    EmailLeadInput & { emailType: string | null; emailVersion: string | null; emailSubject: string | null; emailBody: string | null },
+    EmailLeadInput & { emailVersion: string | null; emailSubject: string | null; emailBody: string | null },
   tier: IcpTier | null,
   sends: EmailSendRecord[],
   settings: EmailSettingsValues,
@@ -626,6 +693,8 @@ export function emailToSend(
   const from = { inboxId: inbox.id, from: inbox.address, risky: riskyAccepted(lead) };
   if (next.step === 0) {
     if (!lead.emailSubject || !lead.emailBody) return null;
+    const failed = preSendCheck(lead.emailSubject, lead.emailBody, { optOutLine: settings.optOutLine, clinicName: lead.clinicName });
+    if (failed.length > 0) return { blocked: `Pre-send check: ${failed.join(" ")}` };
     return { step: 0, label: "Email 1", to, ...from, subject: lead.emailSubject, body: fillSender(lead.emailBody, sender) };
   }
   const first = sends.find((s) => s.step === 0);
@@ -682,7 +751,7 @@ export function isInboxAddress(v: unknown): v is string {
 // and what comes next.
 export function sequenceLabel(
   sends: EmailSendView[],
-  settings: Pick<EmailSettingsValues, "followUpDelayDays" | "followUpTemplates">,
+  settings: Pick<EmailSettingsValues, "followUpDelayDays" | "followUpDelaysDays" | "followUpTemplates">,
   // Why the sequence is not running, where it is not: "replied", "stopped",
   // "no address".
   halted: string | null,

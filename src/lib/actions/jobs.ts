@@ -39,6 +39,8 @@ import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { facebookEmailLeads, findBackupEmail } from "@/lib/facebookEmailRun";
 import { findOwner, findOwnerEmail, findOwnerLeads, ownerBudget, ownerReadiness, hunterCreditsUsedThisMonth, OwnerEmailOutcome } from "@/lib/ownerFindRun";
 import { ownerCostPerLead } from "@/lib/ownerFind";
+import { OPENER_CALL_USD, OPENER_MAX_CALLS_PER_LEAD, openerRerunLeads } from "@/lib/openerRerun";
+import { generateEmailOpener } from "@/lib/actions/emailWorkflow";
 
 // ─── Re-crawl website ──────────────────────────────────────────────────────
 
@@ -573,4 +575,49 @@ export async function stopJobRun(id: string): Promise<void> {
 
 export async function dismissJobRun(id: string): Promise<void> {
   await dismissJob(id);
+}
+
+// ─── Re-run openers (Settings → Email) ─────────────────────────────────────
+
+// Approved-but-unsent leads are unapproved with their old opener kept as a
+// note, then every lead is regenerated under the playbook rules, A-tier
+// first. Nothing is approved.
+export async function startOpenerRerun(): Promise<LaunchResult> {
+  const items = await openerRerunLeads();
+  if (items.length === 0) return { ok: false, error: "No leads to re-run." };
+  return launchJob({
+    kind: "rerun-openers",
+    source: "rerun-openers",
+    verb: "Re-running openers",
+    href: "/pipeline",
+    items: items.map((i) => ({ ...i, estimateUsd: OPENER_CALL_USD * OPENER_MAX_CALLS_PER_LEAD })),
+    halt: (results) => {
+      const last = results.slice(-MAX_CONSECUTIVE_ERRORS);
+      return last.length === MAX_CONSECUTIVE_ERRORS && last.every((r) => r.outcome === "error")
+        ? "Stopped after three errors in a row."
+        : null;
+    },
+    work: async (item) => {
+      const lead = await prisma.lead.findUnique({
+        where: { id: item.id },
+        select: { emailOpener: true, openerAngle: true, emailApprovedAt: true, emailSends: { select: { id: true } } },
+      });
+      if (!lead) return { outcome: "warn", detail: "Lead no longer exists" };
+      if (lead.emailSends.length > 0) return { outcome: "warn", detail: "Email 1 already sent — left alone" };
+      if (lead.emailOpener) {
+        await prisma.leadNote.create({
+          data: {
+            leadId: item.id,
+            body: `Previous email opener${lead.emailApprovedAt ? " (was approved)" : ""}, replaced by Re-run openers: ${lead.emailOpener}`,
+          },
+        });
+      }
+      if (lead.emailApprovedAt) await prisma.lead.update({ where: { id: item.id }, data: { emailApprovedAt: null } });
+      const r = await generateEmailOpener(item.id);
+      if (!r.ok) return { outcome: "error", detail: r.error };
+      return r.manual
+        ? { outcome: "warn", detail: "No cited evidence — needs manual opener" }
+        : { outcome: "ok", detail: `Opener drafted (${r.angle}) — needs approval` };
+    },
+  });
 }

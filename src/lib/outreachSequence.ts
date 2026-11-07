@@ -2290,42 +2290,38 @@ export function buildEmailOpenerPrompt(
   const clinic = ctx.evidence.clinicName.trim();
   const user = [
     `CLINIC: ${clinic}`,
+    "(Never write this name in the opener.)",
     "",
-    "EVIDENCE",
-    "Gathered by an automated enrichment run. This is everything you have.",
-    "",
-    evidenceBlock(ctx.evidence),
-    "",
-    "WHAT THE SCORECARD CITED (found, with the quote that proves it)",
+    "CITED EVIDENCE (each line is a finding, the quote that proves it, and its source). THIS IS THE ONLY THING YOU MAY STATE AS FACT.",
     scorecard.cited.length === 0 ? "  Nothing." : scorecard.cited.map((c) => `  - ${truncate(c, 300)}`).join("\n"),
     "",
-    "WHAT THE SCORECARD LOOKED FOR AND DID NOT FIND (gaps: not confirmed, which is not the same as absent)",
-    scorecard.gaps.length === 0 ? "  Nothing." : scorecard.gaps.map((g) => `  - ${truncate(g, 200)}`).join("\n"),
-    "",
-    ...painPointsBlock(ctx),
     "TASK",
-    "Write the first line of a cold email to this clinic, sent by hand from Gmail. ONE sentence, or two very short ones. It is the opener only: the greeting, the rest of the email and the sign-off are added by the app.",
+    "Write the opener of a cold email to this clinic. The app adds the greeting before it and the ask after it, so the opener carries the observation and its consequence, and NO question.",
     "",
-    "It opens with one true, specific observation about this clinic, read off the evidence or the scorecard's citations above.",
+    "SHAPE: 1 or 2 sentences, 40 words at most.",
+    "  Sentence 1: one verifiable, business-level fact taken from the CITED EVIDENCE above.",
+    "  Sentence 2: the plain consequence for new patients, in everyday words.",
     "",
-    "WHAT TO OBSERVE, in this order of preference. The email that follows is about how new patient inquiries are followed up, so the best opener is something true about how new patients reach this clinic:",
-    "  1. Active Meta ads (only if the advertising evidence shows them).",
-    "  2. A free consultation, screening or new-patient offer named on their site.",
-    "  3. The booking flow: online booking, a request-an-appointment form, a call-to-book line.",
-    "  4. The contact options: phone, a contact form, chat or text.",
-    "  Only if none of those is in the evidence: a named program or service. Equipment and the review count come last of all.",
-    "",
-    "THE OPENER STOPS AT THE OBSERVATION. The email continues on its own with a question about how inquiries are followed up; do not write a bridge to it. Never add an assumption about the clinic to connect the two: nothing about how busy they are, how many inquiries or leads they get, what the ads bring in, how the front desk copes, or what happens after hours. No \"which probably means\", \"I imagine\", \"so you must\", \"that likely\". Say what you saw and stop.",
-    "",
-    "  - Built on something CITED: you may state it plainly, as what you noticed.",
-    "  - Built on a GAP (something not found): it MUST be a question. Never state that anything is missing, absent, lacking, or not there. \"I couldn't tell from the site how a new patient books after hours, is that by phone?\" is the shape. \"You don't offer online booking\" is forbidden.",
+    "WHICH FACT, the highest one the cited evidence supports:",
+    "  1. ads_landing: an active Meta or Google ad, and where it sends people (the homepage, no booking page).",
+    "  2. booking_friction: booking by phone only, a \"request an appointment\" form, no online scheduler.",
+    "  3. program_gap: a named decompression or disc program page, or named equipment (e.g. DRX9000), together with a booking gap.",
+    "  4. review_signal: a patient review that mentions scheduling, callbacks or wait times. Quote the patient's words briefly.",
+    "  If none of the four is supported by a CITED line, return opener null and angle \"manual\". Do not write a filler opener.",
     "",
     "HARD RULES:",
-    "  - Never describe your own service, and no pitch, no offer, no call to book. The body does that.",
-    "  - No figures: no percentages, no dollar amounts, no counts other than the clinic's own review count, no comparisons to other clinics, never \"most clinics\", \"usually\", \"typically\" or \"on average\".",
-    "  - No greeting and no name: do not start with \"Hi\" or the person's name.",
-    `  - Under ${EMAIL_OPENER_MAX_CHARS} characters. No square brackets. No em dashes.`,
-    "  - If the evidence and the scorecard carry nothing true and specific, return null. A forced opener is a fabricated one.",
+    "  - No question mark anywhere.",
+    "  - Refer to the clinic as \"your\" (your site, your ad, your decompression page). Never the clinic's name.",
+    "  - Never infer internal processes nobody can see from outside: never claim there is no follow-up, no reminders, no sequence, no callbacks.",
+    "  - Sentence 2: no numbers, percentages or dollar figures, no \"most clinics\" or any comparison, no medical or outcome claims, no guessing words like \"probably\".",
+    "  - Numbers only inside a product name the evidence names (DRX9000).",
+    "  - Do not start with \"I noticed\", \"I saw\", \"I came across\", \"Quick question\", \"Random question\". No greeting.",
+    "  - No compliments: not their reviews, years in practice, team or website design.",
+    "  - Never use: \"I work with\", \"I help\", \"we help\", \"clinics like yours\", \"boost\", \"grow your practice\", \"more patients\".",
+    "  - Never lead with: the website looking dated, social media, attribution or \"no idea what's working\".",
+    "  - No square brackets. No em dashes.",
+    "",
+    "Example of the shape (do not copy the facts): \"Your Facebook ad for decompression sends people to your homepage rather than a booking page. Anyone ready to book has to go looking for how to do it.\"",
     "",
     INTERNAL_NOTE_SPEC,
     "",
@@ -2333,8 +2329,8 @@ export function buildEmailOpenerPrompt(
     "A single JSON object, exactly these keys:",
     "{",
     '  "opener": "<the opener>" | null,',
-    '  "basis": "cited" | "gap" | null,',
-    '  "evidence": "<what it was built on, quoted>" | null,',
+    '  "angle": "ads_landing" | "booking_friction" | "program_gap" | "review_signal" | "manual",',
+    '  "evidence": "<the cited line it was built on, quoted>" | null,',
     '  "uncertainty": "<hedging used, or none>",',
     '  "stage": "<the stage required before this email>"',
     "}",
@@ -2344,7 +2340,7 @@ export function buildEmailOpenerPrompt(
 
 export type EmailOpenerReply = {
   opener: string | null;
-  basis: "cited" | "gap" | null;
+  angle: "ads_landing" | "booking_friction" | "program_gap" | "review_signal" | "manual";
   note: InternalNote;
 };
 
@@ -2352,9 +2348,11 @@ export function parseEmailOpenerReply(raw: string): EmailOpenerReply | null {
   const body = readObject(raw);
   if (!body) return null;
   const opener = readMessage(body.opener, EMAIL_OPENER_MAX_CHARS);
+  const angles = ["ads_landing", "booking_friction", "program_gap", "review_signal"] as const;
+  const angle = (angles as readonly string[]).includes(String(body.angle)) ? (body.angle as EmailOpenerReply["angle"]) : "manual";
   return {
-    opener: opener === null ? null : opener.replace(/\s*\n+\s*/g, " "),
-    basis: body.basis === "cited" || body.basis === "gap" ? body.basis : null,
+    opener: opener === null || angle === "manual" ? null : opener.replace(/\s*\n+\s*/g, " "),
+    angle: opener === null ? "manual" : angle,
     note: readInternalNote(body),
   };
 }
