@@ -39,6 +39,8 @@ import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/li
 import type { EmailPanelProps } from "@/components/EmailPanel";
 import { pickContactFormLink } from "@/lib/contactForm";
 import { hasRiskyEmail } from "@/lib/ownerFind";
+import { formBucketOf } from "@/lib/emailBuckets";
+import { formSentAtByLead } from "@/lib/contactFormSent";
 import { preSendCheck, shortClinicFor } from "@/lib/emailRules";
 
 function fmtDayMonth(d: Date): string {
@@ -62,9 +64,11 @@ export function emailLeadState(
   settings: EmailSettingsValues,
   now: Date,
   inboxes: SendingInboxView[],
+  // When the contact form was last marked sent, if ever.
+  formSentAt: Date | null = null,
 ): EmailLeadState {
   const tier = leadTier(lead);
-  const status = emailWorkflowStatus(lead, tier, lead.emailSends);
+  const status = emailWorkflowStatus(lead, tier, lead.emailSends, formBucketOf(lead, lead.emailSends.length, formSentAt));
   const next = status === "in_sequence" ? nextFollowUp(lead.emailSends, settings) : null;
   const inbox = inboxForLead(lead, inboxes);
   const send = emailToSend(lead, tier, lead.emailSends, settings, now, inbox);
@@ -128,14 +132,16 @@ export async function loadEmailView(now = new Date()) {
     loadInboxes(),
   ]);
   await assignReady(leads, inboxes);
+  const formSent = await formSentAtByLead(leads.map((l) => l.id));
   // Newly promoted email leads arrive with an address nobody has checked;
   // they are checked on their own from here, budget allowing.
   void autoCheckEmails();
   const counters = await inboxCounters(inboxes, now, settings.riskyDailyLimit);
   const rows = leads.map((l) => {
     const s = leadScore(l);
-    const state = emailLeadState(l, settings, now, inboxes);
+    const state = emailLeadState(l, settings, now, inboxes, formSent.get(l.id) ?? null);
     const counter = counters.find((c) => c.id === state.inbox?.id) ?? null;
+    const isForm = state.status === "contact_form" || state.status === "form_sent";
     return {
       id: l.id,
       clinicName: l.clinicName,
@@ -160,6 +166,8 @@ export async function loadEmailView(now = new Date()) {
       riskyAccepted: riskyAccepted(l),
       riskyFlagged: l.emailRiskyFlaggedAt !== null,
       stage: l.stage,
+      // Contact form / Copy message / Mark form sent, in place of the address.
+      form: isForm ? contactFormPropsFor(l, settings, inboxes, formSent.get(l.id) ?? null) : null,
     };
   });
   const check = await checkInfo(now);
@@ -185,7 +193,8 @@ export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Pr
   const [settings, inboxes] = await Promise.all([loadEmailSettings(), loadInboxes()]);
   await assignReady([lead], inboxes);
   const counters = await inboxCounters(inboxes, now, settings.riskyDailyLimit);
-  const state = emailLeadState(lead, settings, now, inboxes);
+  const formSentAt = (await formSentAtByLead([lead.id])).get(lead.id) ?? null;
+  const state = emailLeadState(lead, settings, now, inboxes, formSentAt);
   const counter = counters.find((c) => c.id === state.inbox?.id) ?? null;
   const check = contactCheck(lead);
   return {
@@ -261,7 +270,7 @@ export async function loadLeadEmailState(leadId: string, now = new Date()): Prom
     prisma.lead.findUniqueOrThrow({ where: { id: leadId }, include: { emailSends: { orderBy: { step: "asc" } } } }),
   ]);
   await assignReady([lead], inboxes);
-  return emailLeadState(lead, settings, now, inboxes);
+  return emailLeadState(lead, settings, now, inboxes, (await formSentAtByLead([lead.id])).get(lead.id) ?? null);
 }
 
 // What the check buttons quote: the key, this month's credits, the cost of one.
@@ -274,15 +283,11 @@ export async function checkInfo(now = new Date()) {
 // stored links, the front-desk message signed from the lead's inbox (or Your
 // name), and when a form was last marked sent.
 export async function contactFormProps(lead: LeadWithSends) {
-  const [settings, inboxes, last] = await Promise.all([
-    loadEmailSettings(),
-    loadInboxes(),
-    prisma.activityLog.findFirst({
-      where: { leadId: lead.id, kind: "CONTACT_FORM_SENT" },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-  ]);
+  const [settings, inboxes, sent] = await Promise.all([loadEmailSettings(), loadInboxes(), formSentAtByLead([lead.id])]);
+  return contactFormPropsFor(lead, settings, inboxes, sent.get(lead.id) ?? null);
+}
+
+export function contactFormPropsFor(lead: LeadWithSends, settings: EmailSettingsValues, inboxes: SendingInboxView[], lastSentAt: Date | null) {
   const inbox = inboxForLead(lead, inboxes);
   const sender = inbox ? senderFor(inbox, settings) : settings.senderName.trim();
   return {
@@ -290,8 +295,8 @@ export async function contactFormProps(lead: LeadWithSends) {
     contactFormUrl: pickContactFormLink(lead.websiteLinks, lead.websiteUrl),
     message: frontDeskMessage(lead, settings, sender),
     // "Sent Oct 30 · call Nov 2": the day it went, and the call Mark form sent booked.
-    lastSentLabel: last
-      ? `Sent ${fmtDayMonth(last.createdAt)} · call ${fmtDayMonth(new Date(last.createdAt.getTime() + CONTACT_FORM_CALL_AFTER_DAYS * 86_400_000))}`
+    lastSentLabel: lastSentAt
+      ? `Sent ${fmtDayMonth(lastSentAt)} · call ${fmtDayMonth(new Date(lastSentAt.getTime() + CONTACT_FORM_CALL_AFTER_DAYS * 86_400_000))}`
       : null,
   };
 }

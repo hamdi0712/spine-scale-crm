@@ -43,6 +43,7 @@ import {
 import { EMAIL_STATUSES, EMAIL_SOURCE_LABELS, EMAIL_TYPE_LABELS, EmailSource, EmailType } from "@/lib/emailFind";
 import type { Lead } from "@prisma/client";
 import { emailWorkflowStatus, SUPPRESSION_REASON_LABELS, SuppressionReason } from "@/lib/emailWorkflow";
+import { formBucketOf } from "@/lib/emailBuckets";
 import {
   MESSAGE_MECHANISMS,
   MESSAGE_MECHANISM_LABELS,
@@ -389,11 +390,14 @@ function flaggedFields(lead: { scoringRejectedAt: Date | null; scoringRejectedRe
 const EMAIL_INCLUDE = {
   emailSends: { select: { step: true, sentAt: true } },
   sendingInbox: { select: { address: true } },
+  // The latest Mark form sent, for the Contact form / Form sent statuses.
+  activity: { where: { kind: "CONTACT_FORM_SENT" }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
 } as const;
 
 type EmailReadLead = Lead & {
   emailSends: { step: number; sentAt: Date }[];
   sendingInbox: { address: string } | null;
+  activity: { createdAt: Date }[];
 };
 
 // The address verdict a filter can ask for: the four stored values, plus
@@ -402,7 +406,7 @@ const EMAIL_STATUS_FILTERS = [...EMAIL_STATUSES, "unchecked"] as const;
 type EmailStatusFilter = (typeof EMAIL_STATUS_FILTERS)[number];
 
 function emailWorkflowOf(lead: EmailReadLead): EmailLeadStatus {
-  return emailWorkflowStatus(lead, leadTier(lead), lead.emailSends);
+  return emailWorkflowStatus(lead, leadTier(lead), lead.emailSends, formBucketOf(lead, lead.emailSends.length, lead.activity[0]?.createdAt ?? null));
 }
 
 function emailFields(lead: EmailReadLead) {

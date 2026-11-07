@@ -1,11 +1,14 @@
 // Where an email-channel lead lives: the Email queue (not ready yet), the
-// Email pipeline (confirmed owner and a usable address), the Contact form list
+// Email pipeline (a usable address, and who it goes to settled: owner confirmed,
+// email approved, or contact set or kept by hand), the Contact form list
 // (nothing found, but the clinic has a form), the Call list (nothing found and
 // no form), or waiting on a contact form already sent. Lost leads are hidden.
 //
 // One rule, read by every view, so a lead is only ever in one of them.
 //
 // Pure.
+
+import { pickContactFormLink } from "@/lib/contactForm";
 
 export type EmailBucket = "hidden" | "queue" | "pipeline" | "contact_form" | "form_sent" | "call";
 
@@ -21,6 +24,19 @@ export interface EmailBucketLead {
   ownerEmailAt: Date | null;
   emailRepliedAt: Date | null;
   suppressedAt: Date | null;
+  // A person decided who the email goes to: the email approved, or the
+  // contact set or kept by hand.
+  emailApprovedAt: Date | null;
+  contactNameByHand: boolean;
+  contactConfirmedAt: Date | null;
+}
+
+// Who the email goes to is settled: Find owners confirmed the owner, the
+// email was approved, or the contact was set or kept by hand.
+export function recipientSettled(
+  lead: Pick<EmailBucketLead, "ownerStatus" | "emailApprovedAt" | "contactNameByHand" | "contactConfirmedAt">,
+): boolean {
+  return lead.ownerStatus === "confirmed" || lead.emailApprovedAt !== null || lead.contactNameByHand || lead.contactConfirmedAt !== null;
 }
 
 export interface EmailBucketExtras {
@@ -36,20 +52,39 @@ export function hasUsableEmail(lead: Pick<EmailBucketLead, "email" | "emailStatu
   return (lead.email ?? "").trim() !== "" && (lead.emailStatus === "valid" || lead.emailStatus === "risky");
 }
 
-// One Find owners run finished on this lead without a usable address: the
-// owner's email step ran (ownerEmailAt), or the owner lookup itself found
-// nobody and there is no address at all.
+// Find owners and the email lookup are both done, and no usable address came
+// of it: the owner's email step ran (ownerEmailAt), or it never can because
+// Find owners found no owner. An unchecked address waits in the queue until
+// it is checked; an invalid one is no address at all.
 export function nothingFound(lead: EmailBucketLead): boolean {
   if (hasUsableEmail(lead)) return false;
-  if (lead.ownerEmailAt) return true;
-  return lead.ownerStatus === "not_found" && (lead.email ?? "").trim() === "";
+  const hasAddress = (lead.email ?? "").trim() !== "";
+  if (hasAddress && lead.emailStatus === null) return false;
+  return lead.ownerEmailAt !== null || lead.ownerStatus === "not_found";
+}
+
+// The two contact-form buckets, which live in the Email pipeline with a status
+// of their own, or null for every other lead.
+export type FormBucket = "contact_form" | "form_sent";
+export function formBucketOf(
+  lead: EmailBucketLead & { websiteLinks: string | null; websiteUrl: string | null },
+  sendCount: number,
+  formSentAt: Date | null,
+): FormBucket | null {
+  const b = emailBucket(lead, { sendCount, contactFormUrl: pickContactFormLink(lead.websiteLinks, lead.websiteUrl), formSentAt });
+  return b === "contact_form" || b === "form_sent" ? b : null;
+}
+
+// The buckets the Email pipeline shows.
+export function inEmailPipeline(b: EmailBucket): boolean {
+  return b === "pipeline" || b === "contact_form" || b === "form_sent";
 }
 
 export function emailBucket(lead: EmailBucketLead, x: EmailBucketExtras): EmailBucket {
   if (lead.stage === "LOST") return "hidden";
   // Already written to, answered or stopped: the pipeline keeps its history.
   if (x.sendCount > 0 || lead.emailRepliedAt || lead.suppressedAt) return "pipeline";
-  if (lead.ownerStatus === "confirmed" && hasUsableEmail(lead)) return "pipeline";
+  if (hasUsableEmail(lead) && recipientSettled(lead)) return "pipeline";
   if (nothingFound(lead)) {
     if (x.formSentAt) return "form_sent";
     if (x.contactFormUrl) return "contact_form";

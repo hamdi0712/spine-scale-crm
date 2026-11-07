@@ -534,9 +534,14 @@ export function emailWorkflowStatus(
   lead: EmailWorkflowLead,
   tier: IcpTier | null,
   sends: EmailSendView[],
+  // Find owners and the email lookup found no usable address and the clinic
+  // has a contact form (formBucketOf in src/lib/emailBuckets.ts): before or
+  // after Mark form sent. Omitted where it is not worked out.
+  formBucket: "contact_form" | "form_sent" | null = null,
 ): EmailWorkflowStatus {
   if (lead.suppressedAt || lead.emailUnsubscribedAt) return "stopped";
   if (lead.emailRepliedAt) return "replied";
+  if (formBucket && sends.length === 0) return formBucket;
   if ((lead.email ?? "").trim() === "") return "no_email";
   if (sends.length > 0) return "in_sequence";
   if (!emailUsable(lead) || lead.emailRiskyFlaggedAt) return "check_email";
@@ -612,6 +617,8 @@ const EMAIL_STATUS_BLOCKERS: Record<EmailWorkflowStatus, string> = {
   needs_opener: "The email has not been approved.",
   needs_manual_opener: "No cited evidence to open with — write the opener by hand.",
   not_ab: "Only A and B tier leads are sent to.",
+  contact_form: "No usable email — send the clinic's contact form instead.",
+  form_sent: "The contact form was sent — no email to send.",
   ready: "",
 };
 

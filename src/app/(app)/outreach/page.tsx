@@ -15,7 +15,6 @@ import { loadEmailQueue } from "@/lib/emailBucketsRead";
 import { ownerJobEstimate } from "@/lib/actions/jobs";
 import OwnerFindButton, { OwnerFindProgress } from "@/components/OwnerFindButton";
 import FindLeadOwnerButton from "@/components/FindLeadOwnerButton";
-import ContactFormButtons from "@/components/ContactFormButtons";
 
 export const dynamic = "force-dynamic";
 
@@ -105,14 +104,14 @@ export default async function OutreachQueuePage() {
   );
 }
 
-// The Email queue: email leads not ready to write to — no confirmed owner, or
-// no valid or risky address. Find owners works on all of them. Below it, the
-// Contact form list: Find owners found nothing, but the clinic has a form.
-// Once a lead has a confirmed owner and a usable address it moves to the
-// Email pipeline; with nothing at all it goes to the Call list
+// The Email queue: one list of email leads not ready to write to. Every lead
+// goes through the same steps — Find owners, then the email lookup. With a
+// usable address and the recipient settled it moves to the Email pipeline;
+// with nothing found it moves to the pipeline as a Contact form lead when the
+// clinic has a form, or to the Call list when it has none
 // (src/lib/emailBuckets.ts).
 async function EmailQueue() {
-  const [{ queue, forms }, owners] = await Promise.all([loadEmailQueue(), ownerJobEstimate()]);
+  const [{ queue }, owners] = await Promise.all([loadEmailQueue(), ownerJobEstimate()]);
   return (
     <div className="wide-format">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -140,7 +139,7 @@ async function EmailQueue() {
         <div className="card mt-8 px-6 py-10 text-center">
           <p className="text-sm font-medium">The queue is empty</p>
           <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
-            Every email lead has an owner and an address, or has gone to the Contact form list or the Call list.
+            Every email lead has moved on: to the Email pipeline (with an address, or as a Contact form lead) or to the Call list.
           </p>
         </div>
       ) : (
@@ -169,32 +168,6 @@ async function EmailQueue() {
         </ul>
       )}
 
-      <section className="mt-10">
-        <h2 className="text-sm font-semibold">
-          Contact form <span className="num ml-1 text-muted">{forms.length}</span>
-        </h2>
-        <p className="helper-text mt-0.5 text-xs text-muted">
-          Find owners found no usable email, but the clinic has a contact form. Once marked sent, a lead leaves this list;
-          three days on with no reply it shows on the Call list.
-        </p>
-        {forms.length === 0 ? (
-          <p className="mt-2 text-xs text-muted">Nothing here.</p>
-        ) : (
-          <div className="mt-3 flex flex-col gap-4">
-            {forms.map((f) => (
-              <div key={f.id}>
-                <Link href={`/pipeline/${f.id}`} className="text-sm font-medium hover:underline">
-                  {f.clinicName}
-                </Link>
-                {f.location && <span className="ml-2 text-xs text-muted">{f.location}</span>}
-                <div className="mt-1.5">
-                  <ContactFormButtons {...f.form} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }
