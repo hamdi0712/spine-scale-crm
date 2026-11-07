@@ -12,6 +12,7 @@ import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
 import { useJobRun } from "@/components/JobProgress";
 import { LostTag, isLost } from "@/components/LostLeads";
+import ContactFormButtons from "@/components/ContactFormButtons";
 import { PIPELINE_EMAIL_TAB_COOKIE, recalledPipelineFilter, rememberPipelineFilter } from "@/lib/emailChannel";
 
 export interface EmailLeadRow {
@@ -29,6 +30,8 @@ export interface EmailLeadRow {
   icpVerdict: string | null;
   icpScore: string | null;
   status: EmailLeadStatus;
+  // A Contact form / Form sent lead: the buttons that stand in for the address.
+  form: { leadId: string; contactFormUrl: string | null; message: { subject: string; body: string }; lastSentLabel: string | null } | null;
   sequence: string;
   // The email to send now — Email 1 once Ready, or the follow-up that is due —
   // with its buttons on the row. Null for everything else.
@@ -58,9 +61,9 @@ const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C:
 // work is. "Needs work" is everything waiting on the operator before it can be
 // sent; "Done" is everything the sequence has finished with, one way or
 // another. Due today cuts across them (every lead in it is In sequence).
-type Filter = "all" | "email" | "noemail" | "risky" | "ready" | "due" | "work" | "sequence" | "done" | "lost";
+type Filter = "all" | "email" | "noemail" | "risky" | "ready" | "form" | "due" | "work" | "sequence" | "done" | "lost";
 
-const FILTERS: Filter[] = ["all", "email", "noemail", "risky", "ready", "due", "work", "sequence", "done", "lost"];
+const FILTERS: Filter[] = ["all", "email", "noemail", "risky", "ready", "form", "due", "work", "sequence", "done", "lost"];
 
 function readFilter(v: unknown): Filter | null {
   return (FILTERS as unknown[]).includes(v) ? (v as Filter) : null;
@@ -68,6 +71,7 @@ function readFilter(v: unknown): Filter | null {
 
 const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "noemail" | "risky" | "lost">, EmailLeadStatus[]> = {
   ready: ["ready"],
+  form: ["contact_form", "form_sent"],
   work: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "no_email"],
   sequence: ["in_sequence"],
   done: ["replied", "stopped", "not_ab"],
@@ -82,7 +86,7 @@ function matches(row: EmailLeadRow, filter: Filter): boolean {
   if (filter === "due") return row.followUpDueToday;
   // Every lead with an address, whatever it is waiting on.
   if (filter === "email") return row.email !== null;
-  if (filter === "noemail") return row.email === null;
+  if (filter === "noemail") return row.email === null && row.form === null;
   if (filter === "risky") return row.risky;
   return FILTER_STATUSES[filter].includes(row.status);
 }
@@ -152,6 +156,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           ["noemail", "No email"],
           ["risky", "Risky"],
           ["ready", "Ready"],
+          ["form", "Contact form"],
           ["due", "Due today"],
           ["work", "Needs work"],
           ["sequence", "In sequence"],
@@ -387,12 +392,18 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <IconMapPin size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.location ?? "—"}</span>
               </p>
-              <p className={`flex min-w-0 items-center gap-2 ${row.email ? "text-ink-soft" : "text-muted"}`} title={row.emailDetail ?? undefined}>
-                <IconMail size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
-                <span className="truncate">{row.email ?? "No email yet"}</span>
-                {row.riskyAccepted && <RiskyTag />}
-                {row.riskyFlagged && <span className="text-[11px] font-medium text-warn">Review</span>}
-              </p>
+              {row.form ? (
+                <div className="pt-1">
+                  <ContactFormButtons {...row.form} compact />
+                </div>
+              ) : (
+                <p className={`flex min-w-0 items-center gap-2 ${row.email ? "text-ink-soft" : "text-muted"}`} title={row.emailDetail ?? undefined}>
+                  <IconMail size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
+                  <span className="truncate">{row.email ?? "No email yet"}</span>
+                  {row.riskyAccepted && <RiskyTag />}
+                  {row.riskyFlagged && <span className="text-[11px] font-medium text-warn">Review</span>}
+                </p>
+              )}
             </div>
             <div className={`mt-auto flex flex-wrap items-center justify-between gap-2 ${selecting ? "pl-[26px]" : ""} pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]`}>
               <EmailStatusBadge status={row.status} />
@@ -427,7 +438,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <EmailStatusBadge status={row.status} />
               </div>
               <p className={`mt-1 truncate text-sm ${row.email ? "text-ink/80" : "text-muted"}`}>
-                {row.email ?? "No email yet"}
+                {row.form ? (row.form.lastSentLabel ?? "Contact form — open the lead to send it") : (row.email ?? "No email yet")}
                 {row.riskyAccepted && <> <RiskyTag /></>}
               </p>
               <p className="mt-2 text-xs font-medium text-accent">
@@ -503,7 +514,9 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                   </div>
                 </td>
                 <td className="td">
-                  {row.email ? (
+                  {row.form ? (
+                    <ContactFormButtons {...row.form} compact />
+                  ) : row.email ? (
                     <>
                       <div className="break-all text-sm text-ink">
                         {row.email}

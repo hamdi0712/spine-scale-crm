@@ -6,7 +6,8 @@
 //
 // The cases: no owner stays in the queue; a hand pick clears the markers so
 // Find owners covers it again; owner + risky email goes to the pipeline;
-// nothing found with a form goes to the Contact form list; nothing at all goes
+// nothing found with a form goes to the Email pipeline as a Contact form lead
+// (Form sent once marked); nothing at all goes
 // to the Call list; a replied lead is a warm call; a form sent three days ago
 // with no reply is a form follow-up; Not interested marks Lost and suppresses.
 
@@ -32,6 +33,7 @@ const TAG = "verify-email-buckets";
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const { loadEmailQueue, loadCallList, emailPipelineIds } = await import("../src/lib/emailBucketsRead");
+  const { loadEmailView, loadLeadEmailState } = await import("../src/lib/emailWorkflowRead");
   const { pickOwner, findOwnerLeads } = await import("../src/lib/ownerFindRun");
   const { logCall } = await import("../src/lib/actions/callList");
   const { markContactFormSent } = await import("../src/lib/actions/emailWorkflow");
@@ -70,22 +72,48 @@ async function main() {
     emailRepliedAt: new Date(), emailReplyType: "interested",
   });
   const lost = await make("Lost Clinic", { stage: "LOST" });
+  // A form link, but the email lookup hasn't run yet: still the queue.
+  const formNotLooked = await make("Form Not Looked Up Clinic", {
+    ownerStatus: "confirmed", contactName: "Dr. Di Eck", websiteUrl: "https://form.example", websiteLinks: FORM_LINKS,
+  });
+  // No owner found (so the lookup can never run) and an invalid address: nothing usable, form → Contact form.
+  const invalidForm = await make("Invalid Address Form Clinic", {
+    ownerStatus: "not_found", ownerCheckedAt: new Date(), email: "old@invalid-form.example", emailStatus: "invalid",
+    websiteUrl: "https://form.example", websiteLinks: FORM_LINKS,
+  });
+  // The same with an unchecked address: waits in the queue until it's checked.
+  const uncheckedNo = await make("Unchecked Address Clinic", {
+    ownerStatus: "not_found", ownerCheckedAt: new Date(), email: "who@unchecked.example", emailStatus: null,
+    websiteUrl: "https://form.example", websiteLinks: FORM_LINKS,
+  });
 
   console.log("Buckets");
-  let { queue, forms } = await loadEmailQueue();
+  let { queue } = await loadEmailQueue();
   const inQueue = (id: string) => queue.some((q) => q.id === id);
-  const pipe = await emailPipelineIds();
+  let pipe = await emailPipelineIds();
+  let view = await loadEmailView();
+  const rowOf = (id: string) => view.rows.find((r) => r.id === id);
+  const statusOf = (id: string) => (pipe.has(id) ? rowOf(id)?.status : undefined);
   check("a lead with no owner stays in the queue", inQueue(noOwner.id) && !pipe.has(noOwner.id));
   check("owner + risky email moves to the pipeline", pipe.has(risky.id) && !inQueue(risky.id));
-  check("nothing found + contact form → Contact form list", forms.some((f) => f.id === formLead.id) && !inQueue(formLead.id));
+  check("nothing found + contact form → Email pipeline, status Contact form", pipe.has(formLead.id) && statusOf(formLead.id) === "contact_form" && !inQueue(formLead.id),
+    String(statusOf(formLead.id)));
+  check("…its row carries the form link and the message, in place of the address",
+    rowOf(formLead.id)?.form?.contactFormUrl === "https://form.example/contact-us" && (rowOf(formLead.id)?.form?.message.body ?? "") !== "" && rowOf(formLead.id)?.form?.lastSentLabel === null);
+  check("the queue page has no Contact form list any more", !("forms" in (await loadEmailQueue())));
+  check("a form link but the email lookup not run yet → still the queue", inQueue(formNotLooked.id) && !pipe.has(formNotLooked.id));
+  check("no owner found + an invalid address + a form → Contact form", statusOf(invalidForm.id) === "contact_form" && !inQueue(invalidForm.id));
+  check("no owner found + an unchecked address → the queue until it's checked", inQueue(uncheckedNo.id) && !pipe.has(uncheckedNo.id));
+  check("the lead page reads the same status", (await loadLeadEmailState(formLead.id)).status === "contact_form");
   let calls = await loadCallList();
   const callOf = (id: string) => calls.find((c) => c.id === id);
   check("nothing at all → Call list (Last resort)", callOf(nothing.id)?.section === "last_resort" && !inQueue(nothing.id));
   check("a replied lead shows under Warm calls", callOf(replied.id)?.section === "warm");
-  check("a Lost lead is hidden everywhere", !inQueue(lost.id) && !forms.some((f) => f.id === lost.id) && !callOf(lost.id));
+  check("a Lost lead is hidden everywhere", !inQueue(lost.id) && !callOf(lost.id) && rowOf(lost.id)?.status !== "contact_form");
 
   console.log("Who the email goes to, settled");
-  const only = (id: string) => [inQueue(id), pipe.has(id), forms.some((f) => f.id === id), !!callOf(id)].filter(Boolean).length === 1;
+  const only = (id: string) => [inQueue(id), pipe.has(id), !!callOf(id)].filter(Boolean).length === 1;
+  check("a Contact form lead is in exactly one place", only(formLead.id));
   check("Spinal Decompression Plus (Ready, owner never confirmed, contact kept by hand) → pipeline only", pipe.has(sdp.id) && !inQueue(sdp.id) && only(sdp.id));
   check("approved email + usable address → pipeline only", pipe.has(approvedOnly.id) && only(approvedOnly.id));
   check("contact set by hand + usable address → pipeline only", pipe.has(byHand.id) && only(byHand.id));
@@ -104,14 +132,20 @@ async function main() {
 
   console.log("Contact form → Form follow-up");
   await markContactFormSent(formLead.id);
-  ({ queue, forms } = await loadEmailQueue());
-  check("after Mark form sent it leaves the Contact form list", !forms.some((f) => f.id === formLead.id));
+  ({ queue } = await loadEmailQueue());
+  pipe = await emailPipelineIds();
+  view = await loadEmailView();
+  check("after Mark form sent it stays in the pipeline as Form sent", statusOf(formLead.id) === "form_sent" && !inQueue(formLead.id), String(statusOf(formLead.id)));
+  check("…with when it went on the row", (rowOf(formLead.id)?.form?.lastSentLabel ?? "").startsWith("Sent "));
   calls = await loadCallList();
   check("…and is not on the Call list yet", !callOf(formLead.id));
   const fourDaysAgo = new Date(Date.now() - 4 * 86_400_000);
   await prisma.activityLog.updateMany({ where: { leadId: formLead.id, kind: "CONTACT_FORM_SENT" }, data: { createdAt: fourDaysAgo } });
   calls = await loadCallList();
   check("three days on with no reply it is a Form follow-up", callOf(formLead.id)?.section === "form_follow_up");
+  pipe = await emailPipelineIds();
+  view = await loadEmailView();
+  check("…and still in the pipeline as Form sent", statusOf(formLead.id) === "form_sent");
 
   console.log("Call buttons");
   check("Called – no answer logs", (await logCall(nothing.id, "CALL_NO_ANSWER")).ok);

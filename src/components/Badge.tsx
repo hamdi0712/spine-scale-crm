@@ -153,6 +153,8 @@ export function StageBadge({ stage }: { stage: string }) {
 const EMAIL_LEAD_TONES: Record<EmailLeadStatus, Tone> = {
   needs_opener: "indigo",
   needs_manual_opener: "amber",
+  contact_form: "indigo",
+  form_sent: "blue",
   check_email: "amber",
   check_contact: "amber",
   not_ab: "neutral",

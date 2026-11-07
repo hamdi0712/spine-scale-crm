@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   }
 
   const emailLead = await prisma.lead.create({
-    data: { clinicName: "Ridgeway Spine", channel: "email", email: "dr@ridgeway.test", emailType: "owner", emailStatus: "valid", emailSource: "site_crawl", stage: "CONTACTED" },
+    data: { clinicName: "Ridgeway Spine", channel: "email", contactName: "Dr. Ana Ridge", email: "dr@ridgeway.test", emailType: "owner", emailStatus: "valid", emailSource: "site_crawl", stage: "CONTACTED" },
   });
   const riskyLead = await prisma.lead.create({
     data: { clinicName: "Harbor Chiro", channel: "email", email: "info@harbor.test", emailType: "generic", emailStatus: "risky" },

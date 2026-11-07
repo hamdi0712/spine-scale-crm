@@ -8,6 +8,8 @@
 //
 // Pure.
 
+import { pickContactFormLink } from "@/lib/contactForm";
+
 export type EmailBucket = "hidden" | "queue" | "pipeline" | "contact_form" | "form_sent" | "call";
 
 // How long after Mark form sent, with no reply, the lead shows on the Call
@@ -50,13 +52,32 @@ export function hasUsableEmail(lead: Pick<EmailBucketLead, "email" | "emailStatu
   return (lead.email ?? "").trim() !== "" && (lead.emailStatus === "valid" || lead.emailStatus === "risky");
 }
 
-// One Find owners run finished on this lead without a usable address: the
-// owner's email step ran (ownerEmailAt), or the owner lookup itself found
-// nobody and there is no address at all.
+// Find owners and the email lookup are both done, and no usable address came
+// of it: the owner's email step ran (ownerEmailAt), or it never can because
+// Find owners found no owner. An unchecked address waits in the queue until
+// it is checked; an invalid one is no address at all.
 export function nothingFound(lead: EmailBucketLead): boolean {
   if (hasUsableEmail(lead)) return false;
-  if (lead.ownerEmailAt) return true;
-  return lead.ownerStatus === "not_found" && (lead.email ?? "").trim() === "";
+  const hasAddress = (lead.email ?? "").trim() !== "";
+  if (hasAddress && lead.emailStatus === null) return false;
+  return lead.ownerEmailAt !== null || lead.ownerStatus === "not_found";
+}
+
+// The two contact-form buckets, which live in the Email pipeline with a status
+// of their own, or null for every other lead.
+export type FormBucket = "contact_form" | "form_sent";
+export function formBucketOf(
+  lead: EmailBucketLead & { websiteLinks: string | null; websiteUrl: string | null },
+  sendCount: number,
+  formSentAt: Date | null,
+): FormBucket | null {
+  const b = emailBucket(lead, { sendCount, contactFormUrl: pickContactFormLink(lead.websiteLinks, lead.websiteUrl), formSentAt });
+  return b === "contact_form" || b === "form_sent" ? b : null;
+}
+
+// The buckets the Email pipeline shows.
+export function inEmailPipeline(b: EmailBucket): boolean {
+  return b === "pipeline" || b === "contact_form" || b === "form_sent";
 }
 
 export function emailBucket(lead: EmailBucketLead, x: EmailBucketExtras): EmailBucket {

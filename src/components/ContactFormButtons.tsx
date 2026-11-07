@@ -15,6 +15,7 @@ export default function ContactFormButtons({
   contactFormUrl,
   message,
   lastSentLabel,
+  compact = false,
 }: {
   leadId: string;
   // Null hides the Contact form button: no stored link reads as one.
@@ -22,6 +23,9 @@ export default function ContactFormButtons({
   message: { subject: string; body: string };
   // "Form sent Oct 30, 2026", or null when it never has been.
   lastSentLabel: string | null;
+  // The Email pipeline's row: the three buttons inline, where the address
+  // would be.
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [copied, setCopied] = useState(false);
@@ -57,6 +61,35 @@ export default function ContactFormButtons({
       setTimeout(() => setMarked(false), 2500);
       router.refresh();
     });
+  }
+
+  if (compact) {
+    const sentRow = lastSentLabel !== null;
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {contactFormUrl && (
+            <a href={contactFormUrl} target="_blank" rel="noreferrer" className="btn h-7 px-2.5 text-xs">
+              Contact form ↗
+            </a>
+          )}
+          <button type="button" onClick={() => void copy()} className="btn h-7 px-2.5 text-xs">
+            {copied ? "Copied" : "Copy message"}
+          </button>
+          <button
+            type="button"
+            onClick={mark}
+            disabled={pending}
+            title="Logs it in the activity feed and adds a task to call the clinic in 3 days"
+            className={`${sentRow ? "btn" : "btn-primary"} h-7 px-2.5 text-xs disabled:opacity-50`}
+          >
+            {pending ? "Marking…" : marked ? "Marked" : sentRow ? "Mark sent again" : "Mark form sent"}
+          </button>
+        </div>
+        {lastSentLabel && <span className="text-xs text-muted">{lastSentLabel}</span>}
+        {error && <span className="text-xs text-bad">{error}</span>}
+      </div>
+    );
   }
 
   let host: string | null = null;

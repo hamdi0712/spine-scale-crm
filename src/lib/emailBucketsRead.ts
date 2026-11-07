@@ -6,8 +6,7 @@ import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
 import { pickContactFormLink } from "@/lib/contactForm";
 import { leadTier } from "@/lib/leadScore";
 import { emailDetailLine } from "@/lib/emailChannel";
-import { CallSection, EmailBucketExtras, callSection, emailBucket, queueReason } from "@/lib/emailBuckets";
-import { contactFormProps } from "@/lib/emailWorkflowRead";
+import { CallSection, EmailBucketExtras, callSection, emailBucket, inEmailPipeline, queueReason } from "@/lib/emailBuckets";
 
 export const CALL_KINDS = ["CALL_NO_ANSWER", "CALL_TALKED", "CALL_NOT_INTERESTED"] as const;
 export type CallKind = (typeof CALL_KINDS)[number];
@@ -54,38 +53,33 @@ export async function emailPipelineIds(): Promise<Set<string>> {
     include: { _count: { select: { emailSends: true } } },
   });
   const extras = await bucketExtras(leads);
-  return new Set(leads.filter((l) => l.stage === "LOST" || emailBucket(l, extras.get(l.id)!) === "pipeline").map((l) => l.id));
+  return new Set(leads.filter((l) => l.stage === "LOST" || inEmailPipeline(emailBucket(l, extras.get(l.id)!))).map((l) => l.id));
 }
 
+// The Email queue: one list, every lead not ready for the Email pipeline yet.
+// Contact-form leads are in the pipeline (src/lib/emailBuckets.ts).
 export async function loadEmailQueue() {
   const leads = await prisma.lead.findMany({
     where: { ...PIPELINE_DEFAULT_WHERE, channel: "email", stage: { not: "LOST" } },
-    include: { _count: { select: { emailSends: true } }, emailSends: true },
+    include: { _count: { select: { emailSends: true } } },
     orderBy: { createdAt: "desc" },
   });
   const extras = await bucketExtras(leads);
-  const queue = [];
-  const forms = [];
-  for (const l of leads) {
-    const b = emailBucket(l, extras.get(l.id)!);
-    if (b === "queue") {
-      queue.push({
-        id: l.id,
-        clinicName: l.clinicName,
-        contactName: l.ownerStatus === "confirmed" ? l.contactName : null,
-        location: l.location,
-        email: (l.email ?? "").trim() || null,
-        emailDetail: emailDetailLine(l),
-        icpTier: leadTier(l),
-        reason: queueReason(l),
-        // The per-lead button: only when Find owners would do something.
-        canFind: l.ownerStatus !== "pick" && l.ownerEmailAt === null,
-      });
-    } else if (b === "contact_form") {
-      forms.push({ id: l.id, clinicName: l.clinicName, location: l.location, icpTier: leadTier(l), form: await contactFormProps(l) });
-    }
-  }
-  return { queue, forms };
+  const queue = leads
+    .filter((l) => emailBucket(l, extras.get(l.id)!) === "queue")
+    .map((l) => ({
+      id: l.id,
+      clinicName: l.clinicName,
+      contactName: l.ownerStatus === "confirmed" ? l.contactName : null,
+      location: l.location,
+      email: (l.email ?? "").trim() || null,
+      emailDetail: emailDetailLine(l),
+      icpTier: leadTier(l),
+      reason: queueReason(l),
+      // The per-lead button: only when Find owners would do something.
+      canFind: l.ownerStatus !== "pick" && l.ownerEmailAt === null,
+    }));
+  return { queue };
 }
 
 export interface CallRow {
