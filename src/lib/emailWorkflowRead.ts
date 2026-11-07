@@ -11,6 +11,7 @@ import {
   EmailToSend,
   EmailWorkflowStatus,
   contactCheck,
+  contactValidation,
   defaultEmailVersion,
   SendingInboxView,
   emailToSend,
@@ -38,6 +39,7 @@ import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/li
 import type { EmailPanelProps } from "@/components/EmailPanel";
 import { pickContactFormLink } from "@/lib/contactForm";
 import { hasRiskyEmail } from "@/lib/ownerFind";
+import { preSendCheck, shortClinicFor } from "@/lib/emailRules";
 
 function fmtDayMonth(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -220,6 +222,13 @@ export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Pr
     opener: lead.emailOpener,
     openerNote: lead.emailOpenerNote,
     openerMechanism: lead.emailOpenerMechanism,
+    openerAngle: lead.openerAngle,
+    contactIssues: contactValidation(lead).issues,
+    shortClinic: { ...shortClinicFor(lead), stored: (lead.shortClinicName ?? "").trim() !== "" },
+    preSend:
+      lead.emailSubject && lead.emailBody && lead.emailSends.length === 0
+        ? preSendCheck(lead.emailSubject, lead.emailBody, { optOutLine: settings.optOutLine, clinicName: lead.clinicName })
+        : [],
     version: defaultEmailVersion(lead),
     subject: lead.emailSubject,
     body: lead.emailBody,

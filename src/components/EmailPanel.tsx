@@ -16,6 +16,8 @@ import {
   markEmailUnsubscribed,
   resolveContact,
   saveEmailDraft,
+  saveManualOpener,
+  setShortClinicName,
   setLeadInbox,
   setEmailVersion,
   unapproveEmail,
@@ -41,6 +43,7 @@ import StarterCopyBanner from "@/components/StarterCopyBanner";
 import UndoMarkSentButton from "@/components/UndoMarkSentButton";
 import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
 import { confirmText } from "@/lib/displayMode";
+import { OPENER_ANGLE_LABELS, readOpenerAngle } from "@/lib/emailRules";
 
 export interface EmailPanelProps {
   leadId: string;
@@ -82,6 +85,14 @@ export interface EmailPanelProps {
   opener: string | null;
   openerNote: string | null;
   openerMechanism: string | null;
+  // ads_landing | booking_friction | program_gap | review_signal | manual
+  openerAngle: string | null;
+  // Why the contact can't be addressed by name (Check contact). Empty: fine.
+  contactIssues: string[];
+  // The name the front-desk greeting uses; stored once edited by hand.
+  shortClinic: { name: string; flagged: boolean; stored: boolean };
+  // Why the assembled Email 1 cannot be approved. Empty: it passes.
+  preSend: string[];
   version: EmailVersion;
   subject: string | null;
   body: string | null;
@@ -109,6 +120,9 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [replyType, setReplyType] = useState<string>("interested");
+  const [manualOpener, setManualOpener] = useState("");
+  const [shortName, setShortName] = useState(p.shortClinic.name);
+  const angle = readOpenerAngle(p.openerAngle);
   const sentAny = p.sends.length > 0;
   const dirty = subject !== (p.subject ?? "") || body !== (p.body ?? "");
   const closed = p.status === "stopped" || p.status === "replied";
@@ -282,10 +296,67 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
         </div>
       )}
 
+      {p.contactIssues.length > 0 && !sentAny && (
+        <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
+          <p className="text-sm font-medium">Check the contact</p>
+          <ul className="mt-1 list-disc pl-4 text-xs leading-relaxed text-muted">
+            {p.contactIssues.map((i) => (
+              <li key={i}>{i}</li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-muted">
+            Fix the contact or the address on the lead — or keep it as is: a one-word name is then taken as the surname,
+            and a blank one falls back to “Hi there,” / “the doctor”. An owner address naming someone else can&apos;t be kept.
+          </p>
+          <div className="mt-2.5">
+            <button type="button" disabled={pending} className="btn" onClick={() => run(() => resolveContact(p.leadId, "keep"))}>
+              Keep as is
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!sentAny && !closed && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="block">
+            <span className="field-label">
+              Short clinic name{" "}
+              {p.shortClinic.flagged && <span className="text-warn">· may not read as the clinic — edit it</span>}
+              {!p.shortClinic.stored && !p.shortClinic.flagged && <span className="text-muted">· cleaned automatically</span>}
+            </span>
+            <input className="field" value={shortName} onChange={(e) => setShortName(e.target.value)} />
+          </label>
+          {(shortName !== p.shortClinic.name || (p.shortClinic.flagged && !p.shortClinic.stored)) && (
+            <button type="button" disabled={pending} className="btn mb-0.5" onClick={() => run(() => setShortClinicName(p.leadId, shortName))}>
+              Save name
+            </button>
+          )}
+        </div>
+      )}
+
       {/* The draft: the opener, and the email built around it. */}
       {!sentAny && !closed && (
         <div className="space-y-3">
-          {p.opener === null ? (
+          {p.opener === null && angle === "manual" ? (
+            <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-4 py-3">
+              <p className="text-sm font-medium">Needs a manual opener</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted">{p.openerNote ?? "No cited evidence at levels 1–4."}</p>
+              <textarea
+                className="field mt-2 !min-h-[80px] text-sm"
+                placeholder="One fact from their site, ad or reviews, then the consequence for new patients. No question."
+                value={manualOpener}
+                onChange={(e) => setManualOpener(e.target.value)}
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" disabled={pending || manualOpener.trim() === ""} className="btn-primary disabled:opacity-50" onClick={() => run(() => saveManualOpener(p.leadId, manualOpener))}>
+                  Save opener
+                </button>
+                <button type="button" disabled={pending} className="btn" onClick={() => run(() => generateEmailOpener(p.leadId))}>
+                  {pending ? "Drafting…" : "Try generating again"}
+                </button>
+              </div>
+            </div>
+          ) : p.opener === null ? (
             <button type="button" disabled={pending} className="btn-primary disabled:opacity-50" onClick={() => run(() => generateEmailOpener(p.leadId))}>
               {pending ? "Drafting…" : "Draft the opener"}
             </button>
@@ -293,7 +364,7 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
             <>
               <div className="rounded-[10px] bg-wash/70 px-4 py-3">
                 <p className="text-xs font-medium text-muted">
-                  Opener · {MECHANISM_LABELS[p.openerMechanism ?? ""] ?? "Drafted"}
+                  Opener · {angle ? `Angle: ${OPENER_ANGLE_LABELS[angle]}` : (MECHANISM_LABELS[p.openerMechanism ?? ""] ?? "Drafted")}
                 </p>
                 <p className="mt-1 text-sm">{p.opener}</p>
                 {p.openerNote?.startsWith("Fell back to curiosity:") && (
@@ -343,6 +414,16 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
               )}
               {p.unfilled.length > 0 && !dirty && (
                 <p className="text-xs text-bad">Still has {p.unfilled.join(", ")} in it — fill it in before approving.</p>
+              )}
+              {p.preSend.length > 0 && !dirty && (
+                <div className="text-xs text-bad">
+                  <p className="font-medium">Pre-send check — can&apos;t be approved yet:</p>
+                  <ul className="list-disc pl-4">
+                    {p.preSend.map((x) => (
+                      <li key={x}>{x}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               <div className="flex flex-wrap items-center gap-2">

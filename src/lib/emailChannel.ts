@@ -125,6 +125,7 @@ export const TALKING_ON_LINKEDIN_BLOCK =
 // thing to do next for each.
 export const EMAIL_LEAD_STATUSES = [
   "needs_opener",
+  "needs_manual_opener",
   "check_email",
   "check_contact",
   "not_ab",
@@ -137,6 +138,7 @@ export const EMAIL_LEAD_STATUSES = [
 export type EmailLeadStatus = (typeof EMAIL_LEAD_STATUSES)[number];
 export const EMAIL_LEAD_STATUS_LABELS: Record<EmailLeadStatus, string> = {
   needs_opener: "Needs opener",
+  needs_manual_opener: "Needs manual opener",
   check_email: "Check email",
   check_contact: "Check contact",
   not_ab: "Not A/B",
@@ -149,6 +151,7 @@ export const EMAIL_LEAD_STATUS_LABELS: Record<EmailLeadStatus, string> = {
 
 export const EMAIL_LEAD_NEXT: Record<EmailLeadStatus, string> = {
   needs_opener: "Draft and approve the email",
+  needs_manual_opener: "Write the opener by hand",
   check_email: "Check the address",
   check_contact: "Pick the contact",
   not_ab: "Not sent to — below A/B",

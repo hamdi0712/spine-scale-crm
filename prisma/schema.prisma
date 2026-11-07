@@ -540,6 +540,14 @@ model Lead {
   emailOpener          String?
   emailOpenerNote      String?
   emailOpenerMechanism String?
+  // The evidence angle the opener was built on: ads_landing |
+  // booking_friction | program_gap | review_signal | manual (no cited
+  // evidence — written by hand). OPENER_ANGLES in src/lib/emailRules.ts.
+  openerAngle          String?
+  // The clinic name the front-desk greeting uses ("Hi {short} team,"). Null:
+  // cleaned from clinicName on the fly (cleanClinicName); set by hand on the
+  // lead page.
+  shortClinicName      String?
   emailVersion         String?
   emailSubject         String?
   emailBody            String?
@@ -695,6 +703,9 @@ model EmailSettings {
   // The fallback for {sender} when the sending inbox has no display name.
   senderName               String @default("")
   followUpDelayDays        Int    @default(3)
+  // JSON array: days before each follow-up, counted from the email before
+  // it. A missing entry falls back to followUpDelayDays.
+  followUpDelaysDays       String @default("[]")
   // UNUSED since each sending inbox has its own limit (SendingInbox).
   dailyLimit               Int    @default(10)
 

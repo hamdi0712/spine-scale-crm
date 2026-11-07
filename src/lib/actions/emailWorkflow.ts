@@ -19,17 +19,11 @@ import {
   EMAIL_OPENER_MAX_CHARS,
   SEQUENCE_MAX_TOKENS,
   SequenceContext,
-  assumptionReason,
   buildEmailOpenerPrompt,
-  buildFirstMessageFallbackPrompt,
-  emailCuriosityPainSignalLine,
-  emailCuriosityProcessLine,
   formatInternalNote,
-  gapAsStatementReason,
-  inventedStatsReason,
   parseEmailOpenerReply,
-  parseFirstMessageFallbackReply,
 } from "@/lib/outreachSequence";
+import { cleanClinicName, openerReason, preSendCheck } from "@/lib/emailRules";
 import {
   CONTACT_FORM_CALL_AFTER_DAYS,
   EMAIL_REPLY_TYPE_LABELS,
@@ -38,6 +32,7 @@ import {
   MAX_FOLLOW_UPS,
   MAX_TEMPLATE_CHARS,
   contactCheck,
+  contactValidation,
   defaultEmailVersion,
   isInboxAddress,
   readEmailReplyType,
@@ -156,12 +151,14 @@ async function loadLead(leadId: string) {
 }
 
 export type OpenerResult =
-  | { ok: true; mechanism: string; fellBack?: string | null }
+  | { ok: true; angle: string; manual: boolean }
   | { ok: false; error: string };
 
-// Drafts the opener and builds the whole email around it from the template
-// for this lead's version. Regenerating is pressing it again: a new opener,
-// a fresh email, and the approval cleared.
+// Drafts the opener under the playbook rules (src/lib/emailRules.ts) and
+// builds the whole email around it. Built only on cited evidence; where none
+// at levels 1–4 exists, nothing is invented: the lead is set to
+// needs_manual_opener (openerAngle "manual") for an opener written by hand.
+// Regenerating is pressing it again: a new opener, the approval cleared.
 export async function generateEmailOpener(leadId: string): Promise<OpenerResult> {
   const lead = await loadLead(leadId);
   if (!lead) return { ok: false, error: "That lead no longer exists." };
@@ -187,59 +184,48 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
     icpPainPoints: (await loadActiveIcp())?.painPoints ?? null,
   };
   const scorecard = scorecardEvidence(lead.icpBreakdown);
-  const { system, user } = buildEmailOpenerPrompt(ctx, scorecard);
-
-  // The made-up-stats check, the gap rule and the no-bridging rule, after
-  // the model has written it; a line that fails any is asked for once more,
-  // then given up on.
-  const screen = (opener: string, basis: "cited" | "gap" | null) =>
-    inventedStatsReason(opener, ctx.evidence) ?? gapAsStatementReason(opener, basis) ?? assumptionReason(opener);
 
   let opener: string | null = null;
+  let angle: string = "manual";
   let note: string | null = null;
   let rejected: string | null = null;
-  for (let attempt = 0; attempt < 2 && opener === null; attempt++) {
-    const reply = await deepSeekJson({ system, user, maxTokens: SEQUENCE_MAX_TOKENS });
-    if (!reply.ok) return { ok: false, error: reply.error };
-    const parsed = parseEmailOpenerReply(reply.content);
-    if (!parsed) return { ok: false, error: "DeepSeek answered, but not in a shape that reads as an opener. Nothing was saved — try again." };
-    if (parsed.opener === null) break; // nothing true to say: the fallback below
-    const why = screen(parsed.opener, parsed.basis);
-    if (why) {
-      rejected = why;
-      continue;
+  // Only cited evidence may be stated: with none, there is nothing to call
+  // the model for.
+  if (scorecard.cited.length > 0) {
+    const { system, user } = buildEmailOpenerPrompt(ctx, scorecard);
+    const sourceText = `${scorecard.cited.join("\n")}\n${lead.websiteNotes ?? ""}`;
+    for (let attempt = 0; attempt < 2 && opener === null; attempt++) {
+      const reply = await deepSeekJson({ system, user, maxTokens: SEQUENCE_MAX_TOKENS });
+      if (!reply.ok) return { ok: false, error: reply.error };
+      const parsed = parseEmailOpenerReply(reply.content);
+      if (!parsed) return { ok: false, error: "DeepSeek answered, but not in a shape that reads as an opener. Nothing was saved — try again." };
+      if (parsed.opener === null) break; // no level 1–4 evidence: manual
+      const why = openerReason(parsed.opener, { clinicName: lead.clinicName, sourceText });
+      if (why) {
+        rejected = why;
+        continue;
+      }
+      opener = parsed.opener;
+      angle = parsed.angle;
+      note = formatInternalNote(parsed.note);
     }
-    opener = parsed.opener;
-    note = formatInternalNote(parsed.note);
   }
-  // Rejected twice: rather than saving nothing, the curiosity fallback below
-  // writes the opener, and the note and result say why.
-  const fellBack = opener === null && rejected !== null ? `the observation opener was rejected twice (${rejected})` : null;
 
-  let mechanism = "observation";
   if (opener === null) {
-    // The curiosity fallback, as Step 2 has it: one true detail to anchor a
-    // question on, or a soft signal pointing at no-shows.
-    const fb = buildFirstMessageFallbackPrompt(ctx);
-    const reply = await deepSeekJson({ system: fb.system, user: fb.user, maxTokens: SEQUENCE_MAX_TOKENS });
-    if (!reply.ok) return { ok: false, error: reply.error };
-    const parsed = parseFirstMessageFallbackReply(reply.content);
-    if (!parsed) return { ok: false, error: "DeepSeek answered the fallback, but not in a shape that can be read. Nothing was saved." };
-    const line = parsed.painSignal
-      ? emailCuriosityPainSignalLine(lead.clinicName)
-      : parsed.detail
-        ? emailCuriosityProcessLine(parsed.detail)
-        : null;
-    if (!line || screen(line, "gap")) {
-      return {
-        ok: false,
-        error: `The evidence carries nothing true and specific enough to open with${parsed.detailRejected ? ` (${parsed.detailRejected})` : ""}. Nothing was saved — enrich the lead, or write the opener by hand.`,
-      };
-    }
-    opener = line;
-    note = formatInternalNote(parsed.note);
-    if (fellBack) note = [`Fell back to curiosity: ${fellBack}.`, note].filter(Boolean).join("\n");
-    mechanism = parsed.painSignal ? "curiosity_pain_signal" : "curiosity_process";
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        emailOpener: null,
+        emailOpenerNote: rejected ? `No usable opener: rejected twice (${rejected}).` : "No cited evidence at levels 1–4 — write the opener by hand.",
+        emailOpenerMechanism: null,
+        openerAngle: "manual",
+        emailSubject: null,
+        emailBody: null,
+        emailApprovedAt: null,
+      },
+    });
+    revalidate(leadId);
+    return { ok: true, angle: "manual", manual: true };
   }
 
   if (opener.length > EMAIL_OPENER_MAX_CHARS) return { ok: false, error: "The opener came back too long. Try again." };
@@ -250,7 +236,8 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
     data: {
       emailOpener: opener,
       emailOpenerNote: note,
-      emailOpenerMechanism: mechanism,
+      emailOpenerMechanism: "observation",
+      openerAngle: angle,
       emailVersion: version,
       emailSubject: email.subject,
       emailBody: email.body,
@@ -258,7 +245,60 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
     },
   });
   revalidate(leadId);
-  return { ok: true, mechanism, fellBack };
+  return { ok: true, angle, manual: false };
+}
+
+// The opener written by hand (a needs_manual_opener lead, or any lead before
+// Email 1). The email is rebuilt around it and has to be approved again; the
+// pre-send check runs at approval.
+export async function saveManualOpener(leadId: string, raw: string): Promise<Result> {
+  const opener = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim() : "";
+  if (opener === "") return { ok: false, error: "Write the opener first." };
+  if (opener.length > EMAIL_OPENER_MAX_CHARS) return { ok: false, error: "That opener is too long." };
+  const lead = await loadLead(leadId);
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  if (lead.emailSends.length > 0) return { ok: false, error: "Email 1 has already been sent." };
+  const version = defaultEmailVersion(lead);
+  const email = renderEmail(await loadEmailSettings(), lead, version, opener);
+  if (lead.emailOpener && lead.emailOpener !== opener) {
+    await prisma.leadNote.create({ data: { leadId, body: `Previous email opener (${lead.openerAngle ?? "no angle"}): ${lead.emailOpener}` } });
+  }
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: {
+      emailOpener: opener,
+      emailOpenerNote: "Written by hand.",
+      openerAngle: "manual",
+      emailVersion: version,
+      emailSubject: email.subject,
+      emailBody: email.body,
+      emailApprovedAt: null,
+    },
+  });
+  revalidate(leadId);
+  return { ok: true };
+}
+
+// The short clinic name the front-desk greeting uses. Blank goes back to the
+// cleaned name. The draft is rebuilt around it.
+export async function setShortClinicName(leadId: string, raw: string): Promise<Result> {
+  const name = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+  const lead = await loadLead(leadId);
+  if (!lead) return { ok: false, error: "That lead no longer exists." };
+  const updated = { ...lead, shortClinicName: name || null };
+  const email =
+    lead.emailOpener && lead.emailSends.length === 0
+      ? renderEmail(await loadEmailSettings(), updated, defaultEmailVersion(lead), lead.emailOpener)
+      : null;
+  await prisma.lead.update({
+    where: { id: leadId },
+    data: {
+      shortClinicName: name || null,
+      ...(email ? { emailSubject: email.subject, emailBody: email.body, emailApprovedAt: null } : {}),
+    },
+  });
+  revalidate(leadId);
+  return { ok: true };
 }
 
 // Switches between the owner-direct and front-desk templates: the email is
@@ -302,6 +342,14 @@ export async function approveEmail(leadId: string): Promise<Result> {
   if (!lead.emailSubject || !lead.emailBody) return { ok: false, error: "There is no email to approve yet — draft the opener first." };
   const left = unfilledPlaceholders(`${lead.emailSubject}\n${lead.emailBody}`);
   if (left.length > 0) return { ok: false, error: `The email still has ${left.join(", ")} in it.` };
+  if (lead.emailSends.length === 0) {
+    const settings = await loadEmailSettings();
+    const failed = preSendCheck(lead.emailSubject, lead.emailBody, { optOutLine: settings.optOutLine, clinicName: lead.clinicName });
+    if (failed.length > 0) return { ok: false, error: `Pre-send check: ${failed.join(" ")}` };
+    if (defaultEmailVersion(lead) === "front_desk" && !lead.shortClinicName && cleanClinicName(lead.clinicName).flagged) {
+      return { ok: false, error: "Check the short clinic name on this lead first — the cleaned one may not read as the clinic." };
+    }
+  }
   await prisma.lead.update({ where: { id: leadId }, data: { emailApprovedAt: new Date() } });
   revalidate(leadId);
   return { ok: true };
@@ -341,8 +389,19 @@ export async function resolveContact(leadId: string, choice: string): Promise<Re
       },
     });
   } else if (choice === "keep") {
-    if (check.state !== "mismatch") return { ok: false, error: "There is nothing to settle." };
-    await prisma.lead.update({ where: { id: leadId }, data: { contactConfirmedAt: now } });
+    if (check.state !== "mismatch" && contactValidation(lead).issues.length === 0) return { ok: false, error: "There is nothing to settle." };
+    // Kept by hand: a one-word name counts as the surname, a blank contact
+    // falls back to "Hi there," / "the doctor". An owner address naming
+    // someone else still needs the contact or the address changed.
+    const kept = { ...lead, contactConfirmedAt: now };
+    const email =
+      lead.emailOpener && lead.emailSends.length === 0
+        ? renderEmail(await loadEmailSettings(), kept, defaultEmailVersion(lead), lead.emailOpener)
+        : null;
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: { contactConfirmedAt: now, ...(email ? { emailSubject: email.subject, emailBody: email.body, emailApprovedAt: null } : {}) },
+    });
   } else {
     return { ok: false, error: "Pick the scorecard's person or keep the contact." };
   }
