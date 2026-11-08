@@ -1046,6 +1046,7 @@ model Persona {
   reasonForFailure  String? // why those failed them
 
   concepts  Concept[]
+  connectorChanges ConnectorChange[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
@@ -2114,12 +2115,17 @@ model ConnectorChange {
   id      String @id @default(cuid())
   tool    String
   summary String
-  leadId  String
-  lead    Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  // Exactly one of these: the lead or the Ad Hub persona the change was made
+  // to. A persona the change created is SetNull when it is deleted (its id
+  // stays in `created`), so the row and its activity line outlive it.
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  personaId String?
+  persona   Persona? @relation(fields: [personaId], references: [id], onDelete: SetNull)
 
   before  String @default("{}")
   after   String @default("{}")
-  // { noteIds, taskIds, suppressionIds }
+  // { noteIds, taskIds, suppressionIds, personaIds }
   created String @default("{}")
 
   activityLogId String?   @unique
