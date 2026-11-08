@@ -99,7 +99,7 @@ export default function DailyOs({
         {/* The day: a ring for how far through, the week's days with their
             own progress, and a bar split into the four blocks by how long each
             takes, each filling in its own colour. */}
-        <section className="glass-panel !rounded-[18px] border p-5">
+        <section className="card card-sheen p-5">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
             <MonkGlassRing done={done} partial={0} total={all.length} size={96} caption={`${done} of ${all.length}`} />
             <div className="min-w-0 flex-1">
@@ -139,8 +139,8 @@ export default function DailyOs({
                   aria-current={on ? "date" : undefined}
                   className={`rounded-xl border px-3 py-2 transition-[background-color,border-color,box-shadow] ${
                     on
-                      ? "border-accent/40 bg-surface shadow-[0_1px_2px_rgba(16,24,40,0.06),0_0_0_3px_rgb(var(--c-accent)/0.08)]"
-                      : "border-transparent bg-[var(--glass-chip)] hover:border-line"
+                      ? "border-accent/35 bg-accent-soft/60 shadow-[0_0_0_3px_rgb(var(--c-accent)/0.08)]"
+                      : "border-line/70 bg-wash/40 hover:border-line hover:bg-wash/70"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
