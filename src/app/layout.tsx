@@ -45,6 +45,15 @@ const caveat = localFont({
   variable: "--font-hand",
 });
 
+// Geist, for one thing: the four headline numbers on the Dashboard's KPI
+// cards (KpiCard). Only the 600 cut is shipped, because that is the only one
+// used; nothing else in the app reads --font-geist.
+const geist = localFont({
+  src: [{ path: "./fonts/geist-latin-600.woff2", weight: "600", style: "normal" }],
+  display: "swap",
+  variable: "--font-geist",
+});
+
 export const metadata: Metadata = {
   title: "Spine Scale Ops",
   description: "Internal ops CRM for Spine Scale",
@@ -115,7 +124,7 @@ export default function RootLayout({
             Guided text for a frame. See lib/displayMode.ts. */}
         <script dangerouslySetInnerHTML={{ __html: DISPLAY_MODE_INIT_SCRIPT }} />
       </head>
-      <body className={`${inter.variable} ${plexMono.variable} ${caveat.variable} font-sans`}>{children}</body>
+      <body className={`${inter.variable} ${plexMono.variable} ${caveat.variable} ${geist.variable} font-sans`}>{children}</body>
     </html>
   );
 }
