@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { createPersonaRecord, updatePersonaRecord } from "@/lib/adhubPersonas";
 import {
   AD_COMPLIANCE_ITEMS,
   AWARENESS_LEVELS,
@@ -114,23 +115,17 @@ function personaFields(formData: FormData, prefix = "") {
 export async function createPersona(formData: FormData) {
   const name = str(formData, "name");
   if (!name) return;
-  const persona = await prisma.persona.create({
-    data: { name, ...personaFields(formData) },
-  });
-  revalidateAdHub();
+  const persona = await createPersonaRecord(name, personaFields(formData));
   redirect(`/ad-hub/personas/${persona.id}`);
 }
 
 export async function updatePersona(id: string, formData: FormData) {
-  await prisma.persona.update({
-    where: { id },
-    data: {
-      name: str(formData, "name") ?? "Untitled persona",
-      ...personaFields(formData),
-    },
+  // The form posts every field, so the whole set is written — a cleared box
+  // clears the field.
+  await updatePersonaRecord(id, {
+    name: str(formData, "name") ?? "Untitled persona",
+    ...personaFields(formData),
   });
-  revalidateAdHub();
-  revalidatePath(`/ad-hub/personas/${id}`);
 }
 
 // Concepts cascade off a persona, and creatives off those concepts — deleting
@@ -232,9 +227,10 @@ export async function createConceptFromWizard(formData: FormData) {
   if (!personaId) {
     const personaName = str(formData, "personaName");
     if (!personaName) return;
-    const persona = await prisma.persona.create({
-      data: { name: personaName, ...personaFields(formData, "persona_") },
-    });
+    const persona = await createPersonaRecord(
+      personaName,
+      personaFields(formData, "persona_"),
+    );
     personaId = persona.id;
   }
 
