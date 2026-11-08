@@ -261,7 +261,21 @@ function HabitRow({ row, day }: { row: MonkHabitDay; day: string }) {
 // The ring, drawn for this page: a frosted track, a blue arc for what is
 // done, a lighter blue run for what is part-done, and the blue glass in the
 // middle. Colours come from .monk-ring-* in globals.css, which switch per theme.
-export function MonkGlassRing({ done, partial, total }: { done: number; partial: number; total: number }) {
+export function MonkGlassRing({
+  done,
+  partial,
+  total,
+  size = 152,
+  caption,
+}: {
+  done: number;
+  partial: number;
+  total: number;
+  // Drawn at 152 and scaled; the type scales with it.
+  size?: number;
+  caption?: string;
+}) {
+  const k = size / 152;
   const S = 152;
   const C = S / 2;
   const R = 58;
@@ -272,8 +286,8 @@ export function MonkGlassRing({ done, partial, total }: { done: number; partial:
   const ang = -Math.PI / 2 + 2 * Math.PI * pDone;
   const pct = Math.round(pDone * 100);
   return (
-    <div className="relative shrink-0" style={{ width: S, height: S }}>
-      <svg width={S} height={S} viewBox={`0 0 ${S} ${S}`} className="absolute inset-0 overflow-visible" role="img" aria-label={`${done} of ${total} done`}>
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${S} ${S}`} className="absolute inset-0 overflow-visible" role="img" aria-label={`${done} of ${total} done`}>
         <defs>
           <linearGradient id="monk-ring-track" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" className="monk-ring-track-a" />
@@ -297,10 +311,10 @@ export function MonkGlassRing({ done, partial, total }: { done: number; partial:
           </>
         )}
       </svg>
-      <div className="glass-panel absolute flex flex-col items-center justify-center rounded-full border" style={{ inset: C - R + W / 2 + 6 }}>
-        <div className="num text-[26px] font-semibold leading-none tracking-[-0.02em]">{pct}%</div>
-        <div className="num mt-1 text-[11px] text-muted">
-          {done} of {total}
+      <div className="glass-panel absolute flex flex-col items-center justify-center rounded-full border" style={{ inset: (C - R + W / 2 + 6) * k }}>
+        <div className="num font-semibold leading-none tracking-[-0.02em]" style={{ fontSize: Math.round(26 * k) }}>{pct}%</div>
+        <div className="num mt-1 text-[11px] text-muted" style={k < 0.8 ? { fontSize: 10, marginTop: 2 } : undefined}>
+          {caption ?? `${done} of ${total}`}
         </div>
       </div>
     </div>

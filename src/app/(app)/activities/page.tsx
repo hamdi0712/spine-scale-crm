@@ -43,16 +43,30 @@ export default async function ActivitiesPage({
     const day = days.find((d) => d.key === asked) ?? fallback;
     const weekday = days.indexOf(day);
     const date = toChecklistDay(parseDayKey(day.key, now));
-    const rows = await prisma.dailyChecklistEntry.findMany({
-      where: { date, item: { startsWith: "os:" }, checked: true },
-      select: { item: true },
+    // The whole week's ticks: the day on screen, and each weekday's progress
+    // for the day picker.
+    const weekRows = await prisma.dailyChecklistEntry.findMany({
+      where: {
+        date: { gte: monday, lte: addDays(monday, 4) },
+        item: { startsWith: "os:" },
+        checked: true,
+      },
+      select: { item: true, date: true },
+    });
+    const rows = weekRows.filter((r) => r.date.getTime() === date.getTime());
+    const progress: Record<string, number> = {};
+    days.forEach((d, i) => {
+      const t = toChecklistDay(parseDayKey(d.key, now)).getTime();
+      const total = osBlocks(i).reduce((a, b) => a + b.tasks.length, 0);
+      const done = weekRows.filter((r) => r.date.getTime() === t).length;
+      progress[d.key] = total ? done / total : 0;
     });
 
     return (
       <div>
         <Header view={view} />
         <div className="mt-8 wide:mt-4">
-          <DailyOs blocks={osBlocks(weekday)} days={days} day={day} checked={new Set(rows.map((r) => r.item))} />
+          <DailyOs blocks={osBlocks(weekday)} days={days} day={day} checked={new Set(rows.map((r) => r.item))} progress={progress} />
         </div>
       </div>
     );
