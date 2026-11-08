@@ -39,8 +39,14 @@
 // Nothing here touches the CRM: no lead, no client, no number off the funnel.
 // It shares the app shell, the sidebar and the design tokens, and nothing else.
 
+import { Suspense } from "react";
+import {
+  IconCalendarMonth,
+  IconChartDonut,
+  IconMountain,
+  IconNotebook,
+} from "@tabler/icons-react";
 import Link from "next/link";
-import { IconCalendarMonth, IconCrownFilled, IconNotebook } from "@tabler/icons-react";
 import {
   activeHabits,
   loadChallenge,
@@ -49,6 +55,9 @@ import {
   loadProgress,
 } from "@/lib/monkModeStore";
 import {
+  MonkChallenge,
+  MonkHabit,
+  MonkProgressMap,
   addDays,
   challengeDays,
   challengeProgress,
@@ -56,8 +65,11 @@ import {
   daysSoFar,
   indexProgress,
   monkCelebration,
+  monkChallengeCells,
+  monkDateRange,
   monkMonth,
   monkPerfectDays,
+  monkProgressNote,
   monkStreakRow,
   monkStreaks,
   monkTally,
@@ -67,17 +79,24 @@ import {
 import { parseDayKey } from "@/lib/dailyChecklist";
 import { fmtDate } from "@/lib/format";
 import { greetingFor } from "@/lib/greeting";
+import { fallbackMonkQuote } from "@/lib/monkModeQuote";
+import { loadMonkQuote } from "@/lib/monkModeQuoteStore";
 import Greeting from "@/components/Greeting";
 import MonkCelebrate from "@/components/MonkCelebrate";
-import MonkCalendarGrid from "@/components/MonkCalendarGrid";
 import MonkDayBar from "@/components/MonkDayBar";
-import MonkDonut from "@/components/MonkDonut";
-import MonkHabitGrid from "@/components/MonkHabitGrid";
 import MonkHeader from "@/components/MonkHeader";
-import MonkHero from "@/components/MonkHero";
 import MonkNote from "@/components/MonkNote";
-import MonkStatBadge from "@/components/MonkStatBadge";
-import MonkStreakPanel from "@/components/MonkStreakPanel";
+import {
+  MonkCardHead,
+  MonkChallengeBar,
+  MonkGlassRing,
+  MonkHabitList,
+  MonkLegend,
+  MonkMonthGrid,
+  MonkNoteBanner,
+  MonkStatTile,
+  MonkWeekStrip,
+} from "@/components/MonkToday";
 
 export const dynamic = "force-dynamic";
 
@@ -174,6 +193,14 @@ export default async function MonkModePage({
     isLastDay: shape.day === shape.total && shape.started,
   });
 
+  // Today's progress, for the day on screen: done, part-done, untouched.
+  const partOnDay = viewRows.filter((r) => r.status !== "complete" && r.done > 0).length;
+  const notYetOnDay = viewRows.length - doneOnDay - partOnDay;
+  const perfect = monkPerfectDays(active, progress, lived, now);
+  const encouragement = monkProgressNote(tally.pct, tally.decided);
+  const cells = monkChallengeCells(challenge, active, progress, now);
+  const daysLeft = Math.max(0, shape.total - shape.day);
+
   return (
     <div>
       {/* Renders nothing. It reads the occasion above and fires once, in the
@@ -184,139 +211,157 @@ export default async function MonkModePage({
       />
 
       <MonkHeader
-        title={
-          // The same greeting the main dashboard uses, rolled on the server on
-          // every request and re-checked against the browser's own clock after
-          // hydration. One greeting pattern in the app, not two.
-          <Greeting serverGreeting={greetingFor(now.getHours(), now.getDay())} />
-        }
+        title={<Greeting serverGreeting={greetingFor(now.getHours(), now.getDay())} />}
         subtitle={
-          active.length === 0
-            ? "No habits set yet."
-            : allDone
-              ? `All ${active.length} done today. That is the whole job.`
-              : `${active.length - doneToday} of ${active.length} still to do today.`
+          <Suspense fallback={<QuoteFallback />}>
+            <Quote challenge={challenge} habits={active} progress={progress} now={now} />
+          </Suspense>
         }
       />
 
-      {/* Which day the habits and the note below write to. On today it is a
-          pair of arrows; on any other day it says so in gold. */}
       <MonkDayBar day={viewing} today={today} />
 
-      <MonkHero
-        challenge={challenge}
-        habits={active}
-        progress={progress}
-        shape={shape}
-        now={now}
-      />
-
-      <section className="card mt-3.5 px-4 py-3">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="display text-base font-semibold">
-            Your {active.length}{" "}
-            {active.length === 1 ? "Non-Negotiable" : "Non-Negotiables"}
-          </h2>
-          {/* The day's score, in the one place it belongs: beside the things
-              being scored. It was a line of prose under the heading saying
-              "all 7 = a successful day", which is a rule anybody reading a
-              list of seven non-negotiables has already worked out. */}
-          {active.length > 0 && (
-            <span
-              className={`num text-xs font-medium ${allDoneOnDay ? "text-ok" : "text-muted"}`}
-            >
-              {doneOnDay} / {active.length} {isToday ? "today" : fmtDate(viewing)}
-            </span>
-          )}
-        </div>
-        <MonkHabitGrid rows={viewRows} day={viewKey} />
-      </section>
-
-      {/* Four panels of one height, and the height is theirs rather than the
-          tallest one's: each is a short reading, and the row is what makes
-          them comparable. This replaced a main column and a rail, which could
-          not be the same height as each other and so never were. */}
-      <div className="mt-3.5 grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-4 max-md:grid-cols-1">
-        <section className="card flex flex-col p-5">
-          {/* Every panel in the row is headed by its own mark now. Filled
-              rather than outlined: at sixteen pixels beside a heading a
-              stroked glyph reads as grey noise, and a solid one reads as an
-              icon. */}
-          <h2 className="display mb-4 flex shrink-0 items-center gap-2 text-base font-semibold">
-            <IconCrownFilled size={16} className="text-warn" aria-hidden />
-            Overall Progress
-          </h2>
-          <MonkDonut tally={tally} />
-        </section>
-
-        {/* `relative` is load-bearing: the treeline inside is absolutely
-            positioned and .card is overflow-hidden but position: static, so
-            without this the strip escapes the card and lays itself across the
-            full width of the page — which is exactly what it did. */}
-        <section className="card relative flex flex-col p-5">
-          <MonkStreakPanel
-            streaks={streaks}
-            row={streakRow}
-            perfectDays={monkPerfectDays(active, progress, lived, now)}
-            daysLived={lived.length}
+      <div className="grid items-stretch gap-6 lg:grid-cols-12 wide:gap-4">
+        {/* The challenge and the day's habits, one card. */}
+        <section className="card p-6 lg:col-span-7 wide:col-span-8 wide:p-5">
+          <MonkCardHead
+            icon={<IconMountain size={16} stroke={1.75} aria-hidden />}
+            title={`${shape.total} Day Challenge`}
+            sub={
+              <span className="num">
+                Day {shape.day} of {shape.total} · {monkDateRange(shape.start, shape.end)}
+                {!shape.started && " · not started"}
+                {shape.finished && " · finished"}
+              </span>
+            }
+            aside={
+              shape.started && !shape.finished ? (
+                <span className="inline-flex h-[22px] shrink-0 items-center rounded-full bg-accent-soft px-2 text-[11px] font-semibold text-accent">
+                  {daysLeft} {daysLeft === 1 ? "day" : "days"} to go
+                </span>
+              ) : null
+            }
           />
+          <MonkChallengeBar cells={cells} shape={shape} />
+          <div className="my-6 h-px bg-line wide:my-5" />
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-[17px] font-semibold tracking-[-0.01em] wide:text-[15px]">
+              {isToday ? <>Today&rsquo;s non-negotiables</> : `Non-negotiables · ${fmtDate(viewing)}`}
+            </h2>
+            {active.length > 0 && (
+              <span className="num text-[13px] text-muted wide:text-xs">
+                <b className="font-semibold text-ink">{doneOnDay}</b> of {active.length} done
+              </span>
+            )}
+          </div>
+          <MonkHabitList rows={viewRows} day={viewKey} />
         </section>
 
-        <section className="card flex flex-col p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="display flex items-center gap-2 text-base font-semibold">
-              <IconCalendarMonth
-                size={16}
-                stroke={2}
-                className="text-accent"
-                aria-hidden
-              />
-              {month.label}
-            </h2>
-            <Link
-              href="/monk-mode/calendar"
-              className="text-xs font-medium text-accent hover:underline"
-            >
-              View all
-            </Link>
+        {/* Progress, streak and the run's encouragement. */}
+        <section className="card flex flex-col p-6 lg:col-span-5 wide:col-span-4 wide:p-5">
+          <MonkCardHead
+            icon={<IconChartDonut size={16} stroke={1.75} aria-hidden />}
+            title={isToday ? <>Today&rsquo;s progress</> : `Progress · ${fmtDate(viewing)}`}
+          />
+          <div className="mt-6 flex items-center gap-8 wide:mt-5 wide:gap-10">
+            <MonkGlassRing done={doneOnDay} partial={partOnDay} total={active.length} />
+            <MonkLegend done={doneOnDay} partial={partOnDay} notYet={notYetOnDay} />
           </div>
-          <MonkCalendarGrid month={month} />
-          {/* The same strip Overall Progress closes with, so the two panels
-              end on one object rather than on a caption and a badge. The
-              trophy is unconditional here: the strip is the month's result and
-              a result needs a mark, where a bare count beside an empty slot
-              read as something failing to appear. */}
-          <div className="mt-auto pt-3">
-            <MonkStatBadge icon="trophy" tone="gold">
-              <span className="num font-medium text-ink">
-                {monthComplete} of {monthCells.length}
-              </span>{" "}
-              {monthCells.length === 1 ? "day" : "days"} complete this month
-            </MonkStatBadge>
+          <div className="mt-6 grid grid-cols-3 gap-2">
+            <MonkStatTile
+              label="Streak"
+              value={streaks.current}
+              unit={streaks.current === 1 ? "day" : "days"}
+              foot={<div className="mt-1 text-[11px] text-muted/80">{streaks.current > 0 ? "Keep it going" : "Starts with today"}</div>}
+            />
+            <MonkStatTile
+              label="Best"
+              value={streaks.best}
+              unit={streaks.best === 1 ? "day" : "days"}
+              foot={<div className="mt-1 text-[11px] text-muted/80">Your record</div>}
+            />
+            <MonkStatTile
+              label="Perfect days"
+              value={perfect}
+              unit={`of ${lived.length}`}
+              foot={
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-wash">
+                  <i
+                    className="block h-full min-w-[4px] rounded-full bg-accent"
+                    style={{ width: `${lived.length > 0 ? (perfect / lived.length) * 100 : 0}%` }}
+                  />
+                </div>
+              }
+            />
+          </div>
+          <div className="my-6">
+            <MonkWeekStrip cells={streakRow} />
+          </div>
+          <div className="mt-auto">
+            <MonkNoteBanner text={encouragement.text} />
           </div>
         </section>
 
-        <section className="card flex flex-col p-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="display flex items-center gap-2 text-base font-semibold">
-              <IconNotebook
-                size={16}
-                stroke={2}
-                className="text-ai"
-                aria-hidden
-              />
-              {isToday ? <>Today&rsquo;s Note</> : `Note · ${fmtDate(viewing)}`}
-            </h2>
-            <Link
-              href="/monk-mode/journal"
-              className="text-xs font-medium text-accent hover:underline"
-            >
-              Journal
-            </Link>
+        {/* The note for the day on screen. */}
+        <section className="card flex flex-col p-6 lg:col-span-7 wide:col-span-8 wide:p-5">
+          <div className="mb-4">
+            <MonkCardHead
+              icon={<IconNotebook size={16} stroke={1.75} aria-hidden />}
+              title={isToday ? <>Today&rsquo;s note</> : `Note · ${fmtDate(viewing)}`}
+              aside={
+                <Link href="/monk-mode/journal" className="text-xs font-medium text-accent hover:underline">
+                  Open journal
+                </Link>
+              }
+            />
           </div>
-          <MonkNote day={viewKey} content={note} rows={6} grow />
+          <MonkNote day={viewKey} content={note} rows={7} grow />
+        </section>
+
+        {/* The month around the day on screen. */}
+        <section className="card p-6 lg:col-span-5 wide:col-span-4 wide:p-5">
+          <div className="mb-4">
+            <MonkCardHead
+              icon={<IconCalendarMonth size={16} stroke={1.75} aria-hidden />}
+              title={month.label}
+              aside={
+                <Link href="/monk-mode/calendar" className="text-xs font-medium text-accent hover:underline">
+                  View all
+                </Link>
+              }
+            />
+          </div>
+          <MonkMonthGrid month={month} />
+          <p className="num mt-3 text-xs text-muted">
+            {monthComplete} of {monthCells.length} {monthCells.length === 1 ? "day" : "days"} complete this month
+          </p>
         </section>
       </div>
     </div>
+  );
+}
+
+// The day's line, under the greeting. Loaded behind Suspense because it can
+// be written fresh for the day; the fallback is the day's stock line.
+async function Quote(props: {
+  challenge: MonkChallenge;
+  habits: MonkHabit[];
+  progress: MonkProgressMap;
+  now: Date;
+}) {
+  const quote = await loadMonkQuote(props);
+  return (
+    <span data-quote-source={quote.source}>
+      &ldquo;{quote.text}&rdquo; &mdash; {quote.author}
+    </span>
+  );
+}
+
+function QuoteFallback() {
+  const quote = fallbackMonkQuote(dayKey(toChecklistDay(new Date())));
+  return (
+    <span>
+      &ldquo;{quote.text}&rdquo; &mdash; {quote.author}
+    </span>
   );
 }
