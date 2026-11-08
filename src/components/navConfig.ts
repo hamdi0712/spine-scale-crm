@@ -37,55 +37,51 @@ export const DASHBOARD = {
 
 export interface NavGroup {
   label: string;
+  // The first group sits straight under Dashboard with no heading in the
+  // sidebar (the phone's More sheet still titles it).
+  headless?: boolean;
   items: { href: string; label: string; Glyph: typeof IconLayoutDashboard }[];
 }
 
+// Grouped by how the work goes rather than by what kind of tool a page is:
+// the day's own pages first, then selling, then the clients that come of it,
+// then the marketing that feeds it, then the one personal page.
 export const NAV_GROUPS: NavGroup[] = [
   {
-    // The funnel, in the order a clinic travels it: everything scraped lands
-    // in Discovery, only what scores gets through to Pipeline, the A- and
-    // B-tier ones nobody has written to yet queue up for outreach, and what
-    // closes becomes a client.
-    label: "Pipeline",
+    // Opened every morning, so ungrouped and at the top.
+    label: "My day",
+    headless: true,
+    items: [
+      { href: "/activities", label: "Tasks", Glyph: IconChecklist },
+      { href: "/calendar", label: "Calendar", Glyph: IconCalendarEvent },
+      { href: "/daily-kpi", label: "Daily KPI", Glyph: IconTargetArrow },
+    ],
+  },
+  {
+    // In the order a clinic travels: found, worked, written to.
+    label: "Sales",
     items: [
       { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
       { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
-      // Between the pipeline and the clients because that is where it sits in
-      // the work: a lead is in the pipeline before anybody has written to it,
-      // and this is the list of the ones nobody has.
-      { href: "/outreach", label: "Outreach Queue", Glyph: IconSend },
-      { href: "/clients", label: "Clients", Glyph: IconUsers },
+      { href: "/outreach", label: "Outreach queue", Glyph: IconSend },
     ],
   },
   {
-    // The day's own work — what is booked, what is owed, and what went out to
-    // clients. None of the three owns a record in the funnel; they are read
-    // from a standing start each morning.
-    label: "Operations",
+    label: "Clients",
     items: [
-      { href: "/calendar", label: "Calendar", Glyph: IconCalendarEvent },
-      { href: "/activities", label: "Activities", Glyph: IconChecklist },
-      { href: "/reporting", label: "Reporting", Glyph: IconChartBar },
+      { href: "/clients", label: "Clients", Glyph: IconUsers },
+      { href: "/reporting", label: "Reports", Glyph: IconChartBar },
     ],
   },
   {
-    // What feeds the funnel rather than sitting in it: the ad workshop, the
-    // day's own numbers against their goals, and the reusable copy.
-    label: "Growth tools",
+    label: "Marketing",
     items: [
       { href: "/ad-hub", label: "Ad Hub", Glyph: IconBulb },
-      { href: "/daily-kpi", label: "Daily KPI", Glyph: IconTargetArrow },
       { href: "/library", label: "Library", Glyph: IconBook },
     ],
   },
   {
-    // Monk Mode, alone under its own heading, and that is the point of the
-    // heading. The three groups above are the agency's work — the funnel, the
-    // day, what feeds the funnel — and this is the one item in the sidebar
-    // that is not about the business at all. Folding it into Operations would
-    // say it was another piece of the day's admin; a group of its own says
-    // what it is. Last, because it is the one thing here nobody opens in
-    // order to do their job.
+    // The one page that is not about the business at all.
     label: "Personal",
     items: [{ href: "/monk-mode", label: "Monk Mode", Glyph: IconMoonStars }],
   },

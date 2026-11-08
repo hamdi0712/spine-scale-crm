@@ -62,7 +62,7 @@ export default async function ClientReportingPage({
       <div className="flex items-start justify-between">
         <div>
           <Link href="/reporting" className="text-sm text-accent hover:underline">
-            ← Reporting
+            ← Reports
           </Link>
           <div className="mt-2 flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
             <h1 className="display text-[32px] font-semibold">
