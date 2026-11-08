@@ -724,6 +724,55 @@
   }
 }
 
+/* The compact big-monitor scale for every page that has no compact layout
+   of its own (AppShell adds .wide-compact; Dashboard, Pipeline, Discovery,
+   Outreach Queue and the lead page are left alone). The same sizes those
+   pages use, applied by rule rather than page by page; below 1600px nothing
+   here applies. */
+@media (min-width: 1600px) {
+  .wide-compact h1.display { font-size: 24px; line-height: 1.2; }
+  .wide-compact h1.display + p,
+  .wide-compact h1.display ~ .helper-text { margin-top: 4px; font-size: 12px; }
+  .wide-compact .btn, .wide-compact .btn-primary, .wide-compact .btn-danger {
+    height: 32px; padding-left: 12px; padding-right: 12px; font-size: 13px;
+  }
+  .wide-compact input.field, .wide-compact select.field { height: 32px; font-size: 13px; }
+  .wide-compact textarea.field { font-size: 13px; }
+  .wide-compact .th { padding-top: 8px; padding-bottom: 8px; font-size: 11px; }
+  .wide-compact .td { padding-top: 10px; padding-bottom: 10px; font-size: 13px; }
+
+  .wide-compact .p-6, .wide-compact .p-5 { padding: 16px; }
+  .wide-compact .px-6, .wide-compact .px-5 { padding-left: 16px; padding-right: 16px; }
+  .wide-compact .py-6, .wide-compact .py-5 { padding-top: 14px; padding-bottom: 14px; }
+  .wide-compact .py-10 { padding-top: 28px; padding-bottom: 28px; }
+  .wide-compact .gap-6 { gap: 16px; }
+  .wide-compact .gap-5 { gap: 14px; }
+  .wide-compact .mt-8 { margin-top: 20px; }
+  .wide-compact .mt-6 { margin-top: 16px; }
+  .wide-compact .mb-8 { margin-bottom: 20px; }
+  .wide-compact .mb-6 { margin-bottom: 16px; }
+  .wide-compact .space-y-8 > :not([hidden]) ~ :not([hidden]) { margin-top: 20px; }
+  .wide-compact .space-y-6 > :not([hidden]) ~ :not([hidden]) { margin-top: 16px; }
+
+  .wide-compact .text-xs { font-size: 11px; }
+  .wide-compact .text-sm { font-size: 13px; }
+  .wide-compact .text-base { font-size: 14px; }
+  .wide-compact .text-lg { font-size: 15px; }
+  .wide-compact .text-xl { font-size: 17px; }
+  .wide-compact .text-2xl { font-size: 20px; }
+  .wide-compact .text-3xl { font-size: 24px; }
+
+  /* The sidebar on every page: shorter rows, smaller type and icons. */
+  .sidebar-compact .h-\[42px\] { height: 34px; font-size: 13px; }
+  .sidebar-compact .h-\[42px\] svg { width: 17px; height: 17px; }
+  .sidebar-compact .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 2px; }
+  .sidebar-compact .text-\[11px\] { font-size: 10px; }
+  .sidebar-compact .text-xs { font-size: 11px; }
+  .sidebar-compact .text-base { font-size: 14px; }
+  .sidebar-compact .pt-5 { padding-top: 16px; }
+  .sidebar-compact .pb-4 { padding-bottom: 12px; }
+}
+
 /* Single-line controls get a fixed 42px height; multi-line fields keep
    vertical padding and a taller default. */
 input.field,

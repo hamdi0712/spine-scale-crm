@@ -42,7 +42,7 @@ export default function Sidebar({
       // Below md the sidebar is not drawn at all: a phone navigates by the
       // bottom tab bar instead (MobileNav). z-index only from md to lg, where
       // it is the icon rail and must sit over the page's sticky furniture.
-      className={`fixed inset-y-0 left-0 flex flex-col border-r border-line/70 bg-panel max-md:hidden md:max-lg:z-30 ${
+      className={`sidebar-compact fixed inset-y-0 left-0 flex flex-col border-r border-line/70 bg-panel max-md:hidden md:max-lg:z-30 ${
         collapsed ? "w-16" : "w-56"
       }`}
     >
