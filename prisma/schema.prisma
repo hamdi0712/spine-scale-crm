@@ -1112,12 +1112,14 @@ model Creative {
   creativeNumber Int     @default(1) // batch/creative number within the concept
   creativeType   String  @default("PHOTO") // PHOTO | VIDEO | UGC
 
-  conceptHeadline String @default("") // the hook — bold, predominant text
+  rawHook         String @default("") // the hook as first written — internal, never goes live
+  conceptHeadline String @default("") // the compliant hook — bold, predominant text that goes live
   adHeadline      String @default("") // 40–50 characters
   adCopy          String @default("")
   cta             String @default("")
 
-  // READY is gated on every compliance item being checked — enforced in
+  // READY and everything after it are gated on every compliance item being
+  // checked and a compliant headline that differs from rawHook — enforced in
   // src/lib/actions/adhub.ts, not by the database.
   status String @default("DRAFT") // DRAFT | COMPLIANCE_REVIEW | READY | LAUNCHED | TESTING | WINNER | LOSER
 

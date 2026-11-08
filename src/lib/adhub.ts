@@ -279,7 +279,7 @@ export const AD_COMPLIANCE_ITEMS: string[] = [
 ];
 
 export const AD_COMPLIANCE_RULE =
-  "Every item has to be checked before a creative can be marked Ready. This is the gate between written and live — nothing goes to the ad account until it clears.";
+  "Every item has to be checked, and the compliant headline written, before a creative can be marked Ready or moved past it. This is the gate between written and live — nothing goes to the ad account until it clears. Editing the live copy afterwards unticks the checklist.";
 
 export interface ComplianceLike {
   checked: boolean;
@@ -293,16 +293,62 @@ export function complianceCheckedCount(items: ComplianceLike[]): number {
   return items.filter((i) => i.checked).length;
 }
 
-// The one status the gate blocks. Everything else stays selectable — a
-// creative can sit in compliance review, or be killed, at any point.
-export const COMPLIANCE_GATED_STATUS: CreativeStatus = "READY";
+// Every status from Ready onward is behind the gate: a creative cannot be
+// marked Ready, nor jump straight to Launched or a test result, without
+// clearing it. Draft and Compliance review stay selectable at any point.
+export const COMPLIANCE_GATED_STATUSES: readonly CreativeStatus[] = [
+  "READY",
+  "LAUNCHED",
+  "TESTING",
+  "WINNER",
+  "LOSER",
+];
+
+export function isGatedStatus(status: string): boolean {
+  return (COMPLIANCE_GATED_STATUSES as readonly string[]).includes(status);
+}
+
+// The hook as first written (internal) against the version that goes live.
+// Compared ignoring case and surrounding whitespace, so a re-cased copy of
+// the raw hook does not count as a compliant rewrite.
+function sameHeadline(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+export interface GateCreativeLike {
+  rawHook: string;
+  conceptHeadline: string;
+}
+
+// Why this creative cannot move to a gated status — empty when it can. The
+// dropdown and setCreativeStatus both read this, so the two never disagree.
+export function readyBlockers(
+  creative: GateCreativeLike,
+  compliance: ComplianceLike[],
+): string[] {
+  const reasons: string[] = [];
+  if (!compliancePassed(compliance)) {
+    reasons.push("every compliance item has to be checked");
+  }
+  if (creative.conceptHeadline.trim() === "") {
+    reasons.push("the compliant headline is empty");
+  } else if (sameHeadline(creative.rawHook, creative.conceptHeadline)) {
+    reasons.push("the compliant headline is the same as the raw hook");
+  }
+  return reasons;
+}
 
 export function isStatusBlocked(
   status: string,
+  creative: GateCreativeLike,
   compliance: ComplianceLike[],
 ): boolean {
-  return status === COMPLIANCE_GATED_STATUS && !compliancePassed(compliance);
+  return isGatedStatus(status) && readyBlockers(creative, compliance).length > 0;
 }
+
+// The fields that go live. Changing any of them means the compliance review
+// no longer describes this creative.
+export const LIVE_COPY_FIELDS = ["conceptHeadline", "adHeadline", "adCopy", "cta"] as const;
 
 // ─── Tree rollups ──────────────────────────────────────────────────────────
 
