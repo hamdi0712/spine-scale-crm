@@ -2210,3 +2210,47 @@ html[data-mode="pro"] :is(.helper-text, .guided-only):first-child + * {
 .dark .monk-ring-glow { filter: drop-shadow(0 3px 4px rgba(77, 141, 255, 0.25)); }
 .dark .monk-dot-partial { background: #3D5F94; }
 .dark .monk-dot-rest { background: #22304A; box-shadow: inset 0 0 0 1px #2E3E58; }
+
+/* ─── Dashboard, compact (big monitor only) ─────────────────────────────
+   The Dashboard at the Pipeline/sidebar scale on screens 1600px and wider:
+   smaller header and controls, tighter cards and gaps, 13/11/15px type, thin
+   business-hours clocks, lighter pipeline and label numbers, and the Geist
+   KPI numbers at 34px without growing the cards. Below 1600px nothing here
+   applies. Scoped by .dash-compact on the Dashboard's root (page.tsx). */
+@media (min-width: 1600px) {
+  /* Header: pipeline scale */
+  .dash-compact h1.display { font-size: 24px !important; line-height: 1.2 !important; }
+  .dash-compact h1.display + p, .dash-compact h1.display ~ p { font-size: 12px !important; margin-top: 4px !important; }
+  .dash-compact .btn, .dash-compact .btn-primary { height: 32px !important; padding: 0 12px !important; font-size: 13px !important; }
+  .dash-compact .segment-item { height: 28px !important; }
+  /* Cards: small radius, tight padding */
+  .dash-compact .card, .dash-compact .card-kpi, .dash-compact section.card { padding: 12px 14px !important; }
+  .dash-compact .glass-panel { padding: 10px 12px !important; }
+  .dash-compact .grid { gap: 10px !important; }
+  .dash-compact .mt-4, .dash-compact .mt-5, .dash-compact .mt-6, .dash-compact .mt-8 { margin-top: 10px !important; }
+  /* Type: 13px body, 11px small, 15px titles */
+  .dash-compact .text-sm, .dash-compact .text-base { font-size: 13px !important; }
+  .dash-compact .text-xs, .dash-compact .text-\[12px\] { font-size: 11px !important; }
+  .dash-compact h2, .dash-compact h2.display, .dash-compact .text-xl, .dash-compact .text-lg { font-size: 15px !important; }
+  /* Business hours: smaller clocks, regular weight */
+  .dash-compact .text-\[26px\], .dash-compact .text-\[28px\], .dash-compact .text-2xl, .dash-compact .text-3xl { font-size: 20px !important; font-weight: 400 !important; font-variant-numeric: proportional-nums; letter-spacing: -0.02em; }
+  .dash-compact .h-10.w-10 { width: 28px !important; height: 28px !important; }
+  .dash-compact .h-9.w-9 { width: 26px !important; height: 26px !important; }
+  /* Pipeline snapshot: smaller donut, Daily OS number style on the total and amounts */
+  .dash-compact .num.text-\[17px\] { font-weight: 400 !important; font-variant-numeric: proportional-nums !important; letter-spacing: -0.03em !important; }
+  .dash-compact li .num.text-xs.font-medium { font-weight: 400 !important; font-variant-numeric: proportional-nums !important; letter-spacing: -0.02em !important; }
+  /* KPI card labels: like "Chat History" — regular weight, no extra tracking */
+  .dash-compact .card-kpi .font-medium.tracking-\[0\.02em\], .dash-compact .font-medium.tracking-\[0\.02em\].text-muted { font-weight: 400 !important; letter-spacing: -0.005em !important; font-size: 12px !important; }
+  /* Pipeline snapshot legend keeps its original size */
+  .dash-compact ul.space-y-2 li .text-xs { font-size: 12px !important; }
+  .dash-compact .card-kpi .text-\[28px\] { font-size: 28px !important; font-weight: 600 !important; letter-spacing: -0.03em !important; }
+  /* Bigger KPI numbers, same card height: the extra size comes out of the gaps around them */
+  .dash-compact .card-kpi .text-\[28px\] { font-size: 34px !important; margin-top: 3px !important; letter-spacing: -0.035em !important; }
+  .dash-compact .card-kpi .mt-2\.5 { margin-top: 4px !important; }
+  /* Client health empty state: more room between the icon and the text */
+  .dash-compact p.mt-5.text-sm.font-medium { margin-top: 26px !important; }
+  /* Client health + Pipeline snapshot: shorter, so Recent activity's third row fits */
+  .dash-compact .px-2.py-3.text-center { padding-top: 0 !important; padding-bottom: 0 !important; }
+  .dash-compact .px-2.py-3.text-center .empty-mark { transform: scale(.85); margin-top: -4px; }
+  .dash-compact .flex.items-center.gap-5 { margin-top: 2px !important; }
+}

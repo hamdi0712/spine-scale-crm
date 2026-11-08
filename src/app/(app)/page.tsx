@@ -339,7 +339,7 @@ export default async function DashboardPage() {
 
 
   return (
-    <div className="max-md:pt-4">
+    <div className="dash-compact max-md:pt-4">
       <div className="flex flex-wrap items-end justify-between gap-4">
         {/* min-w-0 so the quote below can wrap: a flex item's automatic minimum
             size is its content, so without this a long motivational line sets
