@@ -20,7 +20,6 @@ import {
   IconSparkles,
   IconTrophy,
 } from "@tabler/icons-react";
-import { MonkGlassRing } from "@/components/MonkToday";
 import {
   OS_AFTER_CLIENT,
   OS_RULES,
@@ -101,7 +100,6 @@ export default function DailyOs({
             takes, each filling in its own colour. */}
         <section className="card card-sheen p-5">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-            <MonkGlassRing done={done} partial={0} total={all.length} size={96} caption={`${done} of ${all.length}`} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h2 className="text-[20px] font-semibold tracking-[-0.02em] wide:text-[18px]">
@@ -116,6 +114,9 @@ export default function DailyOs({
                 )}
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
+                <span>
+                  <b className="num font-semibold text-ink">{done}</b> of {all.length} done
+                </span>
                 <span className="flex items-center gap-1.5">
                   <IconClock size={15} stroke={1.75} aria-hidden />
                   <span className="num">
