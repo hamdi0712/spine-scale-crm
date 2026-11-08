@@ -410,7 +410,7 @@ export default function CopilotPage({
                 Ask Iman
               </h2>
             )}
-            <p className="helper-text mt-2 max-w-[440px] text-sm leading-relaxed text-muted">
+            <p className="mt-2 max-w-[440px] text-sm leading-relaxed text-muted">
               Ask me anything about your pipeline, clients, or what to focus on
               today.
             </p>
