@@ -243,7 +243,7 @@ export function buildFocus({
         ? `/pipeline/${task.leadId}`
         : task.clientId
           ? `/clients/${task.clientId}`
-          : "/activities",
+          : "/activities?view=board",
       note: overdue ? "Overdue" : "Due today",
       at: null,
       tone: overdue ? "red" : "amber",
@@ -368,7 +368,7 @@ export function summariseFocus(items: FocusItem[]): FocusSummary {
     top.kind === "FOLLOW_UP"
       ? { label: "View pipeline", href: "/pipeline" }
       : top.kind === "TASK"
-        ? { label: "View activities", href: "/activities" }
+        ? { label: "View tasks", href: "/activities?view=board" }
       : top.kind === "HEALTH"
         ? { label: "View reporting", href: "/reporting" }
         : { label: "Open record", href: top.href };

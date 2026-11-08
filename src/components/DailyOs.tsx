@@ -136,7 +136,7 @@ export default function DailyOs({
               return (
                 <Link
                   key={d.key}
-                  href={`/activities?view=os&date=${d.key}`}
+                  href={`/activities?date=${d.key}`}
                   aria-current={on ? "date" : undefined}
                   className={`rounded-xl border px-3 py-2 transition-[background-color,border-color,box-shadow] ${
                     on
