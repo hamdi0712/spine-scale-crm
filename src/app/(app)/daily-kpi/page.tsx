@@ -639,7 +639,7 @@ export default async function DailyKpiPage({
                   : `${streak} ${streak === 1 ? "day" : "days"} in a row behind you — hit both daily goals ${isToday ? "today" : "that day"} to keep it.`}
             </p>
           </div>
-          <Link href="/activities?view=os" className="btn w-full justify-center">
+          <Link href="/activities" className="btn w-full justify-center">
             Open Daily OS
             <Icon name="arrowRight" className="h-4 w-4" />
           </Link>

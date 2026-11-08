@@ -19,7 +19,8 @@ export default async function ActivitiesPage({
 }) {
   // "checklist" is the old daily checklist's address; it opens the Daily OS
   // that replaced it.
-  const view = searchParams.view === "os" || searchParams.view === "checklist" ? "os" : "board";
+  // The Daily OS opens first; the board is ?view=board.
+  const view = searchParams.view === "board" ? "board" : "os";
 
   if (view === "os") {
     const now = new Date();
@@ -151,15 +152,15 @@ function Header({ view }: { view: "board" | "os" }) {
       <div className="segment">
         <Link
           href="/activities"
-          className={`segment-item ${view === "board" ? "segment-item-on" : ""}`}
-        >
-          Board
-        </Link>
-        <Link
-          href="/activities?view=os"
           className={`segment-item ${view === "os" ? "segment-item-on" : ""}`}
         >
           Daily OS
+        </Link>
+        <Link
+          href="/activities?view=board"
+          className={`segment-item ${view === "board" ? "segment-item-on" : ""}`}
+        >
+          Board
         </Link>
       </div>
     </div>
