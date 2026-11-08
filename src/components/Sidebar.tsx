@@ -10,7 +10,16 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconChevronDown, IconLayoutDashboard, IconSelector, IconSparkles } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconLayoutDashboard,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+  IconSelector,
+  IconSparkles,
+} from "@tabler/icons-react";
+import CommandSearch from "@/components/CommandSearch";
+import { readStoredMode } from "@/lib/displayMode";
 import { logout } from "@/lib/actions/auth";
 import Icon from "@/components/Icons";
 import ImanAvatar from "@/components/ImanAvatar";
@@ -62,23 +71,32 @@ export default function Sidebar({
         collapsed ? "w-16" : "w-56"
       }`}
     >
-      <div className={`flex items-center px-4 pb-4 pt-5 ${collapsed ? "flex-col gap-3 px-0" : "justify-between"}`}>
+      <div className={`flex items-center px-4 pb-3 pt-4 ${collapsed ? "flex-col gap-3 px-0" : "justify-between"}`}>
         {collapsed ? (
-          <LogoIconChip />
+          <LogoIconChip className="!h-6 !w-6 !rounded-[7px]" />
         ) : (
-          <Link href="/" className="flex min-w-0 items-center gap-2.5">
-            <LogoIconChip />
-            <span className="display truncate text-base font-semibold text-ink">Spine Scale</span>
+          <Link href="/" className="flex min-w-0 items-center gap-2">
+            <LogoIconChip className="!h-6 !w-6 !rounded-[7px]" />
+            <span className="display truncate text-[14px] font-semibold text-ink">Spine Scale</span>
           </Link>
         )}
         <button
           type="button"
           onClick={onToggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="rounded-[10px] p-2 text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 md:max-lg:hidden"
+          className="rounded-[8px] p-1.5 text-muted hover:bg-wash hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 md:max-lg:hidden"
         >
-          <Icon name="chevronLeft" className={`h-4 w-4 ${collapsed ? "rotate-180" : ""}`} />
+          {collapsed ? (
+            <IconLayoutSidebarLeftExpand size={17} stroke={1.75} aria-hidden />
+          ) : (
+            <IconLayoutSidebarLeftCollapse size={17} stroke={1.75} aria-hidden />
+          )}
         </button>
+      </div>
+
+      {/* Search: pages and every clinic in the app, also on ⌘K. */}
+      <div className={collapsed ? "flex justify-center px-2 pb-2" : "px-3 pb-2"}>
+        <CommandSearch collapsed={collapsed} />
       </div>
 
       {/* Ask Iman: something you use from anywhere, so it sits above the list
@@ -240,6 +258,7 @@ function NavItem({
 // switch, Guided/Pro and Sign out — four rows of controls folded into one.
 function ProfileMenu({ collapsed }: { collapsed: boolean }) {
   const [open, setOpen] = useState(false);
+  const modeLine = useModeLine();
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -274,7 +293,7 @@ function ProfileMenu({ collapsed }: { collapsed: boolean }) {
           <>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-semibold text-ink">{USER_NAME}</span>
-              <span className="block truncate text-[11px] text-muted">Account &amp; display</span>
+              <span className="block truncate text-[11px] text-muted">{modeLine}</span>
             </span>
             <IconSelector size={14} stroke={1.75} className="text-muted" aria-hidden />
           </>
@@ -301,4 +320,28 @@ function ProfileMenu({ collapsed }: { collapsed: boolean }) {
       )}
     </div>
   );
+}
+
+// "Guided · Light": the display mode and theme in force, kept current as
+// either is switched (both toggles announce themselves).
+function useModeLine(): string {
+  const [line, setLine] = useState("Account & display");
+  useEffect(() => {
+    const read = () => {
+      const mode = readStoredMode() === "pro" ? "Pro" : "Guided";
+      const theme = document.documentElement.classList.contains("dark") ? "Dark" : "Light";
+      setLine(`${mode} · ${theme}`);
+    };
+    read();
+    window.addEventListener("display-mode", read);
+    window.addEventListener("storage", read);
+    const mo = new MutationObserver(read);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    return () => {
+      window.removeEventListener("display-mode", read);
+      window.removeEventListener("storage", read);
+      mo.disconnect();
+    };
+  }, []);
+  return line;
 }
