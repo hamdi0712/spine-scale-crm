@@ -30,6 +30,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // Every other page, and these below that width, keep the centred column.
   const pathname = usePathname();
   const wide = WIDE_PAGES.includes(pathname) || /^\/pipeline\/(?!new$)[^/]+$/.test(pathname);
+  // Every other page gets the same big-monitor scale by rule (.wide-compact
+  // in globals.css), edge to edge like the pages above.
+  const compact = !wide;
   // JobsProvider wraps the whole shell, so a long-running job's progress —
   // the header pill, the tab title, each page's panel — survives moving
   // between pages (JobProgress.tsx).
@@ -41,7 +44,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main
         className={`min-h-dvh transition-[margin] ${wide && pathname.startsWith("/pipeline") ? "pipeline-scope" : ""} max-md:ml-0 md:max-lg:ml-16 ${collapsed ? "ml-16" : "ml-56"}`}
       >
-        <div className={`mx-auto max-w-6xl px-10 py-10 ${wide ? "wide:max-w-none wide:px-8 wide:py-6" : ""} max-md:px-4 max-md:pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+24px)] max-md:pt-4 md:max-lg:px-6 md:max-lg:py-8`}>
+        <div className={`mx-auto max-w-6xl px-10 py-10 wide:max-w-none wide:px-8 wide:py-6 ${compact ? "wide-compact" : ""} max-md:px-4 max-md:pb-[calc(var(--tabbar-h)+env(safe-area-inset-bottom)+24px)] max-md:pt-4 md:max-lg:px-6 md:max-lg:py-8`}>
           {children}
         </div>
       </main>
