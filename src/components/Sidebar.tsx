@@ -99,30 +99,6 @@ export default function Sidebar({
         <CommandSearch collapsed={collapsed} />
       </div>
 
-      {/* Ask Iman: something you use from anywhere, so it sits above the list
-          rather than in it. */}
-      <div className={collapsed ? "flex justify-center px-2 pb-2" : "px-3 pb-2"}>
-        <Link
-          href={COPILOT.href}
-          title={collapsed ? "Ask Iman" : undefined}
-          className={`flex h-[34px] items-center gap-2 rounded-[10px] border text-[13px] font-medium ${NAV_MOTION} ${
-            collapsed ? "w-10 justify-center px-0" : "px-2.5"
-          } ${
-            copilotActive
-              ? "border-ai/40 bg-ai/15 text-ink"
-              : "border-ai/20 bg-gradient-to-br from-ai/10 to-accent/[0.07] text-ink hover:border-ai/35"
-          }`}
-        >
-          <ImanAvatar size="nav" />
-          {!collapsed && (
-            <>
-              <span className="flex-1">Ask Iman</span>
-              <IconSparkles size={14} stroke={1.75} className="text-ai" aria-hidden />
-            </>
-          )}
-        </Link>
-      </div>
-
       {/* A long-running job, while one runs — on every page. */}
       <div className={collapsed ? "flex justify-center pb-1" : "px-3 pb-1"}>
         <JobPill variant={collapsed ? "rail" : "sidebar"} />
@@ -173,6 +149,25 @@ export default function Sidebar({
         })}
       </nav>
 
+      {/* Ask Iman, back at the foot of the list where it always lived: a
+          page you go to, kept below the work rather than in it. */}
+      <div className={`pb-2 ${collapsed ? "px-2" : "px-3"}`}>
+        <Link
+          href={COPILOT.href}
+          title={collapsed ? "Ask Iman" : undefined}
+          className={`flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${NAV_MOTION} ${
+            collapsed ? "justify-center px-0" : "px-3"
+          } ${copilotActive ? "nav-active" : "text-muted hover:bg-wash hover:text-ink"}`}
+        >
+          <ImanAvatar size="nav" />
+          {!collapsed && (
+            <>
+              <span className="flex-1">Ask Iman</span>
+              <IconSparkles size={14} stroke={1.75} className="text-ai" aria-hidden />
+            </>
+          )}
+        </Link>
+      </div>
       <div className={`border-t border-line/60 pb-3 pt-2 ${collapsed ? "px-2" : "px-3"}`}>
         <Link
           href={SETTINGS.href}
