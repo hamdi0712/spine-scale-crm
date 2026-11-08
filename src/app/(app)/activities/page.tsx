@@ -1,19 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import {
-  addDays,
-  dayKey as toDayKey,
-  parseDayKey,
-  readDay,
-  toChecklistDay,
-} from "@/lib/dailyChecklist";
-import { ensureDay, readDayRows } from "@/lib/dailyChecklistStore";
-import { computeDailyBonus } from "@/lib/dailyBonus";
-import { loadDailyNumbers } from "@/lib/dailyNumbers";
+import { addDays, dayKey as toDayKey, parseDayKey, toChecklistDay } from "@/lib/dailyChecklist";
+import { OS_WEEKDAYS, osBlocks } from "@/lib/dailyOs";
 import { fmtDate } from "@/lib/format";
-import DailyChecklist from "@/components/DailyChecklist";
-import DailyNumbers from "@/components/DailyNumbers";
-import Icon from "@/components/Icons";
+import DailyOs, { OsDay } from "@/components/DailyOs";
 import TaskBoard, { BoardTask, TaskLinkOption } from "@/components/TaskBoard";
 
 export const dynamic = "force-dynamic";
@@ -27,70 +17,56 @@ export default async function ActivitiesPage({
 }: {
   searchParams: { view?: string; date?: string };
 }) {
-  const view = searchParams.view === "checklist" ? "checklist" : "board";
+  // "checklist" is the old daily checklist's address; it opens the Daily OS
+  // that replaced it.
+  const view = searchParams.view === "os" || searchParams.view === "checklist" ? "os" : "board";
 
-  if (view === "checklist") {
-    const today = toChecklistDay(new Date());
-    const day = parseDayKey(searchParams.date, new Date());
-    const isToday = day.getTime() === today.getTime();
-    // Today gets seeded on view — that write is the whole of the daily reset.
-    // A past day is read without writing, so opening the history never
-    // backfills rows onto a day the routine was not run on.
-    const rows = isToday ? await ensureDay(day) : await readDayRows(day);
-    const numbers = await loadDailyNumbers(day);
-    const checked = readDay(rows);
-    // The bonus is derived from the same counts the panel above draws, so the
-    // two are one reading of the day rather than two.
-    const bonus = computeDailyBonus(numbers);
-    const key = toDayKey(day);
+  if (view === "os") {
+    const now = new Date();
+    const today = toChecklistDay(now);
+    // This week, Monday to Friday. A weekend opens on the nearest weekday:
+    // Sunday on Monday, Saturday on Friday.
+    const dow = (today.getUTCDay() + 6) % 7; // Mon 0 … Sun 6
+    const monday = addDays(today, -dow);
+    const days: OsDay[] = OS_WEEKDAYS.map((label, i) => {
+      const d = addDays(monday, i);
+      return {
+        key: toDayKey(d),
+        label,
+        date: fmtDate(d),
+        future: d.getTime() > today.getTime(),
+        isToday: d.getTime() === today.getTime(),
+      };
+    });
+    const asked = searchParams.date ? toDayKey(toChecklistDay(parseDayKey(searchParams.date, now))) : null;
+    const fallback = days[Math.min(dow, 4)];
+    const day = days.find((d) => d.key === asked) ?? fallback;
+    const weekday = days.indexOf(day);
+    const date = toChecklistDay(parseDayKey(day.key, now));
+    // The whole week's ticks: the day on screen, and each weekday's progress
+    // for the day picker.
+    const weekRows = await prisma.dailyChecklistEntry.findMany({
+      where: {
+        date: { gte: monday, lte: addDays(monday, 4) },
+        item: { startsWith: "os:" },
+        checked: true,
+      },
+      select: { item: true, date: true },
+    });
+    const rows = weekRows.filter((r) => r.date.getTime() === date.getTime());
+    const progress: Record<string, number> = {};
+    days.forEach((d, i) => {
+      const t = toChecklistDay(parseDayKey(d.key, now)).getTime();
+      const total = osBlocks(i).reduce((a, b) => a + b.tasks.length, 0);
+      const done = weekRows.filter((r) => r.date.getTime() === t).length;
+      progress[d.key] = total ? done / total : 0;
+    });
 
     return (
       <div>
         <Header view={view} />
-        {/* Day navigation. Forward stops at today: the routine is a record of
-            days that have happened, and offering tomorrow would invite ticking
-            work nobody has done. */}
-        <div className="mt-8 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/activities?view=checklist&date=${toDayKey(addDays(day, -1))}`}
-              className="btn"
-              aria-label="Previous day"
-            >
-              <Icon name="chevronLeft" className="h-4 w-4" />
-            </Link>
-            <span className="num text-sm font-medium">
-              {isToday ? `Today — ${fmtDate(day)}` : fmtDate(day)}
-            </span>
-            {isToday ? (
-              <span className="btn pointer-events-none opacity-40" aria-hidden>
-                <Icon name="chevronRight" className="h-4 w-4" />
-              </span>
-            ) : (
-              <Link
-                href={`/activities?view=checklist&date=${toDayKey(addDays(day, 1))}`}
-                className="btn"
-                aria-label="Next day"
-              >
-                <Icon name="chevronRight" className="h-4 w-4" />
-              </Link>
-            )}
-          </div>
-          {!isToday && (
-            <Link href="/activities?view=checklist" className="btn">
-              Back to today
-            </Link>
-          )}
-        </div>
-
-        <div className="mt-6 space-y-6">
-          <DailyNumbers numbers={numbers} dayLabel={fmtDate(day)} isToday={isToday} />
-          <DailyChecklist
-            dayKey={key}
-            checked={checked}
-            bonus={bonus}
-            readOnly={!isToday}
-          />
+        <div className="mt-8 wide:mt-4">
+          <DailyOs blocks={osBlocks(weekday)} days={days} day={day} checked={new Set(rows.map((r) => r.item))} progress={progress} />
         </div>
       </div>
     );
@@ -161,14 +137,14 @@ export default async function ActivitiesPage({
 // The page title and the view toggle, shared by both views so the switch does
 // not move when it is used. Same .segment control the pipeline's Table/Board
 // pair wears.
-function Header({ view }: { view: "board" | "checklist" }) {
+function Header({ view }: { view: "board" | "os" }) {
   return (
     <div className="flex items-end justify-between max-md:flex-col max-md:items-stretch max-md:gap-4">
       <div>
         <h1 className="display text-[32px] font-semibold">Tasks</h1>
         <p className="helper-text mt-1.5 text-sm text-muted">
-          {view === "checklist"
-            ? "The fixed daily routine, and what the records say actually happened"
+          {view === "os"
+            ? "4 hours. Email first. Prep in the Manila morning, send into the US window at night."
             : "Everything that wants doing and is not a call, a follow-up or an onboarding step"}
         </p>
       </div>
@@ -180,10 +156,10 @@ function Header({ view }: { view: "board" | "checklist" }) {
           Board
         </Link>
         <Link
-          href="/activities?view=checklist"
-          className={`segment-item ${view === "checklist" ? "segment-item-on" : ""}`}
+          href="/activities?view=os"
+          className={`segment-item ${view === "os" ? "segment-item-on" : ""}`}
         >
-          Daily checklist
+          Daily OS
         </Link>
       </div>
     </div>
