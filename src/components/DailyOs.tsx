@@ -192,7 +192,7 @@ export default function DailyOs({
                   <span className="flex h-6 w-6 items-center justify-center rounded-full" style={{ color: `rgb(${look.c})`, background: `rgb(${look.c} / 0.14)` }}>
                     <Glyph size={13} stroke={1.9} aria-hidden />
                   </span>
-                  <div className="mt-2 text-[22px] font-normal leading-tight tracking-[-0.03em] [font-variant-numeric:proportional-nums]">{s.value}</div>
+                  <div className="mt-2 text-[22px] font-normal leading-tight tracking-[-0.03em] [font-variant-numeric:proportional-nums]">{rangeValue(s.value)}</div>
                   <div className="mt-0.5 text-[11.5px] leading-snug text-muted">{s.label}</div>
                 </div>
               );
@@ -407,5 +407,19 @@ function BlockBar({ blocks, checked, total }: { blocks: OsBlock[]; checked: Set<
       </div>
       <span className="sr-only">{fmtMinutes(total)} in all</span>
     </div>
+  );
+}
+
+// A range like "10–15": the dash gets equal room on both sides, so it sits in
+// the middle instead of leaning against one number under the tight spacing.
+function rangeValue(v: string) {
+  const i = v.indexOf("–");
+  if (i < 0) return v;
+  return (
+    <>
+      {v.slice(0, i)}
+      <span className="mx-[0.12em] inline-block">–</span>
+      {v.slice(i + 1)}
+    </>
   );
 }
