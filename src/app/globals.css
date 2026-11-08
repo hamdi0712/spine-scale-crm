@@ -761,8 +761,11 @@
   .wide-compact .text-xl { font-size: 17px; }
   .wide-compact .text-2xl { font-size: 20px; }
   .wide-compact .text-3xl { font-size: 24px; }
+}
 
-  /* The sidebar on every page: shorter rows, smaller type and icons. */
+/* The sidebar, compact on every desktop width (MacBook and big monitor):
+   shorter rows, smaller type and icons. */
+@media (min-width: 1024px) {
   .sidebar-compact .h-\[42px\] { height: 34px; font-size: 13px; }
   .sidebar-compact .h-\[42px\] svg { width: 17px; height: 17px; }
   .sidebar-compact .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 2px; }
