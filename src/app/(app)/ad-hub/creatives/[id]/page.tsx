@@ -20,8 +20,8 @@ import {
   CREATIVE_TYPES,
   CREATIVE_TYPE_LABELS,
   ITERATE_NOTE,
-  compliancePassed,
   isStatusBlocked,
+  readyBlockers,
   sophisticationMeta,
 } from "@/lib/adhub";
 import { CreativeStatusBadge, CreativeTypeChip } from "@/components/Badge";
@@ -52,7 +52,7 @@ export default async function CreativeDetailPage({
   if (!creative) notFound();
 
   const { concept } = creative;
-  const passed = compliancePassed(creative.compliance);
+  const blockers = readyBlockers(creative, creative.compliance);
   const update = updateCreative.bind(null, creative.id);
   const setStatus = setCreativeStatus.bind(null, creative.id);
   const duplicate = duplicateCreative.bind(null, creative.id);
@@ -157,16 +157,39 @@ export default async function CreativeDetailPage({
             </div>
 
             <div>
-              <label className="field-label" htmlFor="conceptHeadline">
-                Concept headline (hook)
-              </label>
-              <textarea
-                id="conceptHeadline"
-                name="conceptHeadline"
-                rows={2}
-                defaultValue={creative.conceptHeadline}
-                className="field"
-              />
+              <p className="field-label">Concept headline (hook)</p>
+              <div className="m-form-stack grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-muted" htmlFor="rawHook">
+                    Raw (internal)
+                  </label>
+                  <textarea
+                    id="rawHook"
+                    name="rawHook"
+                    rows={2}
+                    defaultValue={creative.rawHook}
+                    placeholder="The hook as it first came out"
+                    className="field mt-1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted" htmlFor="conceptHeadline">
+                    Compliant (goes live)
+                  </label>
+                  <textarea
+                    id="conceptHeadline"
+                    name="conceptHeadline"
+                    rows={2}
+                    defaultValue={creative.conceptHeadline}
+                    placeholder="Rewritten to pass the checklist"
+                    className="field mt-1"
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-muted">
+                Changing the compliant headline, ad headline, copy or CTA unticks
+                the compliance checklist.
+              </p>
               <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                 {CONCEPT_HEADLINE_GUIDANCE}
               </p>
@@ -255,7 +278,7 @@ export default async function CreativeDetailPage({
                   className="field"
                 >
                   {CREATIVE_STATUSES.map((s) => {
-                    const blocked = isStatusBlocked(s, creative.compliance);
+                    const blocked = isStatusBlocked(s, creative, creative.compliance);
                     return (
                       <option key={s} value={s} disabled={blocked}>
                         {CREATIVE_STATUS_LABELS[s]}
@@ -265,9 +288,9 @@ export default async function CreativeDetailPage({
                   })}
                 </select>
                 <p className="mt-2 text-xs leading-relaxed text-muted">
-                  {passed
-                    ? "Compliance is clear, so Ready is available."
-                    : "Ready is unavailable until every compliance item below is checked. Unchecking one later drops a Ready creative back to compliance review."}
+                  {blockers.length === 0
+                    ? "Compliance is clear, so Ready and the statuses after it are available."
+                    : `Ready and everything after it are unavailable: ${blockers.join("; ")}. Unchecking an item or editing the live copy later drops the creative back to compliance review.`}
                 </p>
               </div>
               <div className="flex justify-end">

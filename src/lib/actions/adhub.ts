@@ -7,7 +7,6 @@ import {
   AD_COMPLIANCE_ITEMS,
   AWARENESS_LEVELS,
   AwarenessLevel,
-  COMPLIANCE_GATED_STATUS,
   CONCEPT_STATUSES,
   CREATIVE_STATUSES,
   CREATIVE_TYPES,
@@ -16,7 +15,9 @@ import {
   CreativeType,
   RESEARCH_NOTE_TYPES,
   ResearchNoteType,
-  compliancePassed,
+  LIVE_COPY_FIELDS,
+  isGatedStatus,
+  readyBlockers,
   isSophisticationStage,
 } from "@/lib/adhub";
 
@@ -351,6 +352,7 @@ export async function createCreative(conceptId: string, formData: FormData) {
       creativeType: CREATIVE_TYPES.includes(type as CreativeType)
         ? (type as CreativeType)
         : "PHOTO",
+      rawHook: text(formData, "rawHook"),
       conceptHeadline: text(formData, "conceptHeadline"),
       adHeadline: text(formData, "adHeadline"),
       adCopy: text(formData, "adCopy"),
@@ -363,39 +365,67 @@ export async function createCreative(conceptId: string, formData: FormData) {
   redirect(`/ad-hub/creatives/${creative.id}`);
 }
 
+// Saving copy. If anything that goes live changed — the compliant headline,
+// the ad headline, the copy or the CTA — the compliance review no longer
+// describes this creative: every item is unticked, and a creative at Ready or
+// beyond drops back to compliance review. The raw hook is internal and never
+// goes live, so editing it alone leaves the checks alone.
 export async function updateCreative(id: string, formData: FormData) {
+  const current = await prisma.creative.findUnique({ where: { id } });
+  if (!current) return;
   const type = str(formData, "creativeType");
-  const creative = await prisma.creative.update({
-    where: { id },
-    data: {
-      creativeNumber: int(formData, "creativeNumber") ?? 1,
-      creativeType: CREATIVE_TYPES.includes(type as CreativeType)
-        ? (type as CreativeType)
-        : undefined,
-      conceptHeadline: text(formData, "conceptHeadline"),
-      adHeadline: text(formData, "adHeadline"),
-      adCopy: text(formData, "adCopy"),
-      cta: text(formData, "cta"),
-    },
+  const copy = {
+    conceptHeadline: text(formData, "conceptHeadline"),
+    adHeadline: text(formData, "adHeadline"),
+    adCopy: text(formData, "adCopy"),
+    cta: text(formData, "cta"),
+  };
+  const copyChanged = LIVE_COPY_FIELDS.some((f) => copy[f] !== current[f]);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.creative.update({
+      where: { id },
+      data: {
+        creativeNumber: int(formData, "creativeNumber") ?? 1,
+        creativeType: CREATIVE_TYPES.includes(type as CreativeType)
+          ? (type as CreativeType)
+          : undefined,
+        rawHook: text(formData, "rawHook"),
+        ...copy,
+        ...(copyChanged && isGatedStatus(current.status)
+          ? { status: "COMPLIANCE_REVIEW" }
+          : {}),
+      },
+    });
+    if (copyChanged) {
+      await tx.complianceCheck.updateMany({
+        where: { creativeId: id },
+        data: { checked: false, checkedAt: null },
+      });
+    }
   });
   revalidateAdHub();
   revalidatePath(`/ad-hub/creatives/${id}`);
-  revalidatePath(`/ad-hub/concepts/${creative.conceptId}`);
+  revalidatePath(`/ad-hub/concepts/${current.conceptId}`);
 }
 
-// The compliance gate. The dropdown hides Ready until every item is checked,
-// but the rule is enforced here too — the UI is a convenience, this is the
-// gate.
+// The compliance gate. The dropdown disables every status from Ready onward
+// until the creative clears, but the rule is enforced here — the UI is a
+// convenience, this is the gate.
 export async function setCreativeStatus(id: string, formData: FormData) {
   const status = str(formData, "status");
   if (!CREATIVE_STATUSES.includes(status as CreativeStatus)) return;
 
-  if (status === COMPLIANCE_GATED_STATUS) {
-    const compliance = await prisma.complianceCheck.findMany({
-      where: { creativeId: id },
-      select: { checked: true },
+  if (isGatedStatus(status!)) {
+    const current = await prisma.creative.findUnique({
+      where: { id },
+      select: {
+        rawHook: true,
+        conceptHeadline: true,
+        compliance: { select: { checked: true } },
+      },
     });
-    if (!compliancePassed(compliance)) return;
+    if (!current || readyBlockers(current, current.compliance).length > 0) return;
   }
 
   const creative = await prisma.creative.update({
@@ -418,6 +448,7 @@ export async function duplicateCreative(id: string) {
       conceptId: source.conceptId,
       creativeNumber: await nextCreativeNumber(source.conceptId),
       creativeType: source.creativeType,
+      rawHook: source.rawHook,
       conceptHeadline: source.conceptHeadline,
       adHeadline: source.adHeadline,
       adCopy: source.adCopy,
@@ -454,14 +485,14 @@ export async function toggleComplianceItem(id: string) {
     data: { checked, checkedAt: checked ? new Date() : null },
   });
 
-  // Unchecking an item on a creative that had already cleared the gate takes
-  // it back to compliance review — leaving it sitting at Ready would say it
-  // passed a check that no longer holds.
+  // Unchecking an item on a creative at Ready or beyond takes it back to
+  // compliance review — leaving it there would say it passed a check that no
+  // longer holds.
   const creative = await prisma.creative.findUnique({
     where: { id: current.creativeId },
     select: { status: true },
   });
-  if (!checked && creative?.status === COMPLIANCE_GATED_STATUS) {
+  if (!checked && creative && isGatedStatus(creative.status)) {
     await prisma.creative.update({
       where: { id: current.creativeId },
       data: { status: "COMPLIANCE_REVIEW" },

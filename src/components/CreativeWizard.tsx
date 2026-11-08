@@ -38,6 +38,7 @@ export default function CreativeWizard({
 }) {
   const [step, setStep] = useState(1);
   const [creativeType, setCreativeType] = useState<string>("PHOTO");
+  const [rawHook, setRawHook] = useState("");
   const [conceptHeadline, setConceptHeadline] = useState("");
   const [adHeadline, setAdHeadline] = useState("");
   const [adCopy, setAdCopy] = useState("");
@@ -78,6 +79,7 @@ export default function CreativeWizard({
       />
 
       <input type="hidden" name="creativeType" value={creativeType} />
+      <input type="hidden" name="rawHook" value={rawHook} />
       <input type="hidden" name="conceptHeadline" value={conceptHeadline} />
       <input type="hidden" name="adHeadline" value={adHeadline} />
       <input type="hidden" name="adCopy" value={adCopy} />
@@ -153,17 +155,35 @@ export default function CreativeWizard({
           {step === 2 && (
             <>
               <div>
-                <label className="field-label" htmlFor="cw-hook">
-                  Concept headline (hook)
-                </label>
-                <textarea
-                  id="cw-hook"
-                  rows={2}
-                  value={conceptHeadline}
-                  onChange={(e) => setConceptHeadline(e.target.value)}
-                  placeholder="The line on the creative itself"
-                  className="field"
-                />
+                <p className="field-label">Concept headline (hook)</p>
+                <div className="m-form-stack grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-muted" htmlFor="cw-raw">
+                      Raw (internal)
+                    </label>
+                    <textarea
+                      id="cw-raw"
+                      rows={2}
+                      value={rawHook}
+                      onChange={(e) => setRawHook(e.target.value)}
+                      placeholder="The hook as it first came out"
+                      className="field mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted" htmlFor="cw-hook">
+                      Compliant (goes live)
+                    </label>
+                    <textarea
+                      id="cw-hook"
+                      rows={2}
+                      value={conceptHeadline}
+                      onChange={(e) => setConceptHeadline(e.target.value)}
+                      placeholder="The line on the creative itself"
+                      className="field mt-1"
+                    />
+                  </div>
+                </div>
                 <p className="helper-text mt-2 text-xs leading-relaxed text-muted">
                   {CONCEPT_HEADLINE_GUIDANCE}
                 </p>
