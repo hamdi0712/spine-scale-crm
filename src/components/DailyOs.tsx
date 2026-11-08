@@ -192,7 +192,7 @@ export default function DailyOs({
                   <span className="flex h-6 w-6 items-center justify-center rounded-full" style={{ color: `rgb(${look.c})`, background: `rgb(${look.c} / 0.14)` }}>
                     <Glyph size={13} stroke={1.9} aria-hidden />
                   </span>
-                  <div className="num mt-2 text-[22px] font-semibold leading-tight tracking-[-0.02em]">{s.value}</div>
+                  <div className="num mt-2 text-[22px] font-normal leading-tight tracking-[-0.01em]">{s.value}</div>
                   <div className="mt-0.5 text-[11.5px] leading-snug text-muted">{s.label}</div>
                 </div>
               );
