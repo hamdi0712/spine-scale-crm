@@ -120,11 +120,7 @@ export default function KpiCard({ kpi, tone }: { kpi: Kpi; tone: KpiTone }) {
           half as tall again as it needed to be, and the four of them together
           cost more vertical room than the dashboard has to give — the whole
           page is meant to land on one laptop screen. */}
-      <div
-        className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.03em] max-md:text-[26px]"
-        // Geist on these four numbers only (layout.tsx).
-        style={{ fontFamily: "var(--font-geist), var(--font-sans), system-ui, sans-serif", fontVariantNumeric: "proportional-nums" }}
-      >
+      <div className="mt-2 text-[28px] font-semibold leading-none tracking-tight [font-variant-numeric:proportional-nums] max-md:text-[26px]">
         {kpi.value}
       </div>
 
