@@ -16,6 +16,8 @@
 //
 // Pure. The call and the cache live in src/lib/monkModeQuoteStore.ts.
 
+import { isAllowedQuoteSource } from "@/lib/quoteSourceCheck";
+
 import { MAX_QUOTE_WORDS, capQuote } from "@/lib/dailyQuote";
 
 export { MAX_QUOTE_WORDS };
@@ -136,6 +138,8 @@ export function parseMonkQuote(content: string): MonkQuoteText | null {
   const author = obj.author.trim().replace(/^[—–-]\s*/, "").trim();
   if (text === "" || author === "") return null;
   if (author.length > MAX_AUTHOR_CHARS) return null;
+  // Scripture other than the Quran and hadith never reaches the banner.
+  if (!isAllowedQuoteSource(author)) return null;
   return { text: capQuote(text), author };
 }
 

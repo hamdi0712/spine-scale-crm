@@ -13,6 +13,8 @@
 
 // ─── The day, as the model is told it ──────────────────────────────────────
 
+import { isAllowedQuoteSource } from "@/lib/quoteSourceCheck";
+
 export interface DailyQuoteContext {
   // "Sunday" … "Saturday". Named rather than numbered because the model reads
   // it and a 0 means nothing to it.
@@ -204,6 +206,8 @@ export function parseDailyQuote(content: string): DailyQuoteText | null {
   // no sentence boundary to cut at, so an implausibly long one is still read as
   // a malformed answer.
   if (author.length > MAX_AUTHOR_CHARS) return null;
+  // Scripture other than the Quran and hadith never reaches the banner.
+  if (!isAllowedQuoteSource(author)) return null;
   return { text: capQuote(text), author };
 }
 
