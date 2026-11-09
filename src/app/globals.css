@@ -2214,7 +2214,7 @@ html[data-mode="pro"] :is(.helper-text, .guided-only):first-child + * {
 /* ─── Dashboard, compact (big monitor only) ─────────────────────────────
    The Dashboard at the Pipeline/sidebar scale on screens 1600px and wider:
    smaller header and controls, tighter cards and gaps, 13/11/15px type, thin
-   business-hours clocks, lighter pipeline and label numbers, and the Geist
+   business-hours clocks, lighter pipeline and label numbers, and the
    KPI numbers at 34px without growing the cards. Below 1600px nothing here
    applies. Scoped by .dash-compact on the Dashboard's root (page.tsx). */
 @media (min-width: 1600px) {
@@ -2253,4 +2253,12 @@ html[data-mode="pro"] :is(.helper-text, .guided-only):first-child + * {
   .dash-compact .px-2.py-3.text-center { padding-top: 0 !important; padding-bottom: 0 !important; }
   .dash-compact .px-2.py-3.text-center .empty-mark { transform: scale(.85); margin-top: -4px; }
   .dash-compact .flex.items-center.gap-5 { margin-top: 2px !important; }
+  /* KPI icon discs a size down */
+  .dash-compact .card-kpi .kpi-mark { width: 30px; height: 30px; }
+  .dash-compact .card-kpi .kpi-mark svg { width: 15px; height: 15px; }
+  /* Business-hours clock badge: its own rounded square, kept at the compact size */
+  .dash-compact .glass-mark-dark.h-9.w-9 { border-radius: 9px; }
+  .dash-compact .glass-mark-dark.h-9.w-9 svg { width: 14px; height: 14px; }
+  /* Client health empty state sits lower in its card */
+  .dash-compact .px-2.py-3.text-center { padding-top: 14px !important; }
 }
