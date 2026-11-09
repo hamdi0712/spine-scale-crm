@@ -16,6 +16,8 @@
 //
 // Pure. The call and the cache live in src/lib/monkModeQuoteStore.ts.
 
+import { isAllowedQuoteSource } from "@/lib/quoteSourceCheck";
+
 import { MAX_QUOTE_WORDS, capQuote } from "@/lib/dailyQuote";
 
 export { MAX_QUOTE_WORDS };
@@ -69,7 +71,8 @@ export const MONK_QUOTE_SYSTEM_PROMPT = [
   "You pick one short quotation to put at the top of a personal discipline tracker. One person reads it: a young Muslim man running a 21-day challenge of daily non-negotiable habits — prayer, Quran, exercise, meditation, work on his business, and abstaining from what he has decided to abstain from. This is about self-mastery, not about his job.",
   "",
   "WHAT TO PICK",
-  "- A real quotation from a real source: a philosopher (Stoicism, Greek philosophy and the rest), a religious text (the Quran, the hadith, the Bible, the Dhammapada, and so on), a historical figure, or a well-known modern one. Attribute it accurately.",
+  "- A real quotation from a real source: a philosopher (Stoicism, Greek philosophy and the rest), the Quran or authentic hadith, a historical figure, or a well-known modern one. Attribute it accurately.",
+  "- The only religious sources allowed are the Quran and authentic hadith. Never quote any other scripture or religious text — not the Bible (Old or New Testament), the Torah, the Bhagavad Gita, the Vedas, the Dhammapada, or any other. Philosophers (including Chinese ones such as Lao Tzu and Confucius), historical and modern figures, and proverbs are all fine.",
   "- It must fit the situation described below specifically. A line about beginning is right for day one and wrong for day nineteen; a line about getting back up is right after a broken streak and wrong in the middle of an unbroken one; a line about not easing off is right for a long clean run.",
   "- Islamic sources are welcome and appropriate here, but do not make every answer one — range across traditions and centuries.",
   "- Never invent a quotation and never attribute a real one to the wrong person. If you are not certain of the wording or the source, pick something you are certain of.",
@@ -135,6 +138,8 @@ export function parseMonkQuote(content: string): MonkQuoteText | null {
   const author = obj.author.trim().replace(/^[—–-]\s*/, "").trim();
   if (text === "" || author === "") return null;
   if (author.length > MAX_AUTHOR_CHARS) return null;
+  // Scripture other than the Quran and hadith never reaches the banner.
+  if (!isAllowedQuoteSource(author)) return null;
   return { text: capQuote(text), author };
 }
 
@@ -174,8 +179,8 @@ export const FALLBACK_MONK_QUOTES: MonkQuoteText[] = [
     author: "René Descartes",
   },
   {
-    text: "Though he should conquer a thousand men, he who conquers himself is the greater warrior.",
-    author: "The Dhammapada",
+    text: "He who conquers others is strong; he who conquers himself is mighty.",
+    author: "Lao Tzu",
   },
   {
     text: "It is not that we have a short time to live, but that we waste much of it.",
