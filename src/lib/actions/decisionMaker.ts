@@ -35,7 +35,7 @@ import { runGoogleSearch } from "@/lib/googleSearchRun";
 import { deepSeekJson } from "@/lib/deepseek";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { promoteToLead } from "@/lib/promoteLead";
-import { autoFindBackupEmail } from "@/lib/actions/jobs";
+import { kickContactFinder } from "@/lib/actions/jobs";
 import { findSuppression } from "@/lib/suppression";
 import { parseBreakdown } from "@/lib/discovery";
 import { mergeFill } from "@/lib/discoveryDedupe";
@@ -593,7 +593,7 @@ async function applyDecisionMaker(
   if (tagged && (await findSuppression({ email: tagged.email, websiteUrl: tagged.websiteUrl }))) return null;
   const breakdown = parseBreakdown(candidate.icpBreakdown);
   const leadId = await promoteToLead(id, breakdown, new Date());
-  void autoFindBackupEmail(leadId);
+  void kickContactFinder([leadId]);
   return leadId;
 }
 

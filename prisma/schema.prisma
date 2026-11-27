@@ -325,6 +325,31 @@ model Lead {
   ownerCheckedAt   DateTime?
   ownerEmailAt     DateTime?
 
+  // The contact finder (src/lib/contactFinder.ts, src/lib/contactFinderRun.ts):
+  // one automatic run per email lead, from promotion to its place.
+  //   contactStatus        finding | owner_email | front_desk | contact_form |
+  //                        call | needs_you — what routes an email lead (src/lib/
+  //                        emailBuckets.ts). Null: never run (LinkedIn leads, or
+  //                        an email lead from before the finder).
+  //   contactStatusReason  why, for needs_you ("Out of credits", "Step failed:
+  //                        Hunter", "Not run yet").
+  //   contactTrace         JSON [{ step, result, cost?, quote?, reason?, at }],
+  //                        the run's steps in order.
+  //   ownerConfidence      high | low — how sure the finder is of the owner it
+  //                        put in contactName. low: the email names nobody.
+  //   contactProposal      JSON — what "Look up again" found that differs from
+  //                        the lead, waiting on Replace or Keep.
+  //   contactRetryAt       when an address Instantly could not settle (unknown)
+  //                        is checked once more.
+  //   contactFailures      JSON { step: count } — API failures in a row per step.
+  contactStatus       String?
+  contactStatusReason String?
+  contactTrace        String?
+  ownerConfidence     String?
+  contactProposal     String?
+  contactRetryAt      DateTime?
+  contactFailures     String?
+
   // Which channel the lead is worked on: email | linkedin | call, constrained
   // by LEAD_CHANNELS in src/lib/emailChannel.ts. Every lead that existed
   // before the column is linkedin; a Clinic-first lead is promoted as email.
@@ -1385,6 +1410,14 @@ model ScoringComparison {
 // promise is that neither value is ever sent to the browser in full — the
 // Settings page is served the last four characters and nothing more, and no
 // action returns a key.
+// One-time data migrations run in code (src/lib/dataMigrations.ts): a row
+// per migration that finished cleanly. Never written on a failed run.
+model DataMigration {
+  id    String   @id
+  ranAt DateTime @default(now())
+  note  String?
+}
+
 model AppSecrets {
   id String @id
 

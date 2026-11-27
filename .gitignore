@@ -14,6 +14,9 @@ npm-debug.log*
 # databases a migration or build check creates alongside dev.db.
 prisma/*.db
 prisma/*.db-journal
+# the copy a one-time data migration takes before it writes (src/lib/dataMigrations.ts)
+prisma/*.db.backup-*
+*.db.backup-*
 # the scratch database the tools/verify-* scripts are pointed at
 .verify.db
 .verify-*.db

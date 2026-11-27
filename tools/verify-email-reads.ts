@@ -34,6 +34,11 @@ const server = http.createServer((req, res) => {
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {
+    if ((req.url ?? "").startsWith("/api/?")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ result_count: 0, results: [] }));
+      return;
+    }
     calls.push(`${req.method} ${req.url}`);
     const email = req.method === "POST" ? (JSON.parse(body || "{}").email as string) : decodeURIComponent((req.url ?? "").split("/").pop() ?? "");
     res.writeHead(200, { "Content-Type": "application/json" });
@@ -44,6 +49,7 @@ const server = http.createServer((req, res) => {
 async function main(): Promise<void> {
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   process.env.INSTANTLY_API_BASE = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  process.env.NPI_API_BASE = process.env.INSTANTLY_API_BASE;
   process.env.INSTANTLY_POLL_MS = "50";
   process.env.INSTANTLY_API_KEY = "test-key";
   if (!/verify/.test(process.env.DATABASE_URL ?? "")) {
@@ -120,13 +126,16 @@ async function main(): Promise<void> {
   };
   const inboxOf = async (id: string) => (await prisma.lead.findUniqueOrThrow({ where: { id } })).sendingInboxId;
   const withSends = (id: string) => prisma.lead.findUniqueOrThrow({ where: { id }, include: { emailSends: { orderBy: { step: "asc" } } } });
-  const checkRuns = () => prisma.jobRun.count({ where: { source: "email-check" } });
+  // A check now runs inside the contact finder (src/lib/contactFinderRun.ts)
+  // for email leads; the bare email check is still there for "Check again".
+  const CHECKERS = ["email-check", "contact-finder"];
+  const checkRuns = () => prisma.jobRun.count({ where: { source: { in: CHECKERS } } });
   const waitForChecks = async () => {
     for (let i = 0; i < 400; i++) {
       await sleep(50);
-      if ((await prisma.jobRun.count({ where: { source: "email-check", status: "running" } })) === 0) {
+      if ((await prisma.jobRun.count({ where: { source: { in: CHECKERS }, status: "running" } })) === 0) {
         await sleep(150); // a run's after-hook may start one more
-        if ((await prisma.jobRun.count({ where: { source: "email-check", status: "running" } })) === 0) return;
+        if ((await prisma.jobRun.count({ where: { source: { in: CHECKERS }, status: "running" } })) === 0) return;
       }
     }
     throw new Error("A check never finished.");
@@ -286,7 +295,10 @@ async function main(): Promise<void> {
   fq.set("stage", "NEW");
   await updateLead(quiet.id, fq);
   await sleep(300);
-  check("with no Instantly key the save goes through and no check starts", (await checkRuns()) === runsQuiet && (await prisma.lead.findUniqueOrThrow({ where: { id: quiet.id } })).email === "hi@quiet.test");
+  await waitForChecks();
+  const quietLead = await prisma.lead.findUniqueOrThrow({ where: { id: quiet.id } });
+  check("with no Instantly key the save goes through, nothing is checked, and no noise: it waits quietly",
+    quietLead.email === "hi@quiet.test" && quietLead.emailStatus === null && quietLead.contactStatus === "finding", `${quietLead.contactStatus} ${runsQuiet}`);
   process.env.INSTANTLY_API_KEY = "test-key";
 
   // ─── The owner panel ─────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ export type JobKind =
   | "facebook-emails"
   | "find-owners"
   | "rerun-openers"
+  | "contact-finder"
   | "demo";
 
 // running     the loop is alive on the server
@@ -108,6 +109,7 @@ export const JOB_TITLES: Record<JobKind, string> = {
   "facebook-emails": "Find emails on Facebook",
   "find-owners": "Find owners",
   "rerun-openers": "Re-run openers",
+  "contact-finder": "Contact finder",
   demo: "Demo re-crawl",
 };
 
@@ -122,6 +124,7 @@ export function itemHref(kind: JobKind, subjectId: string): string | null {
     case "facebook-emails":
     case "find-owners":
     case "rerun-openers":
+    case "contact-finder":
       return `/pipeline/${subjectId}`;
     default:
       return null;

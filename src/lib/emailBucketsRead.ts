@@ -6,7 +6,9 @@ import { PIPELINE_DEFAULT_WHERE } from "@/lib/liveLeadWhere";
 import { pickContactFormLink } from "@/lib/contactForm";
 import { leadTier } from "@/lib/leadScore";
 import { emailDetailLine } from "@/lib/emailChannel";
-import { CallSection, EmailBucketExtras, callSection, emailBucket, inEmailPipeline, ownerRunWouldDoNothing, queueCanFind, queueReason } from "@/lib/emailBuckets";
+import { CallSection, EmailBucketExtras, callSection, emailBucket, inEmailPipeline, queueReason } from "@/lib/emailBuckets";
+import { readContactStatus } from "@/lib/contactFinder";
+import { finderDueLeads } from "@/lib/contactFinderRun";
 
 export const CALL_KINDS = ["CALL_NO_ANSWER", "CALL_TALKED", "CALL_NOT_INTERESTED"] as const;
 export type CallKind = (typeof CALL_KINDS)[number];
@@ -56,8 +58,9 @@ export async function emailPipelineIds(): Promise<Set<string>> {
   return new Set(leads.filter((l) => l.stage === "LOST" || inEmailPipeline(emailBucket(l, extras.get(l.id)!))).map((l) => l.id));
 }
 
-// The Email queue: one list, every lead not ready for the Email pipeline yet.
-// Contact-form leads are in the pipeline (src/lib/emailBuckets.ts).
+// The Email queue: only the leads that need you — out of credits, a step that
+// failed twice, or never run — each with Retry. The ones the contact finder
+// is still on are counted for the page's live line, not listed.
 export async function loadEmailQueue() {
   const leads = await prisma.lead.findMany({
     where: { ...PIPELINE_DEFAULT_WHERE, channel: "email", stage: { not: "LOST" } },
@@ -65,21 +68,20 @@ export async function loadEmailQueue() {
     orderBy: { createdAt: "desc" },
   });
   const extras = await bucketExtras(leads);
-  const queue = leads
-    .filter((l) => emailBucket(l, extras.get(l.id)!) === "queue")
+  const inQueue = leads.filter((l) => emailBucket(l, extras.get(l.id)!) === "queue");
+  const queue = inQueue
+    .filter((l) => readContactStatus(l.contactStatus) !== "finding")
     .map((l) => ({
       id: l.id,
       clinicName: l.clinicName,
-      contactName: l.ownerStatus === "confirmed" ? l.contactName : null,
+      contactName: l.contactName,
       location: l.location,
       email: (l.email ?? "").trim() || null,
       emailDetail: emailDetailLine(l),
       icpTier: leadTier(l),
       reason: queueReason(l),
-      // The per-lead button: only when Find owners would do something.
-      canFind: queueCanFind(l),
     }));
-  return { queue };
+  return { queue, finding: inQueue.length - queue.length };
 }
 
 export interface CallRow {
@@ -118,22 +120,19 @@ export async function loadCallList(now = new Date()): Promise<CallRow[]> {
   return rows;
 }
 
-// Queue leads nothing would move: the button shown but the run would do
-// nothing, or no button and not waiting on a person (an owner to pick, an
-// address to check). Should always be empty; tools/list-dead-queue-buttons.ts
-// and the verify script read it.
+// Queue leads nothing would move: "finding" with no run coming — not due now,
+// and no retry booked. Should always be empty (a needs-you lead always has
+// Retry); tools/list-dead-queue-buttons.ts and the verify scripts read it.
 export async function deadQueueLeads(): Promise<{ id: string; clinicName: string; why: string }[]> {
   const leads = await prisma.lead.findMany({
-    where: { ...PIPELINE_DEFAULT_WHERE, channel: "email", stage: { not: "LOST" } },
+    where: { ...PIPELINE_DEFAULT_WHERE, channel: "email", stage: { not: "LOST" }, contactStatus: "finding" },
     include: { _count: { select: { emailSends: true } } },
   });
   const extras = await bucketExtras(leads);
+  const due = new Set((await finderDueLeads()).map((l) => l.id));
   return leads.flatMap((l) => {
     if (emailBucket(l, extras.get(l.id)!) !== "queue") return [];
-    const canFind = queueCanFind(l);
-    if (canFind && ownerRunWouldDoNothing(l)) return [{ id: l.id, clinicName: l.clinicName, why: "button shown, but the run would do nothing" }];
-    const waitsOnPerson = l.ownerStatus === "pick" || ((l.email ?? "").trim() !== "" && l.emailStatus === null);
-    if (!canFind && !waitsOnPerson) return [{ id: l.id, clinicName: l.clinicName, why: `no button and nothing to do (${queueReason(l)})` }];
-    return [];
+    if (due.has(l.id) || l.contactRetryAt !== null) return [];
+    return [{ id: l.id, clinicName: l.clinicName, why: "finding, but no run is due and no retry is booked" }];
   });
 }

@@ -25,10 +25,20 @@ export async function creditsUsedThisMonth(now = new Date()): Promise<number> {
   return r._sum.creditsUsed ?? 0;
 }
 
-// Email-channel leads whose current address has never been checked.
+// Email-channel leads whose current address has never been checked — except
+// those waiting on the contact finder, which checks them itself.
 export async function uncheckedEmailLeads(): Promise<{ id: string; clinicName: string }[]> {
   return prisma.lead.findMany({
-    where: { ...FIND_EMAILS_WHERE, channel: "email", email: { not: null }, NOT: { email: "" }, emailStatus: null, suppressedAt: null },
+    where: {
+      ...FIND_EMAILS_WHERE,
+      channel: "email",
+      email: { not: null },
+      NOT: { email: "" },
+      // Spelled out: a plain NOT would drop the leads with no status too.
+      OR: [{ contactStatus: null }, { contactStatus: { not: "finding" } }],
+      emailStatus: null,
+      suppressedAt: null,
+    },
     select: { id: true, clinicName: true },
     orderBy: { updatedAt: "asc" },
   });

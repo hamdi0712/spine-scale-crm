@@ -21,7 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { runEnrichActors } from "@/lib/enrichRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { findBackupEmail } from "@/lib/facebookEmailRun";
-import { autoCheckEmails } from "@/lib/actions/jobs";
+import { kickContactFinder } from "@/lib/actions/jobs";
 import {
   ENRICH_FIELD_LABELS,
   EnrichInputs,
@@ -80,7 +80,7 @@ export async function runLeadEnrichment(
     const r = await findBackupEmail(leadId, settings);
     if (!(r.kind === "skipped" && r.quiet)) emailFinder = { found: r.kind === "found", detail: r.detail };
     if (r.kind === "found") {
-      void autoCheckEmails();
+      void kickContactFinder([leadId]);
       revalidatePath("/pipeline");
       revalidatePath(`/pipeline/${leadId}`);
     }

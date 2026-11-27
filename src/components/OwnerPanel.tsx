@@ -1,14 +1,16 @@
 "use client";
 
-// The owner, on an email lead's page: what the NPI Registry says, whether its
-// official is a decision-maker, what the site says, and — when they disagree
-// or the site names several doctors — the names to pick between. Picking one
-// confirms them and looks for their email (within budget).
+// The owner, on an email lead's page: who owns the clinic and where that came
+// from, how sure the contact finder is, the finder's latest run on one line,
+// and — after "Look up again" found something different — the two side by
+// side, replaced only when you say so.
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { pickLeadOwner, findLeadOwner } from "@/lib/actions/ownerFind";
+import { pickLeadOwner, findLeadOwner, replaceWithLookup, keepAfterLookup } from "@/lib/actions/ownerFind";
+import { lookUpContactAgain, retryContactFinder } from "@/lib/actions/jobs";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
+import type { ContactFinderPanel } from "@/lib/contactFinder";
 
 export interface OwnerPanelProps {
   leadId: string;
@@ -30,14 +32,18 @@ export interface OwnerPanelProps {
   emailNote: string | null;
   // Settled, but the owner's own address is still to be looked for.
   canFindEmail: boolean;
+  // The contact finder's side (src/lib/contactFinder.ts).
+  finder: ContactFinderPanel | null;
 }
 
 export default function OwnerPanel(p: OwnerPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const { track } = useJobRun("find-owners");
+  const owners = useJobRun("find-owners");
+  const finderRun = useJobRun("contact-finder");
   const settled = p.basisLabel !== null;
+  const f = p.finder;
 
   function pick(name: string) {
     setError(null);
@@ -45,19 +51,49 @@ export default function OwnerPanel(p: OwnerPanelProps) {
       const r = await pickLeadOwner(p.leadId, name);
       if (!r.ok) setError(r.error);
       else {
-        if (r.job.ok) track(r.job.id);
-        else if (!/No email lead is waiting/.test(r.job.error)) setError(`Owner saved. The email lookup didn't start: ${r.job.error}`);
+        if (r.job.ok) finderRun.track(r.job.id);
+        else setError(`Owner saved. ${r.job.error}`);
         router.refresh();
       }
     });
   }
 
-  function runOne() {
+  function findEmail() {
     setError(null);
     startTransition(async () => {
       const r = await findLeadOwner(p.leadId);
       if (!r.ok) setError(r.error);
-      else track(r.id);
+      else owners.track(r.id);
+    });
+  }
+
+  // The contact finder on this lead, proposing only: nothing is replaced
+  // until you press Replace.
+  function lookUpAgain() {
+    setError(null);
+    startTransition(async () => {
+      const r = await lookUpContactAgain(p.leadId);
+      if (!r.ok) setError(r.error);
+      else finderRun.track(r.id);
+    });
+  }
+
+  // Not settled yet: the contact finder on this lead, filling what is blank.
+  function findContact() {
+    setError(null);
+    startTransition(async () => {
+      const r = await retryContactFinder(p.leadId);
+      if (!r.ok) setError(r.error);
+      else finderRun.track(r.id);
+    });
+  }
+
+  function decide(replace: boolean) {
+    setError(null);
+    startTransition(async () => {
+      const r = replace ? await replaceWithLookup(p.leadId) : await keepAfterLookup(p.leadId);
+      if (!r.ok) setError(r.error);
+      router.refresh();
     });
   }
 
@@ -68,26 +104,79 @@ export default function OwnerPanel(p: OwnerPanelProps) {
           Owner: <span className={settled ? "text-ok" : p.status === "pick" ? "text-warn" : "text-muted"}>{p.statusLabel}</span>
           {settled && p.owner && <span className="ml-1.5">{p.owner}</span>}
           {p.basisLabel && <span className="ml-1.5 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-medium text-ok">{p.basisLabel}</span>}
+          {f?.confidence === "high" && <span className="ml-1.5 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-medium text-ok">High confidence</span>}
+          {f?.confidence === "low" && (
+            <span className="ml-1.5 rounded bg-warn-soft px-1.5 py-0.5 text-xs font-medium text-warn" title="The contact finder isn't sure this is the owner, so the email names nobody.">
+              Low confidence — the email names nobody
+            </span>
+          )}
         </p>
-        {settled ? (
-          <div className="flex items-center gap-2">
-            {p.canFindEmail && (
-              <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={runOne}>
-                Find owner email
-              </button>
-            )}
-            <button type="button" className="text-xs font-medium text-accent hover:underline disabled:opacity-50" disabled={pending} onClick={runOne}>
+        <div className="flex items-center gap-2">
+          {settled && p.canFindEmail && (
+            <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={findEmail}>
+              Find owner email
+            </button>
+          )}
+          {settled ? (
+            <button type="button" className="text-xs font-medium text-accent hover:underline disabled:opacity-50" disabled={pending || finderRun.running} onClick={lookUpAgain}>
               Look up again
             </button>
-          </div>
-        ) : (
-          p.status !== "pick" && (
-            <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={runOne}>
-              {p.checkedAt ? "Find owner email" : "Find owner"}
-            </button>
-          )
-        )}
+          ) : (
+            p.status !== "pick" && (
+              <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending || finderRun.running} onClick={findContact}>
+                Find contact
+              </button>
+            )
+          )}
+        </div>
       </div>
+      {f?.traceLine && (
+        <p className="text-muted" title="The contact finder's latest run">
+          {f.traceLine}
+        </p>
+      )}
+      {f?.ownerPick && (
+        <p className="text-muted">
+          AI: {f.ownerPick.reason}
+          {f.ownerPick.quote && <span className="italic"> — “{f.ownerPick.quote}”</span>}
+        </p>
+      )}
+      {f?.proposal && (
+        <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-3 py-2.5">
+          <p className="font-medium text-ink">Look up again found something different</p>
+          <div className="mt-1.5 grid grid-cols-[auto_1fr_1fr] gap-x-4 gap-y-1">
+            <span />
+            <span className="text-muted">On the lead</span>
+            <span className="text-muted">Found</span>
+            {f.proposal.owner && (
+              <>
+                <span className="text-muted">Owner</span>
+                <span>{f.proposal.owner.current ?? "—"}</span>
+                <span className="font-medium">
+                  {f.proposal.owner.found} <span className="text-muted">({f.proposal.owner.confidence} confidence)</span>
+                </span>
+              </>
+            )}
+            {f.proposal.email && (
+              <>
+                <span className="text-muted">Email</span>
+                <span>{f.proposal.email.current ?? "—"}</span>
+                <span className="font-medium">
+                  {f.proposal.email.found} <span className="text-muted">({f.proposal.email.status ?? "unchecked"})</span>
+                </span>
+              </>
+            )}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={() => decide(true)}>
+              Replace
+            </button>
+            <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={() => decide(false)}>
+              Keep
+            </button>
+          </div>
+        </div>
+      )}
       {p.sourceLabel && <p className="text-muted">{p.sourceLabel}</p>}
       {p.npiNumber ? (
         <p className="text-muted">
@@ -114,6 +203,7 @@ export default function OwnerPanel(p: OwnerPanelProps) {
       )}
       {p.emailNote && <p className="text-muted">{p.emailNote}</p>}
       {error && <p className="text-bad">{error}</p>}
+      <JobProgressFor source="contact-finder" />
       <JobProgressFor source="find-owners" />
     </div>
   );

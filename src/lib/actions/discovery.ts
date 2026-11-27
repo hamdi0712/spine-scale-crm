@@ -37,8 +37,7 @@ import { PipelineChannel, TALKING_ON_LINKEDIN_BLOCK } from "@/lib/emailChannel";
 import { showDiscoveryChannel } from "@/lib/discoveryChannelCookie";
 import { findSuppression, loadSuppressionIndex, suppressedMessage } from "@/lib/suppression";
 import { runEnrichActors } from "@/lib/enrichRun";
-import { BackupEmailOutcome, findBackupEmail } from "@/lib/facebookEmailRun";
-import { autoCheckEmails, autoFindBackupEmail } from "@/lib/actions/jobs";
+import { kickContactFinder } from "@/lib/actions/jobs";
 import { recrawlWebsite, whenRecrawlLands } from "@/lib/websiteCrawlRun";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { deepSeekJson } from "@/lib/deepseek";
@@ -885,7 +884,7 @@ export async function processDiscoveryCandidate(
   const leadId = await promoteToLead(id, breakdown, now);
   const headline = `Promoted — ${breakdown.tier}-tier, ${breakdown.total}/${ICP_MAX_SCORE}`;
   steps.push({ label: "Verdict", status: "ok", detail: headline });
-  await backupEmailStep(leadId, settings, steps);
+  await contactFinderStep(leadId, steps);
   revalidatePath("/discovery");
   revalidatePath("/pipeline");
   revalidatePath("/");
@@ -902,24 +901,14 @@ export async function processDiscoveryCandidate(
   };
 }
 
-// A promoted email lead with no address yet: the website, then its Facebook
-// page (src/lib/facebookEmailRun.ts). Only promoted clinics are read, so no
-// rejected one is paid for. Reported as a step of its own; never fails the
-// promotion. A LinkedIn lead, or one that already has an email, adds nothing.
-async function backupEmailStep(leadId: string, settings: PipelineSettings, steps: DiscoveryStep[]): Promise<void> {
-  let r: BackupEmailOutcome;
-  try {
-    r = await findBackupEmail(leadId, settings);
-  } catch {
-    r = { kind: "failed", detail: "The email finder could not run." };
-  }
-  if (r.kind === "skipped" && r.quiet) return;
-  steps.push({
-    label: "Email finder",
-    status: r.kind === "found" ? "ok" : r.kind === "failed" ? "warned" : "skipped",
-    detail: r.detail,
-  });
-  if (r.kind === "found") void autoCheckEmails();
+// A promoted email lead goes to the contact finder, which runs once this
+// queue run is over (src/lib/contactFinderRun.ts): addresses, owner, Hunter,
+// Facebook, the checks and the routing, in that order. Reported as a step of
+// its own; a LinkedIn lead adds nothing.
+async function contactFinderStep(leadId: string, steps: DiscoveryStep[]): Promise<void> {
+  const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { channel: true } });
+  if (lead?.channel !== "email") return;
+  steps.push({ label: "Contact finder", status: "ok", detail: "Queued — it finds the contact when this run is over." });
 }
 
 // The ICP model's half of one candidate's run: score against the active ICP
@@ -1072,7 +1061,7 @@ async function scoreCandidateV2({
 
   const leadId = await promoteToLead(id, breakdown, now);
   steps.push({ label: "Verdict", status: "ok", detail: verdict.reason });
-  await backupEmailStep(leadId, settings, steps);
+  await contactFinderStep(leadId, steps);
   revalidatePath("/discovery");
   revalidatePath("/pipeline");
   revalidatePath("/");
@@ -1117,7 +1106,7 @@ export async function promoteDiscoveryCandidate(id: string) {
   // Whichever model scored it, the lead arrives with that model's card.
   const stored = parseStoredBreakdown(candidate.icpBreakdown);
   const leadId = await promoteToLead(id, stored?.breakdown ?? null, new Date());
-  void autoFindBackupEmail(leadId);
+  void kickContactFinder([leadId]);
 
   revalidatePath("/discovery");
   revalidatePath("/discovery/rejected");

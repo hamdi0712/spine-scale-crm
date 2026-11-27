@@ -100,6 +100,14 @@ async function main() {
     websiteUrl: "https://form.example", websiteLinks: FORM_LINKS,
   });
 
+  // These are existing leads: the one-time migration gives each the contact
+  // status that keeps it where the field-based rule put it, which is what
+  // every view reads now (src/lib/dataMigrations.ts). Scratch database: no backup.
+  const { migrateContactStatus } = await import("../src/lib/dataMigrations");
+  await prisma.dataMigration.deleteMany();
+  const migrated = await migrateContactStatus({ dbFile: null, log: () => {} });
+  check("the migration places every seeded lead without moving one", migrated.ok, migrated.mismatches.join("; "));
+
   console.log("Buckets");
   let { queue } = await loadEmailQueue();
   const inQueue = (id: string) => queue.some((q) => q.id === id);
@@ -137,7 +145,7 @@ async function main() {
   check("Center for Spinal Correction (valid owner address, Find owners never run) → pipeline, not the queue", pipe.has(csc.id) && !inQueue(csc.id) && only(csc.id));
   check("…shown there as Check contact (no contact name)", statusOf(csc.id) === "check_contact", String(statusOf(csc.id)));
   check("an accepted risky owner address → pipeline", pipe.has(riskyOwnerAccepted.id) && !inQueue(riskyOwnerAccepted.id));
-  check("a risky owner address not accepted → queue, with a button that runs", inQueue(riskyOwnerNot.id) && queue.find((q) => q.id === riskyOwnerNot.id)?.canFind === true);
+  check("a risky owner address not accepted → queue, \"Not run yet\" (Retry runs the contact finder)", inQueue(riskyOwnerNot.id) && queue.find((q) => q.id === riskyOwnerNot.id)?.reason === "Not run yet");
   check("an owner picked by hand with nowhere to look → not the queue (Call list)", !inQueue(deadEnd.id) && callOf(deadEnd.id)?.section === "last_resort");
   const dead = await deadQueueLeads();
   check("no queue lead has a button that would do nothing, or no way forward", dead.length === 0, dead.map((d) => `${d.clinicName}: ${d.why}`).join("; "));
@@ -152,7 +160,11 @@ async function main() {
   check("the pick clears both markers", after.ownerCheckedAt === null && after.ownerEmailAt === null, `${after.ownerCheckedAt} ${after.ownerEmailAt}`);
   check("the owner picked by hand is kept", after.ownerStatus === "confirmed" && after.ownerSource === "manual");
   check("the next Find owners run includes it", (await findOwnerLeads()).some((l) => l.id === pick.id));
-  check("it is back in the queue", (await loadEmailQueue()).queue.some((q) => q.id === pick.id));
+  // Where it goes is the contact finder's (pickLeadOwner starts it for the
+  // lead); the pick alone moves nothing.
+  const placeBefore = callOf(pick.id)?.section ?? (inQueue(pick.id) ? "queue" : "pipeline");
+  calls = await loadCallList();
+  check("the pick alone does not move it — the contact finder routes it", (callOf(pick.id)?.section ?? ((await loadEmailQueue()).queue.some((q) => q.id === pick.id) ? "queue" : "pipeline")) === placeBefore, placeBefore);
   check("Find owners leaves pipeline leads alone", !(await findOwnerLeads()).some((l) => l.id === risky.id));
 
   console.log("Contact form → Form follow-up");

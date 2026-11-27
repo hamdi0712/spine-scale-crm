@@ -5,6 +5,7 @@ import { loadInboxes } from "@/lib/emailInboxes";
 import { creditsUsedThisMonth } from "@/lib/emailCheckRun";
 import { hunterCreditsUsedThisMonth } from "@/lib/ownerFindRun";
 import { openerRerunEstimate } from "@/lib/openerRerun";
+import { contactFinderEstimate } from "@/lib/actions/jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,13 @@ export const dynamic = "force-dynamic";
 // each follow-up, and how many to send a day. Emails go out by hand from
 // Gmail; nothing here sends anything.
 export default async function EmailSettingsPage() {
-  const [settings, inboxes, creditsUsed, hunterUsed, rerun] = await Promise.all([loadEmailSettings(), loadInboxes(), creditsUsedThisMonth(), hunterCreditsUsedThisMonth(), openerRerunEstimate()]);
-  return <EmailSettingsForm initial={settings} inboxes={inboxes} starters={startersRemaining(settings)} creditsUsed={creditsUsed} hunterUsed={hunterUsed} rerun={rerun} />;
+  const [settings, inboxes, creditsUsed, hunterUsed, rerun, finder] = await Promise.all([
+    loadEmailSettings(),
+    loadInboxes(),
+    creditsUsedThisMonth(),
+    hunterCreditsUsedThisMonth(),
+    openerRerunEstimate(),
+    contactFinderEstimate(),
+  ]);
+  return <EmailSettingsForm initial={settings} inboxes={inboxes} starters={startersRemaining(settings)} creditsUsed={creditsUsed} hunterUsed={hunterUsed} rerun={rerun} finder={finder} />;
 }
