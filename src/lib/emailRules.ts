@@ -66,6 +66,15 @@ function localPart(email: string | null): string {
   return at > 0 ? e.slice(0, at) : "";
 }
 
+// Whether an owner address's local part carries the contact's surname:
+// drhishon@ for Dr. Heath Hishon. The owner is then read off the address
+// itself. Surnames under three letters are too short to tell.
+export function emailNamesContact(lead: Pick<ContactLead, "email" | "emailType" | "contactName">): boolean {
+  if (lead.emailType !== "owner") return false;
+  const last = slug(parseContactName(lead.contactName)?.last);
+  return last.length >= 3 && localPart(lead.email).replace(/[^a-z]/g, "").includes(last);
+}
+
 // Whether an owner address's local part clearly names somebody other than
 // the contact: drottomeyer@ for David Hadden. Shared inboxes, and local parts
 // too short to read a name from, never count.

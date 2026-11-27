@@ -18,6 +18,7 @@ import { budgetFor, mapVerification, monthStart } from "@/lib/emailCheck";
 import { verifyEmail, InstantlyErrorCode } from "@/lib/instantly";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
 import { getInstantlyApiKey } from "@/lib/appSecretsStore";
+import { releaseInboxIfUnsent, syncLeadInbox } from "@/lib/emailInboxes";
 
 export async function creditsUsedThisMonth(now = new Date()): Promise<number> {
   const r = await prisma.emailCheck.aggregate({ where: { createdAt: { gte: monthStart(now) } }, _sum: { creditsUsed: true } });
@@ -72,9 +73,12 @@ export async function checkLeadEmail(leadId: string, opts: { force?: boolean } =
       where: { id: leadId },
       data: { email: null, emailType: null, emailStatus: null, emailSource: null, emailCheckedAt: now, emailAlternates: JSON.stringify(alternates), emailApprovedAt: null },
     });
+    await releaseInboxIfUnsent(leadId);
     return { kind: "checked", status, email, detail: `${email} is invalid — moved to alternates; back to No email.` };
   }
   await prisma.lead.update({ where: { id: leadId }, data: { emailStatus: status, emailCheckedAt: now } });
+  // A verdict can make an approved lead Ready (valid) or take it out (risky).
+  await syncLeadInbox(leadId);
   const note = status === "invalid" ? " (entered by hand, so it stays)" : rawStatus === "pending" ? " (still pending at Instantly)" : "";
   return { kind: "checked", status, email, detail: `${email}: ${status}${note}` };
 }

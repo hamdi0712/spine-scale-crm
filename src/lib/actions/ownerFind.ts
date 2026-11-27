@@ -5,6 +5,7 @@
 // src/lib/ownerFindRun.ts; the job is in src/lib/actions/jobs.ts.
 
 import { revalidatePath } from "next/cache";
+import { syncReadyInboxes } from "@/lib/emailInboxes";
 import { pickOwner } from "@/lib/ownerFindRun";
 import { startOwnerJob } from "@/lib/actions/jobs";
 import { LaunchResult } from "@/lib/jobRunner";
@@ -32,6 +33,8 @@ export async function findLeadOwner(leadId: string): Promise<LaunchResult> {
 export async function recleanOwners(): Promise<{ ok: true; result: RecleanResult } | { ok: false; error: string }> {
   try {
     const result = await recleanEmailLeads();
+    // Cleaned contacts can make leads Ready or take them out.
+    await syncReadyInboxes();
     revalidatePath("/pipeline");
     revalidatePath("/email");
     return { ok: true, result };

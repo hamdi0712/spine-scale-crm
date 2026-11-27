@@ -50,7 +50,15 @@ import {
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
 import { findSuppression, suppressLead, suppressedMessage } from "@/lib/suppression";
-import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
+import {
+  assignInboxIfReady,
+  assignInboxes,
+  inboxForLead,
+  loadInboxes,
+  releaseInboxIfUnsent,
+  sentTodayByInbox,
+  syncLeadInbox,
+} from "@/lib/emailInboxes";
 
 import { fmtDate } from "@/lib/format";
 
@@ -224,6 +232,7 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
         emailApprovedAt: null,
       },
     });
+    await releaseInboxIfUnsent(leadId);
     revalidate(leadId);
     return { ok: true, angle: "manual", manual: true };
   }
@@ -244,6 +253,7 @@ export async function generateEmailOpener(leadId: string): Promise<OpenerResult>
       emailApprovedAt: null,
     },
   });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   return { ok: true, angle, manual: false };
 }
@@ -275,6 +285,7 @@ export async function saveManualOpener(leadId: string, raw: string): Promise<Res
       emailApprovedAt: null,
     },
   });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   return { ok: true };
 }
@@ -297,6 +308,7 @@ export async function setShortClinicName(leadId: string, raw: string): Promise<R
       ...(email ? { emailSubject: email.subject, emailBody: email.body, emailApprovedAt: null } : {}),
     },
   });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   return { ok: true };
 }
@@ -318,6 +330,7 @@ export async function setEmailVersion(leadId: string, version: string): Promise<
       ...(email ? { emailSubject: email.subject, emailBody: email.body } : {}),
     },
   });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   return { ok: true };
 }
@@ -332,11 +345,16 @@ export async function saveEmailDraft(leadId: string, draft: { subject: string; b
   if (!lead) return { ok: false, error: "That lead no longer exists." };
   if (lead.emailSends.length > 0) return { ok: false, error: "Email 1 has already been sent." };
   await prisma.lead.update({ where: { id: leadId }, data: { emailSubject: subject, emailBody: body, emailApprovedAt: null } });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   return { ok: true };
 }
 
-export async function approveEmail(leadId: string): Promise<Result> {
+export type ApproveResult = { ok: true; inbox: { id: string; address: string } | null } | { ok: false; error: string };
+
+// Approving is what usually makes a lead Ready, so its inbox is given here —
+// and handed back, so the panel shows it at once.
+export async function approveEmail(leadId: string): Promise<ApproveResult> {
   const lead = await loadLead(leadId);
   if (!lead) return { ok: false, error: "That lead no longer exists." };
   if (!lead.emailSubject || !lead.emailBody) return { ok: false, error: "There is no email to approve yet — draft the opener first." };
@@ -351,12 +369,17 @@ export async function approveEmail(leadId: string): Promise<Result> {
     }
   }
   await prisma.lead.update({ where: { id: leadId }, data: { emailApprovedAt: new Date() } });
+  await assignInboxIfReady(leadId);
+  // The inbox the email goes from: Email 1's once sent, the assigned one before.
+  const after = await loadLead(leadId);
+  const inbox = after ? inboxForLead(after, await loadInboxes()) : null;
   revalidate(leadId);
-  return { ok: true };
+  return { ok: true, inbox: inbox ? { id: inbox.id, address: inbox.address } : null };
 }
 
 export async function unapproveEmail(leadId: string): Promise<Result> {
   await prisma.lead.update({ where: { id: leadId }, data: { emailApprovedAt: null } });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   return { ok: true };
 }
@@ -405,6 +428,7 @@ export async function resolveContact(leadId: string, choice: string): Promise<Re
   } else {
     return { ok: false, error: "Pick the scorecard's person or keep the contact." };
   }
+  await syncLeadInbox(leadId);
   revalidate(leadId);
   return { ok: true };
 }
@@ -527,6 +551,7 @@ export async function markEmailReplied(leadId: string, reply: { text: string; ty
     });
     if (type === "not_interested" && !lead.suppressedAt) await suppressLead(tx, lead, "not_interested", now);
   });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   revalidatePath("/tasks");
   return { ok: true };
@@ -553,6 +578,7 @@ export async function acceptRiskyEmail(leadId: string): Promise<Result> {
       data: { kind: "EMAIL_RISKY_ACCEPTED", summary: `Accepted risky address ${email} for ${lead.clinicName} (catch-all domain)`, leadId },
     }),
   ]);
+  await assignInboxIfReady(leadId);
   revalidate(leadId);
   revalidateFeed();
   return { ok: true };
@@ -574,6 +600,7 @@ export async function revokeRiskyEmail(leadId: string): Promise<Result> {
       data: { kind: "EMAIL_RISKY_REVOKED", summary: `Revoked acceptance of risky address ${email} for ${lead.clinicName}`, leadId },
     }),
   ]);
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   revalidateFeed();
   return { ok: true };
@@ -591,6 +618,7 @@ export async function keepFlaggedRiskyEmail(leadId: string): Promise<Result> {
       data: { kind: "EMAIL_RISKY_REVIEWED", summary: `Reviewed risky address ${(lead.email ?? "").trim()} for ${lead.clinicName} — kept`, leadId },
     }),
   ]);
+  await assignInboxIfReady(leadId);
   revalidate(leadId);
   revalidateFeed();
   return { ok: true };
@@ -648,6 +676,7 @@ export async function markEmailBounced(leadId: string): Promise<Result> {
           data: { kind: "EMAIL_RISKY_FLAGGED", summary: `Flagged ${(o.email ?? "").trim()} (${o.clinicName}) for review: ${reason}`, leadId: o.id },
         }),
       ]);
+      await releaseInboxIfUnsent(o.id);
       revalidate(o.id);
     }
   }
@@ -655,6 +684,7 @@ export async function markEmailBounced(leadId: string): Promise<Result> {
   // this address. Counted by the dashboard's bounce rate.
   const last = await prisma.emailSend.findFirst({ where: { leadId, bouncedAt: null }, orderBy: { step: "desc" }, select: { id: true } });
   if (last) await prisma.emailSend.update({ where: { id: last.id }, data: { bouncedAt: new Date() } });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   revalidateFeed();
   return { ok: true };
@@ -669,6 +699,7 @@ export async function markEmailUnsubscribed(leadId: string): Promise<Result> {
     await tx.lead.update({ where: { id: leadId }, data: { emailUnsubscribedAt: now } });
     if (!lead.suppressedAt) await suppressLead(tx, lead, "unsubscribed", now);
   });
+  await releaseInboxIfUnsent(leadId);
   revalidate(leadId);
   return { ok: true };
 }

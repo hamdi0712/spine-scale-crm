@@ -30,6 +30,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { syncLeadInbox } from "@/lib/emailInboxes";
 import { runGoogleSearch } from "@/lib/googleSearchRun";
 import { deepSeekJson } from "@/lib/deepseek";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
@@ -624,6 +625,7 @@ async function fillLead(leadId: string, chosen: DecisionMakerCandidate): Promise
   });
   if (Object.keys(patch).length === 0) return;
   await prisma.lead.update({ where: { id: leadId }, data: patch });
+  await syncLeadInbox(leadId);
 }
 
 // Appends one attempt to the candidate's log, newest first, alongside whatever

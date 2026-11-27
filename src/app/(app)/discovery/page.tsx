@@ -16,7 +16,6 @@ import {
 } from "@/lib/decisionMaker";
 import { IcpTier } from "@/lib/icp";
 import { maxScoreFor } from "@/lib/storedBreakdown";
-import { resolveHeldCandidates } from "@/lib/heldCleanup";
 import AddClinicByName from "@/components/AddClinicByName";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { stepCostPerCandidate } from "@/lib/pipelineSettings";
@@ -93,9 +92,8 @@ export default async function DiscoveryPage({
   // The settings the queue quotes its estimate from — read here so the dialog
   // opens with a number rather than fetching one.
   const settings = await loadPipelineSettings();
-  // Anything the retired Tier 2 chiro hold left behind is re-judged under the
-  // real-program check before the list is read, so none is stranded.
-  await resolveHeldCandidates();
+  // Reading only: the retired Tier 2 chiro hold's leftovers are re-judged
+  // when Process queue starts (startQueueJob), not when the page is opened.
   const [candidates, queued, rejected] = await Promise.all([
     prisma.discoveryCandidate.findMany({ where: { channel }, orderBy: { createdAt: "desc" } }),
     // What Process queue would take on this channel: tagged candidates are
