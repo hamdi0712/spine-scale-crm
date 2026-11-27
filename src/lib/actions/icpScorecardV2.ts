@@ -12,6 +12,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { syncLeadInbox } from "@/lib/emailInboxes";
 import { loadActiveIcp } from "@/lib/icpDefinitionStore";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { scoreWithIcp } from "@/lib/icpScoringRun";
@@ -129,6 +130,8 @@ export async function saveIcpScorecardV2(leadId: string, formData: FormData) {
     where: { id: leadId },
     data: { icpBreakdown: serializeBreakdownV2(saved), icpBreakdownAt: now },
   });
+  // A new tier or decision-maker can make the lead Ready or take it out.
+  await syncLeadInbox(leadId);
   revalidatePath(`/pipeline/${leadId}`);
   revalidatePath("/pipeline");
   revalidatePath("/outreach");

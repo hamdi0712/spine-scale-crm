@@ -49,6 +49,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { autoCheckEmails } from "@/lib/actions/jobs";
+import { syncLeadInbox } from "@/lib/emailInboxes";
 import { recordMilestone } from "@/lib/milestones";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
 import { isLeadStage } from "@/lib/leadStage";
@@ -499,6 +500,7 @@ async function planChange(name: LeadToolName, lead: LeadForWrite, args: Record<s
           });
           // A new address is checked on its own, budget allowing.
           if (!same) void autoCheckEmails();
+          await syncLeadInbox(lead.id);
           return {};
         },
         summary: (b) =>
@@ -514,6 +516,7 @@ async function planChange(name: LeadToolName, lead: LeadForWrite, args: Record<s
         ok: true,
         apply: async () => {
           await prisma.lead.update({ where: { id: lead.id }, data: { contactName, contactNameByHand: true } });
+          await syncLeadInbox(lead.id);
           return {};
         },
         summary: (b) => `Set ${lead.clinicName}'s contact from ${show(b.contactName)} to “${contactName}”`,
@@ -861,6 +864,8 @@ export async function undoConnectorChangeById(id: string): Promise<UndoOutcome> 
     }
     await tx.connectorChange.update({ where: { id }, data: { undoneAt: new Date() } });
   });
+  // The old address or contact back can make the lead Ready or take it out.
+  await syncLeadInbox(leadId);
 
   await recordMilestone("CONNECTOR_CHANGE", `Undid: ${change.summary} — ${CONNECTOR_MARKER}`, { leadId: leadId });
   return { ok: true, message: "Undone." };

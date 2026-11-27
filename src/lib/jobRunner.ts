@@ -71,6 +71,9 @@ export interface JobSpec<T extends JobItem> {
   // Once the loop is over, however it ended. Its answer, if any, is the
   // run's closing note.
   finish?: (ended: { status: JobStatus; halted: string | null }) => Promise<string | null>;
+  // Once the run is marked over — so a job of the same kind may start again.
+  // Not awaited; its failure is nobody's error.
+  after?: (ended: { status: JobStatus; halted: string | null }) => Promise<void>;
 }
 
 // Shared across every module instance in the process — Next can load this
@@ -246,6 +249,7 @@ async function drive<T extends JobItem>(id: string, spec: JobSpec<T>): Promise<v
       where: { id },
       data: { status, current: null, note, finishedAt: new Date() },
     });
+    if (spec.after) void spec.after({ status, halted }).catch(() => {});
   } catch {
     // The database itself failed under the loop. Say the run did not finish
     // rather than leave it looking alive.

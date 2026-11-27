@@ -127,8 +127,25 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
   const dirty = subject !== (p.subject ?? "") || body !== (p.body ?? "");
   const closed = p.status === "stopped" || p.status === "replied";
 
+  // The inbox Approve just gave, shown at once rather than waiting on the
+  // refresh. The page's own value wins as soon as it has one; any other
+  // action clears it.
+  const [justGiven, setJustGiven] = useState<{ id: string; address: string } | null>(null);
+  const inbox = p.inbox ?? justGiven;
+
+  function approve() {
+    setError(null);
+    start(async () => {
+      const r = await approveEmail(p.leadId);
+      if (!r.ok) setError(r.error);
+      else setJustGiven(r.inbox);
+      router.refresh();
+    });
+  }
+
   function run(action: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) {
     setError(null);
+    setJustGiven(null);
     start(async () => {
       const r = await action();
       if (!r.ok) setError(r.error ?? "That did not work.");
@@ -249,18 +266,18 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
         )}
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <span className="text-muted">From</span>
-          {p.inbox === null ? (
+          {inbox === null ? (
             <span className="text-muted">
               {p.inboxes.length === 0 ? "no sending inbox — add one in Settings → Email" : "an inbox is assigned once it is Ready"}
             </span>
           ) : p.inboxLocked || p.inboxes.length < 2 ? (
             <span className="font-medium" title={p.inboxLocked ? "Fixed: Email 1 went from it, and the follow-ups stay in its thread." : undefined}>
-              {p.inbox.address}
+              {inbox.address}
             </span>
           ) : (
             <select
               className="field h-8 w-auto py-0 text-sm"
-              value={p.inbox.id}
+              value={inbox.id}
               disabled={pending}
               onChange={(e) => run(() => setLeadInbox(p.leadId, e.target.value))}
               aria-label="Sending inbox"
@@ -272,7 +289,7 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
               ))}
             </select>
           )}
-          {p.inbox && p.inboxLocked && <span className="text-xs text-muted">· fixed, same thread</span>}
+          {inbox && p.inboxLocked && <span className="text-xs text-muted">· fixed, same thread</span>}
         </div>
         </div>
       </div>
@@ -439,7 +456,7 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
                     </button>
                   </>
                 ) : (
-                  <button type="button" disabled={pending} className="btn-primary disabled:opacity-50" onClick={() => run(() => approveEmail(p.leadId))}>
+                  <button type="button" disabled={pending} className="btn-primary disabled:opacity-50" onClick={approve}>
                     Approve
                   </button>
                 )}

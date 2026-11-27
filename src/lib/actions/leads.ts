@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { syncLeadInbox } from "@/lib/emailInboxes";
 import { seedChecklist } from "@/lib/constants";
 import { isLeadStage, stageChangePatch } from "@/lib/leadStage";
 import { recordMilestone } from "@/lib/milestones";
@@ -131,6 +132,9 @@ export async function updateLead(id: string, formData: FormData) {
       ...(typeChanged ? { emailType: typeIn, emailTypeByHand: true } : {}),
     },
   });
+  // A contact fix can clear the last blocker (Ready); a new address or a
+  // contact that no longer passes takes the lead out.
+  await syncLeadInbox(id);
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
   // A new address on an email lead is checked on its own, budget allowing.
@@ -274,6 +278,7 @@ export async function saveIcpScorecard(id: string, formData: FormData) {
       icpScoredAt: new Date(),
     },
   });
+  await syncLeadInbox(id);
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${id}`);
 }

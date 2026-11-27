@@ -30,6 +30,7 @@
 
 import { DecisionMakerName, EmailCandidate, EmailSource, EmailStatus, clinicDomain, isMailboxProvider, parseAlternates, readDecisionMakerName, readEmailSource } from "@/lib/emailFind";
 import { looksLikePersonName } from "@/lib/decisionMaker";
+import { emailNamesContact, parseContactName } from "@/lib/emailRules";
 import { parseLinks, providerNameFromLink } from "@/lib/websiteCrawl";
 import type { NpiOrganization } from "@/lib/npiRegistry";
 
@@ -534,9 +535,49 @@ export function hasRiskyEmail(lead: { email: string | null; emailStatus: string 
 // ─── The lead page ─────────────────────────────────────────────────────────
 
 // What the owner panel shows, off the lead's columns.
+// Where the lead's owner came from, when it is settled: a lookup that
+// confirmed it (the NPI Registry, or the only doctor the site names), a name
+// set or picked by hand, or an owner address that carries the contact's
+// surname. null: nobody has settled who owns the clinic.
+export type OwnerBasis = "hand" | "npi" | "site" | "email";
+
+export const OWNER_BASIS_LABELS: Record<OwnerBasis, string> = {
+  hand: "set by hand",
+  npi: "confirmed by NPI",
+  site: "from site",
+  email: "from the email address",
+};
+
+export function ownerBasis(lead: {
+  contactName: string | null;
+  contactNameByHand: boolean;
+  ownerStatus: string | null;
+  ownerSource: string | null;
+  email: string | null;
+  emailType: string | null;
+}): OwnerBasis | null {
+  const status = readOwnerStatus(lead.ownerStatus);
+  if (status === "confirmed") {
+    const source = readOwnerSource(lead.ownerSource);
+    if (source === "manual") return "hand";
+    if (source === "site") return "site";
+    if (source === "npi" || source === "npi_site") return "npi";
+  }
+  // Two names to pick between is not settled, whoever typed the contact.
+  if (status === "pick") return null;
+  if (!parseContactName(lead.contactName)) return null;
+  if (lead.contactNameByHand) return "hand";
+  if (emailNamesContact(lead)) return "email";
+  return null;
+}
+
 export function ownerPanelProps(lead: {
   id: string;
   contactName: string | null;
+  contactNameByHand: boolean;
+  channel: string;
+  websiteUrl: string | null;
+  emailStatus: string | null;
   ownerStatus: string | null;
   ownerSource: string | null;
   ownerSiteNames: string | null;
@@ -562,12 +603,18 @@ export function ownerPanelProps(lead: {
     : lead.ownerEmailAt
       ? "The owner's email was looked for — nothing valid turned up."
       : null;
+  const basis = ownerBasis(lead);
   return {
     leadId: lead.id,
     status,
-    statusLabel: status ? OWNER_STATUS_LABELS[status] : "Not looked up",
+    statusLabel: basis ? OWNER_STATUS_LABELS.confirmed : status ? OWNER_STATUS_LABELS[status] : "Not looked up",
+    // Settled: the owner is shown with where it came from, and the lookup is
+    // offered again only as a small link.
+    basisLabel: basis ? OWNER_BASIS_LABELS[basis] : null,
     sourceLabel: status === "confirmed" && source ? OWNER_SOURCE_LABELS[source] : null,
-    owner: status === "confirmed" ? lead.contactName : null,
+    owner: basis ? lead.contactName : null,
+    // The owner is known but their address is not, and it may be looked for.
+    canFindEmail: basis !== null && ownerEmailBlocker(lead) === null,
     npiNumber: lead.npiNumber,
     npiOfficial: lead.npiOfficialName,
     npiTitle: lead.npiOfficialTitle,

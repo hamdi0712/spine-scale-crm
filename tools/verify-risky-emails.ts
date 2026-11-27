@@ -68,7 +68,9 @@ async function main(): Promise<void> {
       data: {
         clinicName: name(n), stage: "NEW", channel: "email", reviewCount: 40, contactName: null,
         emailType: "generic", emailStatus: "risky", icpBreakdown: card(name(n)),
-        emailSubject: "Quick question", emailBody: "Hi team,\n\nA question.\n\n{sender}", emailApprovedAt: new Date(),
+        // One question and the opt-out line above the sign-off: what the
+        // pre-send check asks of Email 1 since the playbook rework.
+        emailSubject: "Quick question", emailBody: `Hi team,\n\nA question?\n\n${wf.DEFAULT_EMAIL_SETTINGS.optOutLine}\n\n{sender}`, emailApprovedAt: new Date(),
         ...data,
       },
     });

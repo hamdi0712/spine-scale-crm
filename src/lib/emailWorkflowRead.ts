@@ -1,5 +1,9 @@
 // The Email view's rows and the Email panel's state, read for a page.
 // Server-only. Every judgement is made by src/lib/emailWorkflow.ts.
+//
+// Reading only: nothing here writes or starts a job. A lead's inbox is given
+// by the write that makes it Ready (src/lib/emailInboxes.ts), and addresses
+// are checked from the writes that create them (autoCheckEmails).
 
 import { Lead, EmailSend } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -32,10 +36,9 @@ import {
   riskyAccepted,
 } from "@/lib/emailWorkflow";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
-import { autoCheckEmails } from "@/lib/actions/jobs";
 import { creditsUsedThisMonth } from "@/lib/emailCheckRun";
 import { getInstantlyApiKey } from "@/lib/appSecretsStore";
-import { assignInboxes, inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
+import { inboxForLead, loadInboxes, sentTodayByInbox } from "@/lib/emailInboxes";
 import type { EmailPanelProps } from "@/components/EmailPanel";
 import { pickContactFormLink } from "@/lib/contactForm";
 import { hasRiskyEmail } from "@/lib/ownerFind";
@@ -86,17 +89,6 @@ export function emailLeadState(
   };
 }
 
-// Leads that have become Ready with no inbox yet are given one now, before
-// anything is shown — the first moment they are Ready is the first moment
-// this sees them so.
-async function assignReady(leads: LeadWithSends[], inboxes: SendingInboxView[]): Promise<void> {
-  const ready = leads.filter(
-    (l) => l.sendingInboxId === null && l.emailSends.length === 0 && emailWorkflowStatus(l, leadTier(l), l.emailSends) === "ready",
-  );
-  const given = await assignInboxes(ready.map((l) => l.id), inboxes);
-  for (const l of ready) if (given[l.id]) l.sendingInboxId = given[l.id];
-}
-
 export interface InboxCounter {
   id: string;
   address: string;
@@ -131,11 +123,7 @@ export async function loadEmailView(now = new Date()) {
     }),
     loadInboxes(),
   ]);
-  await assignReady(leads, inboxes);
   const formSent = await formSentAtByLead(leads.map((l) => l.id));
-  // Newly promoted email leads arrive with an address nobody has checked;
-  // they are checked on their own from here, budget allowing.
-  void autoCheckEmails();
   const counters = await inboxCounters(inboxes, now, settings.riskyDailyLimit);
   const rows = leads.map((l) => {
     const s = leadScore(l);
@@ -191,7 +179,6 @@ function undoProp(lead: LeadWithSends): EmailPanelProps["undo"] {
 
 export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Promise<EmailPanelProps> {
   const [settings, inboxes] = await Promise.all([loadEmailSettings(), loadInboxes()]);
-  await assignReady([lead], inboxes);
   const counters = await inboxCounters(inboxes, now, settings.riskyDailyLimit);
   const formSentAt = (await formSentAtByLead([lead.id])).get(lead.id) ?? null;
   const state = emailLeadState(lead, settings, now, inboxes, formSentAt);
@@ -261,15 +248,13 @@ export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Pr
   };
 }
 
-// One lead's state, as a page would show it: given an inbox first if it has
-// just become Ready.
+// One lead's state, as a page would show it.
 export async function loadLeadEmailState(leadId: string, now = new Date()): Promise<EmailLeadState> {
   const [settings, inboxes, lead] = await Promise.all([
     loadEmailSettings(),
     loadInboxes(),
     prisma.lead.findUniqueOrThrow({ where: { id: leadId }, include: { emailSends: { orderBy: { step: "asc" } } } }),
   ]);
-  await assignReady([lead], inboxes);
   return emailLeadState(lead, settings, now, inboxes, (await formSentAtByLead([lead.id])).get(lead.id) ?? null);
 }
 

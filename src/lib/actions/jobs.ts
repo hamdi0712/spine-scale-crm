@@ -36,6 +36,8 @@ import { clinicTermLine, runClinicSearchTerm } from "@/lib/clinicSearchRun";
 import { checkLeadEmail, checkReadiness, creditsUsedThisMonth, uncheckedEmailLeads } from "@/lib/emailCheckRun";
 import { fmtCredits } from "@/lib/emailCheck";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
+import { releaseInboxIfUnsent, syncReadyInboxes } from "@/lib/emailInboxes";
+import { resolveHeldCandidates } from "@/lib/heldCleanup";
 import { facebookEmailLeads, findBackupEmail } from "@/lib/facebookEmailRun";
 import { findOwner, findOwnerEmail, findOwnerLeads, ownerBudget, ownerReadiness, hunterCreditsUsedThisMonth, OwnerEmailOutcome } from "@/lib/ownerFindRun";
 import { ownerCostPerLead } from "@/lib/ownerFind";
@@ -224,6 +226,12 @@ export async function startComparisonRetryJob(runId: string): Promise<LaunchResu
 // candidates and the other way round.
 export async function startQueueJob(channel: unknown, selectedIds: string[] | null): Promise<LaunchResult> {
   const ch = readPipelineChannel(channel);
+  // Anything the retired Tier 2 chiro hold left behind is re-judged under the
+  // real-program check first, so none is stranded — here, where the queue is
+  // about to be read, rather than every time Discovery is opened. A candidate
+  // it puts back in the queue is picked up by this run.
+  const held = await resolveHeldCandidates();
+  if (held.promoted.length > 0) void autoCheckEmails();
   const queue = selectedIds ? await discoveryQueueSelected(selectedIds, ch) : await discoveryQueue(ch);
   if (queue.length === 0) {
     return {
@@ -259,6 +267,7 @@ export async function startQueueJob(channel: unknown, selectedIds: string[] | nu
     finish: async () => {
       await autoCheckEmails();
       await autoFindOwners();
+      await syncReadyInboxes();
       return null;
     },
   });
@@ -368,12 +377,23 @@ export async function startEmailCheckJob(args: { leadIds?: string[] | null; forc
       return code === "auth" || code === "plan" || code === "no_key" ? `Stopped: ${last?.detail}` : null;
     },
     finish: async ({ halted }) => {
+      // Each verdict already moved its lead's inbox (checkLeadEmail); this
+      // catches anything a verdict changed some other way.
+      await syncReadyInboxes();
       const used = await creditsUsedThisMonth();
       const settings = await loadEmailSettings();
       if (halted) return `${halted.replace(/\.?$/, ".")} ${fmtCredits(used)} of ${settings.checkCreditBudget} credits used this month.`;
       return `About ${fmtCredits(items.length * per)} credits estimated · ${fmtCredits(used)} of ${settings.checkCreditBudget} used this month.${
         items.length < rows.length ? ` ${rows.length - items.length} left unchecked — the budget ran out.` : ""
       }`;
+    },
+    // Addresses that turned up while this ran could not start a check of
+    // their own (one was running): they are taken now, budget allowing.
+    // Only new ones, so a lead that would not check is not retried forever.
+    after: async ({ status, halted }) => {
+      if (status !== "finished" || halted) return;
+      const taken = new Set(rows.map((r) => r.id));
+      if ((await uncheckedEmailLeads()).some((r) => !taken.has(r.id))) await autoCheckEmails();
     },
   });
 }
@@ -423,6 +443,7 @@ export async function startFacebookEmailJob(args: { leadIds?: string[] | null } 
     },
     finish: async ({ status }) => {
       if (found > 0) await autoCheckEmails();
+      await syncReadyInboxes();
       const head = `${found} email${found === 1 ? "" : "s"} found${found > 0 ? " — checking them through Instantly" : ""}.`;
       return status === "stopped" ? `Stopped. ${head}` : head;
     },
@@ -430,14 +451,15 @@ export async function startFacebookEmailJob(args: { leadIds?: string[] | null } 
 }
 
 // A lead just promoted outside the queue (by hand, or by the decision-maker
-// stage): the email finder in the background, and the check if it found one.
+// stage): the email finder in the background, then the check — for the
+// address it found, or the one the lead was promoted with.
 export async function autoFindBackupEmail(leadId: string): Promise<void> {
   try {
-    const r = await findBackupEmail(leadId, await loadPipelineSettings());
-    if (r.kind === "found") await autoCheckEmails();
+    await findBackupEmail(leadId, await loadPipelineSettings());
   } catch {
     // Nobody is waiting on it; the bulk action can try the lead again.
   }
+  await autoCheckEmails();
   await autoFindOwners();
 }
 
@@ -526,6 +548,11 @@ export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: bo
       return null;
     },
     finish: async ({ status, halted }) => {
+      // A confirmed owner can rebuild the draft (approval gone) or settle the
+      // contact (Ready): every inbox follows. Hunter's addresses come back
+      // checked; anything still unchecked is checked, budget allowing.
+      await syncReadyInboxes();
+      await autoCheckEmails();
       const settings = await loadEmailSettings();
       const hunterUsed = await hunterCreditsUsedThisMonth();
       const owners = `${tally.confirmed} owner${tally.confirmed === 1 ? "" : "s"} confirmed${tally.pick > 0 ? ` (${tally.pick} to pick by hand)` : ""}`;
@@ -623,7 +650,10 @@ export async function startOpenerRerun(): Promise<LaunchResult> {
           },
         });
       }
-      if (lead.emailApprovedAt) await prisma.lead.update({ where: { id: item.id }, data: { emailApprovedAt: null } });
+      if (lead.emailApprovedAt) {
+        await prisma.lead.update({ where: { id: item.id }, data: { emailApprovedAt: null } });
+        await releaseInboxIfUnsent(item.id);
+      }
       const r = await generateEmailOpener(item.id);
       if (!r.ok) return { outcome: "error", detail: r.error };
       return r.manual

@@ -15,6 +15,7 @@
 // looked up again, and a main email typed by hand stays the main email.
 
 import { prisma } from "@/lib/prisma";
+import { releaseInboxIfUnsent, syncLeadInbox } from "@/lib/emailInboxes";
 import { PIPELINE_DEFAULT_WHERE, FIND_EMAILS_WHERE } from "@/lib/liveLeadWhere";
 import { clinicDomain, isMailboxProvider, parseAlternates, readDecisionMakerName } from "@/lib/emailFind";
 import {
@@ -203,6 +204,8 @@ export async function setOwnerAsContact(leadId: string, name: string, title: str
         : {}),
     },
   });
+  // A settled contact can make the lead Ready; a rebuilt draft takes it out.
+  await syncLeadInbox(leadId);
 }
 
 // A pick between the names shown: the chosen one becomes the confirmed owner.
@@ -343,6 +346,8 @@ async function save(leadId: string, c: OwnerEmailCandidate, tried: OwnerEmailCan
   });
   if (count === 0) return { kind: "skipped", detail: "The lead's email changed while this ran — nothing saved." };
   if (placed === "main") await rebuildDraft(leadId);
+  // The main address changed (approval gone) or an alternate was added.
+  await syncLeadInbox(leadId);
   const where = placed === "main" ? "now the main email" : c.status === "valid" ? "kept as an alternate (the main email was typed by hand)" : "kept as a risky alternate — the domain accepts every address, so it can't be confirmed";
   return { kind: "found", email: c.address, status: c.status, source: c.source, placed, detail: `${c.address} (${how}) — ${c.status}, ${where}` };
 }
@@ -364,4 +369,5 @@ export async function rebuildDraft(leadId: string): Promise<void> {
   // Unchanged copy keeps its approval.
   if (email.subject === lead.emailSubject && email.body === lead.emailBody) return;
   await prisma.lead.update({ where: { id: leadId }, data: { emailSubject: email.subject, emailBody: email.body, emailApprovedAt: null } });
+  await releaseInboxIfUnsent(leadId);
 }

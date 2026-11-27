@@ -14,6 +14,9 @@ export interface OwnerPanelProps {
   leadId: string;
   status: "confirmed" | "pick" | "not_found" | null;
   statusLabel: string;
+  // Where a settled owner came from: "set by hand", "confirmed by NPI",
+  // "from site", "from the email address". null: not settled.
+  basisLabel: string | null;
   sourceLabel: string | null;
   owner: string | null;
   npiNumber: string | null;
@@ -25,6 +28,8 @@ export interface OwnerPanelProps {
   choices: string[];
   checkedAt: string | null;
   emailNote: string | null;
+  // Settled, but the owner's own address is still to be looked for.
+  canFindEmail: boolean;
 }
 
 export default function OwnerPanel(p: OwnerPanelProps) {
@@ -32,6 +37,7 @@ export default function OwnerPanel(p: OwnerPanelProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const { track } = useJobRun("find-owners");
+  const settled = p.basisLabel !== null;
 
   function pick(name: string) {
     setError(null);
@@ -59,13 +65,27 @@ export default function OwnerPanel(p: OwnerPanelProps) {
     <div className="space-y-2 text-xs leading-relaxed">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">
-          Owner: <span className={p.status === "confirmed" ? "text-ok" : p.status === "pick" ? "text-warn" : "text-muted"}>{p.statusLabel}</span>
-          {p.owner && p.status === "confirmed" && <span className="ml-1.5">{p.owner}</span>}
+          Owner: <span className={settled ? "text-ok" : p.status === "pick" ? "text-warn" : "text-muted"}>{p.statusLabel}</span>
+          {settled && p.owner && <span className="ml-1.5">{p.owner}</span>}
+          {p.basisLabel && <span className="ml-1.5 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-medium text-ok">{p.basisLabel}</span>}
         </p>
-        {p.status !== "pick" && (
-          <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={runOne}>
-            {p.checkedAt ? "Find owner email" : "Find owner"}
-          </button>
+        {settled ? (
+          <div className="flex items-center gap-2">
+            {p.canFindEmail && (
+              <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={runOne}>
+                Find owner email
+              </button>
+            )}
+            <button type="button" className="text-xs font-medium text-accent hover:underline disabled:opacity-50" disabled={pending} onClick={runOne}>
+              Look up again
+            </button>
+          </div>
+        ) : (
+          p.status !== "pick" && (
+            <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={runOne}>
+              {p.checkedAt ? "Find owner email" : "Find owner"}
+            </button>
+          )
         )}
       </div>
       {p.sourceLabel && <p className="text-muted">{p.sourceLabel}</p>}
