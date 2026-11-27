@@ -1,34 +1,14 @@
 "use server";
 
-// The lead page's owner actions: pick between the names the owner finder
-// showed, and run Find owners for this one lead. The work is
-// src/lib/ownerFindRun.ts; the job is in src/lib/actions/jobs.ts.
+// The lead page's owner actions: Replace or Keep what "Re-run contact
+// finder" found (src/lib/contactFinderRun.ts), and Settings → Email's
+// re-clean of owner names. Picking an owner by hand is the lead's Contact
+// field (updateLead marks it contactNameByHand; the finder never overwrites it).
 
 import { revalidatePath } from "next/cache";
 import { syncReadyInboxes } from "@/lib/emailInboxes";
-import { pickOwner } from "@/lib/ownerFindRun";
-import { retryContactFinder, startOwnerJob } from "@/lib/actions/jobs";
-import { LaunchResult } from "@/lib/jobRunner";
 import { RecleanResult, recleanEmailLeads } from "@/lib/ownerReclean";
 import { applyProposal, keepCurrent } from "@/lib/contactFinderRun";
-
-export async function pickLeadOwner(leadId: string, name: string): Promise<{ ok: true; job: LaunchResult } | { ok: false; error: string }> {
-  if (typeof leadId !== "string" || typeof name !== "string") return { ok: false, error: "Pick one of the names shown." };
-  const r = await pickOwner(leadId, name);
-  if (!r.ok) return r;
-  revalidatePath("/pipeline");
-  revalidatePath(`/pipeline/${leadId}`);
-  // Now that the owner is known (set by hand, so kept), the contact finder
-  // runs for this lead: their own address, the checks, and where it goes.
-  const job = await retryContactFinder(leadId);
-  return { ok: true, job };
-}
-
-export async function findLeadOwner(leadId: string): Promise<LaunchResult> {
-  if (typeof leadId !== "string") return { ok: false, error: "No lead." };
-  // Always a fresh run on this lead, even if it was looked up before.
-  return startOwnerJob({ leadIds: [leadId], force: true });
-}
 
 // Settings → Email's "Re-clean owner names & labels": free, no API calls.
 export async function recleanOwners(): Promise<{ ok: true; result: RecleanResult } | { ok: false; error: string }> {

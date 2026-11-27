@@ -1,22 +1,11 @@
-// Find owners — the owner's name from the NPI Registry and the stored crawl,
-// then the owner's email from Hunter or the clinic's pattern, each checked
-// through Instantly — against local mocks of all three APIs, shaped like
-// their real answers (see the headers of src/lib/npiRegistry.ts and
-// src/lib/hunter.ts).
+// The owner rules the contact finder reads — the NPI official's title, the
+// doctors a site names, who an address belongs to (front-desk words win over
+// a name), the Risky chip — and Settings → Email's free re-clean.
+// The run itself (NPI, Hunter, Instantly, routing) is tested in
+// tools/verify-contact-finder.ts.
 //
 //   DATABASE_URL="file:$PWD/.verify-owner.db" npx prisma migrate deploy
 //   DATABASE_URL="file:$PWD/.verify-owner.db" npx tsx tools/verify-owner-find.ts
-//
-// Use a fresh database: the job works on every email lead that qualifies.
-//
-// The cases: an NPI match that agrees with the site (and a Hunter Email
-// Finder hit); an NPI official who is an office manager (and a Hunter miss
-// found by the guesses, with guessing switched on); a name mismatch (a pick); a Gmail-only clinic
-// (skipped, nothing spent); a catch-all domain (kept as a risky alternate);
-// and the budget refusal. Then the front-desk email naming the doctor, the
-// Risky chip's rule, and the automatic run on a newly promoted lead.
-// Then the doctor-name cleanup, guessing off (Hunter only, no Instantly on a
-// miss), the owner/front-desk labels, and the free re-clean.
 
 import http from "node:http";
 import Module from "node:module";
@@ -180,8 +169,6 @@ async function main(): Promise<void> {
   process.env.INSTANTLY_API_KEY = "test-key";
 
   const { prisma } = await import("../src/lib/prisma");
-  const { startOwnerJob, ownerJobEstimate } = await import("../src/lib/actions/jobs");
-  const { pickOwner, findOwnerLeads } = await import("../src/lib/ownerFindRun");
   const { parseAlternates, classifyAddress, readDecisionMakerName } = await import("../src/lib/emailFind");
   const { recleanEmailLeads } = await import("../src/lib/ownerReclean");
   const { hasRiskyEmail, siteDoctorNames, stateFromLocation, isDecisionMakerTitle, ownerPanelProps } = await import("../src/lib/ownerFind");
@@ -195,9 +182,7 @@ async function main(): Promise<void> {
     await prisma.emailCheck.deleteMany({});
   };
   await clean();
-  // Sections 1–7 run with pattern guessing on; 9 turns it off (the default).
   check("pattern guessing is off by default", DEFAULT_EMAIL_SETTINGS.guessOwnerPatterns === false);
-  await saveEmailSettingsRow({ ...DEFAULT_EMAIL_SETTINGS, guessOwnerPatterns: true });
 
   const seed = (name: string, data: Record<string, unknown>) =>
     prisma.lead.create({ data: { clinicName: name, channel: "email", stage: "NEW", leadSource: TAG, ...data } });
@@ -246,104 +231,9 @@ async function main(): Promise<void> {
   });
   const mine = [agree, manager, mismatch, gmail, catchall].map((l) => l.id);
 
-  console.log("\nThe budget refusal");
-  await saveEmailSettingsRow({ ...(await loadEmailSettings()), hunterCreditBudget: 3 });
-  const est = await ownerJobEstimate();
-  check("the estimate counts the five leads, two Hunter credits and four checks each at most", est.count === 5 && est.hunterMax === 10 && est.instantlyMax === 20, JSON.stringify(est));
-  const refused = await startOwnerJob({});
-  check("a job that could pass the Hunter budget is refused", !refused.ok && /Hunter credits/.test(refused.error) && /1 lead would fit/.test(refused.error), refused.ok ? "started" : refused.error);
-  check("nothing was called", npiCalls.length === 0 && hunterCalls.length === 0 && instantlyCalls.length === 0);
-  await saveEmailSettingsRow({ ...(await loadEmailSettings()), hunterCreditBudget: 50 });
-
-  console.log("\nThe run");
-  const t0 = new Date(Date.now() - 1000);
-  const started = await startOwnerJob({});
-  check("starts in the shared job runner", started.ok, started.ok ? "" : started.error);
-  const run = await waitFor("find-owners", t0);
-  console.log(`    note: ${run.note}`);
-  check("finished", run.status === "finished", run.status);
-  check(
-    "the summary: owners confirmed, owner emails found by status, credits used",
-    /4 owners confirmed \(1 to pick by hand\)/.test(run.note ?? "") && /3 owner emails found — 2 valid, 1 risky, 0 invalid/.test(run.note ?? "") && /Hunter credits/.test(run.note ?? ""),
-    run.note ?? "",
-  );
-
-  console.log("\n1. NPI agrees with the site → confirmed; Hunter Email Finder hit");
-  const a = await reload(agree.id);
-  check("matched the Austin record by phone, not the Dallas one", a.npiNumber === "1000000001", String(a.npiNumber));
-  check("official and title saved", a.npiOfficialName === "Dr. Ann Lee" && a.npiOfficialTitle === "Owner", `${a.npiOfficialName}, ${a.npiOfficialTitle}`);
-  check("owner confirmed (NPI and site agree), now the contact", a.ownerStatus === "confirmed" && a.ownerSource === "npi_site" && a.contactName === "Dr. Ann Lee");
-  check("Hunter's address is the main email, source Hunter, checked valid", a.email === "ann.lee@agreespine.test" && a.emailSource === "hunter" && a.emailType === "owner" && a.emailStatus === "valid");
-  const aAlts = parseAlternates(a.emailAlternates);
-  check("the front desk moved to the alternates, as it was", aAlts.some((x) => x.address === "info@agreespine.test" && x.type === "generic" && x.status === "valid" && x.source === "site_crawl"), a.emailAlternates ?? "");
-  check("Domain Search not needed", !hunterCalls.some((c) => c.startsWith("domain:agreespine")), hunterCalls.join(" | "));
-
-  console.log("\n2. NPI official is an office manager → flagged; the site's one doctor confirmed; Hunter miss found by guessing");
-  const m = await reload(manager.id);
-  check("the official is kept and flagged not a decision-maker", m.npiOfficialName === "Pat Doe" && ownerPanelProps(m).npiNotDecisionMaker === true, `${m.npiOfficialName} (${m.npiOfficialTitle})`);
-  check("the site's only doctor is the confirmed owner", m.ownerStatus === "confirmed" && m.ownerSource === "site" && m.contactName === "Dr. Sam Ray", `${m.ownerStatus}/${m.ownerSource}/${m.contactName}`);
-  check("Hunter asked for Sam Ray, found nothing, then Domain Search", hunterCalls.includes("finder:managerchiro.test:sam ray") && hunterCalls.includes("domain:managerchiro.test:limit=1"));
-  check("no pattern: drray@ tried first (invalid), then sam@ (valid) — and it stopped there", instantlyCalls.join(",").includes("drray@managerchiro.test,sam@managerchiro.test") && !instantlyCalls.includes("drsam@managerchiro.test"), instantlyCalls.join(", "));
-  check("the guess is the main email, source Pattern guess", m.email === "sam@managerchiro.test" && m.emailSource === "pattern_guess" && m.emailStatus === "valid");
-  const mAlts = parseAlternates(m.emailAlternates);
-  check("the invalid guess is kept as an invalid alternate; the front desk too", mAlts.some((x) => x.address === "drray@managerchiro.test" && x.status === "invalid") && mAlts.some((x) => x.address === "info@managerchiro.test"), m.emailAlternates ?? "");
-  const hunterCredits = await prisma.hunterCall.findMany({ where: { leadId: manager.id } });
-  check("Hunter's misses cost nothing (X-Credits-Used 0)", hunterCredits.length === 2 && hunterCredits.every((h) => h.creditsUsed === 0));
-
-  console.log("\n3. A name mismatch → both shown to pick");
-  const x = await reload(mismatch.id);
-  check("matched through the DBA name, by phone", x.npiNumber === "1000000003");
-  check("status pick; NPI's and the site's names both offered", x.ownerStatus === "pick" && ownerPanelProps(x).choices.join(",") === "Dr. John Park,Dr. Mia Chen", ownerPanelProps(x).choices.join(","));
-  check("nothing spent and the contact untouched until picked", !hunterCalls.some((c) => c.includes("mismatch.test")) && x.contactName === null);
-  const picked = await pickOwner(mismatch.id, "Dr. Mia Chen");
-  const x2 = await reload(mismatch.id);
-  check("picking confirms her as the owner", picked.ok && x2.ownerStatus === "confirmed" && x2.ownerSource === "manual" && x2.contactName === "Dr. Mia Chen");
-  check("a name that wasn't offered is refused", !(await pickOwner(mismatch.id, "Someone Else")).ok);
-
-  console.log("\n4. A Gmail-only clinic → skipped");
-  const g = await reload(gmail.id);
-  check("owner confirmed for free", g.ownerStatus === "confirmed" && g.contactName === "Dr. Tom Hale");
-  check("no Hunter call and no check for it", !hunterCalls.some((c) => c.includes("gmailchiro")) && !instantlyCalls.some((c) => c.includes("gmailchiro")));
-  check("its Gmail address stays the main email, and it is not offered again", g.email === "gmailchiro.office@gmail.com" && g.ownerEmailAt !== null);
-
-  console.log("\n5. A catch-all domain → risky, kept, never the main email");
-  const c = await reload(catchall.id);
-  check("pattern {first} built kim@ and Instantly said catch-all", instantlyCalls.includes("kim@catchall.test"));
-  check("only one guess checked on a catch-all domain", instantlyCalls.filter((e) => e.endsWith("@catchall.test")).length === 1);
-  check("the front desk is still the main email", c.email === "front@catchall.test" && c.emailStatus === "valid");
-  const cAlts = parseAlternates(c.emailAlternates);
-  check("the guess is an alternate marked risky, not deleted", cAlts.some((y) => y.address === "kim@catchall.test" && y.status === "risky" && y.type === "owner" && y.source === "pattern_guess"), c.emailAlternates ?? "");
-  check("the Risky chip catches it", hasRiskyEmail(c) && !hasRiskyEmail(await reload(agree.id)));
-
-  console.log("\n6. The front desk is asked to pass it to the doctor by name");
-  const fd = renderEmail(DEFAULT_EMAIL_SETTINGS, { clinicName: c.clinicName, contactName: c.contactName, contactTitle: c.contactTitle, websiteNotes: c.websiteNotes }, "front_desk", "Saw your decompression page.");
-  check("“Could you pass this to Dr. Ross?”", /pass this to Dr\. Ross\?/.test(fd.body), fd.body.split("\n").find((l) => l.includes("pass")) ?? "");
-  const before = renderEmail(DEFAULT_EMAIL_SETTINGS, { clinicName: "X", contactName: null, contactTitle: null, websiteNotes: null }, "front_desk", "o");
-  check("(without a contact name it says “the doctor or owner”, never a blank)", /pass this to the doctor or owner\?/.test(before.body), before.body.split("\n").find((l) => l.includes("pass")) ?? "");
-  const saved = renderEmail(
-    { ...DEFAULT_EMAIL_SETTINGS, frontDeskTemplate: "{greeting}\n\n{opener}\n\nThis is probably a question for {contact}. Would you mind passing it along?" },
-    { clinicName: "X", contactName: null, contactTitle: null, websiteNotes: null },
-    "front_desk",
-    "o",
-  );
-  check("the saved template's line, with no contact: “…a question for the doctor or owner.”", saved.body.includes("This is probably a question for the doctor or owner. Would you mind"));
-  const named = renderEmail(
-    { ...DEFAULT_EMAIL_SETTINGS, frontDeskTemplate: "{greeting}\n\n{opener}\n\nThis is probably a question for {contact}. Would you mind passing it along?" },
-    { clinicName: c.clinicName, contactName: c.contactName, contactTitle: c.contactTitle, websiteNotes: c.websiteNotes },
-    "front_desk",
-    "o",
-  );
-  check("…and with a confirmed owner: “…a question for Dr. Ross.”", named.body.includes("This is probably a question for Dr. Ross. Would you mind"));
-
-  console.log("\n7. Not run twice");
-  const left = (await findOwnerLeads()).filter((l) => mine.includes(l.id)).map((l) => l.clinicName);
-  // The just-picked lead has a valid front-desk address, so it is in the
-  // Email pipeline now and the bulk run leaves it; a run for it by name
-  // still covers it.
-  check("no lead is still waiting in the queue", left.join(",") === "", left.join(","));
-  check("…the just-picked one is still covered by name", (await findOwnerLeads({ includePipeline: true })).some((l) => l.clinicName === "Mismatch Wellness"));
-  // New leads are no longer looked up by an automatic Find owners run: the
-  // contact finder takes them (tools/verify-contact-finder.ts).
+  // The run itself — the NPI and site lookup, Hunter, the checks, routing —
+  // is the contact finder's now (tools/verify-contact-finder.ts). What stays
+  // here are the owner rules it reads.
 
   console.log("\n8. Doctor names off the site, cleaned and merged");
   const plasker = siteDoctorNames(
@@ -359,26 +249,6 @@ async function main(): Promise<void> {
   check("“Dr. Mike Pendolino Dr” → Dr. Mike Pendolino", pend.join(",") === "Dr. Mike Pendolino", pend.join(", "));
   const several = siteDoctorNames("Dr. Ann Lee Testimonials. Dr. Bob Kim Conditions. Dr. Lee and Dr. Kim.", null);
   check("several real doctors stay several", several.length === 2 && several.includes("Dr. Ann Lee") && several.includes("Dr. Bob Kim"), several.join(", "));
-
-  console.log("\n9. Guessing off: Hunter's Email Finder only");
-  await saveEmailSettingsRow({ ...(await loadEmailSettings()), guessOwnerPatterns: false });
-  const est2 = await ownerJobEstimate();
-  check("the estimate drops to one Hunter credit and one check a lead", est2.hunterMax === est2.count && est2.instantlyMax === est2.count, JSON.stringify(est2));
-  const miss = await seed("Missing Spine", {
-    location: "Denver, CO", websiteUrl: "https://managerchiro.test", websiteNotes: "x",
-    email: "info@managerchiro.test", emailType: "generic", emailSource: "site_crawl", emailStatus: "valid",
-    contactName: "Dr. Sam Ray", ownerStatus: "confirmed", ownerSource: "site", ownerCheckedAt: new Date(),
-  });
-  const hunterBefore = hunterCalls.length;
-  const instantlyBefore = instantlyCalls.length;
-  const t2 = new Date();
-  await startOwnerJob({ leadIds: [miss.id] });
-  await waitFor("find-owners", t2);
-  const ms = await reload(miss.id);
-  const newHunter = hunterCalls.slice(hunterBefore);
-  check("Hunter's Email Finder asked once, no Domain Search", newHunter.length === 1 && newHunter[0].startsWith("finder:"), newHunter.join(" | "));
-  check("a Hunter miss makes no Instantly calls", instantlyCalls.length === instantlyBefore, instantlyCalls.slice(instantlyBefore).join(", "));
-  check("nothing guessed or saved; the lead is marked looked-for", ms.email === "info@managerchiro.test" && ms.ownerEmailAt !== null && !parseAlternates(ms.emailAlternates).some((x) => x.source === "pattern_guess"));
 
   console.log("\n10. Owner or front desk, by the address");
   const asOwner = (a: string, n: string | null) => classifyAddress(a, n ? readDecisionMakerName(n) : null) === "owner";

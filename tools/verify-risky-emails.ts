@@ -82,7 +82,9 @@ async function main(): Promise<void> {
   const asj = await seed("American Spine And Joint", { email: "info@americanspineandjoint.com", emailSource: "site_crawl", websiteUrl: "https://americanspineandjoint.com" });
   check("a risky, found address starts on Check email", (await status(asj.id)) === "check_email");
   let p = await panel(asj.id);
-  check("Accept risky is offered, and Check again is not", p.risky.isRisky && p.risky.canAccept && !p.risky.accepted);
+  // Found on the clinic's own domain: the contact finder accepts it itself, so
+  // the panel offers no Accept risky (the action below still works by hand).
+  check("found on its own domain: no Accept risky button — the contact finder accepts it", p.risky.isRisky && !p.risky.canAccept && p.risky.autoAcceptable && !p.risky.accepted);
   check("Mark sent is refused before accepting", !(await act.markEmailSent(asj.id, { step: 0, subject: "x", body: "y" })).ok);
   check("Accept risky works", (await act.acceptRiskyEmail(asj.id)).ok);
   check("accepted → Ready", (await status(asj.id)) === "ready");

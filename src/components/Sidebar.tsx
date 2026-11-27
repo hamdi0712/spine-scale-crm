@@ -218,7 +218,7 @@ function NavItem({
   pathname,
   count,
 }: {
-  item: { href: string; label: string; Glyph: typeof IconLayoutDashboard };
+  item: { href: string; label: string; Glyph: typeof IconLayoutDashboard; link?: string };
   collapsed: boolean;
   pathname: string;
   count?: NavCount;
@@ -227,7 +227,7 @@ function NavItem({
   const show = count && count.n > 0;
   return (
     <Link
-      href={item.href}
+      href={item.link ?? item.href}
       title={collapsed ? `${item.label}${show ? ` · ${count.n}` : ""}` : undefined}
       className={`relative flex h-[42px] items-center gap-2 rounded-[10px] text-sm font-normal ${NAV_MOTION} ${
         collapsed ? "justify-center px-0" : "px-3"

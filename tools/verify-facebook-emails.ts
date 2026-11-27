@@ -110,8 +110,7 @@ async function main(): Promise<void> {
   const { prisma } = await import("../src/lib/prisma");
   const { loadPipelineSettings, savePipelineSettings } = await import("../src/lib/pipelineSettingsStore");
   const { DEFAULT_PIPELINE_SETTINGS, readPipelineSettings, pipelineSettingsRow, facebookEmailsCost, fmtEstimate } = await import("../src/lib/pipelineSettings");
-  const { findBackupEmail, facebookEmailLeads } = await import("../src/lib/facebookEmailRun");
-  const { startFacebookEmailJob } = await import("../src/lib/actions/jobs");
+  const { findBackupEmail } = await import("../src/lib/facebookEmailRun");
   const { parseAlternates, EMAIL_SOURCE_LABELS } = await import("../src/lib/emailFind");
   const { promoteToLead } = await import("../src/lib/promoteLead");
   const { pickContactFormLink } = await import("../src/lib/contactForm");
@@ -167,7 +166,7 @@ async function main(): Promise<void> {
   const off = await findBackupEmail(nothing.id, await loadPipelineSettings());
   check("skipped, and says where to turn it on", off.kind === "skipped" && /Settings → Pipeline/.test(off.detail), off.detail);
   check("no page was read", apifyCalls.length === 0);
-  check("the bulk action refuses", !(await startFacebookEmailJob()).ok);
+
 
   await savePipelineSettings({ ...DEFAULT_PIPELINE_SETTINGS, facebookEmails: { enabled: true, actorId: "apify~facebook-pages-scraper" } });
   const settings = await loadPipelineSettings();
@@ -185,20 +184,15 @@ async function main(): Promise<void> {
   check("skipped quietly", hasR.kind === "skipped" && hasR.quiet === true);
   check("email, source and status unchanged; no page read", hasLead.email === "typed@hasemail.test" && hasLead.emailSource === "manual" && hasLead.emailStatus === "valid" && apifyCalls.length === 0);
 
-  console.log("\nThe bulk action");
-  const eligible = await facebookEmailLeads();
-  const names = eligible.map((l) => l.clinicName).sort();
-  check(
-    "lists the three with no email and an unread page — not the one with an email, not the one the website filled",
-    names.length === 3 && names.every((n) => /FB (Listed|Nothing|Vendor)/.test(n)),
-    names.join(", "),
-  );
-  check("the estimate is per page", fmtEstimate(facebookEmailsCost(eligible.length)) === "~$0.03", fmtEstimate(facebookEmailsCost(eligible.length)));
-  const started = await startFacebookEmailJob();
-  check("starts in the shared job runner", started.ok, started.ok ? "" : started.error);
-  const run = await waitFor("facebook-emails");
-  check("finished, 1 found", run.status === "finished" && /^1 email found/.test(run.note ?? ""), `${run.status}: ${run.note}`);
-  check("each page read once", apifyCalls.length === 3 && new Set(apifyCalls).size === 3, apifyCalls.join(", "));
+  console.log("\nThe contact finder's Facebook step");
+  // The bulk "Find emails on Facebook" is gone: the contact finder reads the
+  // page itself, only for a lead with no address at all (src/lib/contactFinderRun.ts).
+  check("the estimate is per page", fmtEstimate(facebookEmailsCost(3)) === "~$0.03", fmtEstimate(facebookEmailsCost(3)));
+  const { kickContactFinder } = await import("../src/lib/actions/jobs");
+  await kickContactFinder([listed.id, nothing.id, vendor.id, has.id]);
+  const run = await waitFor("contact-finder");
+  check("the finder ran in the shared job runner", run.status === "finished", `${run.status}: ${run.note}`);
+  check("each page read once — only the three with no address, not the one with an email", apifyCalls.length === 3 && new Set(apifyCalls).size === 3, apifyCalls.join(", "));
 
   const listedLead = await reload(listed.id);
   const listedAlts = parseAlternates(listedLead.emailAlternates);
@@ -219,11 +213,7 @@ async function main(): Promise<void> {
   const vendorLead = await reload(vendor.id);
   check("web-vendor and builder addresses dropped → no email", vendorLead.email === null && vendorLead.emailAlternates === null && vendorLead.facebookEmailAt !== null, String(vendorLead.email));
 
-  console.log("\nThe Instantly check, automatically");
-  // The bulk action hands what it found to the contact finder, which checks
-  // each new address once and routes the lead.
-  const check1 = await waitFor("contact-finder");
-  check("the contact finder ran when the bulk action finished", check1.status === "finished", `${check1.status}: ${check1.note}`);
+  console.log("\nThe Instantly check, in the same run");
   check("the Facebook address was checked", checked.includes("drlee@fblisted.test"), checked.join(", "));
   // The website address above came from a direct call; in the app every path
   // that finds one (the enrich run, the bulk action, the finder itself) hands
@@ -238,7 +228,7 @@ async function main(): Promise<void> {
   const before = apifyCalls.length;
   const again = await findBackupEmail(nothing.id, settings);
   check("already read: skipped, no new run", again.kind === "skipped" && apifyCalls.length === before, again.detail);
-  check("and the bulk action has nothing left", (await facebookEmailLeads()).length === 0);
+  check("and the finder does not read it again", (await reload(nothing.id)).facebookEmailAt !== null && apifyCalls.length === before);
 
   console.log("\nPromotion");
   const crawlCand = await prisma.discoveryCandidate.create({

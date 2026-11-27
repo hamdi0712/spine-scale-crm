@@ -7,14 +7,16 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { undoEmailSent } from "@/lib/actions/emailWorkflow";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 export default function UndoMarkSentButton({ leadId, sendId, label }: { leadId: string; sendId: string; label: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const ask = useConfirm();
 
-  function undo() {
-    if (!confirm("Undo marking this email as sent?")) return;
+  async function undo() {
+    if (!(await ask({ title: "Undo mark sent?", body: `${label} goes back to not sent — the lead returns to where it was before.`, confirm: "Undo mark sent" }))) return;
     setError(null);
     start(async () => {
       const r = await undoEmailSent(leadId, sendId);
@@ -25,7 +27,7 @@ export default function UndoMarkSentButton({ leadId, sendId, label }: { leadId: 
 
   return (
     <div className="mt-2">
-      <button type="button" onClick={undo} disabled={pending} className="btn h-8 px-2.5 text-xs disabled:opacity-50" title={`Undo ${label} marked sent`}>
+      <button type="button" onClick={() => void undo()} disabled={pending} className="btn h-8 px-2.5 text-xs disabled:opacity-50" title={`Undo ${label} marked sent`}>
         {pending ? "Undoing…" : "Undo mark sent"}
       </button>
       {error && <p className="mt-1.5 text-xs text-bad">{error}</p>}

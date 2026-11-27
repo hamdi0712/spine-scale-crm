@@ -118,8 +118,7 @@ async function main(): Promise<void> {
     throw new Error("Refusing to run: DATABASE_URL must point at a scratch database with 'verify' in its name.");
   }
   const { prisma } = await import("../src/lib/prisma");
-  const { startEmailCheckJob, autoCheckEmails } = await import("../src/lib/actions/jobs");
-  const { readJob, readJobResults } = await import("../src/lib/jobRunner");
+  const { finderBudget, runContactFinder } = await import("../src/lib/contactFinderRun");
   const { creditsUsedThisMonth } = await import("../src/lib/emailCheckRun");
   const { loadEmailSettings, saveEmailSettingsRow } = await import("../src/lib/emailSettingsStore");
   const { mapVerification } = await import("../src/lib/emailCheck");
@@ -135,23 +134,22 @@ async function main(): Promise<void> {
   await saveEmailSettingsRow({ ...(await loadEmailSettings()), checkCreditBudget: 150, creditsPerCheck: 1 });
 
   const seed = (name: string, email: string, extra: Record<string, unknown> = {}) =>
-    prisma.lead.create({ data: { clinicName: `${name} ${TAG}`, stage: "NEW", channel: "email", email, emailSource: "maps_contacts", emailType: "generic", ...extra } });
+    prisma.lead.create({
+      data: {
+        clinicName: `${name} ${TAG}`, stage: "NEW", channel: "email", email, emailSource: "maps_contacts", emailType: "generic",
+        ownerStatus: "not_found", ownerCheckedAt: new Date(), ownerConfidence: "high",
+        ...extra,
+      },
+    });
   const valid = await seed("Valid Spine", "info@validspine.test");
   const catchAll = await seed("Catch-All Clinic", "catchall@everything.test");
   const pending = await seed("Slow Server Clinic", "pending@slowserver.test");
   const invalid = await seed("Invalid Clinic", "invalid@badclinic.test");
   const manual = await seed("Typed In Clinic", "invalid.typed@typed.test", { emailSource: "manual" });
 
-  const runJob = async (args: Parameters<typeof startEmailCheckJob>[0]) => {
-    const started = await startEmailCheckJob(args);
-    if (!started.ok) return { started, job: null, items: [] as { name: string; result: unknown }[] };
-    let job = await readJob(started.id);
-    while (job && job.status === "running") {
-      await sleep(50);
-      job = await readJob(started.id);
-    }
-    return { started, job, items: await readJobResults(started.id) };
-  };
+  // Every check now runs inside the contact finder (src/lib/contactFinderRun.ts).
+  // The leads carry an earlier owner lookup, so the finder asks only Instantly.
+  const find = async (id: string) => runContactFinder(id, await finderBudget());
   const lead = (id: string) => prisma.lead.findUniqueOrThrow({ where: { id } });
 
   console.log("\nThe mapping");
@@ -161,10 +159,8 @@ async function main(): Promise<void> {
       mapVerification({ verificationStatus: "invalid", catchAll: false }) === "invalid" &&
       mapVerification({ verificationStatus: "pending", catchAll: "pending" }) === "unknown");
 
-  console.log("\nCheck all unchecked, against the mock");
-  const first = await runJob({});
-  check("the job ran in the shared runner and finished", first.started.ok && first.job?.status === "finished" && first.job.kind === "email-check" && first.job.done === 5,
-    JSON.stringify(first.started));
+  console.log("\nEach new address, through the contact finder, against the mock");
+  for (const l of [valid, catchAll, pending, invalid, manual]) await find(l.id);
   check("verified → valid", (await lead(valid.id)).emailStatus === "valid" && (await lead(valid.id)).emailCheckedAt !== null);
   check("catch-all → risky", (await lead(catchAll.id)).emailStatus === "risky");
   check("pending was polled until it finished, then valid", (await lead(pending.id)).emailStatus === "valid" &&
@@ -182,47 +178,30 @@ async function main(): Promise<void> {
     (await prisma.emailCheck.findFirstOrThrow({ where: { email: "catchall@everything.test" } })).catchAll === "true");
 
   console.log("\nEach address once");
-  const again = await runJob({});
-  check("a second Check all checks nothing", !again.started.ok && /Nothing to check/.test(again.started.ok ? "" : again.started.error) && (await prisma.emailCheck.count()) === 5);
-  const notForced = await runJob({ leadIds: [valid.id] });
-  check("nor does Check email on a checked lead", !notForced.started.ok);
-  const forced = await runJob({ leadIds: [valid.id], force: true });
-  check("Check again re-checks it", forced.job?.status === "finished" && (await prisma.emailCheck.count({ where: { email: "info@validspine.test" } })) === 2);
+  await find(valid.id);
+  check("running the finder again checks nothing it already checked", (await prisma.emailCheck.count()) === 5);
 
   console.log("\nThe budget");
-  await saveEmailSettingsRow({ ...(await loadEmailSettings()), checkCreditBudget: 2 });
-  const extra = await Promise.all([1, 2, 3, 4].map((i) => seed(`Budget Clinic ${i}`, `info@budget${i}.test`)));
-  // 1.5 used of 2: 0.5 left = 2 checks at 0.25; 4 unchecked need 1.
-  const refused = await runJob({});
-  check("a job that would go over the budget is refused, saying how many fit",
-    !refused.started.ok && /needs 1 credits and 0\.5 are left of this month's 2 — 2 checks would fit/.test(refused.started.ok ? "" : refused.started.error),
-    refused.started.ok ? "started?" : refused.started.error);
-  check("and checked nothing", (await prisma.emailCheck.count()) === 6);
-  await autoCheckEmails();
-  let auto = await prisma.jobRun.findFirst({ where: { source: "email-check" }, orderBy: { startedAt: "desc" } });
-  while (auto?.status === "running") {
-    await sleep(50);
-    auto = await prisma.jobRun.findFirst({ where: { source: "email-check" }, orderBy: { startedAt: "desc" } });
-  }
-  const checkedExtra = (await prisma.lead.findMany({ where: { id: { in: extra.map((e) => e.id) } } })).filter((l) => l.emailStatus !== null).length;
-  check("the automatic check takes as many as fit (2), and leaves the rest", checkedExtra === 2 && (await creditsUsedThisMonth()) === 2, `${checkedExtra} checked`);
-  await autoCheckEmails();
-  check("with the budget used up it does not start", (await prisma.emailCheck.count()) === 8);
+  await saveEmailSettingsRow({ ...(await loadEmailSettings()), checkCreditBudget: 1.25 });
+  const broke = await seed("Budget Clinic", "info@budget.test");
+  const rb = await find(broke.id);
+  check("no credits left: the lead needs you, \"Out of credits\", and nothing is checked",
+    rb.status === "needs_you" && (await lead(broke.id)).contactStatusReason === "Out of credits" && (await prisma.emailCheck.count()) === 5, String(rb.status));
 
   console.log("\nNo API access");
   await saveEmailSettingsRow({ ...(await loadEmailSettings()), checkCreditBudget: 150 });
   process.env.INSTANTLY_API_KEY = "no-plan";
-  const noPlan = await runJob({});
-  const noPlanItem = noPlan.items[0];
-  check("a plan without API access says so, and the run stops",
-    noPlan.job?.status === "stopped" && /plan doesn't allow API access/.test(noPlan.job.note ?? "") && noPlan.job.done === 1, noPlan.job?.note ?? JSON.stringify(noPlanItem));
-  check("and nothing on the lead changes", (await prisma.lead.count({ where: { id: { in: extra.map((e) => e.id) }, emailStatus: null } })) === 2);
+  const noPlan = await find(broke.id);
+  check("a plan without API access stops the run and the lead needs you", noPlan.status === "needs_you" && noPlan.stop === true && (await lead(broke.id)).emailStatus === null,
+    `${noPlan.status} ${noPlan.detail}`);
+  check("…saying so in the trace", /plan doesn't allow API access/.test((await lead(broke.id)).contactTrace ?? ""));
   process.env.INSTANTLY_API_KEY = "revoked";
-  const revoked = await runJob({});
-  check("a revoked key says so", revoked.job?.status === "stopped" && /refused the API key/.test(revoked.job.note ?? ""));
+  const revoked = await find(broke.id);
+  check("a revoked key says so", revoked.status === "needs_you" && /refused the API key/.test((await lead(broke.id)).contactTrace ?? ""));
   delete process.env.INSTANTLY_API_KEY;
-  const noKey = await runJob({});
-  check("no key at all: refused before anything runs", !noKey.started.ok && /No Instantly API key/.test(noKey.started.ok ? "" : noKey.started.error));
+  const noKey = await find(broke.id);
+  check("no key at all: \"Missing API key: Instantly\", nothing sent to Instantly",
+    noKey.status === "needs_you" && (await lead(broke.id)).contactStatusReason === "Missing API key: Instantly");
 
   console.log("\nNothing but email verification");
   check("every call was to the spec's email-verification paths", outOfSpec.length === 0, outOfSpec.join(", "));

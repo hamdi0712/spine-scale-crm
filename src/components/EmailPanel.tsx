@@ -8,6 +8,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { useConfirm } from "@/components/ConfirmDialog";
 import {
   approveEmail,
   generateEmailOpener,
@@ -41,7 +42,6 @@ import { EmailStatusBadge } from "@/components/Badge";
 import EmailSendButtons from "@/components/EmailSendButtons";
 import StarterCopyBanner from "@/components/StarterCopyBanner";
 import UndoMarkSentButton from "@/components/UndoMarkSentButton";
-import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
 import { confirmText } from "@/lib/displayMode";
 import { OPENER_ANGLE_LABELS, readOpenerAngle } from "@/lib/emailRules";
 
@@ -68,7 +68,10 @@ export interface EmailPanelProps {
   // guessed), whether it is, and whether a bounce on its domain flagged it.
   risky: {
     isRisky: boolean;
+    // Accept risky by hand: only where the contact finder will not accept it.
     canAccept: boolean;
+    // The finder accepts it on its own (found on the clinic's domain, not revoked).
+    autoAcceptable: boolean;
     accepted: boolean;
     inSequence: boolean;
     flagged: { at: string; reason: string | null } | null;
@@ -113,6 +116,7 @@ const MECHANISM_LABELS: Record<string, string> = {
 // the panel leaves it out of its own first line.
 export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelProps & { statusInTitle?: boolean }) {
   const router = useRouter();
+  const ask = useConfirm();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [subject, setSubject] = useState(p.subject ?? "");
@@ -215,11 +219,14 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
                   type="button"
                   className="btn h-8 px-2.5 text-xs"
                   disabled={pending}
-                  onClick={() => {
-                    const ask = p.risky.inSequence
-                      ? "Revoke accept? Its follow-ups pause until it is accepted again."
-                      : "Revoke accept? The lead goes back out of Ready.";
-                    if (!confirm(ask)) return;
+                  onClick={async () => {
+                    const ok = await ask({
+                      title: "Revoke accept?",
+                      body: p.risky.inSequence ? "Its follow-ups pause until it is accepted again." : "The lead goes back out of Ready.",
+                      confirm: "Revoke accept",
+                      danger: true,
+                    });
+                    if (!ok) return;
                     run(() => revokeRiskyEmail(p.leadId));
                   }}
                 >
@@ -231,7 +238,11 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
                 Accept risky
               </button>
             ) : (
-              <p className="text-xs text-muted">This address was guessed, inferred or imported rather than found, so it can’t be accepted.</p>
+              <p className="text-xs text-muted">
+                {p.risky.autoAcceptable
+                  ? "Found on the clinic’s own domain — the contact finder accepts it on its next run."
+                  : "This address was guessed, inferred or imported rather than found, so it can’t be accepted."}
+              </p>
             )}
             {p.risky.flagged && (
               <div className="rounded-[10px] border border-warn/30 bg-warn-soft/60 px-3 py-2">
@@ -246,22 +257,6 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
                 </div>
               </div>
             )}
-          </div>
-        )}
-        {p.email && !closed && !p.risky.isRisky && (
-          <div className="mt-1.5">
-            <EmailCheckButton
-              label={p.check.checked ? "Check again" : "Check email"}
-              count={1}
-              leadIds={[p.leadId]}
-              force={p.check.checked}
-              perCheck={p.check.perCheck}
-              used={p.check.used}
-              budget={p.check.budget}
-              hasKey={p.check.hasKey}
-              compact
-            />
-            <EmailCheckProgress className="mt-2" />
           </div>
         )}
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -404,9 +399,17 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
                     type="button"
                     aria-pressed={p.version === v}
                     disabled={pending}
-                    onClick={() => {
+                    onClick={async () => {
                       if (v === p.version) return;
-                      if (dirty && !confirm(confirmText("Switching rebuilds the email from the other template, and your edits go. Switch?", "Switch template? Your edits are lost."))) return;
+                      if (
+                        dirty &&
+                        !(await ask({
+                          title: "Switch template?",
+                          body: confirmText("Switching rebuilds the email from the other template, and your edits go.", "Your edits are lost."),
+                          confirm: "Switch",
+                        }))
+                      )
+                        return;
                       run(() => setEmailVersion(p.leadId, v));
                     }}
                     className={`segment-item px-3 text-xs ${p.version === v ? "segment-item-on" : ""}`}
@@ -464,8 +467,15 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
                   type="button"
                   disabled={pending}
                   className="btn"
-                  onClick={() => {
-                    if (!confirm(confirmText("Draft a new opener? The email is rebuilt around it and needs approving again.", "New opener? Needs approving again."))) return;
+                  onClick={async () => {
+                    if (
+                      !(await ask({
+                        title: "Draft a new opener?",
+                        body: confirmText("The email is rebuilt around it and needs approving again.", "Needs approving again."),
+                        confirm: "Regenerate",
+                      }))
+                    )
+                      return;
                     run(() => generateEmailOpener(p.leadId));
                   }}
                 >
@@ -533,8 +543,16 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
               type="button"
               disabled={pending || !p.email}
               className="btn disabled:opacity-50"
-              onClick={() => {
-                if (!confirm(confirmText(`Mark ${p.email} bounced? The address moves to the alternates as invalid and the lead goes back to No email. The clinic is not suppressed.`, `Mark ${p.email} bounced? Lead goes back to No email.`))) return;
+              onClick={async () => {
+                if (
+                  !(await ask({
+                    title: `Mark ${p.email} bounced?`,
+                    body: confirmText("The address moves to the alternates as invalid and the lead goes back to No email. The clinic is not suppressed.", "Lead goes back to No email."),
+                    confirm: "Mark bounced",
+                    danger: true,
+                  }))
+                )
+                  return;
                 run(() => markEmailBounced(p.leadId));
               }}
             >
@@ -544,8 +562,16 @@ export default function EmailPanel({ statusInTitle = false, ...p }: EmailPanelPr
               type="button"
               disabled={pending}
               className="btn"
-              onClick={() => {
-                if (!confirm(confirmText(`Mark ${p.clinicName} unsubscribed? It goes on the suppression list and is not contacted again on any channel.`, `Unsubscribe ${p.clinicName}? Never contacted again on any channel.`))) return;
+              onClick={async () => {
+                if (
+                  !(await ask({
+                    title: `Mark ${p.clinicName} unsubscribed?`,
+                    body: confirmText("It goes on the suppression list and is not contacted again on any channel.", "Never contacted again on any channel."),
+                    confirm: "Unsubscribe",
+                    danger: true,
+                  }))
+                )
+                  return;
                 run(() => markEmailUnsubscribed(p.leadId));
               }}
             >

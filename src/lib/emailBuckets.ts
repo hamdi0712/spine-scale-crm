@@ -121,6 +121,13 @@ export function formBucketOf(
   return b === "contact_form" || b === "form_sent" ? b : null;
 }
 
+// The lead page's contact-form panel (Copy message, Mark form sent): only on
+// an email lead the contact finder routed to the clinic's form. A lead with a
+// usable email in the Email pipeline never shows it.
+export function showsContactFormPanel(lead: { channel: string; contactStatus: string | null }): boolean {
+  return lead.channel === "email" && readContactStatus(lead.contactStatus) === "contact_form";
+}
+
 // The buckets the Email pipeline shows.
 export function inEmailPipeline(b: EmailBucket): boolean {
   return b === "pipeline" || b === "contact_form" || b === "form_sent";

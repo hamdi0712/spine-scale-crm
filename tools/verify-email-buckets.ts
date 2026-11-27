@@ -33,9 +33,7 @@ const TAG = "verify-email-buckets";
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const { loadEmailQueue, loadCallList, emailPipelineIds, deadQueueLeads } = await import("../src/lib/emailBucketsRead");
-  const { findLeadOwner } = await import("../src/lib/actions/ownerFind");
   const { loadEmailView, loadLeadEmailState } = await import("../src/lib/emailWorkflowRead");
-  const { pickOwner, findOwnerLeads } = await import("../src/lib/ownerFindRun");
   const { logCall } = await import("../src/lib/actions/callList");
   const { markContactFormSent } = await import("../src/lib/actions/emailWorkflow");
 
@@ -149,23 +147,9 @@ async function main() {
   check("an owner picked by hand with nowhere to look → not the queue (Call list)", !inQueue(deadEnd.id) && callOf(deadEnd.id)?.section === "last_resort");
   const dead = await deadQueueLeads();
   check("no queue lead has a button that would do nothing, or no way forward", dead.length === 0, dead.map((d) => `${d.clinicName}: ${d.why}`).join("; "));
-  const forced = await findLeadOwner(lookedUp.id);
-  check("'Find this owner's email' runs even on a lead looked up before (here it stops only at the missing API key)",
-    !forced.ok && /API key/.test(forced.error) && !/waiting on its owner/.test(forced.error), forced.ok ? "started" : forced.error);
-
-  console.log("Hand pick");
-  const r = await pickOwner(pick.id, "Dr. Jane Roe");
-  const after = await prisma.lead.findUniqueOrThrow({ where: { id: pick.id } });
-  check("picking an owner works", r.ok);
-  check("the pick clears both markers", after.ownerCheckedAt === null && after.ownerEmailAt === null, `${after.ownerCheckedAt} ${after.ownerEmailAt}`);
-  check("the owner picked by hand is kept", after.ownerStatus === "confirmed" && after.ownerSource === "manual");
-  check("the next Find owners run includes it", (await findOwnerLeads()).some((l) => l.id === pick.id));
-  // Where it goes is the contact finder's (pickLeadOwner starts it for the
-  // lead); the pick alone moves nothing.
-  const placeBefore = callOf(pick.id)?.section ?? (inQueue(pick.id) ? "queue" : "pipeline");
-  calls = await loadCallList();
-  check("the pick alone does not move it — the contact finder routes it", (callOf(pick.id)?.section ?? ((await loadEmailQueue()).queue.some((q) => q.id === pick.id) ? "queue" : "pipeline")) === placeBefore, placeBefore);
-  check("Find owners leaves pipeline leads alone", !(await findOwnerLeads()).some((l) => l.id === risky.id));
+  // Picking the owner and the Find owner buttons are gone: the Contact field
+  // sets the owner by hand, and the contact finder does the rest
+  // (tools/verify-contact-finder.ts).
 
   console.log("Contact form → Form follow-up");
   await markContactFormSent(formLead.id);

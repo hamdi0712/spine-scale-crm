@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { startOpenerRerun } from "@/lib/actions/jobs";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import type { RerunEstimate } from "@/lib/openerRerun";
 
@@ -14,17 +15,20 @@ export default function RerunOpenersButton({ estimate }: { estimate: RerunEstima
   const { running, track } = useJobRun("rerun-openers");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const ask = useConfirm();
   const total = estimate.reset + estimate.needs;
 
   async function run() {
     if (
-      !confirm(
-        `Re-run openers for ${total} lead${total === 1 ? "" : "s"}?\n\n` +
+      !(await ask({
+        title: `Re-run openers for ${total} lead${total === 1 ? "" : "s"}?`,
+        body:
           `${estimate.reset} approved but unsent: unapproved, old opener kept in the lead's notes, regenerated.\n` +
           `${estimate.needs} in Needs opener (A-tier first, then B-tier): generated.\n\n` +
           `Nothing is approved — each opener waits for you. Leads with no cited evidence go to Needs manual opener.\n\n` +
           `DeepSeek cost: up to about $${estimate.maxUsd.toFixed(2)} (two calls per lead at most).`,
-      )
+        confirm: "Re-run openers",
+      }))
     )
       return;
     setError(null);

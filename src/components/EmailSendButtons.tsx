@@ -9,6 +9,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { markEmailSent } from "@/lib/actions/emailWorkflow";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { EmailToSend, copyText, gmailComposeUrl, inboxShort } from "@/lib/emailWorkflow";
 import { confirmText } from "@/lib/displayMode";
 
@@ -36,6 +37,7 @@ export default function EmailSendButtons({
   const [pending, start] = useTransition();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const ask = useConfirm();
 
   async function copy() {
     try {
@@ -47,27 +49,31 @@ export default function EmailSendButtons({
     }
   }
 
-  function markSent() {
+  async function markSent() {
     if (
       inboxSentToday >= inboxLimit &&
-      !confirm(
-        confirmText(
+      !(await ask({
+        title: "Over the daily limit",
+        body: confirmText(
           `That will be ${inboxSentToday + 1} sent today from ${toSend.from}, over its limit of ${inboxLimit}. Mark it sent anyway?`,
           `${inboxShort(toSend.from)} over its limit: ${inboxSentToday + 1} of ${inboxLimit} today. Mark sent?`,
         ),
-      )
+        confirm: "Mark sent anyway",
+      }))
     ) {
       return;
     }
     if (
       toSend.risky &&
       inboxRiskySentToday >= riskyLimit &&
-      !confirm(
-        confirmText(
+      !(await ask({
+        title: "Over the risky limit",
+        body: confirmText(
           `That will be ${inboxRiskySentToday + 1} risky sends today from ${toSend.from}, over the risky limit of ${riskyLimit}. Mark it sent anyway?`,
           `${inboxShort(toSend.from)} over its risky limit: ${inboxRiskySentToday + 1} of ${riskyLimit} today. Mark sent?`,
         ),
-      )
+        confirm: "Mark sent anyway",
+      }))
     ) {
       return;
     }
@@ -96,7 +102,7 @@ export default function EmailSendButtons({
         <button type="button" onClick={() => void copy()} className={btn}>
           {copied ? "Copied" : "Copy email"}
         </button>
-        <button type="button" onClick={markSent} disabled={pending} className={`${compact ? "btn-primary h-8 px-2.5 text-xs" : "btn-primary"} disabled:opacity-50`}>
+        <button type="button" onClick={() => void markSent()} disabled={pending} className={`${compact ? "btn-primary h-8 px-2.5 text-xs" : "btn-primary"} disabled:opacity-50`}>
           {pending ? "Saving…" : `Mark ${toSend.label} sent`}
         </button>
       </div>

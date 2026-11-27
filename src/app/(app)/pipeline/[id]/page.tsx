@@ -92,6 +92,8 @@ import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 import OwnerPanel from "@/components/OwnerPanel";
 import { ownerPanelProps } from "@/lib/ownerFind";
 import { contactFinderPanelProps } from "@/lib/contactFinder";
+import { showsContactFormPanel } from "@/lib/emailBuckets";
+import { DUPLICATE_SELECT, duplicatesOf } from "@/lib/duplicates";
 
 export const dynamic = "force-dynamic";
 
@@ -180,7 +182,6 @@ export default async function LeadDetailPage({
     const finder = contactFinderPanelProps(lead);
     return {
       ...base,
-      canFindEmail: base.canFindEmail && finder.confidence !== "low",
       sourceLabel: finder.ownerPick ? null : base.sourceLabel,
       finder,
     };
@@ -201,7 +202,14 @@ export default async function LeadDetailPage({
   const overdue = nextTask?.dueDate ? nextTask.dueDate.getTime() < Date.UTC(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()) : false;
 
   // Email leads only: the message is the front-desk email.
-  const contactForm = lead.channel === "email" ? await contactFormProps(lead) : null;
+  // Only where the contact finder routed the lead to the clinic's form —
+  // never on a lead with a usable email in the Email pipeline.
+  const contactForm = showsContactFormPanel(lead) ? await contactFormProps(lead) : null;
+  // The same doctor or clinic on another lead (email leads only): a chip.
+  const duplicates =
+    lead.channel === "email"
+      ? duplicatesOf(lead, await prisma.lead.findMany({ where: { archived: false, id: { not: lead.id } }, select: DUPLICATE_SELECT }))
+      : [];
 
   // The scorecard. The ICP model's card where the lead has one; a blank card
   // against the active ICP where it does not, to score by hand or with the
@@ -249,6 +257,22 @@ export default async function LeadDetailPage({
                   </span>
                 )}
               </div>
+              {/* The same doctor or clinic on another lead: a warning only,
+                  never merged (src/lib/duplicates.ts). */}
+              {duplicates.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {duplicates.map((d) => (
+                    <Link
+                      key={d.id}
+                      href={`/pipeline/${d.id}`}
+                      title={d.by === "domain" ? "Same website domain" : "Same contact, same state"}
+                      className="inline-flex h-[22px] items-center rounded-full bg-warn-soft px-2.5 text-xs font-medium text-warn hover:underline"
+                    >
+                      Also on: {d.clinicName} · {d.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
               <ul className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
                 <li className="flex min-w-0 items-center gap-1.5">
                   <IconUser size={15} stroke={1.75} aria-hidden className="shrink-0" />

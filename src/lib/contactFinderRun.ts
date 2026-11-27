@@ -21,9 +21,10 @@ import {
   ContactProposal,
   ContactStatus,
   FAILED_STEP_RETRY_MS,
-  NO_KEY_RETRY_MS,
+  missingKey,
   FoundAddress,
   MAX_STEP_FAILURES,
+  NOT_RUN_YET,
   OUT_OF_CREDITS,
   OWNER_PICK_CALL_USD,
   OWNER_PICK_SYSTEM,
@@ -51,7 +52,7 @@ import {
   serializeTrace,
   stepFailed,
 } from "@/lib/contactFinder";
-import { EmailSource, classifyAddress, clinicDomain, isMailboxProvider, readDecisionMakerName } from "@/lib/emailFind";
+import { EmailSource, classifyAddress, clinicDomain, hasFrontDeskWord, isMailboxProvider, readDecisionMakerName } from "@/lib/emailFind";
 import { decideOwner, matchNpiOrganization, npiNameQueries, samePerson, siteDoctorNames, stateFromLocation, NpiMatch, addressFromPattern, guessAddresses } from "@/lib/ownerFind";
 import { searchNpiOrganizations } from "@/lib/npiRegistry";
 import { findEmail, searchDomain } from "@/lib/hunter";
@@ -59,7 +60,7 @@ import { checkAddress, checkReadiness } from "@/lib/emailCheckRun";
 import { hunterCreditsUsedThisMonth, rebuildDraft } from "@/lib/ownerFindRun";
 import { findBackupEmail } from "@/lib/facebookEmailRun";
 import { deepSeekJson } from "@/lib/deepseek";
-import { getDeepseekApiKey, getHunterApiKey } from "@/lib/appSecretsStore";
+import { getDeepseekApiKey, getHunterApiKey, getInstantlyApiKey } from "@/lib/appSecretsStore";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { loadPipelineSettings } from "@/lib/pipelineSettingsStore";
 import { FACEBOOK_PAGE_USD_PER_PAGE } from "@/lib/pipelineSettings";
@@ -228,12 +229,13 @@ export async function runContactFinder(
   const finalConfidence: OwnerConfidence | null = handContact ? null : contactName ? (contactIsOwner ? confidence : "low") : null;
 
   // Addresses read again against the owner: drhishon@ is the owner's once
-  // Dr. Hishon is known. Only upward; a type set by hand stays.
+  // Dr. Hishon is known. A front-desk word (paportofrontdesk@) always means
+  // the front desk, whatever was stored. A type set by hand stays.
   const person = readDecisionMakerName(contactName);
-  if (person) {
-    for (const a of addresses) {
-      if (a.type === "generic" && !(a.main && lead.emailTypeByHand) && classifyAddress(a.address, person) === "owner") a.type = "owner";
-    }
+  for (const a of addresses) {
+    if (a.main && lead.emailTypeByHand) continue;
+    if (hasFrontDeskWord(a.address)) a.type = "generic";
+    else if (person && a.type === "generic" && classifyAddress(a.address, person) === "owner") a.type = "owner";
   }
 
   // ─── 3a. Hunter: the owner's own address ─────────────────────────────────
@@ -247,7 +249,10 @@ export async function runContactFinder(
   } else if (!domain || isMailboxProvider(domain)) {
     add({ step: "Hunter", result: "skipped (no clinic domain)" });
   } else if (!(await getHunterApiKey())) {
-    add({ step: "Hunter", result: "skipped (no API key)" });
+    // Hunter is needed here (no owner address, a sure owner, the clinic's own
+    // domain) and cannot run: the lead needs you until a key is saved.
+    add({ step: "Hunter", result: "no API key" });
+    return needsYou(missingKey("Hunter"));
   } else {
     if (budget.hunterLeft < 1) {
       add({ step: "Hunter", result: "out of credits" });
@@ -323,14 +328,10 @@ export async function runContactFinder(
     const c = await checkAddress(leadId, a.address);
     if (!c.ok) {
       if (c.code === "no_key") {
-        // Not a block the brief counts as needing you: it waits, quietly,
-        // and the hourly look tries again once a key is there.
-        add({ step: "Instantly", result: "no API key — waiting" });
-        if (mode === "propose") return finish({}, { status: null, detail: "No Instantly API key." });
-        return finish(
-          { contactStatus: "finding", contactStatusReason: null, contactRetryAt: new Date(now.getTime() + NO_KEY_RETRY_MS) },
-          { status: "finding", detail: "No Instantly API key — waiting for one." },
-        );
+        // Nothing can be checked: the lead needs you until a key is saved
+        // (saving one wakes the finder; see finderDueLeads).
+        add({ step: "Instantly", result: "no API key" });
+        return needsYou(missingKey("Instantly"));
       }
       return failed("Instantly", c.error, c.code === "auth" || c.code === "plan");
     }
@@ -356,7 +357,10 @@ export async function runContactFinder(
 
   // Risky and found on the clinic's own domain or free mail: accepted.
   const handAccepted = (a: FoundAddress) => a.main && riskyAccepted(lead);
-  const accepted = (a: FoundAddress) => handAccepted(a) || canAutoAccept(a, lead.websiteUrl);
+  // An address the operator revoked is theirs to accept again, never the finder's.
+  const revoked = await revokedAddresses(leadId);
+  const autoAcceptable = (a: FoundAddress) => !revoked.has(a.address) && canAutoAccept(a, lead.websiteUrl);
+  const accepted = (a: FoundAddress) => handAccepted(a) || autoAcceptable(a);
 
   // ─── 5. Route ────────────────────────────────────────────────────────────
   const contactFormUrl = pickContactFormLink(lead.websiteLinks, lead.websiteUrl);
@@ -425,10 +429,12 @@ export async function runContactFinder(
     if (!(newMain.main && lead.emailTypeByHand)) data.emailType = newMain.type;
     data.emailStatus = newMain.status;
     if (mainChanged) data.emailSource = newMain.source;
-    if (newMain.status !== mainBefore?.status || mainChanged) data.emailCheckedAt = now;
+    // Compared with what was stored: the address objects above carry the new
+    // verdicts already.
+    if (mainChanged || newMain.status !== lead.emailStatus) data.emailCheckedAt = now;
     // Accepted automatically: logged, and from here it counts as an accepted
     // risky address everywhere — the risky daily limit, a bounce on its domain.
-    if (newMain.status === "risky" && !handAccepted(newMain) && canAutoAccept(newMain, lead.websiteUrl)) {
+    if (newMain.status === "risky" && !handAccepted(newMain) && autoAcceptable(newMain)) {
       data.emailRiskyAcceptedAt = now;
       data.emailRiskyAcceptedEmail = newMain.address;
       await prisma.activityLog.create({
@@ -451,6 +457,18 @@ export async function runContactFinder(
   if ((contactChanged || mainChanged) && !approved) await rebuildDraft(leadId);
   await syncLeadInbox(leadId);
   return { status, detail: `${routed.address ? routed.address.address : routed.route === "contact_form" ? "Contact form" : "Call list"}${waitForRetry ? " (waiting on a retry)" : ""}` };
+}
+
+// Addresses whose acceptance the operator revoked on this lead (logged by
+// revokeRiskyEmail as EMAIL_RISKY_REVOKED).
+export async function revokedAddresses(leadId: string): Promise<Set<string>> {
+  const rows = await prisma.activityLog.findMany({ where: { leadId, kind: "EMAIL_RISKY_REVOKED" }, select: { summary: true } });
+  const out = new Set<string>();
+  for (const r of rows) {
+    const m = /risky address (\S+@\S+?) for /.exec(r.summary);
+    if (m) out.add(m[1].toLowerCase());
+  }
+  return out;
 }
 
 // ─── The owner step ────────────────────────────────────────────────────────
@@ -628,6 +646,11 @@ export async function markForFinder(leadIds: string[]): Promise<string[]> {
 export async function finderDueLeads(now = new Date()): Promise<{ id: string; clinicName: string }[]> {
   const budget = await finderBudget(now);
   const room = budget.hunterLeft >= 1 && budget.instantlyLeft + 1e-9 >= budget.perCheck;
+  // A key saved since: the leads it blocked are due again.
+  const keys = [
+    ...((await getInstantlyApiKey()) ? [missingKey("Instantly")] : []),
+    ...((await getHunterApiKey()) ? [missingKey("Hunter")] : []),
+  ];
   return prisma.lead.findMany({
     where: {
       ...FINDER_LEAD_WHERE,
@@ -635,6 +658,7 @@ export async function finderDueLeads(now = new Date()): Promise<{ id: string; cl
         { contactStatus: "finding", OR: [{ contactRetryAt: null }, { contactRetryAt: { lte: now } }] },
         { contactRetryAt: { lte: now } },
         ...(room ? [{ contactStatus: "needs_you", contactStatusReason: OUT_OF_CREDITS }] : []),
+        ...(keys.length > 0 ? [{ contactStatus: "needs_you", contactStatusReason: { in: keys } }] : []),
       ],
     },
     select: { id: true, clinicName: true },
@@ -645,8 +669,11 @@ export async function finderDueLeads(now = new Date()): Promise<{ id: string; cl
 // The Settings → Email backfill: every lead the Email queue holds — not run
 // yet, finding, or needing you.
 export async function finderQueueLeads(): Promise<{ id: string; clinicName: string }[]> {
+  // The ones the finder has never run on: from before it existed ("Not run
+  // yet"), or with no status at all. Leads that need you for a reason have
+  // their own Retry.
   return prisma.lead.findMany({
-    where: { ...FINDER_LEAD_WHERE, OR: [{ contactStatus: null }, { contactStatus: { in: ["finding", "needs_you"] } }] },
+    where: { ...FINDER_LEAD_WHERE, OR: [{ contactStatus: null }, { contactStatus: "needs_you", contactStatusReason: NOT_RUN_YET }] },
     select: { id: true, clinicName: true },
     orderBy: { createdAt: "asc" },
   });

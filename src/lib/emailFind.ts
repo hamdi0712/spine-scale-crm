@@ -318,6 +318,21 @@ function initialsOf(name: string): string {
     .join("");
 }
 
+// Front-desk words: an address with one of these is the front desk's, even
+// with the doctor's name in it (paportofrontdesk@). The long words count
+// anywhere in the local part; the short ones only at its start or end (or as
+// all of it), so a name that happens to hold one — martinford@, steaman@ — is
+// not caught. Dots, dashes and digits are ignored: front.desk@ is frontdesk.
+const FRONT_DESK_ANYWHERE = ["frontdesk", "reception", "appointments", "billing", "office"];
+const FRONT_DESK_AT_EDGE = ["info", "team", "hello", "admin", "contact"];
+export function hasFrontDeskWord(address: string): boolean {
+  const at = address.indexOf("@");
+  const letters = slug(at === -1 ? address : address.slice(0, at));
+  if (letters === "") return false;
+  if (FRONT_DESK_ANYWHERE.some((w) => letters.includes(w))) return true;
+  return FRONT_DESK_AT_EDGE.some((w) => letters === w || letters.startsWith(w) || letters.endsWith(w));
+}
+
 // Who reads an address: the owner (a doctor's own inbox — drdave@,
 // backpaindoc@, the owner's name or initials) or the front desk (generic).
 // A practice's inbox is generic even with a name in it (teamnadimi@,
@@ -327,6 +342,8 @@ export function classifyAddress(address: string, person: DecisionMakerName | nul
   if (GENERIC_LOCALS.includes(local)) return "generic";
   const letters = slug(local);
   if (letters === "") return "generic";
+  // A front-desk word wins over everything below, the doctor's name included.
+  if (hasFrontDeskWord(address)) return "generic";
   if (PRACTICE_PREFIXES.some((p) => letters.startsWith(p))) return "generic";
   if (PRACTICE_WORDS.some((w) => letters.includes(w))) return "generic";
 

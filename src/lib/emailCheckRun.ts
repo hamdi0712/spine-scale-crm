@@ -1,101 +1,24 @@
-// Checking one lead's address through Instantly, and what the result does to
-// the lead. Server-only; the job that runs it for many is in
-// src/lib/actions/jobs.ts.
+// Checking an address through Instantly — what the contact finder
+// (src/lib/contactFinderRun.ts) calls for every new address — and this
+// month's credits. Server-only.
 //
-//   Each address is checked once. A lead whose current address already has a
-//   status is skipped unless the check is forced ("Check again").
-//   valid / risky / unknown set the status. invalid moves the address to the
-//   alternates and the lead goes back to No email — except an address typed
-//   in by hand, which is marked invalid and left where it is: the app never
-//   replaces an email you entered.
 //   Every check is logged with what it cost (EmailCheck), and the cost per
 //   check in Settings is corrected from credits_used.
 
 import { prisma } from "@/lib/prisma";
-import { PIPELINE_DEFAULT_WHERE, FIND_EMAILS_WHERE } from "@/lib/liveLeadWhere";
-import { EmailCandidate, EmailStatus, parseAlternates, readEmailSource } from "@/lib/emailFind";
+import { EmailStatus } from "@/lib/emailFind";
 import { budgetFor, mapVerification, monthStart } from "@/lib/emailCheck";
 import { verifyEmail, InstantlyErrorCode } from "@/lib/instantly";
 import { loadEmailSettings, saveEmailSettingsRow } from "@/lib/emailSettingsStore";
 import { getInstantlyApiKey } from "@/lib/appSecretsStore";
-import { releaseInboxIfUnsent, syncLeadInbox } from "@/lib/emailInboxes";
 
 export async function creditsUsedThisMonth(now = new Date()): Promise<number> {
   const r = await prisma.emailCheck.aggregate({ where: { createdAt: { gte: monthStart(now) } }, _sum: { creditsUsed: true } });
   return r._sum.creditsUsed ?? 0;
 }
 
-// Email-channel leads whose current address has never been checked — except
-// those waiting on the contact finder, which checks them itself.
-export async function uncheckedEmailLeads(): Promise<{ id: string; clinicName: string }[]> {
-  return prisma.lead.findMany({
-    where: {
-      ...FIND_EMAILS_WHERE,
-      channel: "email",
-      email: { not: null },
-      NOT: { email: "" },
-      // Spelled out: a plain NOT would drop the leads with no status too.
-      OR: [{ contactStatus: null }, { contactStatus: { not: "finding" } }],
-      emailStatus: null,
-      suppressedAt: null,
-    },
-    select: { id: true, clinicName: true },
-    orderBy: { updatedAt: "asc" },
-  });
-}
-
-export type CheckOutcome =
-  | { kind: "checked"; status: string; email: string; detail: string }
-  | { kind: "skipped"; detail: string }
-  | { kind: "failed"; detail: string; code: InstantlyErrorCode };
-
-export async function checkLeadEmail(leadId: string, opts: { force?: boolean } = {}): Promise<CheckOutcome> {
-  const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-  if (!lead) return { kind: "skipped", detail: "No longer here." };
-  const email = (lead.email ?? "").trim().toLowerCase();
-  if (email === "") return { kind: "skipped", detail: "No email to check." };
-  if (lead.emailStatus !== null && !opts.force) return { kind: "skipped", detail: `Already checked (${lead.emailStatus}) — use Check again.` };
-
-  const checked = await checkAddress(leadId, email);
-  if (!checked.ok) return { kind: "failed", detail: checked.error, code: checked.code };
-  const { status, rawStatus } = checked;
-  const now = new Date();
-
-  // The address may have changed while the check ran; the result is about
-  // the address that was checked, so it only lands if that is still the one.
-  const current = await prisma.lead.findUnique({ where: { id: leadId }, select: { email: true } });
-  if ((current?.email ?? "").trim().toLowerCase() !== email) {
-    return { kind: "skipped", detail: "The address changed while it was being checked — nothing written." };
-  }
-
-  if (status === "invalid" && lead.emailSource !== "manual") {
-    const alternates: EmailCandidate[] = [
-      ...parseAlternates(lead.emailAlternates).filter((a) => a.address !== email),
-      {
-        address: email,
-        type: lead.emailType === "owner" ? "owner" : "generic",
-        status: "invalid",
-        // Where it came from, kept: an address off a Facebook page stays one.
-        source: readEmailSource(lead.emailSource) ?? "imported",
-      },
-    ];
-    await prisma.lead.update({
-      where: { id: leadId },
-      data: { email: null, emailType: null, emailStatus: null, emailSource: null, emailCheckedAt: now, emailAlternates: JSON.stringify(alternates), emailApprovedAt: null },
-    });
-    await releaseInboxIfUnsent(leadId);
-    return { kind: "checked", status, email, detail: `${email} is invalid — moved to alternates; back to No email.` };
-  }
-  await prisma.lead.update({ where: { id: leadId }, data: { emailStatus: status, emailCheckedAt: now } });
-  // A verdict can make an approved lead Ready (valid) or take it out (risky).
-  await syncLeadInbox(leadId);
-  const note = status === "invalid" ? " (entered by hand, so it stays)" : rawStatus === "pending" ? " (still pending at Instantly)" : "";
-  return { kind: "checked", status, email, detail: `${email}: ${status}${note}` };
-}
-
 // One address through Instantly, logged with what it cost (EmailCheck) — the
-// check every address gets, whether or not it is the lead's email yet. The
-// owner finder checks its guesses with this before saving any of them.
+// check every address gets, whether or not it is the lead's email yet. 
 export async function checkAddress(
   leadId: string | null,
   emailIn: string,

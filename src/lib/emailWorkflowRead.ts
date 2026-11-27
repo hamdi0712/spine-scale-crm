@@ -3,7 +3,7 @@
 //
 // Reading only: nothing here writes or starts a job. A lead's inbox is given
 // by the write that makes it Ready (src/lib/emailInboxes.ts), and addresses
-// are checked from the writes that create them (autoCheckEmails).
+// are checked by the contact finder (src/lib/contactFinderRun.ts).
 
 import { Lead, EmailSend } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -45,6 +45,10 @@ import { hasRiskyEmail } from "@/lib/ownerFind";
 import { formBucketOf } from "@/lib/emailBuckets";
 import { formSentAtByLead } from "@/lib/contactFormSent";
 import { preSendCheck, shortClinicFor } from "@/lib/emailRules";
+import { DUPLICATE_SELECT, duplicateIndex } from "@/lib/duplicates";
+import { canAutoAccept } from "@/lib/contactFinder";
+import { revokedAddresses } from "@/lib/contactFinderRun";
+import type { EmailSource } from "@/lib/emailFind";
 
 function fmtDayMonth(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -124,6 +128,8 @@ export async function loadEmailView(now = new Date()) {
     loadInboxes(),
   ]);
   const formSent = await formSentAtByLead(leads.map((l) => l.id));
+  // The same doctor or clinic on another lead, any channel: a marker only.
+  const dupes = duplicateIndex(await prisma.lead.findMany({ where: { archived: false }, select: DUPLICATE_SELECT }));
   const counters = await inboxCounters(inboxes, now, settings.riskyDailyLimit);
   const rows = leads.map((l) => {
     const s = leadScore(l);
@@ -153,6 +159,8 @@ export async function loadEmailView(now = new Date()) {
       riskyLimit: settings.riskyDailyLimit,
       riskyAccepted: riskyAccepted(l),
       riskyFlagged: l.emailRiskyFlaggedAt !== null,
+      // "Also on: Strauss Scoliosis Correction · LinkedIn · Contacted".
+      duplicates: (dupes.get(l.id) ?? []).map((d) => `${d.clinicName} · ${d.label}`),
       stage: l.stage,
       // Contact form / Copy message / Mark form sent, in place of the address.
       form: isForm ? contactFormPropsFor(l, settings, inboxes, formSent.get(l.id) ?? null) : null,
@@ -167,6 +175,15 @@ export async function loadEmailView(now = new Date()) {
     starters: startersRemaining(settings),
     unchecked: leads.filter((l) => l.stage !== "LOST" && (l.email ?? "").trim() !== "" && l.emailStatus === null).length,
   };
+}
+
+// Whether the contact finder accepts this risky address on its own (found,
+// on the clinic's own domain or free mail, never revoked by you).
+async function finderWillAccept(lead: LeadWithSends): Promise<boolean> {
+  const address = (lead.email ?? "").trim().toLowerCase();
+  if (address === "" || lead.emailStatus !== "risky") return false;
+  if (!canAutoAccept({ address, status: lead.emailStatus, source: (lead.emailSource as EmailSource | null) ?? null }, lead.websiteUrl)) return false;
+  return !(await revokedAddresses(lead.id)).has(address);
 }
 
 // Everything the Email panel on a lead's page shows.
@@ -202,7 +219,10 @@ export async function emailPanelProps(lead: LeadWithSends, now = new Date()): Pr
     riskyLimit: settings.riskyDailyLimit,
     risky: {
       isRisky: (lead.email ?? "").trim() !== "" && lead.emailStatus === "risky",
-      canAccept: canAcceptRisky(lead),
+      // Accept by hand only where the contact finder will not: an address
+      // typed in, one found off the clinic's domain, or one you revoked.
+      canAccept: canAcceptRisky(lead) && !(await finderWillAccept(lead)),
+      autoAcceptable: await finderWillAccept(lead),
       accepted: riskyAccepted(lead),
       // Already emailed: revoking pauses its follow-ups rather than leaving Ready.
       inSequence: lead.emailSends.length > 0,

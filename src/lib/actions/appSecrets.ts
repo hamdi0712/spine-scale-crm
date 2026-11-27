@@ -40,4 +40,10 @@ export async function saveAppSecret(formData: FormData): Promise<void> {
   // key, and every caller reads the row live, so there is nothing further to
   // invalidate — a saved key is in force on the next request without one.
   revalidatePath("/settings/api-keys");
+
+  // A key the contact finder was waiting on ("Missing API key: …"): the leads
+  // it blocked leave Needs you on their own.
+  if (key === "instantlyApiKey" || key === "hunterApiKey") {
+    void (await import("@/lib/actions/jobs")).kickContactFinder();
+  }
 }

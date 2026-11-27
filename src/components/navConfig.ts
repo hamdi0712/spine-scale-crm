@@ -40,7 +40,9 @@ export interface NavGroup {
   // The first group sits straight under Dashboard with no heading in the
   // sidebar (the phone's More sheet still titles it).
   headless?: boolean;
-  items: { href: string; label: string; Glyph: typeof IconLayoutDashboard }[];
+  // link: where the item goes when it is not just href — the page matched for
+  // highlighting and counts is still href.
+  items: { href: string; label: string; Glyph: typeof IconLayoutDashboard; link?: string }[];
 }
 
 // Grouped by how the work goes rather than by what kind of tool a page is:
@@ -63,7 +65,9 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/discovery", label: "Discovery", Glyph: IconRadar2 },
       { href: "/pipeline", label: "Pipeline", Glyph: IconGitBranch },
-      { href: "/outreach", label: "Outreach queue", Glyph: IconSend },
+      // The email view of /outreach: the leads the contact finder could not
+      // finish. LinkedIn's outreach queue is the page's channel toggle away.
+      { href: "/outreach", link: "/outreach?channel=email", label: "Needs you", Glyph: IconSend },
     ],
   },
   {

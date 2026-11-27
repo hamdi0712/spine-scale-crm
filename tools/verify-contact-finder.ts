@@ -524,6 +524,142 @@ async function main(): Promise<void> {
     if (f.startsWith(`${path.basename(dbFile!)}.backup-`)) fs.unlinkSync(path.join(path.dirname(dbFile!), f));
   }
 
+  // ═══ PR 3: front-desk words, the contact-form panel, missing keys, the
+  // badge, duplicates, hand-set contacts, revoked addresses, the relabel ═══
+  const { classifyAddress, hasFrontDeskWord, readDecisionMakerName } = await import("../src/lib/emailFind");
+  const { showsContactFormPanel } = await import("../src/lib/emailBuckets");
+  const { duplicateIndex } = await import("../src/lib/duplicates");
+  const { loadNavCounts } = await import("../src/lib/navCounts");
+  const { updateLead } = await import("../src/lib/actions/leads");
+  const { migrateFrontDeskLabels, FRONT_DESK_LABEL_MIGRATION } = await import("../src/lib/dataMigrations");
+
+  console.log("\nFront-desk words: the front desk's, whatever name is in it");
+  const paporto = readDecisionMakerName("Dr. Andrea Paporto");
+  check("paportofrontdesk@gmail.com → front desk, the doctor's name notwithstanding", classifyAddress("paportofrontdesk@gmail.com", paporto) === "generic");
+  check("front.desk@ and front-desk@ are frontdesk", hasFrontDeskWord("paporto.front.desk@gmail.com") && hasFrontDeskWord("front-desk@x.test"));
+  check("long words count anywhere: …reception, …appointments, …billing, …office",
+    ["drleereception@x.test", "leeappointments@x.test", "billingdrlee@x.test", "drleeoffice@x.test"].every((a) => classifyAddress(a, readDecisionMakerName("Dr. Ann Lee")) === "generic"));
+  check("short words at the start, the end, or alone: info@, infodrlee@, drleeinfo@, teamlee@, hello@, leeadmin@, contactlee@",
+    ["info@x.test", "infodrlee@x.test", "drleeinfo@x.test", "teamlee@x.test", "hello@x.test", "leeadmin@x.test", "contactlee@x.test"].every((a) => hasFrontDeskWord(a)));
+  check("…but not inside a name: martinford@ (info), steaman@ (team), shellos@ (hello), badminton@ (admin)",
+    !hasFrontDeskWord("martinford@x.test") && !hasFrontDeskWord("steaman@x.test") && !hasFrontDeskWord("shellos@x.test") && !hasFrontDeskWord("badminton@x.test"));
+  check("…so drmartinford@ stays the owner's for Dr. Martin Ford", classifyAddress("drmartinford@x.test", readDecisionMakerName("Dr. Martin Ford")) === "owner");
+  const wrongLabel = await seed("Paporto Chiro", {
+    websiteNotes: "Dr. Andrea Paporto, chiropractor.",
+    email: "paportofrontdesk@gmail.com", emailType: "owner", emailSource: "maps_contacts",
+  });
+  const rwl = await go(wrongLabel.id);
+  check("the finder relabels a stored owner-type front-desk address → Front desk", rwl.status === "front_desk" && (await lead(wrongLabel.id)).emailType === "generic", String(rwl.status));
+  const handLabel = await seed("Hand Label Chiro", { email: "officedrkim@x.test", emailType: "owner", emailTypeByHand: true, emailStatus: "valid", emailSource: "maps_contacts" });
+  await go(handLabel.id);
+  check("…but a type set by hand is left alone", (await lead(handLabel.id)).emailType === "owner");
+
+  console.log("\nThe contact-form panel follows the status");
+  const strauss = await seed("Strauss Scoliosis", { email: "info@straussscoliosis.test", emailType: "generic", emailSource: "facebook_page" });
+  await go(strauss.id);
+  const ls = await lead(strauss.id);
+  check("a lead with a valid email in the Email pipeline: no contact-form panel", ls.contactStatus === "front_desk" && !showsContactFormPanel(ls), String(ls.contactStatus));
+  check("a Contact form lead: the panel", showsContactFormPanel(await lead(form.id)));
+  check("never on a LinkedIn lead", !showsContactFormPanel({ channel: "linkedin", contactStatus: "contact_form" }));
+
+  console.log("\nMissing API keys");
+  delete process.env.HUNTER_API_KEY;
+  const needsHunter = await seed("Keyless Spine", { websiteNotes: "Dr. Rae Keyless, chiropractor." });
+  const rk = await go(needsHunter.id);
+  check("Hunter needed, no key → Needs you, \"Missing API key: Hunter\"", rk.status === "needs_you" && (await lead(needsHunter.id)).contactStatusReason === "Missing API key: Hunter", String(rk.status));
+  const noHunterNeeded = await seed("Desk Only Spine", { email: "frontdesk@deskonlyspine.test", emailType: "generic", emailSource: "maps_contacts" });
+  check("…but a lead that doesn't need Hunter still routes", (await go(noHunterNeeded.id)).status === "front_desk");
+  check("not due while the key is missing", !(await run.finderDueLeads()).some((l) => l.id === needsHunter.id));
+  process.env.HUNTER_API_KEY = "hunter-test-key";
+  check("key saved: due again", (await run.finderDueLeads()).some((l) => l.id === needsHunter.id));
+  await jobs.kickContactFinder();
+  await waitForFinder();
+  check("…and the automatic run clears it", (await lead(needsHunter.id)).contactStatus !== "needs_you", String((await lead(needsHunter.id)).contactStatus));
+  delete process.env.INSTANTLY_API_KEY;
+  const needsInstantly = await seed("Unchecked Spine", { email: "hi@uncheckedspine.test", emailType: "generic", emailSource: "maps_contacts" });
+  const ri = await go(needsInstantly.id);
+  check("no Instantly key → Needs you, \"Missing API key: Instantly\"", ri.status === "needs_you" && (await lead(needsInstantly.id)).contactStatusReason === "Missing API key: Instantly");
+  process.env.INSTANTLY_API_KEY = "instantly-test-key";
+  await jobs.kickContactFinder();
+  await waitForFinder();
+  check("…cleared once the key is there", (await lead(needsInstantly.id)).contactStatus === "front_desk", String((await lead(needsInstantly.id)).contactStatus));
+
+  console.log("\nThe sidebar badge is the Needs you count");
+  const nav = async () => (await loadNavCounts())["/outreach"].n;
+  check("badge = the leads Needs you lists", (await nav()) === (await loadEmailQueue()).queue.length, `${await nav()} vs ${(await loadEmailQueue()).queue.length}`);
+  const queueNow = (await loadEmailQueue()).queue.map((q) => q.id);
+  await prisma.lead.updateMany({ where: { id: { in: queueNow } }, data: { contactStatus: "call", contactStatusReason: null } });
+  check("nothing needs you → 0 (the badge hides at 0)", (await nav()) === 0 && (await loadEmailQueue()).queue.length === 0);
+  await seed("Badge Spine", { contactStatus: "needs_you", contactStatusReason: cf.OUT_OF_CREDITS });
+  check("one needs you → 1", (await nav()) === 1);
+
+  console.log("\nDuplicate doctors and clinics (a warning only)");
+  const dl = (id: string, clinicName: string, channel: string, stage: string, websiteUrl: string | null, contactName: string | null, location: string | null) =>
+    ({ id, clinicName, channel, stage, websiteUrl, contactName, location });
+  const idx = duplicateIndex([
+    dl("a", "Strauss Scoliosis Correction", "email", "NEW", "https://straussmethod.com/about", "Dr. Andrew Strauss", "Nanuet, NY 10954"),
+    dl("b", "Hudson Valley Scoliosis", "linkedin", "CONTACTED", "https://www.straussmethod.com", null, null),
+    dl("c", "Living Well Medical", "linkedin", "CONTACTED", "https://livingwellnewyork.com", "Dr. Steven Shoshany", "632 Broadway, New York, NY 10012"),
+    dl("d", "Dr. Steven Shoshany Chiropractor", "email", "LOST", null, "Dr. Steven Shoshany", "636 Broadway, New York, NY 10012"),
+    dl("e", "Lee Spine", "email", "NEW", "https://leespine.test", "Dr. Ann Lee", "Austin, TX"),
+    dl("f", "Lee Wellness", "email", "NEW", "https://leewellness.test", "Dr. Bob Lee", "Austin, TX"),
+    dl("g", "Ann Lee Chiro", "email", "NEW", "https://annleechiro.test", "Dr. Ann Lee", "Portland, OR"),
+    dl("h", "FB Only One", "email", "NEW", "https://www.facebook.com/one", null, null),
+    dl("i", "FB Only Two", "email", "NEW", "https://facebook.com/two", null, null),
+  ]);
+  check("same website domain → Also on, with channel and stage", idx.get("a")?.[0]?.id === "b" && idx.get("a")?.[0]?.label === "LinkedIn · Contacted", JSON.stringify(idx.get("a")));
+  check("same contact in the same state → Also on (Shoshany, NY)", idx.get("d")?.some((m) => m.id === "c" && m.by === "person") === true);
+  check("different doctors, same surname and state → nothing", !idx.has("e") && !idx.has("f"));
+  check("the same name in another state → nothing", !(idx.get("g") ?? []).length);
+  check("two clinics on Facebook pages are not the same clinic", !idx.has("h") && !idx.has("i"));
+
+  console.log("\nA contact typed on the lead page is the owner, by hand");
+  const edited = await seed("Edited Contact Spine", { websiteNotes: "Dr. Site Person, chiropractor.", email: "info@editedcontactspine.test", emailType: "generic", emailSource: "maps_contacts" });
+  const fe = new FormData();
+  fe.set("clinicName", `Edited Contact Spine ${TAG}`);
+  fe.set("contactName", "Dr. Typed Owner");
+  fe.set("email", "info@editedcontactspine.test");
+  fe.set("stage", "NEW");
+  await updateLead(edited.id, fe);
+  await waitForFinder();
+  check("editing the Contact field marks it set by hand", (await lead(edited.id)).contactNameByHand === true);
+  await go(edited.id);
+  check("…and the finder never overwrites it, though the site names someone else", (await lead(edited.id)).contactName === "Dr. Typed Owner", String((await lead(edited.id)).contactName));
+
+  console.log("\nA risky address you revoked is not accepted again");
+  const rev = await seed("Revoked Spine", { websiteUrl: "https://revokedspine.test", email: "riskydesk@revokedspine.test", emailType: "generic", emailSource: "maps_contacts" });
+  await go(rev.id);
+  check("found on its own domain: auto-accepted", (await lead(rev.id)).emailRiskyAcceptedAt !== null);
+  const pAuto = await emailPanelProps(await lead(rev.id));
+  await act.revokeRiskyEmail(rev.id);
+  await go(rev.id);
+  check("revoked, then re-run: not accepted again", (await lead(rev.id)).emailRiskyAcceptedAt === null);
+  const pRev = await emailPanelProps(await lead(rev.id));
+  check("Accept risky: hidden while the finder accepts it, offered once you revoked it", !pAuto.risky.canAccept && pRev.risky.canAccept && !pRev.risky.autoAcceptable);
+  const offDomain = await seed("Off Domain Spine", { email: "riskydesk@webdesign.test", emailType: "generic", emailSource: "maps_contacts", emailStatus: "risky" });
+  check("Accept risky offered for a found address off the clinic's domain", (await emailPanelProps(await lead(offDomain.id))).risky.canAccept);
+
+  console.log("\nThe one-time relabel");
+  await prisma.dataMigration.deleteMany({ where: { id: FRONT_DESK_LABEL_MIGRATION } });
+  const rl1 = await seed("Relabel Spine", { contactStatus: "owner_email", email: "leefrontdesk@gmail.com", emailType: "owner", emailStatus: "valid", emailSource: "maps_contacts" });
+  const rl2 = await seed("Relabel Sent Spine", { contactStatus: "owner_email", email: "kimoffice@gmail.com", emailType: "owner", emailStatus: "valid", emailSource: "maps_contacts" });
+  await prisma.emailSend.create({ data: { leadId: rl2.id, step: 0, toEmail: "kimoffice@gmail.com", subject: "s", body: "b", sentAt: new Date() } });
+  const rl3 = await seed("Relabel Approved Spine", { contactStatus: "owner_email", email: "parkreception@gmail.com", emailType: "owner", emailStatus: "valid", emailSource: "maps_contacts", emailApprovedAt: new Date() });
+  const rl4 = await seed("Relabel Typed Spine", { contactStatus: "owner_email", email: "joinfo@gmail.com", emailType: "owner", emailStatus: "valid", emailSource: "manual" });
+  const relabelLog: string[] = [];
+  const rr = await migrateFrontDeskLabels({ log: (l) => relabelLog.push(l) });
+  check("a backup is taken first", rr.backup !== null && fs.existsSync(rr.backup!), String(rr.backup));
+  check("an unsent, unapproved lead's front-desk address → front desk, Owner email → Front desk",
+    (await lead(rl1.id)).emailType === "generic" && (await lead(rl1.id)).contactStatus === "front_desk");
+  check("sent, approved and typed-by-hand leads are left alone",
+    (await lead(rl2.id)).emailType === "owner" && (await lead(rl3.id)).emailType === "owner" && (await lead(rl4.id)).emailType === "owner");
+  check("each lead it changes is logged", relabelLog.some((l) => /Relabel Spine/.test(l) && /leefrontdesk@gmail\.com owner → front desk/.test(l)) && !relabelLog.some((l) => /Relabel (Sent|Approved|Typed)/.test(l)));
+  check("run again: nothing to do", !(await migrateFrontDeskLabels({ log: () => {} })).ran);
+  const dbFile2 = sqliteFile();
+  for (const f of fs.readdirSync(path.dirname(dbFile2!))) {
+    if (f.startsWith(`${path.basename(dbFile2!)}.backup-`)) fs.unlinkSync(path.join(path.dirname(dbFile2!), f));
+  }
+
   await waitForFinder();
   server.close();
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);

@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { startContactFinderBackfill } from "@/lib/actions/jobs";
+import { useConfirm } from "@/components/ConfirmDialog";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 
 export interface ContactFinderEstimate {
@@ -28,12 +29,16 @@ export default function ContactFinderBackfillButton({ estimate }: { estimate: Co
   const { running, track } = useJobRun("contact-finder");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const ask = useConfirm();
   const e = estimate;
+  // Nothing has been left unrun: the section is not shown at all.
+  if (e.count === 0 && !running) return null;
 
   async function run() {
     if (
-      !confirm(
-        `Run the contact finder on ${e.count} queue lead${e.count === 1 ? "" : "s"}?\n\n` +
+      !(await ask({
+        title: `Run the contact finder on ${e.count} lead${e.count === 1 ? "" : "s"}?`,
+        body:
           `Worst case (every lead needing every step):\n` +
           `• Hunter: up to ${n(e.hunterMax)} credits (${n(e.hunterLeft)} left this month)\n` +
           `• Instantly: up to ${n(e.instantlyMax)} credits (${n(e.instantlyLeft)} left this month)\n` +
@@ -42,7 +47,8 @@ export default function ContactFinderBackfillButton({ estimate }: { estimate: Co
           `\nMost leads stop well short of that: the finder stops at the first good answer. ` +
           `It never goes past a monthly budget — a lead it can't afford is marked "Out of credits" and waits. ` +
           `Nothing is sent or approved.`,
-      )
+        confirm: "Run contact finder",
+      }))
     )
       return;
     setError(null);
@@ -59,7 +65,7 @@ export default function ContactFinderBackfillButton({ estimate }: { estimate: Co
       <div>
         <p className="text-sm font-medium">Run contact finder on queue leads</p>
         <p className="helper-text mt-1 text-xs leading-relaxed text-muted">
-          Takes the {e.count} lead{e.count === 1 ? "" : "s"} in the Email queue through the contact finder: owner, Hunter, Facebook, Instantly, then
+          Takes the {e.count} lead{e.count === 1 ? "" : "s"} marked &ldquo;Not run yet&rdquo; through the contact finder: owner, Hunter, Facebook, Instantly, then
           the Email pipeline, a contact form or the call list. At most {n(e.hunterMax)} Hunter and {n(e.instantlyMax)} Instantly credits and about $
           {e.deepseekMaxUsd.toFixed(2)} of DeepSeek, within this month&apos;s budgets.
         </p>

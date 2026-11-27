@@ -84,6 +84,11 @@ export async function loadEmailQueue() {
   return { queue, finding: inQueue.length - queue.length };
 }
 
+// The sidebar badge on Needs you: exactly the leads that page lists.
+export async function needsYouCount(): Promise<number> {
+  return (await loadEmailQueue()).queue.length;
+}
+
 export interface CallRow {
   id: string;
   clinicName: string;

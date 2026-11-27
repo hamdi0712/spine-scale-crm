@@ -16,19 +16,11 @@
 //      no NPI decision-maker, the site names several  → pick
 //      nobody anywhere                                 → not_found
 //
-// 2. The owner's email, only for a confirmed owner on a clinic-owned domain
-//    with no owner address yet. Hunter's Email Finder. Only with Settings →
-//    Email's "Guess owner emails from patterns" on (off by default): failing
-//    that, Domain Search's pattern; failing a pattern, three guesses —
-//    drlast@, first@, drfirst@ — each checked with Instantly, stopping at the
-//    first valid one.
-//
-// 3. Where a found address goes. Valid → the main email, the front desk to
-//    the alternates. On a catch-all domain (Instantly: risky) only an address
-//    Hunter saw on the web becomes the main email; an inferred or guessed one
-//    is kept as a risky alternate, since nothing can confirm it.
+// 2. The owner's address: the contact finder's Hunter step
+//    (src/lib/contactFinderRun.ts), with the pattern and the guesses below
+//    when Settings → Email allows them.
 
-import { DecisionMakerName, EmailCandidate, EmailSource, EmailStatus, clinicDomain, isMailboxProvider, parseAlternates, readDecisionMakerName, readEmailSource } from "@/lib/emailFind";
+import { DecisionMakerName, clinicDomain, isMailboxProvider, parseAlternates, readDecisionMakerName } from "@/lib/emailFind";
 import { looksLikePersonName } from "@/lib/decisionMaker";
 import { emailNamesContact, parseContactName } from "@/lib/emailRules";
 import { parseLinks, providerNameFromLink } from "@/lib/websiteCrawl";
@@ -58,17 +50,6 @@ export const OWNER_SOURCE_LABELS: Record<OwnerSource, string> = {
 export function readOwnerSource(v: unknown): OwnerSource | null {
   return typeof v === "string" && (OWNER_SOURCES as readonly string[]).includes(v) ? (v as OwnerSource) : null;
 }
-
-// Worst case per lead, for the estimate: Email Finder and Domain Search (a
-// credit each), and four Instantly checks (Hunter's address, then three
-// guesses — a pattern means one guess, not three). With guessing off, Email
-// Finder and one check of what it returns.
-export const HUNTER_CREDITS_PER_LEAD_MAX = 2;
-export const INSTANTLY_CHECKS_PER_LEAD_MAX = 4;
-export function ownerCostPerLead(guess: boolean): { hunter: number; instantly: number } {
-  return guess ? { hunter: HUNTER_CREDITS_PER_LEAD_MAX, instantly: INSTANTLY_CHECKS_PER_LEAD_MAX } : { hunter: 1, instantly: 1 };
-}
-export const DEFAULT_HUNTER_CREDIT_BUDGET = 50;
 
 // ─── Reading the lead ──────────────────────────────────────────────────────
 
@@ -461,61 +442,6 @@ export function guessAddresses(person: DecisionMakerName, domain: string): strin
 }
 
 // ─── Where the found address goes ──────────────────────────────────────────
-
-export type OwnerEmailSource = Extract<EmailSource, "hunter" | "hunter_inferred" | "pattern_guess">;
-
-export interface OwnerEmailCandidate {
-  address: string;
-  status: EmailStatus;
-  source: OwnerEmailSource;
-  // Hunter's provenance; a guess is never "found".
-  found: boolean;
-}
-
-export function ownerEmailPlacement(c: OwnerEmailCandidate): "main" | "alternate" {
-  if (c.status === "valid") return "main";
-  if (c.status === "invalid") return "alternate";
-  // risky (catch-all) or unknown: only an address seen on the web.
-  return c.source === "hunter" && c.found ? "main" : "alternate";
-}
-
-// The lead's email columns with the owner's address in them. As the main
-// email, the old one (the front desk) moves to the alternates with what is
-// known about it; as an alternate, it joins them. A main address typed in
-// by hand is never replaced — the owner's goes to the alternates instead.
-export function withOwnerEmail(
-  lead: { email: string | null; emailType: string | null; emailStatus: string | null; emailSource: string | null; emailAlternates: string | null },
-  c: OwnerEmailCandidate,
-): {
-  placed: "main" | "alternate";
-  fields: { email?: string; emailType?: string; emailStatus?: string; emailSource?: string; emailAlternates: string | null };
-} {
-  const wanted = ownerEmailPlacement(c);
-  const manual = lead.emailSource === "manual" && (lead.email ?? "").trim() !== "";
-  const placed = wanted === "main" && !manual ? "main" : "alternate";
-  const owner: EmailCandidate = { address: c.address, type: "owner", status: c.status, source: c.source };
-  const others = parseAlternates(lead.emailAlternates).filter((a) => a.address !== c.address);
-  if (placed === "alternate") {
-    const list = [...others, owner];
-    return { placed, fields: { emailAlternates: JSON.stringify(list) } };
-  }
-  const old = (lead.email ?? "").trim().toLowerCase();
-  const demoted: EmailCandidate[] =
-    old !== "" && old !== c.address
-      ? [{ address: old, type: lead.emailType === "owner" ? "owner" : "generic", status: (lead.emailStatus as EmailStatus | null) ?? null, source: readEmailSource(lead.emailSource) ?? "imported" }]
-      : [];
-  const list = [...demoted, ...others.filter((a) => a.address !== old)];
-  return {
-    placed,
-    fields: {
-      email: c.address,
-      emailType: "owner",
-      emailStatus: c.status,
-      emailSource: c.source,
-      emailAlternates: list.length > 0 ? JSON.stringify(list) : null,
-    },
-  };
-}
 
 // Whether the lead already has the owner's address — as its email, or as an
 // alternate nobody has found invalid.

@@ -12,14 +12,13 @@
 // Either way an address is cleaned and labelled by the helpers in
 // src/lib/emailFind.ts, lands unchecked, and never replaces an email the lead
 // already has — the write only happens while the lead's email is still empty.
-// The Instantly check is the caller's to start (autoCheckEmails), once.
+// The Instantly check is the contact finder's, once (src/lib/contactFinderRun.ts).
 //
 // Server-only, and not a "use server" module: the queue, the lead page and
 // the bulk job call it; the browser never does.
 
 import { prisma } from "@/lib/prisma";
 import { runApifySync } from "@/lib/apify";
-import { PIPELINE_DEFAULT_WHERE, FIND_EMAILS_WHERE } from "@/lib/liveLeadWhere";
 import { backupEmailFields, pickFacebookEmails, pickSiteCrawlEmails } from "@/lib/emailFind";
 import { PipelineSettings } from "@/lib/pipelineSettings";
 
@@ -105,20 +104,4 @@ export async function findBackupEmail(leadId: string, settings: PipelineSettings
     return { kind: "skipped", detail: "An email was added meanwhile — left alone." };
   }
   return { kind: "found", email: fields.email, source: "facebook_page", detail: `${fields.email} — from the Facebook page` };
-}
-
-// Email leads the bulk action would read: no email, a Facebook page, and that
-// page not read yet.
-export async function facebookEmailLeads(): Promise<{ id: string; clinicName: string }[]> {
-  return prisma.lead.findMany({
-    where: {
-      ...FIND_EMAILS_WHERE,
-      channel: "email",
-      suppressedAt: null,
-      facebookEmailAt: null,
-      AND: [{ OR: [{ email: null }, { email: "" }] }, { facebookUrl: { not: null } }, { NOT: { facebookUrl: "" } }],
-    },
-    select: { id: true, clinicName: true },
-    orderBy: { updatedAt: "asc" },
-  });
 }

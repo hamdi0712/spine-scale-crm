@@ -62,9 +62,9 @@ export function readOwnerConfidence(v: unknown): OwnerConfidence | null {
 // and how long a step that failed once waits to be tried again.
 export const UNKNOWN_RETRY_MS = 24 * 3_600_000;
 export const FAILED_STEP_RETRY_MS = 15 * 60_000;
-// No Instantly key: nothing can be checked. The lead waits (finding) and the
-// hourly look tries again — no key is not one of the blocks that need you.
-export const NO_KEY_RETRY_MS = 60 * 60_000;
+// A key the finder needs is not saved (Settings → API Keys): the lead needs
+// you, and leaves on its own once the key is saved.
+export const missingKey = (service: "Instantly" | "Hunter") => `Missing API key: ${service}`;
 
 // ─── The trace ─────────────────────────────────────────────────────────────
 

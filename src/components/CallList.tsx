@@ -9,6 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { logCall } from "@/lib/actions/callList";
+import { useConfirm } from "@/components/ConfirmDialog";
 import type { CallRow } from "@/lib/emailBucketsRead";
 import type { CallSection } from "@/lib/emailBuckets";
 
@@ -48,9 +49,14 @@ function CallItem({ row }: { row: CallRow }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const ask = useConfirm();
 
-  function log(kind: string) {
-    if (kind === "CALL_NOT_INTERESTED" && !confirm(`Mark ${row.clinicName} not interested? It moves to Lost and goes on the suppression list.`)) return;
+  async function log(kind: string) {
+    if (
+      kind === "CALL_NOT_INTERESTED" &&
+      !(await ask({ title: `Mark ${row.clinicName} not interested?`, body: "It moves to Lost and goes on the suppression list.", confirm: "Not interested", danger: true }))
+    )
+      return;
     setError(null);
     start(async () => {
       const r = await logCall(row.id, kind);
