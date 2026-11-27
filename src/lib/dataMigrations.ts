@@ -25,6 +25,8 @@ import { prisma } from "@/lib/prisma";
 import { EmailBucket, emailBucket, legacyEmailBucket } from "@/lib/emailBuckets";
 import { bucketExtras } from "@/lib/emailBucketsRead";
 import { ContactStatus, NOT_RUN_YET } from "@/lib/contactFinder";
+import { hasFrontDeskWord, parseAlternates } from "@/lib/emailFind";
+import { rebuildDraft } from "@/lib/ownerFindRun";
 
 export const CONTACT_STATUS_MIGRATION = "2026-11-28-contact-status";
 
@@ -143,4 +145,86 @@ export async function runDataMigrations(log?: Log): Promise<void> {
   } catch (e) {
     (log ?? console.error)(`[data migration] Contact status failed: ${e instanceof Error ? e.message : String(e)} — nothing marked done.`);
   }
+  try {
+    await migrateFrontDeskLabels({ log });
+  } catch (e) {
+    (log ?? console.error)(`[data migration] Front-desk labels failed: ${e instanceof Error ? e.message : String(e)} — nothing marked done.`);
+  }
+}
+
+// ─── Front-desk labels ─────────────────────────────────────────────────────
+//
+// Addresses with a front-desk word (paportofrontdesk@, info.drlee@) were
+// sometimes labelled the owner's because the doctor's name was in them. The
+// rule is fixed for new addresses (hasFrontDeskWord in src/lib/emailFind.ts);
+// this puts the stored ones right, once, on leads where nothing has been
+// promised yet: nothing sent, not approved, the address not set by hand
+// (typed in the lead form, or through the connector). A lead routed as Owner
+// email on such an address becomes Front desk; its unapproved draft follows
+// the new label (the opener is kept). Every lead it changes is logged.
+
+export const FRONT_DESK_LABEL_MIGRATION = "2026-11-29-front-desk-labels";
+
+export async function migrateFrontDeskLabels(opts: { log?: Log; now?: Date; dbFile?: string | null } = {}): Promise<MigrationResult & { changed: string[] }> {
+  const log = opts.log ?? ((l: string) => console.log(`[data migration] ${l}`));
+  const now = opts.now ?? new Date();
+  if (await prisma.dataMigration.findUnique({ where: { id: FRONT_DESK_LABEL_MIGRATION } })) {
+    return { ran: false, ok: true, summary: "already done", backup: null, mismatches: [], changed: [] };
+  }
+  const file = opts.dbFile === undefined ? sqliteFile() : opts.dbFile;
+  let backup: string | null = null;
+  if (file) {
+    if (!fs.existsSync(file)) {
+      log(`Front-desk labels: the database file ${file} was not found — nothing done, tried again at the next start.`);
+      return { ran: true, ok: false, summary: "no database file", backup: null, mismatches: [], changed: [] };
+    }
+    backup = `${file}.backup-${stamp(now)}-labels`;
+    fs.copyFileSync(file, backup);
+    log(`Front-desk labels: backed up the database to ${backup}`);
+  }
+
+  const leads = await prisma.lead.findMany({
+    where: { channel: "email", emailSends: { none: {} }, emailApprovedAt: null },
+    select: { id: true, clinicName: true, email: true, emailType: true, emailSource: true, emailTypeByHand: true, emailAlternates: true, emailVersion: true, contactStatus: true },
+  });
+  const changed: string[] = [];
+  const writes: { id: string; data: Record<string, unknown>; rebuild: boolean }[] = [];
+  for (const l of leads) {
+    const data: Record<string, unknown> = {};
+    const notes: string[] = [];
+    const main = (l.email ?? "").trim().toLowerCase();
+    const mainByHand = l.emailTypeByHand || l.emailSource === "manual";
+    if (main !== "" && l.emailType === "owner" && !mainByHand && hasFrontDeskWord(main)) {
+      data.emailType = "generic";
+      notes.push(`${main} owner → front desk`);
+      if (l.contactStatus === "owner_email") {
+        data.contactStatus = "front_desk";
+        notes.push("Owner email → Front desk");
+      }
+    }
+    const alternates = parseAlternates(l.emailAlternates);
+    let altChanged = false;
+    for (const a of alternates) {
+      if (a.type === "owner" && a.source !== "manual" && hasFrontDeskWord(a.address)) {
+        a.type = "generic";
+        altChanged = true;
+        notes.push(`${a.address} (alternate) owner → front desk`);
+      }
+    }
+    if (altChanged) data.emailAlternates = JSON.stringify(alternates);
+    if (notes.length === 0) continue;
+    writes.push({ id: l.id, data, rebuild: data.emailType !== undefined && l.emailVersion === null });
+    changed.push(`${l.clinicName} (${l.id}): ${notes.join("; ")}`);
+  }
+
+  await prisma.$transaction([
+    ...writes.map((w) => prisma.lead.update({ where: { id: w.id }, data: w.data })),
+    prisma.dataMigration.create({ data: { id: FRONT_DESK_LABEL_MIGRATION, ranAt: now, note: `${changed.length} lead(s) relabelled` } }),
+  ]);
+  for (const c of changed) log(`Front-desk labels: ${c}`);
+  // The draft follows the label where the version was never chosen by hand.
+  for (const w of writes) if (w.rebuild) await rebuildDraft(w.id);
+  const summary = `${changed.length} lead${changed.length === 1 ? "" : "s"} relabelled`;
+  log(`Front-desk labels: done — ${summary}.`);
+  return { ran: true, ok: true, summary, backup, mismatches: [], changed };
 }

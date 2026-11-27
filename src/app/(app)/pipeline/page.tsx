@@ -15,11 +15,7 @@ import ChannelToggle from "@/components/ChannelToggle";
 import EmailLeadTable, { EmailLeadRow } from "@/components/EmailLeadTable";
 import { PIPELINE_CHANNEL_COOKIE, PIPELINE_EMAIL_TAB_COOKIE, PIPELINE_LINKEDIN_STAGE_COOKIE, readPipelinePageChannel } from "@/lib/emailChannel";
 import { loadEmailView } from "@/lib/emailWorkflowRead";
-import FacebookEmailButton, { FacebookEmailProgress } from "@/components/FacebookEmailButton";
-import DropdownMenu from "@/components/DropdownMenu";
-import { facebookEmailLeads } from "@/lib/facebookEmailRun";
-import EmailCheckButton, { EmailCheckProgress } from "@/components/EmailCheckButton";
-import { OwnerFindProgress } from "@/components/OwnerFindButton";
+import { JobProgressFor } from "@/components/JobProgress";
 import { emailPipelineIds } from "@/lib/emailBucketsRead";
 import CallList from "@/components/CallList";
 import { loadCallList } from "@/lib/emailBucketsRead";
@@ -223,15 +219,10 @@ export default async function PipelinePage({
 // Ready, or have a follow-up due, carry the buttons to open it in Gmail, copy
 // it and mark it sent. Every status is worked out by src/lib/emailWorkflow.ts.
 async function EmailPipeline({ tab }: { tab?: string }) {
-  const [view, facebookLeads, pipelineSettings, inPipeline] = await Promise.all([
-    loadEmailView(),
-    facebookEmailLeads(),
-    loadPipelineSettings(),
-    emailPipelineIds(),
-  ]);
-  const { counters, starters, unchecked, check } = view;
-  // Only leads with a confirmed owner and a valid or risky address (or already
-  // written to) — the rest wait in the Email queue (src/lib/emailBuckets.ts).
+  const [view, inPipeline] = await Promise.all([loadEmailView(), emailPipelineIds()]);
+  const { counters, starters, check } = view;
+  // Only the leads the contact finder routed here (an owner or front-desk
+  // address), or already written to — src/lib/emailBuckets.ts.
   const rows = view.rows.filter((r) => inPipeline.has(r.id));
 
   // Lost leads count in neither card: they are hidden from the Email view
@@ -250,15 +241,11 @@ async function EmailPipeline({ tab }: { tab?: string }) {
             <ChannelToggle channel="email" callEnabled />
           </div>
           <p className="helper-text mt-1.5 text-sm text-muted wide:mt-1 wide:text-xs">
-            Email leads with a confirmed owner and a usable address — the rest wait in the{" "}
-            <Link href="/outreach" className="underline">Email queue</Link>
+            Email leads with an owner or front-desk address — the contact finder routes them here; anything it can&apos;t finish is in{" "}
+            <Link href="/outreach" className="underline">Needs you</Link>
           </p>
         </div>
         <div className="flex items-center gap-2 max-md:[&>*]:flex-1 wide:[&_.btn-primary]:!h-8 wide:[&_.btn-primary]:!px-3.5 wide:[&_.btn-primary]:!text-[13px] wide:[&_.btn]:!h-8 wide:[&_.btn]:!px-3 wide:[&_.btn]:!text-[13px]">
-          <DropdownMenu label="Find emails" badge={unchecked + (pipelineSettings.facebookEmails.enabled ? facebookLeads.length : 0)}>
-            <EmailCheckButton label="Check all unchecked" count={unchecked} {...check} menu />
-            <FacebookEmailButton count={facebookLeads.length} enabled={pipelineSettings.facebookEmails.enabled} menu />
-          </DropdownMenu>
           <Link href="/discovery/import/clinic" className="btn-primary justify-center">
             Find clinics
           </Link>
@@ -298,9 +285,7 @@ async function EmailPipeline({ tab }: { tab?: string }) {
       </div>
 
       {starters.length > 0 && <StarterCopyBanner remaining={starters} className="mt-6" />}
-      <EmailCheckProgress className="mt-6" />
-      <FacebookEmailProgress className="mt-6" />
-      <OwnerFindProgress className="mt-6" />
+      <JobProgressFor source="contact-finder" className="mt-6" />
 
       <div className="mt-8 wide:mt-4">
         {rows.length === 0 ? (

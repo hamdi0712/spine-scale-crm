@@ -33,9 +33,9 @@ const EMAIL_PREP: OsBlock = {
   tasks: [
     {
       key: "queue",
-      label: "Clear the Email queue",
+      label: "Clear Needs you",
       minutes: 15,
-      how: "Outreach queue → Email. Run Find owners from the top right. Open any lead marked “Pick the owner” and pick the doctor from the site. Leads with nothing found move to Contact form or the Call list on their own.",
+      how: "Needs you, in the sidebar. The contact finder routes new email leads on its own; only leads it couldn’t finish are listed. Fix the reason (save a missing API key, raise a budget) or press Retry.",
     },
     {
       key: "fix",

@@ -2,13 +2,14 @@
 
 // The owner, on an email lead's page: who owns the clinic and where that came
 // from, how sure the contact finder is, the finder's latest run on one line,
-// and — after "Look up again" found something different — the two side by
-// side, replaced only when you say so.
+// and one button — "Re-run contact finder" — whose differences from the lead
+// are shown side by side and replaced only when you say so. Picking an owner
+// by hand is the Contact field in the lead's details.
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { pickLeadOwner, findLeadOwner, replaceWithLookup, keepAfterLookup } from "@/lib/actions/ownerFind";
-import { lookUpContactAgain, retryContactFinder } from "@/lib/actions/jobs";
+import { replaceWithLookup, keepAfterLookup } from "@/lib/actions/ownerFind";
+import { lookUpContactAgain } from "@/lib/actions/jobs";
 import { JobProgressFor, useJobRun } from "@/components/JobProgress";
 import type { ContactFinderPanel } from "@/lib/contactFinder";
 
@@ -30,8 +31,6 @@ export interface OwnerPanelProps {
   choices: string[];
   checkedAt: string | null;
   emailNote: string | null;
-  // Settled, but the owner's own address is still to be looked for.
-  canFindEmail: boolean;
   // The contact finder's side (src/lib/contactFinder.ts).
   finder: ContactFinderPanel | null;
 }
@@ -40,49 +39,17 @@ export default function OwnerPanel(p: OwnerPanelProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const owners = useJobRun("find-owners");
   const finderRun = useJobRun("contact-finder");
   const settled = p.basisLabel !== null;
   const f = p.finder;
 
-  function pick(name: string) {
-    setError(null);
-    startTransition(async () => {
-      const r = await pickLeadOwner(p.leadId, name);
-      if (!r.ok) setError(r.error);
-      else {
-        if (r.job.ok) finderRun.track(r.job.id);
-        else setError(`Owner saved. ${r.job.error}`);
-        router.refresh();
-      }
-    });
-  }
-
-  function findEmail() {
-    setError(null);
-    startTransition(async () => {
-      const r = await findLeadOwner(p.leadId);
-      if (!r.ok) setError(r.error);
-      else owners.track(r.id);
-    });
-  }
-
-  // The contact finder on this lead, proposing only: nothing is replaced
-  // until you press Replace.
-  function lookUpAgain() {
+  // "Re-run contact finder": the finder on this lead, proposing only — what
+  // it finds that differs is shown beside what is on the lead, and nothing is
+  // replaced until you press Replace.
+  function rerun() {
     setError(null);
     startTransition(async () => {
       const r = await lookUpContactAgain(p.leadId);
-      if (!r.ok) setError(r.error);
-      else finderRun.track(r.id);
-    });
-  }
-
-  // Not settled yet: the contact finder on this lead, filling what is blank.
-  function findContact() {
-    setError(null);
-    startTransition(async () => {
-      const r = await retryContactFinder(p.leadId);
       if (!r.ok) setError(r.error);
       else finderRun.track(r.id);
     });
@@ -101,7 +68,7 @@ export default function OwnerPanel(p: OwnerPanelProps) {
     <div className="space-y-2 text-xs leading-relaxed">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">
-          Owner: <span className={settled ? "text-ok" : p.status === "pick" ? "text-warn" : "text-muted"}>{p.statusLabel}</span>
+          Owner: <span className={settled ? "text-ok" : "text-muted"}>{p.statusLabel}</span>
           {settled && p.owner && <span className="ml-1.5">{p.owner}</span>}
           {p.basisLabel && <span className="ml-1.5 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-medium text-ok">{p.basisLabel}</span>}
           {f?.confidence === "high" && <span className="ml-1.5 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-medium text-ok">High confidence</span>}
@@ -111,24 +78,9 @@ export default function OwnerPanel(p: OwnerPanelProps) {
             </span>
           )}
         </p>
-        <div className="flex items-center gap-2">
-          {settled && p.canFindEmail && (
-            <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={findEmail}>
-              Find owner email
-            </button>
-          )}
-          {settled ? (
-            <button type="button" className="text-xs font-medium text-accent hover:underline disabled:opacity-50" disabled={pending || finderRun.running} onClick={lookUpAgain}>
-              Look up again
-            </button>
-          ) : (
-            p.status !== "pick" && (
-              <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending || finderRun.running} onClick={findContact}>
-                Find contact
-              </button>
-            )
-          )}
-        </div>
+        <button type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending || finderRun.running} onClick={rerun}>
+          {finderRun.running ? "Running…" : "Re-run contact finder"}
+        </button>
       </div>
       {f?.traceLine && (
         <p className="text-muted" title="The contact finder's latest run">
@@ -187,24 +139,10 @@ export default function OwnerPanel(p: OwnerPanelProps) {
       ) : p.checkedAt ? (
         <p className="text-muted">No NPI Registry record matched this clinic.</p>
       ) : null}
-      {p.siteNames.length > 0 && p.status !== "pick" && <p className="text-muted">On the site: {p.siteNames.join(", ")}</p>}
-      {p.status === "pick" && (
-        <div className="space-y-1.5">
-          <p className="text-muted">These don&apos;t agree — who owns the clinic?</p>
-          <div className="flex flex-wrap gap-2">
-            {p.choices.map((name) => (
-              <button key={name} type="button" className="btn !h-7 !px-2.5 !text-xs" disabled={pending} onClick={() => pick(name)}>
-                {name}
-                {name === p.npiOfficial ? <span className="text-muted"> · NPI</span> : <span className="text-muted"> · site</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {p.siteNames.length > 0 && <p className="text-muted">On the site: {p.siteNames.join(", ")}</p>}
       {p.emailNote && <p className="text-muted">{p.emailNote}</p>}
       {error && <p className="text-bad">{error}</p>}
       <JobProgressFor source="contact-finder" />
-      <JobProgressFor source="find-owners" />
     </div>
   );
 }

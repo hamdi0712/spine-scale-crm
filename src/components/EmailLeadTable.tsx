@@ -9,8 +9,6 @@ import { IcpTier } from "@/lib/icp";
 import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
 import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge";
 import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
-import { startEmailCheckJob, startFacebookEmailJob, startOwnerJob } from "@/lib/actions/jobs";
-import { useJobRun } from "@/components/JobProgress";
 import { LostTag, isLost } from "@/components/LostLeads";
 import ContactFormButtons from "@/components/ContactFormButtons";
 import { PIPELINE_EMAIL_TAB_COOKIE, recalledPipelineFilter, rememberPipelineFilter } from "@/lib/emailChannel";
@@ -49,6 +47,8 @@ export interface EmailLeadRow {
   // a bounce on its domain.
   riskyAccepted: boolean;
   riskyFlagged: boolean;
+  // The same doctor or clinic on other leads, as "Name · Channel · Stage".
+  duplicates: string[];
   // The lead's pipeline stage. Lost leads are hidden unless the Lost chip is
   // picked (or a search by clinic name finds one).
   stage: string;
@@ -117,23 +117,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   const [tiers, setTiers] = useState<Set<string>>(new Set());
   const [inbox, setInbox] = useState("");
   const [sort, setSort] = useState<"updated" | "score" | "name">("updated");
-  // The pick for the bulk actions, as on Discovery: tick cards or rows, or
-  // Select all for everything the filters show.
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  // The tick boxes only show in select mode; leaving it drops the pick.
-  const [selecting, setSelecting] = useState(false);
-  function setSelectMode(on: boolean) {
-    setSelecting(on);
-    if (!on) setPicked(new Set());
-  }
-  function toggle(id: string, on: boolean) {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
   useEffect(() => {
     try {
       if (localStorage.getItem(VIEW_KEY) === "table") setView("table");
@@ -187,18 +170,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
     );
   const cards = view === "cards";
   const tagLost = filter !== "lost";
-  const allPicked = shown.length > 0 && shown.every((r) => picked.has(r.id));
-  function pickAll(on: boolean) {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      for (const r of shown) {
-        if (on) next.add(r.id);
-        else next.delete(r.id);
-      }
-      return next;
-    });
-  }
-  const pickedRows = rows.filter((r) => picked.has(r.id));
   const extras = (
     <>
           <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field !h-8 w-auto text-[13px]">
@@ -289,16 +260,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         </div>
       </div>
 
-      <SelectionBar
-        rows={pickedRows}
-        allPicked={allPicked}
-        shownCount={shown.length}
-        onPickAll={pickAll}
-        onClear={() => setPicked(new Set())}
-        selecting={selecting}
-        onSelectMode={setSelectMode}
-      />
-
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 wide:hidden">
         <div className="m-pill-row flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
           {tabs.map((tab) => {
@@ -320,18 +281,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           })}
         </div>
         <div className="flex w-full items-center gap-2 md:w-auto">
-        {/* Below the big monitor, Select sits here beside the search rather
-            than on a row of its own. */}
-        {!selecting && (
-          <button
-            type="button"
-            onClick={() => setSelectMode(true)}
-            disabled={shown.length === 0}
-            className="btn !h-9 !px-3 text-sm max-md:hidden disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Select
-          </button>
-        )}
         <label className="relative flex w-full items-center md:w-60">
           <span className="sr-only">Search clinics</span>
           <IconSearch size={15} stroke={2} aria-hidden className="pointer-events-none absolute left-3 text-muted" />
@@ -356,23 +305,15 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
               if ((e.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
               router.push(`/pipeline/${row.id}`);
             }}
-            className={`card card-sheen group flex cursor-pointer flex-col gap-2 p-3.5 ${picked.has(row.id) ? "border-accent/40 bg-accent/5" : ""} transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-card-hover`}
+            className={`card card-sheen group flex cursor-pointer flex-col gap-2 p-3.5 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-card-hover`}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2.5">
-              {selecting && (
-                <input
-                  type="checkbox"
-                  checked={picked.has(row.id)}
-                  onChange={(e) => toggle(row.id, e.target.checked)}
-                  aria-label={`Select ${row.clinicName}`}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
-                />
-              )}
               <div className="min-w-0">
                 <Link href={`/pipeline/${row.id}`} className="block truncate text-sm font-semibold text-ink">
                   {row.clinicName}
                   {tagLost && isLost(row.stage) && <LostTag />}
+                  <DuplicateTag also={row.duplicates} />
                 </Link>
                 <p className="mt-0.5 truncate text-[11px] text-muted">{row.contactName ?? "No contact yet"}</p>
               </div>
@@ -387,7 +328,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 />
               )}
             </div>
-            <div className={`space-y-0.5 ${selecting ? "pl-[26px]" : ""} text-[12.5px]`}>
+            <div className={`space-y-0.5 text-[12.5px]`}>
               <p className="flex min-w-0 items-center gap-2 text-ink-soft">
                 <IconMapPin size={13} stroke={1.75} aria-hidden className="shrink-0 text-muted" />
                 <span className="truncate">{row.location ?? "—"}</span>
@@ -405,7 +346,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 </p>
               )}
             </div>
-            <div className={`mt-auto flex flex-wrap items-center justify-between gap-2 ${selecting ? "pl-[26px]" : ""} pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]`}>
+            <div className={`mt-auto flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px] [&>span:first-child]:h-5 [&>span:first-child]:px-2 [&>span:first-child]:text-[11px]`}>
               <EmailStatusBadge status={row.status} />
               {row.sendBlocked && !row.toSend ? (
                 <span className="truncate text-xs text-bad" title={row.sendBlocked}>Can&apos;t send yet</span>
@@ -434,6 +375,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 <span className="min-w-0 text-[15px] font-medium leading-snug text-ink">
                   {row.clinicName}
                   {tagLost && isLost(row.stage) && <LostTag />}
+                  <DuplicateTag also={row.duplicates} />
                 </span>
                 <EmailStatusBadge status={row.status} />
               </div>
@@ -464,11 +406,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         <table className="w-full wide:[&_.td]:text-[13px] wide:[&_.td]:py-2.5 wide:[&_.th]:py-2 wide:[&_.th]:text-[11px]">
           <thead>
             <tr>
-              {selecting && (
-                <th className="th w-10 pr-0">
-                  <input type="checkbox" checked={allPicked} onChange={(e) => pickAll(e.target.checked)} aria-label="Select all" className="h-4 w-4 accent-accent" />
-                </th>
-              )}
               <th className="th">Clinic</th>
               <th className="th">Email</th>
               <th className="th">Tier</th>
@@ -490,17 +427,6 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                 }}
                 className="group cursor-pointer transition-colors hover:bg-wash/70"
               >
-                {selecting && (
-                  <td className="td w-10 pr-0">
-                    <input
-                      type="checkbox"
-                      checked={picked.has(row.id)}
-                      onChange={(e) => toggle(row.id, e.target.checked)}
-                      aria-label={`Select ${row.clinicName}`}
-                      className="h-4 w-4 accent-accent"
-                    />
-                  </td>
-                )}
                 <td className="td">
                   <Link
                     href={`/pipeline/${row.id}`}
@@ -509,6 +435,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
                     {row.clinicName}
                   </Link>
                   {tagLost && isLost(row.stage) && <LostTag />}
+                  <DuplicateTag also={row.duplicates} />
                   <div className="mt-0.5 text-xs text-muted">
                     {[row.contactName ?? "No contact yet", row.location].filter(Boolean).join(" · ")}
                   </div>
@@ -578,7 +505,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
             ))}
             {shown.length === 0 && (
               <tr>
-                <td className="td text-muted" colSpan={selecting ? 7 : 6}>
+                <td className="td text-muted" colSpan={6}>
                   {q ? "No clinic matches that search." : "Nothing here right now."}
                 </td>
               </tr>
@@ -590,127 +517,16 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   );
 }
 
-// The pick's bar: Select all, how many are ticked, and the email-finding runs
-// for just those leads. Each run takes only the picked leads it applies to
-// (Check: ones with an address; Facebook and owners: their own waiting lists)
-// and says so when none of them qualify.
-function SelectionBar({
-  rows,
-  allPicked,
-  shownCount,
-  onPickAll,
-  onClear,
-  selecting,
-  onSelectMode,
-}: {
-  rows: EmailLeadRow[];
-  allPicked: boolean;
-  shownCount: number;
-  onPickAll: (on: boolean) => void;
-  onClear: () => void;
-  selecting: boolean;
-  onSelectMode: (on: boolean) => void;
-}) {
-  const check = useJobRun("email-check");
-  const facebook = useJobRun("facebook-emails");
-  const owners = useJobRun("find-owners");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const ids = rows.map((r) => r.id);
-  const withEmail = rows.filter((r) => r.email !== null).length;
-  const noEmail = rows.length - withEmail;
-
-  async function run(
-    key: string,
-    ask: string,
-    start: () => Promise<{ ok: true; id: string } | { ok: false; error: string }>,
-    track: (id: string) => void,
-  ) {
-    if (!confirm(ask)) return;
-    setError(null);
-    setBusy(key);
-    const r = await start().catch(() => ({ ok: false as const, error: "The run could not be started." }));
-    setBusy(null);
-    if (!r.ok) setError(r.error);
-    else track(r.id);
-  }
-
-  const n = rows.length;
-  const btn = "btn !h-8 !px-3 !text-[13px] disabled:cursor-not-allowed disabled:opacity-50";
-  if (!selecting) {
-    return (
-      <div className="mb-3 hidden items-center wide:flex">
-        <button type="button" onClick={() => onSelectMode(true)} className={btn} disabled={shownCount === 0}>
-          Select
-        </button>
-      </div>
-    );
-  }
+// The same doctor or clinic is on another lead: a small soft pill, its
+// tooltip naming them. A warning only; nothing is merged.
+function DuplicateTag({ also }: { also: string[] }) {
+  if (also.length === 0) return null;
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 max-md:hidden md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-2.5 wide:mb-3 wide:border-0 wide:px-0 wide:py-0">
-      <button type="button" onClick={() => onSelectMode(false)} className={btn}>
-        Done
-      </button>
-      <label className="flex items-center gap-2 text-[13px] text-ink-soft">
-        <input type="checkbox" checked={allPicked} onChange={(e) => onPickAll(e.target.checked)} disabled={shownCount === 0} className="h-4 w-4 accent-accent" />
-        Select all
-      </label>
-      {n > 0 && (
-        <>
-          <span className="num ml-1 text-[13px] font-medium text-ink">{n} selected</span>
-          <button
-            type="button"
-            className={btn}
-            disabled={owners.running || busy !== null}
-            onClick={() =>
-              void run(
-                "owners",
-                `Find the owner for the ${n} selected lead${n === 1 ? "" : "s"}?\n\nNames come from the NPI Registry and the clinic's site (free); emails for confirmed owners use Hunter and Instantly credits. Leads that already have their owner are skipped.`,
-                () => startOwnerJob({ leadIds: ids }),
-                owners.track,
-              )
-            }
-          >
-            {busy === "owners" || owners.running ? "Finding owners…" : "Find owners"}
-          </button>
-          <button
-            type="button"
-            className={btn}
-            disabled={withEmail === 0 || check.running || busy !== null}
-            title={withEmail === 0 ? "None of the selected leads has an address" : undefined}
-            onClick={() =>
-              void run(
-                "check",
-                `Check the ${withEmail} selected address${withEmail === 1 ? "" : "es"} through Instantly? Each check uses Instantly credits.`,
-                () => startEmailCheckJob({ leadIds: ids, force: true }),
-                check.track,
-              )
-            }
-          >
-            {busy === "check" || check.running ? "Checking…" : `Check emails${withEmail > 0 ? ` (${withEmail})` : ""}`}
-          </button>
-          <button
-            type="button"
-            className={btn}
-            disabled={noEmail === 0 || facebook.running || busy !== null}
-            title={noEmail === 0 ? "Every selected lead already has an address" : undefined}
-            onClick={() =>
-              void run(
-                "facebook",
-                `Look for an email on the website and Facebook page of the ${noEmail} selected lead${noEmail === 1 ? "" : "s"} with no address?`,
-                () => startFacebookEmailJob({ leadIds: ids }),
-                facebook.track,
-              )
-            }
-          >
-            {busy === "facebook" || facebook.running ? "Reading…" : `Find on Facebook${noEmail > 0 ? ` (${noEmail})` : ""}`}
-          </button>
-          <button type="button" onClick={onClear} className="text-[13px] font-medium text-muted hover:text-ink">
-            Clear
-          </button>
-        </>
-      )}
-      {error && <p className="basis-full text-xs text-bad">{error}</p>}
-    </div>
+    <span
+      title={`Also on: ${also.join("; ")}`}
+      className="ml-1.5 inline-flex h-[18px] items-center rounded-full bg-warn-soft px-1.5 align-middle text-[10.5px] font-medium text-warn"
+    >
+      Duplicate
+    </span>
   );
 }

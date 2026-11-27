@@ -279,12 +279,14 @@ async function main(): Promise<void> {
   console.log("\nA verdict that makes an approved lead Ready gives it an inbox");
   const waiting = await seed("Waiting Spine", { emailStatus: null });
   await prisma.lead.update({ where: { id: waiting.id }, data: { emailApprovedAt: new Date() } });
-  const { checkLeadEmail } = await import("../src/lib/emailCheckRun");
-  const v = await checkLeadEmail(waiting.id);
+  // The check is the contact finder's (src/lib/contactFinderRun.ts).
+  const { runContactFinder, finderBudget } = await import("../src/lib/contactFinderRun");
+  await prisma.lead.update({ where: { id: waiting.id }, data: { ownerStatus: "not_found", ownerCheckedAt: new Date(), ownerConfidence: "high" } });
+  await runContactFinder(waiting.id, await finderBudget());
   check("the check comes back valid, the lead is Ready, and it has an inbox — no click",
-    v.kind === "checked" && (await loadLeadEmailState(waiting.id)).status === "ready" && (await inboxOf(waiting.id)) !== null);
+    (await prisma.lead.findUniqueOrThrow({ where: { id: waiting.id } })).emailStatus === "valid" && (await loadLeadEmailState(waiting.id)).status === "ready" && (await inboxOf(waiting.id)) !== null);
 
-  console.log("\nNo key, no check — and no noise");
+  console.log("\nNo key: no check, and the lead needs you");
   await waitForChecks();
   delete process.env.INSTANTLY_API_KEY;
   const quiet = await prisma.lead.create({ data: { clinicName: `Quiet Clinic ${TAG}`, stage: "NEW", channel: "email" } });
@@ -297,8 +299,9 @@ async function main(): Promise<void> {
   await sleep(300);
   await waitForChecks();
   const quietLead = await prisma.lead.findUniqueOrThrow({ where: { id: quiet.id } });
-  check("with no Instantly key the save goes through, nothing is checked, and no noise: it waits quietly",
-    quietLead.email === "hi@quiet.test" && quietLead.emailStatus === null && quietLead.contactStatus === "finding", `${quietLead.contactStatus} ${runsQuiet}`);
+  check("with no Instantly key the save goes through, nothing is checked, and the lead needs you: \"Missing API key: Instantly\"",
+    quietLead.email === "hi@quiet.test" && quietLead.emailStatus === null && quietLead.contactStatus === "needs_you" && quietLead.contactStatusReason === "Missing API key: Instantly",
+    `${quietLead.contactStatus} ${quietLead.contactStatusReason} ${runsQuiet}`);
   process.env.INSTANTLY_API_KEY = "test-key";
 
   // ─── The owner panel ─────────────────────────────────────────────────────

@@ -33,9 +33,11 @@ export const dynamic = "force-dynamic";
 // The two tiers this page exists for.
 const OUTREACH_TIERS: IcpTier[] = ["A", "B"];
 
-export default async function OutreachQueuePage() {
+export default async function OutreachQueuePage({ searchParams }: { searchParams?: { channel?: string } }) {
   // Email or LinkedIn, one at a time, remembered per browser like Pipeline.
-  const channel = readPipelineChannel(cookies().get(OUTREACH_CHANNEL_COOKIE)?.value);
+  // A link that names the channel (the sidebar's "Needs you" names email)
+  // wins over the remembered one; the toggle drops it from the URL.
+  const channel = readPipelineChannel(searchParams?.channel ?? cookies().get(OUTREACH_CHANNEL_COOKIE)?.value);
   // Email has its own queue: leads not ready for the Email pipeline yet.
   if (channel === "email") return <EmailQueue />;
   const leads = await prisma.lead.findMany({
@@ -103,7 +105,7 @@ export default async function OutreachQueuePage() {
   );
 }
 
-// The Email queue: the contact finder (src/lib/contactFinderRun.ts) takes
+// Needs you (the email view): the contact finder (src/lib/contactFinderRun.ts) takes
 // every new email lead to its place on its own — the Email pipeline, the
 // Contact form list or the Call list. Only the leads that need you are listed
 // here (out of credits, a step that failed twice, or never run), each with
@@ -115,7 +117,7 @@ async function EmailQueue() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <h1 className="display text-[32px] font-semibold">Email queue</h1>
+            <h1 className="display text-[32px] font-semibold">Needs you</h1>
             <ChannelToggle channel="email" cookie={OUTREACH_CHANNEL_COOKIE} label="Outreach Queue channel" />
           </div>
           <p className="helper-text page-sub mt-1.5 text-sm text-muted">

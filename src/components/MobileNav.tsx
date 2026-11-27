@@ -254,7 +254,7 @@ export function MobileTabBar() {
                   return (
                     <Link
                       key={item.href}
-                      href={item.href}
+                      href={item.link ?? item.href}
                       className={`flex min-h-[76px] flex-col items-center justify-center gap-1.5 rounded-[14px] border px-2 py-3 text-center text-xs font-medium transition-transform active:scale-[0.97] ${
                         on
                           ? "border-accent/30 bg-accent/10 text-accent"
