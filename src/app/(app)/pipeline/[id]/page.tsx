@@ -91,6 +91,7 @@ import OldModelScorecard from "@/components/OldModelScorecard";
 import LeadEnrichPanel from "@/components/LeadEnrichPanel";
 import OwnerPanel from "@/components/OwnerPanel";
 import { ownerPanelProps } from "@/lib/ownerFind";
+import { contactFinderPanelProps } from "@/lib/contactFinder";
 
 export const dynamic = "force-dynamic";
 
@@ -170,7 +171,20 @@ export default async function LeadDetailPage({
   // The email panel's props, worked out once: the header's status pill reads
   // them too.
   const emailProps = lead.channel === "email" ? await emailPanelProps(lead) : null;
-  const ownerProps = lead.channel === "email" ? ownerPanelProps(lead) : null;
+  // The owner panel, with the contact finder's side. An owner the finder is
+  // not sure of is never looked up on Hunter; an owner DeepSeek picked is
+  // described by its own reason, not the old "only doctor" source line.
+  const ownerProps = (() => {
+    if (lead.channel !== "email") return null;
+    const base = ownerPanelProps(lead);
+    const finder = contactFinderPanelProps(lead);
+    return {
+      ...base,
+      canFindEmail: base.canFindEmail && finder.confidence !== "low",
+      sourceLabel: finder.ownerPick ? null : base.sourceLabel,
+      finder,
+    };
+  })();
 
   // The side column's timeline: what happened to the lead (the activity feed)
   // and what was written on it (notes), newest first.

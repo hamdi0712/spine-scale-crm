@@ -180,7 +180,7 @@ async function main(): Promise<void> {
   process.env.INSTANTLY_API_KEY = "test-key";
 
   const { prisma } = await import("../src/lib/prisma");
-  const { startOwnerJob, autoFindOwners, ownerJobEstimate } = await import("../src/lib/actions/jobs");
+  const { startOwnerJob, ownerJobEstimate } = await import("../src/lib/actions/jobs");
   const { pickOwner, findOwnerLeads } = await import("../src/lib/ownerFindRun");
   const { parseAlternates, classifyAddress, readDecisionMakerName } = await import("../src/lib/emailFind");
   const { recleanEmailLeads } = await import("../src/lib/ownerReclean");
@@ -335,21 +335,15 @@ async function main(): Promise<void> {
   );
   check("…and with a confirmed owner: “…a question for Dr. Ross.”", named.body.includes("This is probably a question for Dr. Ross. Would you mind"));
 
-  console.log("\n7. Not run twice; the automatic run on a new lead");
+  console.log("\n7. Not run twice");
   const left = (await findOwnerLeads()).filter((l) => mine.includes(l.id)).map((l) => l.clinicName);
   // The just-picked lead has a valid front-desk address, so it is in the
   // Email pipeline now and the bulk run leaves it; a run for it by name
   // still covers it.
   check("no lead is still waiting in the queue", left.join(",") === "", left.join(","));
   check("…the just-picked one is still covered by name", (await findOwnerLeads({ includePipeline: true })).some((l) => l.clinicName === "Mismatch Wellness"));
-  const fresh = await seed("Newly Promoted Spine", { location: "Austin, TX", websiteUrl: "https://newly.test", email: "hi@newly.test", emailType: "generic", emailStatus: "valid" });
-  const t1 = new Date();
-  await autoFindOwners();
-  await waitFor("find-owners", t1);
-  const f = await reload(fresh.id);
-  const mx = await reload(mismatch.id);
-  check("the new lead was looked up on its own", f.ownerCheckedAt !== null && f.ownerStatus === "not_found", String(f.ownerStatus));
-  check("the auto run only takes leads never looked up (the picked one waits for its own run)", mx.ownerEmailAt === null);
+  // New leads are no longer looked up by an automatic Find owners run: the
+  // contact finder takes them (tools/verify-contact-finder.ts).
 
   console.log("\n8. Doctor names off the site, cleaned and merged");
   const plasker = siteDoctorNames(

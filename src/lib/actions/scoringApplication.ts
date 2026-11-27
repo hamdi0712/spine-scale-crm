@@ -14,13 +14,13 @@ import {
   unflagLead,
 } from "@/lib/scoringApplication";
 import { syncLeadInbox, syncReadyInboxes } from "@/lib/emailInboxes";
-import { autoCheckEmails } from "@/lib/actions/jobs";
+import { kickContactFinder } from "@/lib/actions/jobs";
 
-// New tiers and flags move inboxes (Ready or not), and promoted candidates
-// arrive with addresses nobody has checked.
+// New tiers and flags move inboxes (Ready or not), and promoted email leads
+// arrive waiting on the contact finder.
 async function afterScoringChange(): Promise<void> {
   await syncReadyInboxes();
-  void autoCheckEmails();
+  void kickContactFinder();
 }
 
 function refresh() {

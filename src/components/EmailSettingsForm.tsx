@@ -17,6 +17,7 @@ import {
 import { fmtCredits } from "@/lib/emailCheck";
 import RecleanOwners from "@/components/RecleanOwners";
 import RerunOpenersButton from "@/components/RerunOpenersButton";
+import ContactFinderBackfillButton, { ContactFinderEstimate } from "@/components/ContactFinderBackfillButton";
 import { inboxNameMismatch } from "@/lib/emailRules";
 import type { RerunEstimate } from "@/lib/openerRerun";
 
@@ -29,6 +30,7 @@ export default function EmailSettingsForm({
   creditsUsed,
   hunterUsed,
   rerun,
+  finder,
 }: {
   initial: EmailSettingsValues;
   inboxes: SendingInboxView[];
@@ -36,6 +38,7 @@ export default function EmailSettingsForm({
   creditsUsed: number;
   hunterUsed: number;
   rerun: RerunEstimate;
+  finder: ContactFinderEstimate;
 }) {
   const router = useRouter();
   const [v, setV] = useState<EmailSettingsValues>(initial);
@@ -250,6 +253,7 @@ export default function EmailSettingsForm({
         )}
       </div>
 
+      <ContactFinderBackfillButton estimate={finder} />
       <RerunOpenersButton estimate={rerun} />
 
       <div className="card space-y-4 p-6">

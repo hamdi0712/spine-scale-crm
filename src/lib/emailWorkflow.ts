@@ -254,6 +254,15 @@ export interface EmailLeadInput {
   ownerSource?: string | null;
   contactNameByHand?: boolean;
   contactConfirmedAt?: Date | null;
+  // high | low — the contact finder's certainty that the contact owns the
+  // clinic. low: no email names anyone ("Hi there,", "probably for the doctor").
+  ownerConfidence?: string | null;
+}
+
+// The finder was not sure of the owner, and nobody has set the contact by
+// hand since: the email names nobody.
+export function namesNobody(lead: { ownerConfidence?: string | null; contactNameByHand?: boolean }): boolean {
+  return lead.ownerConfidence === "low" && !lead.contactNameByHand;
 }
 
 // Whether the contact can be addressed by name, and why not.
@@ -269,6 +278,7 @@ export function contactValidation(lead: EmailLeadInput): ContactValidation {
     ownerSource: lead.ownerSource ?? null,
     contactNameByHand: lead.contactNameByHand ?? false,
     contactConfirmedAt: lead.contactConfirmedAt ?? null,
+    lowConfidence: namesNobody(lead),
   });
 }
 
@@ -287,6 +297,7 @@ export const CONTACT_FALLBACK = "the doctor or owner";
 // Who the front desk is asked to pass it to: the contact by name ("Dr. Lee"),
 // or, with no usable contact name, the doctor or owner.
 function contactFor(lead: EmailLeadInput): string {
+  if (namesNobody(lead)) return CONTACT_FALLBACK;
   const s = salutation(lead.contactName, lead.contactTitle, lead.websiteNotes);
   if (addressIsPlaceholder(s)) return CONTACT_FALLBACK;
   return s.honorific ? s.address : (lead.contactName ?? "").trim() || s.address;
@@ -415,8 +426,11 @@ export function contactCheck(lead: {
   contactConfirmedAt: Date | null;
   contactNameByHand?: boolean;
   emailType?: string | null;
+  ownerConfidence?: string | null;
 }): ContactCheck {
   const cited = scorecardDecisionMaker(lead.icpBreakdown);
+  // Names nobody: a disagreement over the name changes nothing in the email.
+  if (namesNobody(lead)) return { state: "confirmed", scorecardName: cited };
   // Settled: kept by hand, or set by hand (the lead form, a pick, or the
   // Claude connector).
   if (!cited || lead.contactConfirmedAt || lead.contactNameByHand) return { state: "confirmed", scorecardName: cited };

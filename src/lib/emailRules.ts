@@ -58,6 +58,9 @@ export interface ContactLead {
   ownerSource: string | null;
   contactNameByHand: boolean;
   contactConfirmedAt: Date | null;
+  // The contact finder was not sure this is the owner (ownerConfidence low):
+  // the email names nobody, so there is nothing about the name to check.
+  lowConfidence?: boolean;
 }
 
 function localPart(email: string | null): string {
@@ -132,6 +135,7 @@ export interface ContactValidation {
 }
 
 export function validateContact(lead: ContactLead): ContactValidation {
+  if (lead.lowConfidence) return { lastName: null, issues: [] };
   const issues: string[] = [];
   const p = parseContactName(lead.contactName);
   let lastName: string | null = null;

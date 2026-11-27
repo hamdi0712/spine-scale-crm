@@ -12,9 +12,8 @@ import ChannelToggle from "@/components/ChannelToggle";
 import { cookies } from "next/headers";
 import { OUTREACH_CHANNEL_COOKIE, readPipelineChannel } from "@/lib/emailChannel";
 import { loadEmailQueue } from "@/lib/emailBucketsRead";
-import { ownerJobEstimate } from "@/lib/actions/jobs";
-import OwnerFindButton, { OwnerFindProgress } from "@/components/OwnerFindButton";
-import FindLeadOwnerButton from "@/components/FindLeadOwnerButton";
+import ContactFinderRetryButton from "@/components/ContactFinderRetryButton";
+import FindingContactsLine from "@/components/FindingContactsLine";
 
 export const dynamic = "force-dynamic";
 
@@ -104,14 +103,13 @@ export default async function OutreachQueuePage() {
   );
 }
 
-// The Email queue: one list of email leads not ready to write to. Every lead
-// goes through the same steps — Find owners, then the email lookup. With a
-// usable address and the recipient settled it moves to the Email pipeline;
-// with nothing found it moves to the pipeline as a Contact form lead when the
-// clinic has a form, or to the Call list when it has none
-// (src/lib/emailBuckets.ts).
+// The Email queue: the contact finder (src/lib/contactFinderRun.ts) takes
+// every new email lead to its place on its own — the Email pipeline, the
+// Contact form list or the Call list. Only the leads that need you are listed
+// here (out of credits, a step that failed twice, or never run), each with
+// Retry; the ones it is still finding are counted in the live line above.
 async function EmailQueue() {
-  const [{ queue }, owners] = await Promise.all([loadEmailQueue(), ownerJobEstimate()]);
+  const { queue, finding } = await loadEmailQueue();
   return (
     <div className="wide-format">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -121,25 +119,24 @@ async function EmailQueue() {
             <ChannelToggle channel="email" cookie={OUTREACH_CHANNEL_COOKIE} label="Outreach Queue channel" />
           </div>
           <p className="helper-text page-sub mt-1.5 text-sm text-muted">
-            Email leads without a confirmed owner or a usable address yet — they move to the{" "}
-            <Link href="/pipeline" className="underline">Email pipeline</Link> once they have both
+            The contact finder moves new email leads on its own — to the{" "}
+            <Link href="/pipeline" className="underline">Email pipeline</Link>, a contact form or the call list. Only leads it can&apos;t finish are here.
           </p>
         </div>
         <PageActions className="flex flex-wrap items-center gap-2 xl:shrink-0 xl:justify-end">
           <span className="num text-xs text-muted">
-            {queue.length} in the queue
+            {queue.length} need{queue.length === 1 ? "s" : ""} you
           </span>
-          <OwnerFindButton estimate={owners} plain />
         </PageActions>
       </div>
 
-      <OwnerFindProgress className="mt-6" />
+      <FindingContactsLine count={finding} />
 
       {queue.length === 0 ? (
         <div className="card mt-8 px-6 py-10 text-center">
-          <p className="text-sm font-medium">The queue is empty</p>
+          <p className="text-sm font-medium">Nothing needs you</p>
           <p className="helper-text mx-auto mt-1 max-w-lg text-xs leading-relaxed text-muted">
-            Every email lead has moved on: to the Email pipeline (with an address, or as a Contact form lead) or to the Call list.
+            Every email lead has moved on, or the contact finder is still on it.
           </p>
         </div>
       ) : (
@@ -156,13 +153,7 @@ async function EmailQueue() {
                 </p>
                 <p className="text-xs font-medium text-warn">{l.reason}</p>
               </div>
-              {l.canFind ? (
-                <FindLeadOwnerButton leadId={l.id} />
-              ) : (
-                <Link href={`/pipeline/${l.id}`} className="btn h-8 px-3 text-sm">
-                  Open lead
-                </Link>
-              )}
+              <ContactFinderRetryButton leadId={l.id} />
             </li>
           ))}
         </ul>

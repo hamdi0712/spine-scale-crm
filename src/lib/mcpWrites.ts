@@ -48,7 +48,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { autoCheckEmails } from "@/lib/actions/jobs";
+import { kickContactFinder } from "@/lib/actions/jobs";
 import { syncLeadInbox } from "@/lib/emailInboxes";
 import { recordMilestone } from "@/lib/milestones";
 import { LEAD_STAGES, LEAD_STAGE_LABELS, LeadStage } from "@/lib/constants";
@@ -498,9 +498,10 @@ async function planChange(name: LeadToolName, lead: LeadForWrite, args: Record<s
               ...(same ? {} : { emailStatus: null, emailCheckedAt: null }),
             },
           });
-          // A new address is checked on its own, budget allowing.
-          if (!same) void autoCheckEmails();
           await syncLeadInbox(lead.id);
+          // A new address: the contact finder checks it and routes the lead,
+          // leaving the address itself as set here.
+          if (!same) void kickContactFinder([lead.id]);
           return {};
         },
         summary: (b) =>
@@ -517,6 +518,7 @@ async function planChange(name: LeadToolName, lead: LeadForWrite, args: Record<s
         apply: async () => {
           await prisma.lead.update({ where: { id: lead.id }, data: { contactName, contactNameByHand: true } });
           await syncLeadInbox(lead.id);
+          void kickContactFinder([lead.id]);
           return {};
         },
         summary: (b) => `Set ${lead.clinicName}'s contact from ${show(b.contactName)} to “${contactName}”`,

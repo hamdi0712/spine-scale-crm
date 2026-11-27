@@ -104,6 +104,9 @@ export async function promoteWithin(
         // was found — a Clinic-first candidate from before Discovery had
         // channels is a LinkedIn candidate and promotes as one.
         channel: readLeadChannel(candidate.channel) === "email" ? "email" : "linkedin",
+        // An email lead goes to the contact finder (src/lib/contactFinderRun.ts),
+        // which takes it from here to its place. LinkedIn leads never.
+        contactStatus: readLeadChannel(candidate.channel) === "email" ? "finding" : null,
         stage: PROMOTED_LEAD_STAGE,
         // Stamped with the promotion's own instant rather than left to the
         // column's now() default, so the lead, its scorecard and the

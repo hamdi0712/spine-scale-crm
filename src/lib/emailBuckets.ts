@@ -1,8 +1,13 @@
-// Where an email-channel lead lives: the Email queue (not ready yet), the
-// Email pipeline (a usable address, and who it goes to settled: owner confirmed,
-// email approved, or contact set or kept by hand), the Contact form list
-// (nothing found, but the clinic has a form), the Call list (nothing found and
-// no form), or waiting on a contact form already sent. Lost leads are hidden.
+// Where an email-channel lead lives: the Email queue (the contact finder is
+// still on it, or it needs you), the Email pipeline (an owner or front-desk
+// address), the Contact form list (no usable address, but the clinic has a
+// form), the Call list (neither), or waiting on a contact form already sent.
+// Lost leads are hidden.
+//
+// The place is the contact finder's (contactStatus, src/lib/contactFinder.ts),
+// not worked out here from the email and owner fields any more. The old rule
+// is kept below as legacyEmailBucket for the one-time migration that set
+// contactStatus on every existing lead without moving any of them.
 //
 // One rule, read by every view, so a lead is only ever in one of them.
 //
@@ -10,6 +15,7 @@
 
 import { pickContactFormLink } from "@/lib/contactForm";
 import { ownerEmailBlocker } from "@/lib/ownerFind";
+import { CONTACT_STATUS_LABELS, NOT_RUN_YET, readContactStatus } from "@/lib/contactFinder";
 
 export type EmailBucket = "hidden" | "queue" | "pipeline" | "contact_form" | "form_sent" | "call";
 
@@ -38,6 +44,9 @@ export interface EmailBucketLead {
   ownerSource: string | null;
   websiteUrl: string | null;
   contactName: string | null;
+  // The contact finder's place for the lead, and why when it needs you.
+  contactStatus: string | null;
+  contactStatusReason: string | null;
 }
 
 // An owner-type address that checked valid, or a risky one accepted by hand
@@ -121,6 +130,28 @@ export function emailBucket(lead: EmailBucketLead, x: EmailBucketExtras): EmailB
   if (lead.stage === "LOST") return "hidden";
   // Already written to, answered or stopped: the pipeline keeps its history.
   if (x.sendCount > 0 || lead.emailRepliedAt || lead.suppressedAt) return "pipeline";
+  switch (readContactStatus(lead.contactStatus)) {
+    case "owner_email":
+    case "front_desk":
+      return "pipeline";
+    case "contact_form":
+      return x.formSentAt ? "form_sent" : "contact_form";
+    case "call":
+      // A form sent before the finder routed it here still waits on its reply.
+      return x.formSentAt ? "form_sent" : "call";
+    default:
+      // finding, needs_you, or never run.
+      return "queue";
+  }
+}
+
+// The rule before the contact finder, from the email and owner fields. Read
+// only by the one-time migration (src/lib/dataMigrations.ts), which sets each
+// existing lead's contactStatus to keep it exactly where this put it.
+export function legacyEmailBucket(lead: EmailBucketLead, x: EmailBucketExtras): EmailBucket {
+  if (lead.stage === "LOST") return "hidden";
+  // Already written to, answered or stopped: the pipeline keeps its history.
+  if (x.sendCount > 0 || lead.emailRepliedAt || lead.suppressedAt) return "pipeline";
   if (hasUsableEmail(lead) && (recipientSettled(lead) || usableOwnerAddress(lead))) return "pipeline";
   if (nothingFound(lead)) {
     if (x.formSentAt) return "form_sent";
@@ -130,8 +161,18 @@ export function emailBucket(lead: EmailBucketLead, x: EmailBucketExtras): EmailB
   return "queue";
 }
 
-// Why a lead is still in the queue, in a few words.
+// Why a lead is in the queue, in a few words: the finder is on it, or why it
+// needs you.
 export function queueReason(lead: EmailBucketLead): string {
+  const status = readContactStatus(lead.contactStatus);
+  if (status === "needs_you") return lead.contactStatusReason ?? "Needs you";
+  if (status === "finding") return "Finding contacts";
+  if (status === null) return NOT_RUN_YET;
+  return CONTACT_STATUS_LABELS[status];
+}
+
+// The reason before the contact finder, kept for the migration's log.
+export function legacyQueueReason(lead: EmailBucketLead): string {
   if (lead.ownerStatus === "pick") return "Pick the owner";
   if (lead.ownerStatus === "not_found") return "No owner found";
   if (lead.ownerStatus !== "confirmed") return "Owner not looked up yet";

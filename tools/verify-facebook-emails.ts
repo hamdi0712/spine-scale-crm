@@ -76,6 +76,12 @@ const server = http.createServer((req, res) => {
       res.end(JSON.stringify(PAGES[page] ?? []));
       return;
     }
+    // The NPI Registry, for the contact finder's owner step: no record.
+    if (url.pathname === "/api/") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ result_count: 0, results: [] }));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/v2/email-verification") {
       const { email } = JSON.parse(body) as { email: string };
       checked.push(email);
@@ -99,13 +105,13 @@ async function main(): Promise<void> {
   process.env.APIFY_API_TOKEN = "test-token";
   process.env.INSTANTLY_API_BASE = `http://127.0.0.1:${port}`;
   process.env.INSTANTLY_API_KEY = "test-key";
+  process.env.NPI_API_BASE = `http://127.0.0.1:${port}`;
 
   const { prisma } = await import("../src/lib/prisma");
   const { loadPipelineSettings, savePipelineSettings } = await import("../src/lib/pipelineSettingsStore");
   const { DEFAULT_PIPELINE_SETTINGS, readPipelineSettings, pipelineSettingsRow, facebookEmailsCost, fmtEstimate } = await import("../src/lib/pipelineSettings");
   const { findBackupEmail, facebookEmailLeads } = await import("../src/lib/facebookEmailRun");
-  const { startFacebookEmailJob, autoFindBackupEmail } = await import("../src/lib/actions/jobs");
-  const { uncheckedEmailLeads } = await import("../src/lib/emailCheckRun");
+  const { startFacebookEmailJob } = await import("../src/lib/actions/jobs");
   const { parseAlternates, EMAIL_SOURCE_LABELS } = await import("../src/lib/emailFind");
   const { promoteToLead } = await import("../src/lib/promoteLead");
   const { pickContactFormLink } = await import("../src/lib/contactForm");
@@ -214,9 +220,17 @@ async function main(): Promise<void> {
   check("web-vendor and builder addresses dropped → no email", vendorLead.email === null && vendorLead.emailAlternates === null && vendorLead.facebookEmailAt !== null, String(vendorLead.email));
 
   console.log("\nThe Instantly check, automatically");
-  const check1 = await waitFor("email-check");
-  check("an email check ran when the bulk action finished", check1.status === "finished", `${check1.status}: ${check1.note}`);
-  check("the Facebook address and the website one were checked", checked.includes("drlee@fblisted.test") && checked.includes("office@sitecrawl.test"), checked.join(", "));
+  // The bulk action hands what it found to the contact finder, which checks
+  // each new address once and routes the lead.
+  const check1 = await waitFor("contact-finder");
+  check("the contact finder ran when the bulk action finished", check1.status === "finished", `${check1.status}: ${check1.note}`);
+  check("the Facebook address was checked", checked.includes("drlee@fblisted.test"), checked.join(", "));
+  // The website address above came from a direct call; in the app every path
+  // that finds one (the enrich run, the bulk action, the finder itself) hands
+  // the lead to the contact finder, which checks it.
+  await (await import("../src/lib/actions/jobs")).kickContactFinder([site.id]);
+  await waitFor("contact-finder");
+  check("the website address is checked by the contact finder", checked.includes("office@sitecrawl.test"), checked.join(", "));
   check("the address someone typed was not re-checked", !checked.includes("typed@hasemail.test"));
   check("the Facebook address is valid now", (await reload(listed.id)).emailStatus === "valid");
 
@@ -245,10 +259,12 @@ async function main(): Promise<void> {
   });
   const fbLeadId = await promoteToLead(fbCand.id, null, new Date());
   check("nothing from Maps or the website: no email yet", (await reload(fbLeadId)).email === null);
-  await autoFindBackupEmail(fbLeadId);
+  check("a promoted email lead waits for the contact finder", (await reload(fbLeadId)).contactStatus === "finding");
+  // The contact finder's Facebook step (src/lib/contactFinderRun.ts) is this
+  // same call, for a lead with no address at all.
+  await findBackupEmail(fbLeadId, await loadPipelineSettings());
   const fbLead = await reload(fbLeadId);
   check("then its Facebook page is read and the address saved", fbLead.email === "info@fbpromoted.test" && fbLead.emailSource === "facebook_page", String(fbLead.email));
-  check("and it is waiting for (or has had) the Instantly check", fbLead.emailStatus !== null || (await uncheckedEmailLeads()).some((l) => l.id === fbLeadId));
 
   console.log("\nThe contact-form link");
   const links = (list: [string, string][]) => JSON.stringify(list.map(([text, url]) => ({ text, url, page: "https://clinic.test/" })));

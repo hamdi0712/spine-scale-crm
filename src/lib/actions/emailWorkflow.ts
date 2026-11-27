@@ -96,6 +96,9 @@ export async function saveEmailSettings(raw: unknown): Promise<Result> {
     if (!saved.ok) return saved;
   }
   await saveEmailSettingsRow(settings);
+  // A raised budget clears "Out of credits": the contact finder takes those
+  // leads again (quietly does nothing when there is still no room).
+  void (await import("@/lib/actions/jobs")).kickContactFinder();
   revalidatePath("/settings/email");
   revalidatePath("/pipeline");
   return { ok: true };

@@ -7,9 +7,10 @@
 import { revalidatePath } from "next/cache";
 import { syncReadyInboxes } from "@/lib/emailInboxes";
 import { pickOwner } from "@/lib/ownerFindRun";
-import { startOwnerJob } from "@/lib/actions/jobs";
+import { retryContactFinder, startOwnerJob } from "@/lib/actions/jobs";
 import { LaunchResult } from "@/lib/jobRunner";
 import { RecleanResult, recleanEmailLeads } from "@/lib/ownerReclean";
+import { applyProposal, keepCurrent } from "@/lib/contactFinderRun";
 
 export async function pickLeadOwner(leadId: string, name: string): Promise<{ ok: true; job: LaunchResult } | { ok: false; error: string }> {
   if (typeof leadId !== "string" || typeof name !== "string") return { ok: false, error: "Pick one of the names shown." };
@@ -17,9 +18,9 @@ export async function pickLeadOwner(leadId: string, name: string): Promise<{ ok:
   if (!r.ok) return r;
   revalidatePath("/pipeline");
   revalidatePath(`/pipeline/${leadId}`);
-  // Now that the owner is known, their address — within budget, as a run of
-  // one. Refused quietly when there is no key or budget; the panel says why.
-  const job = await startOwnerJob({ leadIds: [leadId] });
+  // Now that the owner is known (set by hand, so kept), the contact finder
+  // runs for this lead: their own address, the checks, and where it goes.
+  const job = await retryContactFinder(leadId);
   return { ok: true, job };
 }
 
@@ -41,4 +42,22 @@ export async function recleanOwners(): Promise<{ ok: true; result: RecleanResult
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "The re-clean failed." };
   }
+}
+
+// "Look up again" found something different: Replace puts it on the lead (as
+// the operator's own choice); Keep leaves the lead as it was. Both logged in
+// the lead's contact trace.
+export async function replaceWithLookup(leadId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (typeof leadId !== "string") return { ok: false, error: "No lead." };
+  const r = await applyProposal(leadId);
+  revalidatePath("/pipeline");
+  revalidatePath("/outreach");
+  revalidatePath(`/pipeline/${leadId}`);
+  return r;
+}
+
+export async function keepAfterLookup(leadId: string): Promise<{ ok: true }> {
+  if (typeof leadId === "string") await keepCurrent(leadId);
+  revalidatePath(`/pipeline/${leadId}`);
+  return { ok: true };
 }

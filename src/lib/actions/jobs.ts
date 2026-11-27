@@ -38,6 +38,8 @@ import { fmtCredits } from "@/lib/emailCheck";
 import { loadEmailSettings } from "@/lib/emailSettingsStore";
 import { releaseInboxIfUnsent, syncReadyInboxes } from "@/lib/emailInboxes";
 import { resolveHeldCandidates } from "@/lib/heldCleanup";
+import { finderBudget, finderDueLeads, finderQueueLeads, markForFinder, runContactFinder } from "@/lib/contactFinderRun";
+import { CONTACT_STATUS_LABELS, finderWorstCase } from "@/lib/contactFinder";
 import { facebookEmailLeads, findBackupEmail } from "@/lib/facebookEmailRun";
 import { findOwner, findOwnerEmail, findOwnerLeads, ownerBudget, ownerReadiness, hunterCreditsUsedThisMonth, OwnerEmailOutcome } from "@/lib/ownerFindRun";
 import { ownerCostPerLead } from "@/lib/ownerFind";
@@ -231,7 +233,7 @@ export async function startQueueJob(channel: unknown, selectedIds: string[] | nu
   // about to be read, rather than every time Discovery is opened. A candidate
   // it puts back in the queue is picked up by this run.
   const held = await resolveHeldCandidates();
-  if (held.promoted.length > 0) void autoCheckEmails();
+  if (held.promoted.length > 0) void kickContactFinder();
   const queue = selectedIds ? await discoveryQueueSelected(selectedIds, ch) : await discoveryQueue(ch);
   if (queue.length === 0) {
     return {
@@ -262,13 +264,14 @@ export async function startQueueJob(channel: unknown, selectedIds: string[] | nu
         result,
       };
     },
-    // Addresses the email finder found on promoted leads, checked once the
-    // run is over (one may have been running while they turned up).
+    // The promoted email leads arrive "finding": the contact finder takes
+    // them once the run is over.
     finish: async () => {
-      await autoCheckEmails();
-      await autoFindOwners();
       await syncReadyInboxes();
       return null;
+    },
+    after: async () => {
+      await kickContactFinder();
     },
   });
 }
@@ -359,6 +362,7 @@ export async function startEmailCheckJob(args: { leadIds?: string[] | null; forc
     items = rows.slice(0, ready.affordable);
   }
   const per = ready.settings.creditsPerCheck;
+  const invalidIds: string[] = [];
   return launchJob({
     kind: "email-check",
     source: "email-check",
@@ -367,6 +371,7 @@ export async function startEmailCheckJob(args: { leadIds?: string[] | null; forc
     items: items.map((r) => ({ id: r.id, name: r.clinicName })),
     work: async (item) => {
       const r = await checkLeadEmail(item.id, { force });
+      if (r.kind === "checked" && r.status === "invalid") invalidIds.push(item.id);
       if (r.kind === "failed") return { outcome: "error", detail: r.detail, result: { code: r.code } };
       if (r.kind === "skipped") return { outcome: "warn", detail: r.detail };
       return { outcome: r.status === "valid" ? "ok" : "warn", detail: r.detail };
@@ -394,6 +399,7 @@ export async function startEmailCheckJob(args: { leadIds?: string[] | null; forc
       if (status !== "finished" || halted) return;
       const taken = new Set(rows.map((r) => r.id));
       if ((await uncheckedEmailLeads()).some((r) => !taken.has(r.id))) await autoCheckEmails();
+      if (invalidIds.length > 0) await kickContactFinder(invalidIds);
     },
   });
 }
@@ -414,6 +420,118 @@ export async function autoCheckEmails(): Promise<void> {
   }
 }
 
+// ─── The contact finder ────────────────────────────────────────────────────
+
+// One run per lead, in the fixed order (src/lib/contactFinder.ts), from a
+// budget shared by the whole job. leadIds null is whatever is due (new
+// leads, retries, credit blocks with room again); a list is exactly those
+// leads — Retry, the backfill, a trigger. propose: "Look up again" on one
+// lead, which only ever proposes.
+export async function startContactFinderJob(args: { leadIds?: string[] | null; mode?: "apply" | "propose" } = {}): Promise<LaunchResult> {
+  const mode = args?.mode === "propose" ? "propose" : "apply";
+  const ids = Array.isArray(args?.leadIds) ? args.leadIds.filter((x) => typeof x === "string") : null;
+  if (ids && mode === "apply") await markForFinder(ids);
+  const rows = ids
+    ? await prisma.lead.findMany({ where: { id: { in: ids }, channel: "email" }, select: { id: true, clinicName: true } })
+    : await finderDueLeads();
+  if (rows.length === 0) return { ok: false, error: ids ? "None of those is an email lead the finder can work on." : "No lead is waiting on the contact finder." };
+  const budget = await finderBudget();
+  const tally: Record<string, number> = {};
+  return launchJob({
+    kind: "contact-finder",
+    source: "contact-finder",
+    verb: mode === "propose" ? "Looking up" : "Finding contacts",
+    href: "/pipeline",
+    items: rows.map((r) => ({ id: r.id, name: r.clinicName })),
+    work: async (item) => {
+      const r = await runContactFinder(item.id, budget, { mode });
+      const key = r.status ?? "unchanged";
+      tally[key] = (tally[key] ?? 0) + 1;
+      const label = r.status ? CONTACT_STATUS_LABELS[r.status] : "Unchanged";
+      return {
+        outcome: r.status === "needs_you" ? "error" : r.status === "finding" || r.status === null ? "warn" : "ok",
+        detail: `${label} — ${r.detail}`,
+        result: { stop: r.stop === true },
+      };
+    },
+    halt: (results) => {
+      const last = results[results.length - 1] as { result?: { stop?: boolean }; detail: string } | undefined;
+      return last?.result?.stop ? `Stopped: ${last.detail}` : null;
+    },
+    finish: async ({ status, halted }) => {
+      const parts = Object.entries(tally).map(([k, n]) => `${n} ${k === "unchanged" ? "unchanged" : CONTACT_STATUS_LABELS[k as keyof typeof CONTACT_STATUS_LABELS].toLowerCase()}`);
+      const spent = `${fmtCredits(budget.hunterSpent)} Hunter · ${fmtCredits(budget.instantlySpent)} Instantly credits · $${budget.deepseekUsd.toFixed(3)} DeepSeek${budget.facebookUsd > 0 ? ` · $${budget.facebookUsd.toFixed(2)} Apify` : ""}`;
+      const head = halted ? `${halted.replace(/\.?$/, ".")} ` : status === "stopped" ? "Stopped. " : "";
+      return `${head}${parts.join(" · ") || "Nothing to do"} — ${spent}.`;
+    },
+    // Leads that arrived while this ran (promotions, retries) are taken next.
+    after: async () => {
+      if (mode === "apply") await kickContactFinder();
+    },
+  });
+}
+
+// Starts the finder on whatever is due — and first puts these leads in line,
+// when given. Quiet: nothing due, or a run already going (it takes them when
+// it ends), means it simply does not start. Called by every trigger: a
+// promotion, a hand-saved email, the connector, the hourly timer.
+export async function kickContactFinder(leadIds?: string[]): Promise<void> {
+  try {
+    if (leadIds && leadIds.length > 0) await markForFinder(leadIds);
+    if ((await finderDueLeads()).length === 0) return;
+    await startContactFinderJob({});
+  } catch {
+    // An automatic run that cannot start is not an error anybody is waiting on.
+  }
+}
+
+// "Retry" on a needs-you lead.
+export async function retryContactFinder(leadId: string): Promise<LaunchResult> {
+  if (typeof leadId !== "string") return { ok: false, error: "No lead." };
+  const r = await startContactFinderJob({ leadIds: [leadId] });
+  // A run already going takes it when it ends (it is marked finding).
+  if (!r.ok && /already running/i.test(r.error)) return { ok: false, error: "The contact finder is running — this lead is next." };
+  return r;
+}
+
+// "Look up again" on a lead page: proposes, never replaces.
+export async function lookUpContactAgain(leadId: string): Promise<LaunchResult> {
+  if (typeof leadId !== "string") return { ok: false, error: "No lead." };
+  return startContactFinderJob({ leadIds: [leadId], mode: "propose" });
+}
+
+// What the Settings → Email backfill would cost at most, for its confirm.
+export async function contactFinderEstimate(): Promise<{
+  count: number;
+  hunterMax: number;
+  instantlyMax: number;
+  deepseekMaxUsd: number;
+  facebookMaxUsd: number;
+  hunterLeft: number;
+  instantlyLeft: number;
+}> {
+  const rows = await finderQueueLeads();
+  const budget = await finderBudget();
+  const per = finderWorstCase(budget.guess);
+  const facebookOn = (await loadPipelineSettings()).facebookEmails.enabled;
+  return {
+    count: rows.length,
+    hunterMax: rows.length * per.hunter,
+    instantlyMax: rows.length * per.instantlyChecks * budget.perCheck,
+    deepseekMaxUsd: rows.length * per.deepseekUsd,
+    facebookMaxUsd: facebookOn ? rows.length * FACEBOOK_PAGE_USD_PER_PAGE : 0,
+    hunterLeft: budget.hunterLeft,
+    instantlyLeft: budget.instantlyLeft,
+  };
+}
+
+// Settings → Email: "Run contact finder on queue leads".
+export async function startContactFinderBackfill(): Promise<LaunchResult> {
+  const rows = await finderQueueLeads();
+  if (rows.length === 0) return { ok: false, error: "No lead in the Email queue." };
+  return startContactFinderJob({ leadIds: rows.map((r) => r.id) });
+}
+
 // ─── Find emails on Facebook ───────────────────────────────────────────────
 
 // Email leads with no address, a Facebook page, and that page not read yet:
@@ -430,6 +548,7 @@ export async function startFacebookEmailJob(args: { leadIds?: string[] | null } 
   const rows = (await facebookEmailLeads()).filter((r) => !only || only.has(r.id));
   if (rows.length === 0) return { ok: false, error: "No email lead without an address has an unread Facebook page." };
   let found = 0;
+  const foundIds: string[] = [];
   return launchJob({
     kind: "facebook-emails",
     source: "facebook-emails",
@@ -438,30 +557,23 @@ export async function startFacebookEmailJob(args: { leadIds?: string[] | null } 
     items: rows.map((r) => ({ id: r.id, name: r.clinicName, estimateUsd: FACEBOOK_PAGE_USD_PER_PAGE })),
     work: async (item) => {
       const r = await findBackupEmail(item.id, settings);
-      if (r.kind === "found") found++;
+      if (r.kind === "found") {
+        found++;
+        foundIds.push(item.id);
+      }
       return { outcome: r.kind === "found" ? "ok" : r.kind === "failed" ? "error" : "warn", detail: r.detail };
     },
     finish: async ({ status }) => {
-      if (found > 0) await autoCheckEmails();
       await syncReadyInboxes();
-      const head = `${found} email${found === 1 ? "" : "s"} found${found > 0 ? " — checking them through Instantly" : ""}.`;
+      const head = `${found} email${found === 1 ? "" : "s"} found${found > 0 ? " — the contact finder checks and routes them" : ""}.`;
       return status === "stopped" ? `Stopped. ${head}` : head;
+    },
+    after: async () => {
+      if (foundIds.length > 0) await kickContactFinder(foundIds);
     },
   });
 }
 
-// A lead just promoted outside the queue (by hand, or by the decision-maker
-// stage): the email finder in the background, then the check — for the
-// address it found, or the one the lead was promoted with.
-export async function autoFindBackupEmail(leadId: string): Promise<void> {
-  try {
-    await findBackupEmail(leadId, await loadPipelineSettings());
-  } catch {
-    // Nobody is waiting on it; the bulk action can try the lead again.
-  }
-  await autoCheckEmails();
-  await autoFindOwners();
-}
 
 // ─── Find owners ───────────────────────────────────────────────────────────
 
@@ -552,7 +664,6 @@ export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: bo
       // contact (Ready): every inbox follows. Hunter's addresses come back
       // checked; anything still unchecked is checked, budget allowing.
       await syncReadyInboxes();
-      await autoCheckEmails();
       const settings = await loadEmailSettings();
       const hunterUsed = await hunterCreditsUsedThisMonth();
       const owners = `${tally.confirmed} owner${tally.confirmed === 1 ? "" : "s"} confirmed${tally.pick > 0 ? ` (${tally.pick} to pick by hand)` : ""}`;
@@ -563,20 +674,6 @@ export async function startOwnerJob(args: { leadIds?: string[] | null; auto?: bo
       return `${head}${owners} · ${emails} · ${credits}.${trimmed}`;
     },
   });
-}
-
-// Newly promoted email leads, looked up on their own while there are keys
-// and budget left — as many as fit. Quiet, like autoCheckEmails.
-export async function autoFindOwners(): Promise<void> {
-  try {
-    const pending = await findOwnerLeads({ onlyNew: true });
-    if (pending.length === 0) return;
-    const ready = await ownerReadiness(1);
-    if (!ready.hasHunterKey || !ready.hasInstantlyKey || ready.affordable === 0) return;
-    await startOwnerJob({ auto: true });
-  } catch {
-    // Nobody is waiting on it; Find owners can run it by hand.
-  }
 }
 
 // What Find owners would cost at most, for the confirm.
