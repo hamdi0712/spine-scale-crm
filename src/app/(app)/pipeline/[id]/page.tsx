@@ -52,6 +52,7 @@ import { sequenceState, toMessageViews } from "@/lib/outreachSequenceRead";
 import { salutation, salutationNote } from "@/lib/outreachSequence";
 import { fmtRelative } from "@/lib/activity";
 import { US_TIME_ZONES, isUsTimeZone, zoneLabel } from "@/lib/timezones";
+import LeadLocalTime from "@/components/LeadLocalTime";
 import { fmtDate, fmtDateTime, toDateInput } from "@/lib/format";
 import {
   IconBrandFacebookFilled,
@@ -287,7 +288,7 @@ export default async function LeadDetailPage({
                 {isUsTimeZone(lead.timeZone) && (
                   <li className="flex items-center gap-1.5">
                     <IconClockHour4 size={15} stroke={1.75} aria-hidden className="shrink-0" />
-                    {zoneLabel(lead.timeZone)} time
+                    <LeadLocalTime timeZone={lead.timeZone!} label={zoneLabel(lead.timeZone)} />
                   </li>
                 )}
               </ul>
