@@ -385,7 +385,20 @@ export async function runContactFinder(
     };
     const differs = proposal.owner !== null || proposal.email !== null;
     add({ step: "Look up again", result: differs ? "found something different — Replace or Keep" : "same as on file" });
-    return finish({ contactProposal: differs ? JSON.stringify(proposal) : null }, { status: null, detail: differs ? "Different result — waiting on you." : "Same as on file." });
+    // The address on file, accepted if the rules say so: replacing nothing,
+    // so not a proposal. Never on a sent lead.
+    const mainNow = addresses.find((a) => a.main) ?? null;
+    const accept =
+      !locked && mainNow && mainNow.status === "risky" && !handAccepted(mainNow) && autoAcceptable(mainNow)
+        ? await autoAcceptWrite(lead, mainNow, now, add)
+        : {};
+    const out = await finish(
+      { contactProposal: differs ? JSON.stringify(proposal) : null, ...accept },
+      { status: null, detail: differs ? "Different result — waiting on you." : "Same as on file." },
+    );
+    // Accepted: it may be Ready now, so its inbox follows.
+    if (Object.keys(accept).length > 0) await syncLeadInbox(leadId);
+    return out;
   }
 
   // ─── Apply ───────────────────────────────────────────────────────────────
@@ -435,16 +448,7 @@ export async function runContactFinder(
     // Accepted automatically: logged, and from here it counts as an accepted
     // risky address everywhere — the risky daily limit, a bounce on its domain.
     if (newMain.status === "risky" && !handAccepted(newMain) && autoAcceptable(newMain)) {
-      data.emailRiskyAcceptedAt = now;
-      data.emailRiskyAcceptedEmail = newMain.address;
-      await prisma.activityLog.create({
-        data: {
-          kind: "EMAIL_RISKY_ACCEPTED",
-          summary: `Auto-accepted risky address ${newMain.address} for ${lead.clinicName} (found on ${SOURCE_LABEL[newMain.source ?? "imported"] ?? "file"}, catch-all domain)`,
-          leadId,
-        },
-      });
-      add({ step: "Instantly", result: `${newMain.address} risky — auto-accepted` });
+      Object.assign(data, await autoAcceptWrite(lead, newMain, now, add));
     }
   } else if (mainBefore) {
     Object.assign(data, { email: null, emailType: null, emailStatus: null, emailSource: null });
@@ -469,6 +473,26 @@ export async function revokedAddresses(leadId: string): Promise<Set<string>> {
     if (m) out.add(m[1].toLowerCase());
   }
   return out;
+}
+
+// Accepting a risky address automatically: the lead's fields, and the
+// activity-feed line. From here it counts as an accepted risky address
+// everywhere — the risky daily limit, a bounce on its domain.
+export async function autoAcceptWrite(
+  lead: { id: string; clinicName: string },
+  a: { address: string; source: EmailSource | null },
+  now: Date,
+  add?: (e: Omit<TraceEntry, "at">) => void,
+): Promise<Record<string, unknown>> {
+  await prisma.activityLog.create({
+    data: {
+      kind: "EMAIL_RISKY_ACCEPTED",
+      summary: `Auto-accepted risky address ${a.address} for ${lead.clinicName} (found on ${SOURCE_LABEL[a.source ?? "imported"] ?? "file"}, catch-all domain)`,
+      leadId: lead.id,
+    },
+  });
+  add?.({ step: "Instantly", result: `${a.address} risky — auto-accepted` });
+  return { emailRiskyAcceptedAt: now, emailRiskyAcceptedEmail: a.address };
 }
 
 // ─── The owner step ────────────────────────────────────────────────────────
