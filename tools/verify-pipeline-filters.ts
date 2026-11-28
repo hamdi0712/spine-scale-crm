@@ -61,6 +61,31 @@ async function main(): Promise<void> {
   check("the Lost lead is only under Lost", count("lost") === 1 && !rows.filter((r) => matchesFilter(r, "owner")).some((r) => /Owner Lost/.test(r.clinicName)));
   check("All counts every lead but the Lost one", count("all") === rows.length - 1);
 
+  console.log("\nMore than one chip");
+  const { matchesSelection, toggleFilter, chipCount, readSelection } = await import("../src/lib/emailFilters");
+  const r = (contactStatus: string, status: string, extra: Record<string, unknown> = {}) =>
+    ({ contactStatus, status, stage: "NEW", followUpDueToday: false, ...extra }) as Parameters<typeof matchesSelection>[0];
+  const sample = [
+    r("owner_email", "needs_opener"),
+    r("owner_email", "ready"),
+    r("front_desk", "needs_opener"),
+    r("front_desk", "in_sequence", { followUpDueToday: true }),
+    r("owner_email", "needs_opener", { stage: "LOST" }),
+  ];
+  const shown = (sel: Parameters<typeof matchesSelection>[1]) => sample.filter((x) => matchesSelection(x, sel)).length;
+  check("Owner + Needs work: only owner leads that need work (different groups narrow)", shown(["owner", "work"]) === 1);
+  check("Ready + Needs work: either (same group widens)", shown(["ready", "work"]) === 3);
+  check("Owner + Front desk: either", shown(["owner", "desk"]) === 4);
+  check("nothing picked = All, Lost left out", shown([]) === 4);
+  check("Lost shows only when Lost is picked, and narrows with Owner", shown(["lost"]) === 1 && shown(["owner", "lost"]) === 1 && shown(["owner"]) === 2);
+  check("pressing a chip adds or removes it; All clears them",
+    JSON.stringify(toggleFilter(["owner"], "work")) === JSON.stringify(["owner", "work"]) &&
+      JSON.stringify(toggleFilter(["owner", "work"], "owner")) === JSON.stringify(["work"]) &&
+      toggleFilter(["owner", "work"], "all").length === 0);
+  check("counts follow the other group: with Owner picked, Needs work counts 1", chipCount(sample, ["owner"], "work") === 1 && chipCount(sample, [], "work") === 2);
+  check("…and Front desk counts what it would show beside Needs work", chipCount(sample, ["owner", "work"], "desk") === 1);
+  check("the picked chips are remembered as a list", JSON.stringify(readSelection("owner,work")) === JSON.stringify(["owner", "work"]) && readSelection("all")?.length === 0 && readSelection("risky") === null);
+
   console.log("\nRemembered between visits");
   const st = { tiers: ["A"], sort: "score" as const, query: "spine", inbox: "hamdi@spinescale.co" };
   const back = parseViewState(serializeViewState(st));
