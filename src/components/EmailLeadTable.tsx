@@ -10,7 +10,19 @@ import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
 import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge";
 import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { LostTag, isLost } from "@/components/LostLeads";
-import { FILTER_TABS, Filter, Sort, VIEW_STATE_KEY, matchesFilter, parseViewState, readFilter, serializeViewState } from "@/lib/emailFilters";
+import {
+  FILTER_TABS,
+  Filter,
+  Sort,
+  VIEW_STATE_KEY,
+  chipCount,
+  matchesSelection,
+  parseViewState,
+  readFilter,
+  readSelection,
+  serializeViewState,
+  toggleFilter,
+} from "@/lib/emailFilters";
 import type { MatchTag } from "@/lib/duplicates";
 import ContactFormButtons from "@/components/ContactFormButtons";
 import { PIPELINE_EMAIL_TAB_COOKIE, recalledPipelineFilter, rememberPipelineFilter } from "@/lib/emailChannel";
@@ -63,7 +75,6 @@ const VIEW_KEY = "pipeline-email-view";
 const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C: "bg-bad" };
 
 // The chips and their rules: src/lib/emailFilters.ts (pure, and tested).
-const matches = matchesFilter;
 
 // The Email view of the pipeline: one row per clinic, built around the one
 // thing to do next. Every tab is always shown with its count, so the set
@@ -73,16 +84,23 @@ const matches = matchesFilter;
 export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRow[]; initialTab?: string }) {
   const router = useRouter();
   const due = rows.filter((r) => r.followUpDueToday && !isLost(r.stage)).length;
-  const [filter, setFilter] = useState<Filter>(readFilter(initialTab) ?? (due > 0 ? "due" : "all"));
-  // Remembered so coming back from a lead's page lands on the same chip.
+  // The chips picked: none is All. Owner + Needs work narrows (different
+  // groups); Ready + Due today widens (same group) — src/lib/emailFilters.ts.
+  const [picked, setPicked] = useState<Filter[]>(() => {
+    const linked = readFilter(initialTab);
+    return linked ? (linked === "all" ? [] : [linked]) : due > 0 ? ["due"] : [];
+  });
+  // Remembered so coming back from a lead's page lands on the same chips.
   useEffect(() => {
-    const f = readFilter(recalledPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, "tab"));
-    if (f) setFilter(f);
+    const f = readSelection(recalledPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, "tab"));
+    if (f) setPicked(f);
   }, []);
   function pickFilter(f: Filter) {
-    setFilter(f);
-    rememberPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, f);
+    const next = toggleFilter(picked, f);
+    setPicked(next);
+    rememberPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, next.length === 0 ? "all" : next.join(","));
   }
+  const isOn = (f: Filter) => (f === "all" ? picked.length === 0 : picked.includes(f));
   const [query, setQuery] = useState("");
   // The big monitor's extras: cards or the table, a tier and an inbox filter,
   // and a sort. Below the wide breakpoint none of these are shown and the
@@ -128,8 +146,8 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
 
   const tabs = useMemo(
     () =>
-      FILTER_TABS.map(([key, label]) => ({ key, label, count: rows.filter((r) => matches(r, key)).length })),
-    [rows],
+      FILTER_TABS.map(([key, label]) => ({ key, label, count: chipCount(rows, picked, key) })),
+    [rows, picked],
   );
 
   const q = query.trim().toLowerCase();
@@ -137,7 +155,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
     .filter(
       (r) =>
         // A search by clinic name finds a Lost lead from any chip.
-        (matches(r, filter) || (q !== "" && isLost(r.stage) && r.clinicName.toLowerCase().includes(q))) &&
+        (matchesSelection(r, picked) || (q !== "" && isLost(r.stage) && r.clinicName.toLowerCase().includes(q))) &&
         (tiers.size === 0 || (r.icpTier !== null && tiers.has(r.icpTier))) &&
         (inbox === "" || r.inbox === inbox) &&
         (q === "" ||
@@ -151,7 +169,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           : 0,
     );
   const cards = view === "cards";
-  const tagLost = filter !== "lost";
+  const tagLost = !picked.includes("lost");
   const extras = (
     <>
           <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field !h-8 w-auto text-[13px]">
@@ -223,7 +241,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
         </div>
         <div className="flex flex-wrap gap-1" role="group" aria-label="Filter">
           {tabs.map((tab) => {
-            const on = filter === tab.key;
+            const on = isOn(tab.key);
             return (
               <button
                 key={tab.key}
@@ -245,7 +263,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 wide:hidden">
         <div className="m-pill-row flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
           {tabs.map((tab) => {
-            const on = filter === tab.key;
+            const on = isOn(tab.key);
             return (
               <button
                 key={tab.key}

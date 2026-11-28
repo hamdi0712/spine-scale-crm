@@ -91,3 +91,50 @@ export function parseViewState(raw: string | null | undefined): ViewState | null
     return null;
   }
 }
+
+// ─── More than one chip ────────────────────────────────────────────────────
+//
+// Chips come in two groups: who the email goes to (Owner, Front desk) and
+// where it stands (Contact form, Due today, Ready, Needs work, In sequence,
+// Done, Lost). Picked from different groups they narrow each other — Owner +
+// Needs work is the owner leads that need work. Picked from the same group
+// either will do — Ready + Due today is both. All (or nothing) is every lead.
+
+export type FilterGroup = "who" | "what";
+export function filterGroup(f: Filter): FilterGroup | null {
+  if (f === "all") return null;
+  return f === "owner" || f === "desk" ? "who" : "what";
+}
+
+export function matchesSelection(row: FilterRow, sel: Filter[]): boolean {
+  const picked = sel.filter((f) => f !== "all");
+  if (picked.length === 0) return matchesFilter(row, "all");
+  const who = picked.filter((f) => filterGroup(f) === "who");
+  const what = picked.filter((f) => filterGroup(f) === "what");
+  // Lost leads show only when Lost is picked (matchesFilter leaves them out of every other chip).
+  if (isLost(row.stage) && !what.includes("lost")) return false;
+  const whoOk = who.length === 0 || who.some((f) => matchesFilter({ ...row, stage: "NEW" }, f));
+  const whatOk = what.length === 0 || what.some((f) => matchesFilter(row, f));
+  return whoOk && whatOk;
+}
+
+// A chip pressed: All clears the rest; any other is added or taken away.
+export function toggleFilter(sel: Filter[], f: Filter): Filter[] {
+  if (f === "all") return [];
+  return sel.includes(f) ? sel.filter((x) => x !== f) : [...sel.filter((x) => x !== "all"), f];
+}
+
+// What a chip's count shows: the leads it would show beside the chips
+// already picked in the other group.
+export function chipCount(rows: FilterRow[], sel: Filter[], f: Filter): number {
+  const g = filterGroup(f);
+  const base = g === null ? [] : [...sel.filter((x) => x !== "all" && filterGroup(x) !== g), f];
+  return rows.filter((r) => matchesSelection(r, base)).length;
+}
+
+// "owner,work" ↔ ["owner", "work"]; unknown chips dropped.
+export function readSelection(v: unknown): Filter[] | null {
+  if (typeof v !== "string" || v.trim() === "") return null;
+  const out = v.split(",").map(readFilter).filter((f): f is Filter => f !== null && f !== "all");
+  return v.split(",").includes("all") ? [] : out.length > 0 ? Array.from(new Set(out)) : null;
+}
