@@ -31,7 +31,8 @@ async function main(): Promise<void> {
     throw new Error("Refusing to run: DATABASE_URL must point at a scratch database with 'verify' in its name.");
   }
   const { prisma } = await import("../src/lib/prisma");
-  const { FILTER_TABS, matchesFilter, readFilter, parseViewState, serializeViewState } = await import("../src/lib/emailFilters");
+  const { CONTACT_TABS, STATUS_TABS, NO_SELECTION, chipCount, visibleRows, pressChip, readFilter, readSelection, writeSelection, parseViewState, serializeViewState } =
+    await import("../src/lib/emailFilters");
   const { duplicateIndex, matchTag } = await import("../src/lib/duplicates");
   const { loadEmailView } = await import("../src/lib/emailWorkflowRead");
 
@@ -42,49 +43,102 @@ async function main(): Promise<void> {
     prisma.lead.create({ data: { clinicName: `${name} ${TAG}`, stage: "NEW", channel: "email", ...data } });
 
   console.log("\nThe chips");
-  check("in order: All, Owner, Front desk, Contact form, Due today, Ready, Needs work, In sequence, Done, Lost",
-    FILTER_TABS.map(([, l]) => l).join(", ") === "All, Owner, Front desk, Contact form, Due today, Ready, Needs work, In sequence, Done, Lost",
-    FILTER_TABS.map(([, l]) => l).join(", "));
-  check("Has email, No email and Risky are gone; a remembered one reads as nothing", readFilter("email") === null && readFilter("noemail") === null && readFilter("risky") === null);
+  check("contact chips: All, Owner, Front desk, Contact form", CONTACT_TABS.map(([, l]) => l).join(", ") === "All, Owner, Front desk, Contact form");
+  check("status chips: Due today, Ready, Needs work, In sequence, Done, Lost", STATUS_TABS.map(([, l]) => l).join(", ") === "Due today, Ready, Needs work, In sequence, Done, Lost");
+  check("Has email, No email and Risky are gone", readFilter("email") === null && readFilter("noemail") === null && readFilter("risky") === null);
 
   await mk("Owner One", { contactStatus: "owner_email", email: "drone@one.test", emailType: "owner", emailStatus: "valid" });
-  await mk("Owner Two", { contactStatus: "owner_email", email: "drtwo@two.test", emailType: "owner", emailStatus: "valid" });
   await mk("Owner Lost", { contactStatus: "owner_email", email: "drlost@lost.test", emailType: "owner", emailStatus: "valid", stage: "LOST" });
   await mk("Desk One", { contactStatus: "front_desk", email: "info@deskone.test", emailType: "generic", emailStatus: "valid" });
   await mk("Form One", { contactStatus: "contact_form" });
-  const view = await loadEmailView();
-  const rows = view.rows.filter((r) => r.clinicName.endsWith(TAG));
-  const count = (f: Parameters<typeof matchesFilter>[1]) => rows.filter((r) => matchesFilter(r, f)).length;
+  const live = (await loadEmailView()).rows.filter((r) => r.clinicName.endsWith(TAG));
+  const none = { tiers: [], inbox: "", query: "" };
   const stored = async (status: string) => prisma.lead.count({ where: { clinicName: { endsWith: TAG }, contactStatus: status, stage: { not: "LOST" } } });
-  check("Owner = contactStatus owner_email (Lost left out)", count("owner") === (await stored("owner_email")) && count("owner") === 2, String(count("owner")));
-  check("Front desk = contactStatus front_desk", count("desk") === (await stored("front_desk")) && count("desk") === 1, String(count("desk")));
-  check("the Lost lead is only under Lost", count("lost") === 1 && !rows.filter((r) => matchesFilter(r, "owner")).some((r) => /Owner Lost/.test(r.clinicName)));
-  check("All counts every lead but the Lost one", count("all") === rows.length - 1);
+  check("Owner = contactStatus owner_email, Lost left out", chipCount(live, NO_SELECTION, "owner", none) === (await stored("owner_email")), String(chipCount(live, NO_SELECTION, "owner", none)));
+  check("Front desk = contactStatus front_desk", chipCount(live, NO_SELECTION, "desk", none) === (await stored("front_desk")));
+  check("Contact form = contactStatus contact_form", chipCount(live, NO_SELECTION, "form", none) === (await stored("contact_form")));
+  check("All leaves Lost out; Lost holds only it", chipCount(live, NO_SELECTION, "all", none) === live.length - 1 && chipCount(live, NO_SELECTION, "lost", none) === 1);
 
-  console.log("\nMore than one chip");
-  const { matchesSelection, toggleFilter, chipCount, readSelection } = await import("../src/lib/emailFilters");
-  const r = (contactStatus: string, status: string, extra: Record<string, unknown> = {}) =>
-    ({ contactStatus, status, stage: "NEW", followUpDueToday: false, ...extra }) as Parameters<typeof matchesSelection>[0];
-  const sample = [
-    r("owner_email", "needs_opener"),
-    r("owner_email", "ready"),
-    r("front_desk", "needs_opener"),
-    r("front_desk", "in_sequence", { followUpDueToday: true }),
-    r("owner_email", "needs_opener", { stage: "LOST" }),
+  console.log("\nEvery count is the list it would show — every combination, tier A and all tiers");
+  // A made-up pipeline with every kind of lead, so every combination has
+  // something in it and something left out.
+  const statuses = ["ready", "needs_opener", "check_email", "in_sequence", "replied", "contact_form"] as const;
+  const contacts = ["owner_email", "front_desk", "contact_form"] as const;
+  const rows: Parameters<typeof visibleRows>[0] = [];
+  let n = 0;
+  for (const cs of contacts)
+    for (const st of statuses)
+      for (const tier of ["A", "B", null] as const)
+        for (const stage of ["NEW", "LOST"])
+          rows.push({
+            clinicName: `${n % 3 === 0 ? "Harbor" : "Clinic"} ${n++}`, contactName: null, location: null, email: null,
+            icpTier: tier, inbox: n % 3 === 0 ? "hamdi@spinescale.co" : "team@spinescale.co",
+            contactStatus: cs, status: st as never, stage, followUpDueToday: st === "in_sequence" && n % 2 === 0,
+          });
+  // The rules written out again, plainly, to check the module against.
+  const STATUS_OF: Record<string, string[]> = { ready: ["ready"], work: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "check_clinic_name", "no_email"], sequence: ["in_sequence"], done: ["replied", "stopped", "not_ab"] };
+  const CONTACT_OF: Record<string, string | null> = { all: null, owner: "owner_email", desk: "front_desk", form: "contact_form" };
+  const expected = (contact: string, status: string | null, v: { tiers: string[]; inbox: string; query: string }) =>
+    rows.filter((r) => {
+      const lostByName = v.query !== "" && r.stage === "LOST" && r.clinicName.toLowerCase().includes(v.query.toLowerCase());
+      const lostOk = r.stage === "LOST" ? status === "lost" || lostByName : status !== "lost";
+      const contactOk = CONTACT_OF[contact] === null || r.contactStatus === CONTACT_OF[contact];
+      const statusOk = status === null || status === "lost" || (status === "due" ? r.followUpDueToday : (STATUS_OF[status] ?? []).includes(r.status as string));
+      const statusOkForLostByName = r.stage === "LOST" && lostByName && status !== "lost" ? true : statusOk;
+      return (
+        lostOk && contactOk && statusOkForLostByName &&
+        (v.tiers.length === 0 || (r.icpTier !== null && v.tiers.includes(r.icpTier))) &&
+        (v.inbox === "" || r.inbox === v.inbox) &&
+        (v.query === "" || r.clinicName.toLowerCase().includes(v.query.toLowerCase()))
+      );
+    }).length;
+  const views = [
+    { name: "all tiers", v: { tiers: [] as string[], inbox: "", query: "" } },
+    { name: "tier A only", v: { tiers: ["A"], inbox: "", query: "" } },
+    { name: "tier A + one inbox", v: { tiers: ["A"], inbox: "hamdi@spinescale.co", query: "" } },
+    { name: "all tiers + a search", v: { tiers: [] as string[], inbox: "", query: "harbor" } },
   ];
-  const shown = (sel: Parameters<typeof matchesSelection>[1]) => sample.filter((x) => matchesSelection(x, sel)).length;
-  check("Owner + Needs work: only owner leads that need work (different groups narrow)", shown(["owner", "work"]) === 1);
-  check("Ready + Needs work: either (same group widens)", shown(["ready", "work"]) === 3);
-  check("Owner + Front desk: either", shown(["owner", "desk"]) === 4);
-  check("nothing picked = All, Lost left out", shown([]) === 4);
-  check("Lost shows only when Lost is picked, and narrows with Owner", shown(["lost"]) === 1 && shown(["owner", "lost"]) === 1 && shown(["owner"]) === 2);
-  check("pressing a chip adds or removes it; All clears them",
-    JSON.stringify(toggleFilter(["owner"], "work")) === JSON.stringify(["owner", "work"]) &&
-      JSON.stringify(toggleFilter(["owner", "work"], "owner")) === JSON.stringify(["work"]) &&
-      toggleFilter(["owner", "work"], "all").length === 0);
-  check("counts follow the other group: with Owner picked, Needs work counts 1", chipCount(sample, ["owner"], "work") === 1 && chipCount(sample, [], "work") === 2);
-  check("…and Front desk counts what it would show beside Needs work", chipCount(sample, ["owner", "work"], "desk") === 1);
-  check("the picked chips are remembered as a list", JSON.stringify(readSelection("owner,work")) === JSON.stringify(["owner", "work"]) && readSelection("all")?.length === 0 && readSelection("risky") === null);
+  const statusChoices: (string | null)[] = [null, ...STATUS_TABS.map(([k]) => k)];
+  let combos = 0;
+  let wrong: string[] = [];
+  for (const { name, v } of views)
+    for (const [contact] of CONTACT_TABS)
+      for (const status of statusChoices) {
+        const sel = { contact, status } as Parameters<typeof visibleRows>[1];
+        combos++;
+        // The list for this selection…
+        if (visibleRows(rows, sel, v).length !== expected(contact, status, v)) wrong.push(`${name}: ${contact}+${status} list`);
+        // …and every chip's count beside it is the list pressing it gives.
+        for (const [chip] of [...CONTACT_TABS, ...STATUS_TABS]) {
+          const shownAfter = visibleRows(rows, pressChip(sel, chip), v).length;
+          const isActiveStatus = sel.status === chip;
+          const counted = chipCount(rows, sel, chip, v);
+          const listWith = isActiveStatus ? visibleRows(rows, sel, v).length : shownAfter;
+          if (counted !== listWith) wrong.push(`${name}: ${contact}+${status}, chip ${chip}: count ${counted} ≠ list ${listWith}`);
+        }
+      }
+  check(`count shown = rows listed, for every chip in all ${combos} reachable selections`, wrong.length === 0, wrong.slice(0, 3).join("; "));
+  const tierA = { tiers: ["A"], inbox: "", query: "" };
+  check("tier A only: In sequence counts only tier-A leads, as the list shows",
+    chipCount(rows, NO_SELECTION, "sequence", tierA) === visibleRows(rows, { contact: "all", status: "sequence" }, tierA).length &&
+      chipCount(rows, NO_SELECTION, "sequence", tierA) < chipCount(rows, NO_SELECTION, "sequence", none));
+  const inSeq = { contact: "all" as const, status: "sequence" as const };
+  check("with In sequence picked, Front desk counts the front-desk leads in sequence",
+    chipCount(rows, inSeq, "desk", none) === rows.filter((r) => r.stage !== "LOST" && r.status === "in_sequence" && r.contactStatus === "front_desk").length);
+  check("Lost never counts under All, Owner, Front desk or Contact form",
+    (["all", "owner", "desk", "form"] as const).every((c) => visibleRows(rows, { contact: c, status: null }, none).every((r) => r.stage !== "LOST")));
+  check("…only under Lost — unless a search finds one by name",
+    visibleRows(rows, { contact: "all", status: "lost" }, none).every((r) => r.stage === "LOST") &&
+      visibleRows(rows, NO_SELECTION, { tiers: [], inbox: "", query: "harbor" }).some((r) => r.stage === "LOST"));
+  check("one contact chip and one status chip at a time; the status chip toggles off",
+    JSON.stringify(pressChip({ contact: "owner", status: "work" }, "desk")) === JSON.stringify({ contact: "desk", status: "work" }) &&
+      JSON.stringify(pressChip({ contact: "owner", status: "work" }, "ready")) === JSON.stringify({ contact: "owner", status: "ready" }) &&
+      pressChip({ contact: "owner", status: "work" }, "work").status === null);
+  check("remembered as \"owner,work\"; an older list or a ?tab= link reads back",
+    writeSelection({ contact: "owner", status: "work" }) === "owner,work" &&
+      JSON.stringify(readSelection("owner,work")) === JSON.stringify({ contact: "owner", status: "work" }) &&
+      JSON.stringify(readSelection("due")) === JSON.stringify({ contact: "all", status: "due" }) &&
+      readSelection("risky") === null);
 
   console.log("\nRemembered between visits");
   const st = { tiers: ["A"], sort: "score" as const, query: "spine", inbox: "hamdi@spinescale.co" };

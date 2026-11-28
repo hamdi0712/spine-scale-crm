@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { IconChevronRight, IconLayoutGrid, IconList, IconMail, IconMapPin, IconSearch } from "@tabler/icons-react";
 import { EMAIL_LEAD_NEXT, EmailLeadStatus } from "@/lib/emailChannel";
 import { IcpTier } from "@/lib/icp";
@@ -11,17 +11,21 @@ import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge
 import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { LostTag, isLost } from "@/components/LostLeads";
 import {
-  FILTER_TABS,
+  CONTACT_TABS,
   Filter,
+  NO_SELECTION,
+  STATUS_TABS,
+  Selection,
   Sort,
   VIEW_STATE_KEY,
   chipCount,
-  matchesSelection,
+  chipOn,
   parseViewState,
-  readFilter,
+  pressChip,
   readSelection,
   serializeViewState,
-  toggleFilter,
+  visibleRows,
+  writeSelection,
 } from "@/lib/emailFilters";
 import type { MatchTag } from "@/lib/duplicates";
 import ContactFormButtons from "@/components/ContactFormButtons";
@@ -84,23 +88,22 @@ const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C:
 export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRow[]; initialTab?: string }) {
   const router = useRouter();
   const due = rows.filter((r) => r.followUpDueToday && !isLost(r.stage)).length;
-  // The chips picked: none is All. Owner + Needs work narrows (different
-  // groups); Ready + Due today widens (same group) — src/lib/emailFilters.ts.
-  const [picked, setPicked] = useState<Filter[]>(() => {
-    const linked = readFilter(initialTab);
-    return linked ? (linked === "all" ? [] : [linked]) : due > 0 ? ["due"] : [];
+  // One contact chip and at most one status chip (src/lib/emailFilters.ts).
+  const [sel, setSel] = useState<Selection>(() => {
+    const linked = readSelection(initialTab);
+    return linked ?? (due > 0 ? { contact: "all", status: "due" } : NO_SELECTION);
   });
   // Remembered so coming back from a lead's page lands on the same chips.
   useEffect(() => {
     const f = readSelection(recalledPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, "tab"));
-    if (f) setPicked(f);
+    if (f) setSel(f);
   }, []);
   function pickFilter(f: Filter) {
-    const next = toggleFilter(picked, f);
-    setPicked(next);
-    rememberPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, next.length === 0 ? "all" : next.join(","));
+    const next = pressChip(sel, f);
+    setSel(next);
+    rememberPipelineFilter(PIPELINE_EMAIL_TAB_COOKIE, writeSelection(next));
   }
-  const isOn = (f: Filter) => (f === "all" ? picked.length === 0 : picked.includes(f));
+  const isOn = (f: Filter) => chipOn(sel, f);
   const [query, setQuery] = useState("");
   // The big monitor's extras: cards or the table, a tier and an inbox filter,
   // and a sort. Below the wide breakpoint none of these are shown and the
@@ -144,23 +147,20 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   }
   const inboxes = useMemo(() => Array.from(new Set(rows.map((r) => r.inbox).filter((x): x is string => !!x))).sort(), [rows]);
 
-  const tabs = useMemo(
+  // The list and every count come from the same visibleRows(): a count is
+  // exactly what pressing that chip would list, beside everything else active.
+  const viewFilters = useMemo(() => ({ tiers: Array.from(tiers), inbox, query }), [tiers, inbox, query]);
+  const tabGroups = useMemo(
     () =>
-      FILTER_TABS.map(([key, label]) => ({ key, label, count: chipCount(rows, picked, key) })),
-    [rows, picked],
+      [CONTACT_TABS, STATUS_TABS].map((group) =>
+        (group as [Filter, string][]).map(([key, label]) => ({ key, label, count: chipCount(rows, sel, key, viewFilters) })),
+      ),
+    [rows, sel, viewFilters],
   );
 
   const q = query.trim().toLowerCase();
-  const shown = rows
-    .filter(
-      (r) =>
-        // A search by clinic name finds a Lost lead from any chip.
-        (matchesSelection(r, picked) || (q !== "" && isLost(r.stage) && r.clinicName.toLowerCase().includes(q))) &&
-        (tiers.size === 0 || (r.icpTier !== null && tiers.has(r.icpTier))) &&
-        (inbox === "" || r.inbox === inbox) &&
-        (q === "" ||
-          [r.clinicName, r.contactName, r.location, r.email].some((v) => (v ?? "").toLowerCase().includes(q))),
-    )
+  const shown = visibleRows(rows, sel, viewFilters)
+    .slice()
     .sort((a, b) =>
       sort === "score"
         ? (Number(b.icpScore) || -1) - (Number(a.icpScore) || -1)
@@ -169,7 +169,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           : 0,
     );
   const cards = view === "cards";
-  const tagLost = !picked.includes("lost");
+  const tagLost = sel.status !== "lost";
   const extras = (
     <>
           <select value={inbox} onChange={(e) => setInbox(e.target.value)} aria-label="Inbox" className="field !h-8 w-auto text-[13px]">
@@ -239,46 +239,58 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
           </label>
           {extras}
         </div>
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Filter">
-          {tabs.map((tab) => {
-            const on = isOn(tab.key);
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => pickFilter(tab.key)}
-                aria-pressed={on}
-                className={`inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
-                  on ? "border-accent/40 bg-accent-soft font-semibold text-accent" : "border-line font-medium text-ink-soft hover:bg-wash"
-                }`}
-              >
-                {tab.label}
-                <span className="num opacity-70">{tab.count}</span>
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
+          {tabGroups.map((group, gi) => (
+            <Fragment key={gi}>
+              {gi > 0 && <span className="mx-1.5 h-4 w-px bg-line" aria-hidden />}
+              <div className="flex flex-wrap gap-1" role="group" aria-label={gi === 0 ? "Contact" : "Status"}>
+                {group.map((tab) => {
+                  const on = isOn(tab.key);
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => pickFilter(tab.key)}
+                      aria-pressed={on}
+                      className={`inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-md border px-2 text-[11px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+                        on ? "border-accent/40 bg-accent-soft font-semibold text-accent" : "border-line font-medium text-ink-soft hover:bg-wash"
+                      }`}
+                    >
+                      {tab.label}
+                      <span className="num opacity-70">{tab.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Fragment>
+          ))}
         </div>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 md:mb-0 md:border-b md:border-line/60 md:px-4 md:py-3 wide:hidden">
         <div className="m-pill-row flex flex-wrap items-center gap-1" role="group" aria-label="Filter">
-          {tabs.map((tab) => {
-            const on = isOn(tab.key);
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => pickFilter(tab.key)}
-                aria-pressed={on}
-                className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
-                  on ? "bg-accent-soft font-semibold text-accent" : "text-muted hover:bg-wash hover:text-ink"
-                }`}
-              >
-                {tab.label}
-                <span className={`num text-xs ${on ? "opacity-90" : "opacity-70"}`}>{tab.count}</span>
-              </button>
-            );
-          })}
+          {tabGroups.map((group, gi) => (
+            <Fragment key={gi}>
+              {gi > 0 && <span className="mx-1 h-5 w-px shrink-0 bg-line" aria-hidden />}
+              {group.map((tab) => {
+                const on = isOn(tab.key);
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => pickFilter(tab.key)}
+                    aria-pressed={on}
+                    className={`inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 ${
+                      on ? "bg-accent-soft font-semibold text-accent" : "text-muted hover:bg-wash hover:text-ink"
+                    }`}
+                  >
+                    {tab.label}
+                    <span className={`num text-xs ${on ? "opacity-90" : "opacity-70"}`}>{tab.count}</span>
+                  </button>
+                );
+              })}
+            </Fragment>
+          ))}
         </div>
         <div className="flex w-full items-center gap-2 md:w-auto">
         <label className="relative flex w-full items-center md:w-60">

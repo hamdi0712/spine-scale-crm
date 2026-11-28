@@ -92,49 +92,115 @@ export function parseViewState(raw: string | null | undefined): ViewState | null
   }
 }
 
-// ─── More than one chip ────────────────────────────────────────────────────
+// ─── The two chip groups ───────────────────────────────────────────────────
 //
-// Chips come in two groups: who the email goes to (Owner, Front desk) and
-// where it stands (Contact form, Due today, Ready, Needs work, In sequence,
-// Done, Lost). Picked from different groups they narrow each other — Owner +
-// Needs work is the owner leads that need work. Picked from the same group
-// either will do — Ready + Due today is both. All (or nothing) is every lead.
+// Contact (who the email goes to): All, Owner, Front desk, Contact form — one
+// at a time, All being none. Status (where it stands): Due today, Ready,
+// Needs work, In sequence, Done, Lost — one at a time, or none. One of each
+// can be active together: Owner + Needs work is the owner leads that need work.
+//
+// Every count is visibleRows() for that chip, beside whatever else is active —
+// the other group's chip, the tiers, the inbox, the search — so a count is
+// always exactly the list pressing it would show.
 
-export type FilterGroup = "who" | "what";
-export function filterGroup(f: Filter): FilterGroup | null {
-  if (f === "all") return null;
-  return f === "owner" || f === "desk" ? "who" : "what";
+export type ContactChip = "all" | "owner" | "desk" | "form";
+export type StatusChip = "due" | "ready" | "work" | "sequence" | "done" | "lost";
+export interface Selection {
+  contact: ContactChip;
+  status: StatusChip | null;
+}
+export const NO_SELECTION: Selection = { contact: "all", status: null };
+
+export const CONTACT_TABS: [ContactChip, string][] = [
+  ["all", "All"],
+  ["owner", "Owner"],
+  ["desk", "Front desk"],
+  ["form", "Contact form"],
+];
+export const STATUS_TABS: [StatusChip, string][] = [
+  ["due", "Due today"],
+  ["ready", "Ready"],
+  ["work", "Needs work"],
+  ["sequence", "In sequence"],
+  ["done", "Done"],
+  ["lost", "Lost"],
+];
+
+const isContact = (f: string): f is ContactChip => CONTACT_TABS.some(([k]) => k === f);
+const isStatus = (f: string): f is StatusChip => STATUS_TABS.some(([k]) => k === f);
+
+export interface ViewFilters {
+  tiers: string[];
+  inbox: string;
+  query: string;
 }
 
-export function matchesSelection(row: FilterRow, sel: Filter[]): boolean {
-  const picked = sel.filter((f) => f !== "all");
-  if (picked.length === 0) return matchesFilter(row, "all");
-  const who = picked.filter((f) => filterGroup(f) === "who");
-  const what = picked.filter((f) => filterGroup(f) === "what");
-  // Lost leads show only when Lost is picked (matchesFilter leaves them out of every other chip).
-  if (isLost(row.stage) && !what.includes("lost")) return false;
-  const whoOk = who.length === 0 || who.some((f) => matchesFilter({ ...row, stage: "NEW" }, f));
-  const whatOk = what.length === 0 || what.some((f) => matchesFilter(row, f));
-  return whoOk && whatOk;
+export interface VisibleRow extends FilterRow {
+  clinicName: string;
+  contactName: string | null;
+  location: string | null;
+  email: string | null;
+  icpTier: string | null;
+  inbox: string | null;
 }
 
-// A chip pressed: All clears the rest; any other is added or taken away.
-export function toggleFilter(sel: Filter[], f: Filter): Filter[] {
-  if (f === "all") return [];
-  return sel.includes(f) ? sel.filter((x) => x !== f) : [...sel.filter((x) => x !== "all"), f];
+function chipMatch(row: VisibleRow, sel: Selection): boolean {
+  // Lost leads are under Lost and nowhere else.
+  if (isLost(row.stage) !== (sel.status === "lost")) return false;
+  const c = sel.contact;
+  if (c === "owner" && row.contactStatus !== "owner_email") return false;
+  if (c === "desk" && row.contactStatus !== "front_desk") return false;
+  if (c === "form" && row.contactStatus !== "contact_form") return false;
+  if (sel.status && sel.status !== "lost" && !matchesFilter(row, sel.status)) return false;
+  return true;
 }
 
-// What a chip's count shows: the leads it would show beside the chips
-// already picked in the other group.
-export function chipCount(rows: FilterRow[], sel: Filter[], f: Filter): number {
-  const g = filterGroup(f);
-  const base = g === null ? [] : [...sel.filter((x) => x !== "all" && filterGroup(x) !== g), f];
-  return rows.filter((r) => matchesSelection(r, base)).length;
+// The list: the chips, then the tiers, the inbox and the search. A search by
+// name also finds a Lost lead whatever the status chip.
+export function visibleRows<T extends VisibleRow>(rows: T[], sel: Selection, v: ViewFilters): T[] {
+  const q = v.query.trim().toLowerCase();
+  return rows.filter((r) => {
+    const byName = q !== "" && isLost(r.stage) && r.clinicName.toLowerCase().includes(q);
+    const chips = chipMatch(r, sel) || (byName && chipMatch(r, { ...sel, status: "lost" }));
+    return (
+      chips &&
+      (v.tiers.length === 0 || (r.icpTier !== null && v.tiers.includes(r.icpTier))) &&
+      (v.inbox === "" || r.inbox === v.inbox) &&
+      (q === "" || [r.clinicName, r.contactName, r.location, r.email].some((x) => (x ?? "").toLowerCase().includes(q)))
+    );
+  });
 }
 
-// "owner,work" ↔ ["owner", "work"]; unknown chips dropped.
-export function readSelection(v: unknown): Filter[] | null {
+// The selection a chip would make: it replaces its own group's chip and keeps
+// the other group's. Pressing the active status chip again clears it.
+export function pressChip(sel: Selection, chip: Filter): Selection {
+  if (isContact(chip)) return { ...sel, contact: chip };
+  if (isStatus(chip)) return { ...sel, status: sel.status === chip ? null : chip };
+  return sel;
+}
+
+// What the chip's count shows: the rows it would list (its own group's chip
+// replaced, never cleared, so the active chip counts what is shown now).
+export function chipCount<T extends VisibleRow>(rows: T[], sel: Selection, chip: Filter, v: ViewFilters): number {
+  const next = isContact(chip) ? { ...sel, contact: chip } : isStatus(chip) ? { ...sel, status: chip } : sel;
+  return visibleRows(rows, next, v).length;
+}
+
+export function chipOn(sel: Selection, chip: Filter): boolean {
+  return isContact(chip) ? sel.contact === chip : sel.status === chip;
+}
+
+// Remembered as "owner,work" (or one chip from a ?tab= link, or a list saved
+// by the earlier multi-chip version): the first chip of each group wins.
+export function readSelection(v: unknown): Selection | null {
   if (typeof v !== "string" || v.trim() === "") return null;
-  const out = v.split(",").map(readFilter).filter((f): f is Filter => f !== null && f !== "all");
-  return v.split(",").includes("all") ? [] : out.length > 0 ? Array.from(new Set(out)) : null;
+  const parts = v.split(",").map((x) => x.trim());
+  const contact = parts.find(isContact) ?? null;
+  const status = parts.find(isStatus) ?? null;
+  if (!contact && !status) return null;
+  return { contact: contact ?? "all", status };
+}
+
+export function writeSelection(sel: Selection): string {
+  return [sel.contact, ...(sel.status ? [sel.status] : [])].join(",");
 }
