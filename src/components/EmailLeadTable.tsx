@@ -10,6 +10,8 @@ import { EmailToSend, inboxShort } from "@/lib/emailWorkflow";
 import { EmailStatusBadge, IcpScoreBadge, IcpTierChip } from "@/components/Badge";
 import EmailSendButtons, { RiskyTag } from "@/components/EmailSendButtons";
 import { LostTag, isLost } from "@/components/LostLeads";
+import { FILTER_TABS, Filter, Sort, VIEW_STATE_KEY, matchesFilter, parseViewState, readFilter, serializeViewState } from "@/lib/emailFilters";
+import type { MatchTag } from "@/lib/duplicates";
 import ContactFormButtons from "@/components/ContactFormButtons";
 import { PIPELINE_EMAIL_TAB_COOKIE, recalledPipelineFilter, rememberPipelineFilter } from "@/lib/emailChannel";
 
@@ -47,8 +49,11 @@ export interface EmailLeadRow {
   // a bounce on its domain.
   riskyAccepted: boolean;
   riskyFlagged: boolean;
-  // The same doctor or clinic on other leads, as "Name · Channel · Stage".
-  duplicates: string[];
+  // The same doctor or clinic on other leads: a Duplicate on the same
+  // channel, "On LinkedIn" / "On Call" on another (src/lib/duplicates.ts).
+  duplicates: MatchTag[];
+  // Where the contact finder routed it: the Owner and Front desk chips.
+  contactStatus: string | null;
   // The lead's pipeline stage. Lost leads are hidden unless the Lost chip is
   // picked (or a search by clinic name finds one).
   stage: string;
@@ -57,39 +62,8 @@ export interface EmailLeadRow {
 const VIEW_KEY = "pipeline-email-view";
 const TIER_DOT: Record<"A" | "B" | "C", string> = { A: "bg-ok", B: "bg-warn", C: "bg-bad" };
 
-// Six tabs rather than a chip per status: the statuses grouped by what the
-// work is. "Needs work" is everything waiting on the operator before it can be
-// sent; "Done" is everything the sequence has finished with, one way or
-// another. Due today cuts across them (every lead in it is In sequence).
-type Filter = "all" | "email" | "noemail" | "risky" | "ready" | "form" | "due" | "work" | "sequence" | "done" | "lost";
-
-const FILTERS: Filter[] = ["all", "email", "noemail", "risky", "ready", "form", "due", "work", "sequence", "done", "lost"];
-
-function readFilter(v: unknown): Filter | null {
-  return (FILTERS as unknown[]).includes(v) ? (v as Filter) : null;
-}
-
-const FILTER_STATUSES: Record<Exclude<Filter, "all" | "due" | "email" | "noemail" | "risky" | "lost">, EmailLeadStatus[]> = {
-  ready: ["ready"],
-  form: ["contact_form", "form_sent"],
-  work: ["needs_opener", "needs_manual_opener", "check_email", "check_contact", "check_clinic_name", "no_email"],
-  sequence: ["in_sequence"],
-  done: ["replied", "stopped", "not_ab"],
-};
-
-// Lost leads are in the Lost chip and no other: every other chip, and its
-// count, leaves them out.
-function matches(row: EmailLeadRow, filter: Filter): boolean {
-  if (filter === "lost") return isLost(row.stage);
-  if (isLost(row.stage)) return false;
-  if (filter === "all") return true;
-  if (filter === "due") return row.followUpDueToday;
-  // Every lead with an address, whatever it is waiting on.
-  if (filter === "email") return row.email !== null;
-  if (filter === "noemail") return row.email === null && row.form === null;
-  if (filter === "risky") return row.risky;
-  return FILTER_STATUSES[filter].includes(row.status);
-}
+// The chips and their rules: src/lib/emailFilters.ts (pure, and tested).
+const matches = matchesFilter;
 
 // The Email view of the pipeline: one row per clinic, built around the one
 // thing to do next. Every tab is always shown with its count, so the set
@@ -116,7 +90,29 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   const [view, setView] = useState<"cards" | "table">("cards");
   const [tiers, setTiers] = useState<Set<string>>(new Set());
   const [inbox, setInbox] = useState("");
-  const [sort, setSort] = useState<"updated" | "score" | "name">("updated");
+  const [sort, setSort] = useState<Sort>("updated");
+  // Back from a lead's page: the tiers, sort, search and inbox as they were.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    try {
+      const st = parseViewState(sessionStorage.getItem(VIEW_STATE_KEY));
+      if (st) {
+        setTiers(new Set(st.tiers));
+        setSort(st.sort);
+        setQuery(st.query);
+        setInbox(st.inbox);
+      }
+    } catch {
+      // No storage (a private window): the view starts fresh.
+    }
+    setRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      sessionStorage.setItem(VIEW_STATE_KEY, serializeViewState({ tiers: Array.from(tiers), sort, query, inbox }));
+    } catch {}
+  }, [restored, tiers, sort, query, inbox]);
   useEffect(() => {
     try {
       if (localStorage.getItem(VIEW_KEY) === "table") setView("table");
@@ -132,21 +128,7 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
 
   const tabs = useMemo(
     () =>
-      (
-        [
-          ["all", "All"],
-          ["email", "Has email"],
-          ["noemail", "No email"],
-          ["risky", "Risky"],
-          ["ready", "Ready"],
-          ["form", "Contact form"],
-          ["due", "Due today"],
-          ["work", "Needs work"],
-          ["sequence", "In sequence"],
-          ["done", "Done"],
-          ["lost", "Lost"],
-        ] as [Filter, string][]
-      ).map(([key, label]) => ({ key, label, count: rows.filter((r) => matches(r, key)).length })),
+      FILTER_TABS.map(([key, label]) => ({ key, label, count: rows.filter((r) => matches(r, key)).length })),
     [rows],
   );
 
@@ -517,16 +499,26 @@ export default function EmailLeadTable({ rows, initialTab }: { rows: EmailLeadRo
   );
 }
 
-// The same doctor or clinic is on another lead: a small soft pill, its
-// tooltip naming them. A warning only; nothing is merged.
-function DuplicateTag({ also }: { also: string[] }) {
+// The same doctor or clinic on another lead. Same channel: a warning
+// "Duplicate". Another channel (LinkedIn, Call): a neutral "On LinkedIn".
+// A label only; nothing is merged or blocked.
+function DuplicateTag({ also }: { also: MatchTag[] }) {
   if (also.length === 0) return null;
+  const dupes = also.filter((m) => m.kind === "duplicate");
+  const elsewhere = Array.from(new Set(also.filter((m) => m.kind === "elsewhere").map((m) => m.pill)));
+  const pill = "ml-1.5 inline-flex h-[18px] items-center rounded-full px-1.5 align-middle text-[10.5px] font-medium";
   return (
-    <span
-      title={`Also on: ${also.join("; ")}`}
-      className="ml-1.5 inline-flex h-[18px] items-center rounded-full bg-warn-soft px-1.5 align-middle text-[10.5px] font-medium text-warn"
-    >
-      Duplicate
-    </span>
+    <>
+      {dupes.length > 0 && (
+        <span title={dupes.map((m) => m.tooltip).join("; ")} className={`${pill} bg-warn-soft text-warn`}>
+          Duplicate
+        </span>
+      )}
+      {elsewhere.map((label) => (
+        <span key={label} title={also.filter((m) => m.pill === label).map((m) => m.tooltip).join("; ")} className={`${pill} bg-wash text-muted`}>
+          {label}
+        </span>
+      ))}
+    </>
   );
 }
