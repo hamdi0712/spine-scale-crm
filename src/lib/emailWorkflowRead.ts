@@ -45,7 +45,7 @@ import { hasRiskyEmail } from "@/lib/ownerFind";
 import { formBucketOf } from "@/lib/emailBuckets";
 import { formSentAtByLead } from "@/lib/contactFormSent";
 import { preSendCheck, shortClinicFor } from "@/lib/emailRules";
-import { DUPLICATE_SELECT, duplicateIndex } from "@/lib/duplicates";
+import { DUPLICATE_SELECT, duplicateIndex, matchTag } from "@/lib/duplicates";
 import { canAutoAccept } from "@/lib/contactFinder";
 import { revokedAddresses } from "@/lib/contactFinderRun";
 import type { EmailSource } from "@/lib/emailFind";
@@ -160,7 +160,8 @@ export async function loadEmailView(now = new Date()) {
       riskyAccepted: riskyAccepted(l),
       riskyFlagged: l.emailRiskyFlaggedAt !== null,
       // "Also on: Strauss Scoliosis Correction · LinkedIn · Contacted".
-      duplicates: (dupes.get(l.id) ?? []).map((d) => `${d.clinicName} · ${d.label}`),
+      duplicates: (dupes.get(l.id) ?? []).map((d) => matchTag(l.channel, d)),
+      contactStatus: l.contactStatus,
       stage: l.stage,
       // Contact form / Copy message / Mark form sent, in place of the address.
       form: isForm ? contactFormPropsFor(l, settings, inboxes, formSent.get(l.id) ?? null) : null,

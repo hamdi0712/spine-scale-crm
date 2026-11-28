@@ -99,3 +99,26 @@ export function duplicatesOf(lead: DuplicateLead, others: DuplicateLead[]): Dupl
 
 // The fields a read needs, for prisma's select.
 export const DUPLICATE_SELECT = { id: true, clinicName: true, channel: true, stage: true, websiteUrl: true, contactName: true, location: true } as const;
+
+// How a match reads beside a lead. Only the same channel is a duplicate
+// (two email leads, two LinkedIn leads): the same clinic worked on another
+// channel is just where else it is — "On LinkedIn", "On Call" — neutral.
+export interface MatchTag {
+  kind: "duplicate" | "elsewhere";
+  // "On LinkedIn" / "Duplicate"
+  pill: string;
+  // "Hudson Valley Scoliosis · LinkedIn · Contacted"
+  tooltip: string;
+  // The lead page's chip: "Also on LinkedIn: Hudson Valley Scoliosis · Contacted"
+  chip: string;
+  id: string;
+}
+
+export function matchTag(leadChannel: string, m: DuplicateMatch): MatchTag {
+  const channel = LEAD_CHANNEL_LABELS[m.channel as LeadChannel] ?? m.channel;
+  const stage = LEAD_STAGE_LABELS[m.stage as LeadStage] ?? m.stage;
+  if (m.channel === leadChannel) {
+    return { kind: "duplicate", pill: "Duplicate", tooltip: `${m.clinicName} · ${channel} · ${stage}`, chip: `Also on: ${m.clinicName} · ${channel} · ${stage}`, id: m.id };
+  }
+  return { kind: "elsewhere", pill: `On ${channel}`, tooltip: `${m.clinicName} · ${channel} · ${stage}`, chip: `Also on ${channel}: ${m.clinicName} · ${stage}`, id: m.id };
+}

@@ -94,7 +94,7 @@ import OwnerPanel from "@/components/OwnerPanel";
 import { ownerPanelProps } from "@/lib/ownerFind";
 import { contactFinderPanelProps } from "@/lib/contactFinder";
 import { showsContactFormPanel } from "@/lib/emailBuckets";
-import { DUPLICATE_SELECT, duplicatesOf } from "@/lib/duplicates";
+import { DUPLICATE_SELECT, duplicatesOf, matchTag } from "@/lib/duplicates";
 
 export const dynamic = "force-dynamic";
 
@@ -262,16 +262,23 @@ export default async function LeadDetailPage({
                   never merged (src/lib/duplicates.ts). */}
               {duplicates.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  {duplicates.map((d) => (
-                    <Link
-                      key={d.id}
-                      href={`/pipeline/${d.id}`}
-                      title={d.by === "domain" ? "Same website domain" : "Same contact, same state"}
-                      className="inline-flex h-[22px] items-center rounded-full bg-warn-soft px-2.5 text-xs font-medium text-warn hover:underline"
-                    >
-                      Also on: {d.clinicName} · {d.label}
-                    </Link>
-                  ))}
+                  {duplicates.map((d) => {
+                    // Same channel: a duplicate (warning). Another channel
+                    // (LinkedIn, Call): where else the clinic is (neutral).
+                    const t = matchTag(lead.channel, d);
+                    return (
+                      <Link
+                        key={d.id}
+                        href={`/pipeline/${d.id}`}
+                        title={d.by === "domain" ? "Same website domain" : "Same contact, same state"}
+                        className={`inline-flex h-[22px] items-center rounded-full px-2.5 text-xs font-medium hover:underline ${
+                          t.kind === "duplicate" ? "bg-warn-soft text-warn" : "bg-wash text-muted"
+                        }`}
+                      >
+                        {t.chip}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
               <ul className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
