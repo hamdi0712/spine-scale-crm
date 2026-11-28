@@ -660,6 +660,54 @@ async function main(): Promise<void> {
     if (f.startsWith(`${path.basename(dbFile2!)}.backup-`)) fs.unlinkSync(path.join(path.dirname(dbFile2!), f));
   }
 
+  // ═══ Re-run with the same result still accepts; the one-time sweep; Dr. Google ═══
+  console.log("\nRe-run, same as on file, still runs the accept step (Seaport Spine)");
+  const { siteDoctorNames } = await import("../src/lib/ownerFind");
+  const { migrateStuckRiskyAccepts, RISKY_ACCEPT_SWEEP } = await import("../src/lib/dataMigrations");
+  const seaport = await seed("Seaport Spine", {
+    websiteUrl: "https://seaportspine.test", contactStatus: "owner_email", contactName: "Dr. Mark Hollien", ownerStatus: "confirmed", ownerSource: "npi_site",
+    ownerCheckedAt: new Date(), ownerConfidence: "high", websiteNotes: "Dr. Mark Hollien, chiropractor.",
+    email: "drhollien@seaportspine.test", emailType: "owner", emailStatus: "risky", emailSource: "maps_contacts",
+  });
+  check("before: risky, found on its own domain, not accepted", (await lead(seaport.id)).emailRiskyAcceptedAt === null);
+  await go(seaport.id, { mode: "propose" });
+  const sp = await lead(seaport.id);
+  check("a re-run with the same result: \"same as on file\", no proposal", sp.contactProposal === null && (await trace(seaport.id)).some((e) => e.result === "same as on file"));
+  check("…and the address is auto-accepted", sp.emailRiskyAcceptedAt !== null && sp.emailRiskyAcceptedEmail === "drhollien@seaportspine.test");
+  check("…logged as auto-accepted", (await prisma.activityLog.count({ where: { leadId: seaport.id, summary: { startsWith: "Auto-accepted" } } })) === 1);
+  check("…so the panel shows it accepted, not \"accepts it on its next run\"", (await emailPanelProps(await lead(seaport.id))).risky.accepted);
+  const sentSeaport = await seed("Sent Seaport", {
+    websiteUrl: "https://sentseaport.test", email: "drx@sentseaport.test", emailType: "owner", emailStatus: "risky", emailSource: "maps_contacts",
+    ownerStatus: "not_found", ownerCheckedAt: new Date(), ownerConfidence: "high",
+  });
+  await prisma.emailSend.create({ data: { leadId: sentSeaport.id, step: 0, toEmail: "drx@sentseaport.test", subject: "s", body: "b", sentAt: new Date() } });
+  await go(sentSeaport.id, { mode: "propose" });
+  check("never on a sent lead", (await lead(sentSeaport.id)).emailRiskyAcceptedAt === null);
+
+  console.log("\nThe one-time sweep for Pipeline leads stuck unaccepted");
+  await prisma.dataMigration.deleteMany({ where: { id: RISKY_ACCEPT_SWEEP } });
+  const mkStuck = (n: string, data: Record<string, unknown>) =>
+    seed(n, { contactStatus: "owner_email", emailType: "owner", emailStatus: "risky", emailSource: "maps_contacts", ...data });
+  const stuck = await mkStuck("Stuck Spine", { websiteUrl: "https://stuckspine.test", email: "drstuck@stuckspine.test" });
+  const offSite = await mkStuck("Off Site Spine", { websiteUrl: "https://offsitespine.test", email: "drx@designer.test" });
+  const guessedStuck = await mkStuck("Guessed Spine", { websiteUrl: "https://guessedspine.test", email: "drg@guessedspine.test", emailSource: "pattern_guess" });
+  const revokedStuck = await mkStuck("Revoked Stuck Spine", { websiteUrl: "https://revokedstuck.test", email: "drr@revokedstuck.test" });
+  await prisma.activityLog.create({ data: { kind: "EMAIL_RISKY_REVOKED", summary: `Revoked acceptance of risky address drr@revokedstuck.test for Revoked Stuck Spine ${TAG}`, leadId: revokedStuck.id } });
+  const sweepLog: string[] = [];
+  const sw = await migrateStuckRiskyAccepts({ log: (l) => sweepLog.push(l) });
+  check("a backup first", sw.backup !== null && fs.existsSync(sw.backup!));
+  check("found on its own domain → accepted, logged", (await lead(stuck.id)).emailRiskyAcceptedAt !== null && sweepLog.some((l) => /Stuck Spine/.test(l)));
+  check("off the clinic's domain, guessed, or revoked → left alone",
+    (await lead(offSite.id)).emailRiskyAcceptedAt === null && (await lead(guessedStuck.id)).emailRiskyAcceptedAt === null && (await lead(revokedStuck.id)).emailRiskyAcceptedAt === null);
+  check("run again: nothing to do", !(await migrateStuckRiskyAccepts({ log: () => {} })).ran);
+  for (const f of fs.readdirSync(path.dirname(sqliteFile()!))) {
+    if (f.startsWith(`${path.basename(sqliteFile()!)}.backup-`)) fs.unlinkSync(path.join(path.dirname(sqliteFile()!), f));
+  }
+
+  console.log("\nNo \"Dr. Google\"");
+  const names = siteDoctorNames("Read our Dr. Google reviews. Dr. Facebook says hi. Find us on Dr. Yelp. Meet Dr. Ann Lee, our chiropractor.", null);
+  check("Dr. Google, Dr. Facebook and Dr. Yelp are not doctors; Dr. Ann Lee is", names.join(",") === "Dr. Ann Lee", names.join(", "));
+
   await waitForFinder();
   server.close();
   console.log(failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) failed.`);

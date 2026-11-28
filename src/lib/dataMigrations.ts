@@ -25,7 +25,11 @@ import { prisma } from "@/lib/prisma";
 import { EmailBucket, emailBucket, legacyEmailBucket } from "@/lib/emailBuckets";
 import { bucketExtras } from "@/lib/emailBucketsRead";
 import { ContactStatus, NOT_RUN_YET } from "@/lib/contactFinder";
-import { hasFrontDeskWord, parseAlternates } from "@/lib/emailFind";
+import { EmailSource, hasFrontDeskWord, parseAlternates } from "@/lib/emailFind";
+import { canAutoAccept } from "@/lib/contactFinder";
+import { autoAcceptWrite, revokedAddresses } from "@/lib/contactFinderRun";
+import { riskyAccepted } from "@/lib/emailWorkflow";
+import { syncLeadInbox } from "@/lib/emailInboxes";
 import { rebuildDraft } from "@/lib/ownerFindRun";
 
 export const CONTACT_STATUS_MIGRATION = "2026-11-28-contact-status";
@@ -150,6 +154,11 @@ export async function runDataMigrations(log?: Log): Promise<void> {
   } catch (e) {
     (log ?? console.error)(`[data migration] Front-desk labels failed: ${e instanceof Error ? e.message : String(e)} — nothing marked done.`);
   }
+  try {
+    await migrateStuckRiskyAccepts({ log });
+  } catch (e) {
+    (log ?? console.error)(`[data migration] Risky accepts failed: ${e instanceof Error ? e.message : String(e)} — nothing marked done.`);
+  }
 }
 
 // ─── Front-desk labels ─────────────────────────────────────────────────────
@@ -226,5 +235,56 @@ export async function migrateFrontDeskLabels(opts: { log?: Log; now?: Date; dbFi
   for (const w of writes) if (w.rebuild) await rebuildDraft(w.id);
   const summary = `${changed.length} lead${changed.length === 1 ? "" : "s"} relabelled`;
   log(`Front-desk labels: done — ${summary}.`);
+  return { ran: true, ok: true, summary, backup, mismatches: [], changed };
+}
+
+// ─── Risky addresses the finder should have accepted ───────────────────────
+//
+// A "Re-run contact finder" that found the same as on file used to stop
+// before the accept step, and Pipeline leads were never in the queue the
+// backfill ran on. So some leads hold a risky address that was found on the
+// clinic's own domain (or free mail), never revoked, and still not accepted —
+// "the contact finder accepts it on its next run". Accepted here, once, by
+// the same rule (canAutoAccept, revokedAddresses), on unsent leads; each one
+// logged in the activity feed and in this log.
+
+export const RISKY_ACCEPT_SWEEP = "2026-11-28-risky-accept-sweep";
+
+export async function migrateStuckRiskyAccepts(opts: { log?: Log; now?: Date; dbFile?: string | null } = {}): Promise<MigrationResult & { changed: string[] }> {
+  const log = opts.log ?? ((l: string) => console.log(`[data migration] ${l}`));
+  const now = opts.now ?? new Date();
+  if (await prisma.dataMigration.findUnique({ where: { id: RISKY_ACCEPT_SWEEP } })) {
+    return { ran: false, ok: true, summary: "already done", backup: null, mismatches: [], changed: [] };
+  }
+  const file = opts.dbFile === undefined ? sqliteFile() : opts.dbFile;
+  let backup: string | null = null;
+  if (file) {
+    if (!fs.existsSync(file)) {
+      log(`Risky accepts: the database file ${file} was not found — nothing done, tried again at the next start.`);
+      return { ran: true, ok: false, summary: "no database file", backup: null, mismatches: [], changed: [] };
+    }
+    backup = `${file}.backup-${stamp(now)}-risky`;
+    fs.copyFileSync(file, backup);
+    log(`Risky accepts: backed up the database to ${backup}`);
+  }
+  const leads = await prisma.lead.findMany({
+    where: { channel: "email", emailStatus: "risky", emailSends: { none: {} }, suppressedAt: null, emailUnsubscribedAt: null, emailRepliedAt: null },
+  });
+  const changed: string[] = [];
+  for (const l of leads) {
+    const address = (l.email ?? "").trim().toLowerCase();
+    if (address === "" || riskyAccepted(l)) continue;
+    const source = (l.emailSource as EmailSource | null) ?? null;
+    if (!canAutoAccept({ address, status: "risky", source }, l.websiteUrl)) continue;
+    if ((await revokedAddresses(l.id)).has(address)) continue;
+    const data = await autoAcceptWrite(l, { address, source }, now);
+    await prisma.lead.update({ where: { id: l.id }, data });
+    await syncLeadInbox(l.id);
+    changed.push(`${l.clinicName} (${l.id}): ${address} accepted`);
+  }
+  await prisma.dataMigration.create({ data: { id: RISKY_ACCEPT_SWEEP, ranAt: now, note: `${changed.length} accepted` } });
+  for (const c of changed) log(`Risky accepts: ${c}`);
+  const summary = `${changed.length} lead${changed.length === 1 ? "" : "s"} accepted`;
+  log(`Risky accepts: done — ${summary}.`);
   return { ran: true, ok: true, summary, backup, mismatches: [], changed };
 }

@@ -226,6 +226,9 @@ const PAGE_WORDS = new Set([
   "owner", "founder", "director", "president", "lead", "chief", "senior", "associate", "assistant", "manager",
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "yes", "no", "not", "all", "any", "every",
   "iguess", "ithink", "iam", "ive", "im", "okay", "ok", "thanks", "thank", "please",
+  // review, listing and social sites a page credits ("Dr. Google reviews")
+  "google", "facebook", "yelp", "instagram", "twitter", "youtube", "tiktok", "linkedin", "pinterest", "healthgrades", "zocdoc",
+  "vitals", "webmd", "ratemds", "bing", "yahoo", "apple", "maps", "trustpilot", "bbb", "nextdoor", "angi", "groupon",
 ]);
 
 function isPageWord(w: string): boolean {
